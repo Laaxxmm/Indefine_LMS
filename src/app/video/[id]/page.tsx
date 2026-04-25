@@ -1,4 +1,4 @@
-import { auth } from "@/lib/auth";
+import { auth, signOut } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
@@ -66,14 +66,36 @@ export default async function VideoPage({
   const bestAttempt =
     video.quiz?.attempts.find((a) => a.passed) ?? video.quiz?.attempts[0];
 
+  const moduleVideos = video.module.videos;
+  const moduleDone = moduleVideos.filter(
+    (v) => v.progresses[0]?.completed
+  ).length;
+  const modulePct =
+    moduleVideos.length > 0 ? (moduleDone / moduleVideos.length) * 100 : 0;
+
   return (
-    <main className="min-h-screen px-4 sm:px-6 py-6 max-w-[1600px] mx-auto">
-      <Link
-        href={`/dashboard?module=${video.moduleId}`}
-        className="text-sm text-white/60 hover:text-white inline-block mb-4"
-      >
-        ← {video.module.title}
-      </Link>
+    <main className="min-h-screen px-4 sm:px-6 py-4 max-w-[1600px] mx-auto">
+      <header className="flex items-center justify-between gap-4 mb-4 flex-wrap">
+        <Link
+          href="/dashboard"
+          className="text-sm text-white/60 hover:text-white inline-flex items-center gap-2"
+        >
+          ← Dashboard
+        </Link>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-white/80">{session.user.name}</span>
+          <form
+            action={async () => {
+              "use server";
+              await signOut({ redirectTo: "/" });
+            }}
+          >
+            <button className="text-xs px-3 py-1.5 rounded bg-white/10 hover:bg-white/15">
+              Sign out
+            </button>
+          </form>
+        </div>
+      </header>
 
       <div className="grid lg:grid-cols-[1fr_340px] gap-6">
         {/* Main column — big player + quiz */}
@@ -169,12 +191,21 @@ export default async function VideoPage({
 
         {/* Sidebar — module video list */}
         <aside className="lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto rounded-xl bg-white/5 border border-white/10">
-          <div className="px-4 py-3 border-b border-white/10 sticky top-0 bg-[#0b1020]/90 backdrop-blur z-10">
+          <div className="px-4 py-3 border-b border-white/10 sticky top-0 bg-[#0b1020]/95 backdrop-blur z-10">
             <p className="text-xs uppercase text-white/50 tracking-wide">
               {video.module.title}
             </p>
             <p className="text-sm font-medium mt-0.5">
-              {video.module.videos.length} videos
+              {moduleDone} / {moduleVideos.length} videos completed
+            </p>
+            <div className="mt-2 h-1.5 bg-white/10 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-brand-500 transition-all"
+                style={{ width: `${modulePct}%` }}
+              />
+            </div>
+            <p className="text-[10px] text-white/50 mt-1 text-right">
+              {Math.round(modulePct)}% module progress
             </p>
           </div>
           <div className="divide-y divide-white/5">

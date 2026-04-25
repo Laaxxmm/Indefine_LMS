@@ -190,23 +190,40 @@ export default async function AdminAssignmentsPage({
           </div>
 
           <fieldset className="text-sm">
-            <legend className="text-white/60 mb-2">Assign to</legend>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-1.5 max-h-64 overflow-y-auto rounded border border-white/10 p-3 bg-white/5">
-              {users.map((u) => (
-                <label
-                  key={u.id}
-                  className="flex items-center gap-2 hover:bg-white/5 rounded px-2 py-1 cursor-pointer"
-                >
-                  <input
-                    type="checkbox"
-                    name="userIds"
-                    value={u.id}
-                    className="accent-brand-500"
-                  />
-                  <span className="truncate">{u.name ?? u.email}</span>
-                </label>
-              ))}
-            </div>
+            <legend className="text-white/60 mb-2">
+              Assign to ({users.length} user{users.length === 1 ? "" : "s"} available)
+            </legend>
+            {users.length === 0 ? (
+              <div className="rounded border border-white/10 p-4 bg-white/5 text-sm text-white/60">
+                No users yet.{" "}
+                <Link href="/admin" className="text-brand-500 hover:text-brand-600 underline">
+                  Sync users from M365
+                </Link>{" "}
+                from the admin home first.
+              </div>
+            ) : (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-1.5 max-h-64 overflow-y-auto rounded border border-white/10 p-3 bg-white/5">
+                {users.map((u) => (
+                  <label
+                    key={u.id}
+                    className="flex items-center gap-2 hover:bg-white/5 rounded px-2 py-1 cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      name="userIds"
+                      value={u.id}
+                      className="accent-brand-500"
+                    />
+                    <span className="truncate">
+                      {u.name ?? u.email}
+                      <span className="text-white/40 text-xs ml-1">
+                        {u.email}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
             <p className="text-xs text-white/50 mt-2">
               Tip: tick multiple users to create one assignment per person in a single click.
             </p>

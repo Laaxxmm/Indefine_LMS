@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { syncOneDriveVideos } from "@/lib/sync";
+import { syncOrgUsers } from "@/lib/users-sync";
 import { revalidatePath } from "next/cache";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +15,15 @@ async function syncAction() {
   await syncOneDriveVideos({ fallbackUserId: session.user.id });
   revalidatePath("/admin");
   revalidatePath("/dashboard");
+}
+
+async function syncUsersAction() {
+  "use server";
+  const session = await auth();
+  if (session?.user?.role !== "ADMIN") throw new Error("Forbidden");
+  await syncOrgUsers({ fallbackUserId: session.user.id });
+  revalidatePath("/admin");
+  revalidatePath("/admin/assignments");
 }
 
 export default async function AdminPage() {
@@ -35,6 +45,7 @@ export default async function AdminPage() {
     orderBy: [{ courseId: "asc" }, { order: "asc" }],
   });
 
+  const userCount = await prisma.user.count();
   const totalVideos = modules.reduce((s, m) => s + m.videos.length, 0);
   const totalQuizzes = modules.reduce(
     (s, m) => s + m.videos.filter((v) => v.quiz).length,
@@ -76,7 +87,8 @@ export default async function AdminPage() {
       </div>
 
       {/* Stat tiles */}
-      <div className="grid sm:grid-cols-3 gap-3 mb-6">
+      <div className="grid sm:grid-cols-4 gap-3 mb-6">
+        <Stat label="Users" value={userCount} />
         <Stat label="Modules" value={modules.length} />
         <Stat label="Videos" value={totalVideos} />
         <Stat
@@ -86,22 +98,30 @@ export default async function AdminPage() {
         />
       </div>
 
-      <section className="rounded-xl bg-white/5 border border-white/10 p-5 mb-8">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <h2 className="text-lg font-semibold">Sync from SharePoint</h2>
-            <p className="text-white/60 text-sm mt-1">
-              Pulls the latest videos from <code className="text-white/80">L&D</code> and
-              creates a module per subfolder.
-            </p>
-          </div>
+      <div className="grid sm:grid-cols-2 gap-3 mb-8">
+        <section className="rounded-xl bg-white/5 border border-white/10 p-5">
+          <h2 className="text-base font-semibold">Sync videos</h2>
+          <p className="text-white/60 text-xs mt-1 mb-3">
+            Pull the latest videos from <code className="text-white/80">L&D</code>; each subfolder becomes a module.
+          </p>
           <form action={syncAction}>
-            <button className="px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 font-medium">
-              Sync now
+            <button className="px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 font-medium text-sm">
+              Sync videos
             </button>
           </form>
-        </div>
-      </section>
+        </section>
+        <section className="rounded-xl bg-white/5 border border-white/10 p-5">
+          <h2 className="text-base font-semibold">Sync users from M365</h2>
+          <p className="text-white/60 text-xs mt-1 mb-3">
+            Imports every active user in the SRCA tenant so you can assign work to them — even if they haven&apos;t signed in yet.
+          </p>
+          <form action={syncUsersAction}>
+            <button className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/15 text-sm">
+              Sync users
+            </button>
+          </form>
+        </section>
+      </div>
 
       <section>
         <h2 className="text-lg font-semibold mb-3">

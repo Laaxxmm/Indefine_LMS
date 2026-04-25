@@ -211,6 +211,46 @@ export async function listVideosRecursive(
   return out;
 }
 
+// -------------------- Organisation users --------------------
+
+export interface GraphOrgUser {
+  id: string;
+  displayName: string | null;
+  mail: string | null;
+  userPrincipalName: string;
+  jobTitle?: string | null;
+  accountEnabled: boolean;
+}
+
+/**
+ * Fetch all enabled users in the M365 tenant. Requires User.Read.All
+ * Application permission with admin consent on the Entra app.
+ */
+export async function listOrgUsers(token: string): Promise<GraphOrgUser[]> {
+  const out: GraphOrgUser[] = [];
+  let url:
+    | string
+    | undefined = `${GRAPH}/users?$select=id,displayName,mail,userPrincipalName,jobTitle,accountEnabled&$top=999`;
+  while (url) {
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      throw new Error(`Graph /users failed: ${res.status} ${await res.text()}`);
+    }
+    const json = (await res.json()) as {
+      value: GraphOrgUser[];
+      "@odata.nextLink"?: string;
+    };
+    for (const u of json.value) {
+      if (u.accountEnabled) out.push(u);
+    }
+    url = json["@odata.nextLink"];
+  }
+  return out;
+}
+
 /** Single-level listing kept for back-compat / direct use. */
 export async function listFolderVideos(
   driveId: string,

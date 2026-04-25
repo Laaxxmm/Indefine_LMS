@@ -118,7 +118,10 @@ export default function VideoPlayer({
         ref={ref}
         src={src}
         controls
-        controlsList="nodownload"
+        controlsList="nodownload noplaybackrate noremoteplayback"
+        disablePictureInPicture
+        disableRemotePlayback
+        onContextMenu={(e) => e.preventDefault()}
         className="w-full rounded-xl bg-black"
       />
       <div className="mt-3 h-1.5 bg-white/10 rounded">
