@@ -40,9 +40,12 @@ async function ensureModule(courseId: string, title: string, order: number) {
 
 export async function syncOneDriveVideos(opts: { fallbackUserId?: string } = {}) {
   const driveId = process.env.GRAPH_DRIVE_ID;
+  const folderPath = process.env.GRAPH_VIDEOS_FOLDER_PATH;
   const folderId = process.env.GRAPH_VIDEOS_FOLDER_ID;
-  if (!driveId || !folderId) {
-    throw new Error("GRAPH_DRIVE_ID and GRAPH_VIDEOS_FOLDER_ID must be set");
+  if (!driveId || (!folderPath && !folderId)) {
+    throw new Error(
+      "GRAPH_DRIVE_ID and one of GRAPH_VIDEOS_FOLDER_PATH or GRAPH_VIDEOS_FOLDER_ID must be set"
+    );
   }
 
   let token = await getAppOnlyToken();
@@ -51,7 +54,17 @@ export async function syncOneDriveVideos(opts: { fallbackUserId?: string } = {})
   }
   if (!token) throw new Error("No Graph token available");
 
-  const items = await listVideosRecursive(driveId, folderId, token);
+  // Prefer the path-based root reference because top-level item IDs in
+  // SharePoint sometimes don't round-trip cleanly through /items/{id}/children.
+  const root = folderPath
+    ? ({ kind: "path", folderPath } as const)
+    : ({ kind: "id", itemId: folderId! } as const);
+
+  const rootName = folderPath
+    ? folderPath.split("/").filter(Boolean).pop() ?? "Videos"
+    : "Videos";
+
+  const items = await listVideosRecursive(driveId, root, token, rootName);
   const course = await ensureCourse();
 
   // Group videos by their immediate parent folder name. Items found in the

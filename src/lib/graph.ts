@@ -97,6 +97,26 @@ async function listChildren(
   return data.value;
 }
 
+async function listChildrenByPath(
+  driveId: string,
+  path: string,
+  token: string
+): Promise<GraphDriveItem[]> {
+  // path-based children listing — more robust than item-id lookup for the
+  // top-level folder, which can return IDs that don't round-trip cleanly
+  // in some SharePoint configurations.
+  const encoded = path
+    .split("/")
+    .filter(Boolean)
+    .map(encodeURIComponent)
+    .join("/");
+  const data = await graphFetch<{ value: GraphDriveItem[] }>(
+    `/drives/${driveId}/root:/${encoded}:/children?$top=200&$select=id,name,size,folder,file,video,@microsoft.graph.downloadUrl`,
+    token
+  );
+  return data.value;
+}
+
 /**
  * Recursively list every video file under `folderId`.
  * Each returned item carries the name of its immediate parent folder
@@ -105,21 +125,31 @@ async function listChildren(
  */
 export async function listVideosRecursive(
   driveId: string,
-  rootFolderId: string,
+  root: { kind: "id"; itemId: string } | { kind: "path"; folderPath: string },
   token: string,
   rootFolderName = "Videos"
 ): Promise<VideoWithFolder[]> {
   const out: VideoWithFolder[] = [];
-  const stack: { id: string; path: string[] }[] = [
-    { id: rootFolderId, path: [rootFolderName] },
+
+  // First listing: by path or by id, depending on what we have.
+  const firstChildren =
+    root.kind === "path"
+      ? await listChildrenByPath(driveId, root.folderPath, token)
+      : await listChildren(driveId, root.itemId, token);
+
+  const stack: { children: GraphDriveItem[]; path: string[] }[] = [
+    { children: firstChildren, path: [rootFolderName] },
   ];
+
   while (stack.length) {
-    const { id, path } = stack.pop()!;
-    const children = await listChildren(driveId, id, token);
+    const { children, path } = stack.pop()!;
     const parentName = path[path.length - 1];
     for (const c of children) {
       if (c.folder) {
-        stack.push({ id: c.id, path: [...path, c.name] });
+        // Subfolder IDs from a successful listing always round-trip cleanly,
+        // so we can use item-id-based recursion from here on.
+        const sub = await listChildren(driveId, c.id, token);
+        stack.push({ children: sub, path: [...path, c.name] });
       } else if (c.file?.mimeType?.startsWith("video/")) {
         out.push({ ...c, parentFolderName: parentName, parentPath: path });
       }
