@@ -1,32 +1,41 @@
-// Sync the configured OneDrive folder into our DB so each video has a stable id.
-// We keep a single default Course/Module to start; admins can re-organize later.
+// Sync a SharePoint/OneDrive folder tree into our DB.
+//
+// Layout convention:
+//   Configured root folder        → Course "General Training" (auto-created)
+//   Each immediate subfolder      → Module
+//   Videos inside subfolders      → Video rows under the matching Module
+//   Videos directly in the root   → grouped under a fallback Module "Uncategorized"
+//
+// Re-running the sync is idempotent — videos are matched by (graphDriveId, graphItemId).
 
 import { prisma } from "@/lib/prisma";
-import { getAppOnlyToken, getUserGraphToken, listFolderVideos } from "@/lib/graph";
+import { getAppOnlyToken, getUserGraphToken, listVideosRecursive } from "@/lib/graph";
 
 const DEFAULT_COURSE_TITLE = "General Training";
-const DEFAULT_MODULE_TITLE = "All Videos";
+const FALLBACK_MODULE_TITLE = "Uncategorized";
 
-async function ensureDefaults() {
-  let course = await prisma.course.findFirst({
+async function ensureCourse() {
+  const existing = await prisma.course.findFirst({
     where: { title: DEFAULT_COURSE_TITLE },
-    include: { modules: true },
   });
-  if (!course) {
-    course = await prisma.course.create({
-      data: {
-        title: DEFAULT_COURSE_TITLE,
-        description: "Auto-imported videos from OneDrive",
-        published: true,
-        modules: { create: [{ title: DEFAULT_MODULE_TITLE, order: 0 }] },
-      },
-      include: { modules: true },
-    });
-  }
-  const mod = course.modules[0] ?? (await prisma.module.create({
-    data: { courseId: course.id, title: DEFAULT_MODULE_TITLE, order: 0 },
-  }));
-  return { courseId: course.id, moduleId: mod.id };
+  if (existing) return existing;
+  return prisma.course.create({
+    data: {
+      title: DEFAULT_COURSE_TITLE,
+      description: "Auto-imported from SharePoint",
+      published: true,
+    },
+  });
+}
+
+async function ensureModule(courseId: string, title: string, order: number) {
+  const found = await prisma.module.findFirst({
+    where: { courseId, title },
+  });
+  if (found) return found;
+  return prisma.module.create({
+    data: { courseId, title, order },
+  });
 }
 
 export async function syncOneDriveVideos(opts: { fallbackUserId?: string } = {}) {
@@ -42,36 +51,60 @@ export async function syncOneDriveVideos(opts: { fallbackUserId?: string } = {})
   }
   if (!token) throw new Error("No Graph token available");
 
-  const items = await listFolderVideos(driveId, folderId, token);
-  const { moduleId } = await ensureDefaults();
+  const items = await listVideosRecursive(driveId, folderId, token);
+  const course = await ensureCourse();
 
-  const results: { added: number; updated: number } = { added: 0, updated: 0 };
-  for (const [i, item] of items.entries()) {
-    const existing = await prisma.video.findFirst({
-      where: { graphItemId: item.id, graphDriveId: driveId },
-    });
-    if (existing) {
-      await prisma.video.update({
-        where: { id: existing.id },
-        data: {
-          title: item.name,
-          durationSeconds: item.video?.duration ? Math.round(item.video.duration / 1000) : existing.durationSeconds,
-        },
+  // Group videos by their immediate parent folder name. Items found in the
+  // root sync folder fall under the fallback module.
+  const groups = new Map<string, typeof items>();
+  for (const item of items) {
+    // Walk up: if parentPath has length 1 it's the root, use fallback.
+    const moduleName =
+      item.parentPath.length > 1 ? item.parentFolderName : FALLBACK_MODULE_TITLE;
+    const list = groups.get(moduleName) ?? [];
+    list.push(item);
+    groups.set(moduleName, list);
+  }
+
+  let added = 0;
+  let updated = 0;
+  let moduleOrder = 0;
+
+  for (const [moduleName, moduleItems] of groups) {
+    const mod = await ensureModule(course.id, moduleName, moduleOrder++);
+    for (const [i, item] of moduleItems.entries()) {
+      const existing = await prisma.video.findFirst({
+        where: { graphItemId: item.id, graphDriveId: driveId },
       });
-      results.updated++;
-    } else {
-      await prisma.video.create({
-        data: {
-          moduleId,
-          title: item.name,
-          graphDriveId: driveId,
-          graphItemId: item.id,
-          durationSeconds: item.video?.duration ? Math.round(item.video.duration / 1000) : null,
-          order: i,
-        },
-      });
-      results.added++;
+      const durationSec = item.video?.duration
+        ? Math.round(item.video.duration / 1000)
+        : null;
+
+      if (existing) {
+        await prisma.video.update({
+          where: { id: existing.id },
+          data: {
+            title: item.name,
+            moduleId: mod.id,
+            durationSeconds: durationSec ?? existing.durationSeconds,
+          },
+        });
+        updated++;
+      } else {
+        await prisma.video.create({
+          data: {
+            moduleId: mod.id,
+            title: item.name,
+            graphDriveId: driveId,
+            graphItemId: item.id,
+            durationSeconds: durationSec,
+            order: i,
+          },
+        });
+        added++;
+      }
     }
   }
-  return results;
+
+  return { added, updated, modules: groups.size };
 }

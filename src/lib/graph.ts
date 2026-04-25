@@ -72,21 +72,70 @@ export interface GraphDriveItem {
   id: string;
   name: string;
   size?: number;
+  folder?: { childCount: number };
   file?: { mimeType: string };
   video?: { duration?: number; width?: number; height?: number };
   "@microsoft.graph.downloadUrl"?: string;
 }
 
+export interface VideoWithFolder extends GraphDriveItem {
+  /** Name of the immediate parent folder (used as the Module title). */
+  parentFolderName: string;
+  /** Path from the root sync folder, e.g. ["L&D", "AS"]. */
+  parentPath: string[];
+}
+
+async function listChildren(
+  driveId: string,
+  itemId: string,
+  token: string
+): Promise<GraphDriveItem[]> {
+  const data = await graphFetch<{ value: GraphDriveItem[]; "@odata.nextLink"?: string }>(
+    `/drives/${driveId}/items/${itemId}/children?$top=200&$select=id,name,size,folder,file,video,@microsoft.graph.downloadUrl`,
+    token
+  );
+  return data.value;
+}
+
+/**
+ * Recursively list every video file under `folderId`.
+ * Each returned item carries the name of its immediate parent folder
+ * (so the sync layer can group videos into Modules) and the full path
+ * from the root for display.
+ */
+export async function listVideosRecursive(
+  driveId: string,
+  rootFolderId: string,
+  token: string,
+  rootFolderName = "Videos"
+): Promise<VideoWithFolder[]> {
+  const out: VideoWithFolder[] = [];
+  const stack: { id: string; path: string[] }[] = [
+    { id: rootFolderId, path: [rootFolderName] },
+  ];
+  while (stack.length) {
+    const { id, path } = stack.pop()!;
+    const children = await listChildren(driveId, id, token);
+    const parentName = path[path.length - 1];
+    for (const c of children) {
+      if (c.folder) {
+        stack.push({ id: c.id, path: [...path, c.name] });
+      } else if (c.file?.mimeType?.startsWith("video/")) {
+        out.push({ ...c, parentFolderName: parentName, parentPath: path });
+      }
+    }
+  }
+  return out;
+}
+
+/** Single-level listing kept for back-compat / direct use. */
 export async function listFolderVideos(
   driveId: string,
   folderId: string,
   token: string
 ): Promise<GraphDriveItem[]> {
-  const data = await graphFetch<{ value: GraphDriveItem[] }>(
-    `/drives/${driveId}/items/${folderId}/children?$top=200&$select=id,name,size,file,video,@microsoft.graph.downloadUrl`,
-    token
-  );
-  return data.value.filter((i) => i.file?.mimeType?.startsWith("video/"));
+  const children = await listChildren(driveId, folderId, token);
+  return children.filter((i) => i.file?.mimeType?.startsWith("video/"));
 }
 
 export async function getStreamUrl(
