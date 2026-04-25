@@ -17,6 +17,12 @@ export default async function Dashboard({
   const role = session.user.role;
   const sp = await searchParams;
 
+  const myAssignments = await prisma.assignment.findMany({
+    where: { userId },
+    include: { video: true },
+    orderBy: [{ status: "asc" }, { dueAt: "asc" }, { createdAt: "desc" }],
+  });
+
   const courses = await prisma.course.findMany({
     where: { published: true },
     include: {
@@ -129,6 +135,83 @@ export default async function Dashboard({
             <p className="font-bold text-lg">{upcoming.pointsOnTime} pt</p>
           </div>
         </div>
+      )}
+
+      {myAssignments.length > 0 && (
+        <section className="mb-8">
+          <h2 className="text-lg font-semibold mb-3">
+            My assignments{" "}
+            <span className="text-white/40 font-normal text-sm">
+              ({myAssignments.filter((a) => a.status === "PENDING").length} pending ·{" "}
+              {myAssignments.reduce(
+                (s, a) => s + (a.status === "COMPLETED" ? a.points : 0),
+                0
+              )}{" "}
+              / {myAssignments.reduce((s, a) => s + a.points, 0)} pts earned)
+            </span>
+          </h2>
+          <div className="rounded-xl bg-white/5 border border-white/10 divide-y divide-white/5 overflow-hidden">
+            {myAssignments.map((a) => {
+              const overdue =
+                a.status === "PENDING" && a.dueAt && a.dueAt < new Date();
+              return (
+                <div
+                  key={a.id}
+                  className="px-4 py-3 flex items-center justify-between gap-3"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span
+                        className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full ${
+                          a.kind === "VIDEO"
+                            ? "bg-blue-500/20 text-blue-300"
+                            : "bg-purple-500/20 text-purple-300"
+                        }`}
+                      >
+                        {a.kind}
+                      </span>
+                      <span
+                        className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full ${
+                          a.status === "COMPLETED"
+                            ? "bg-green-500/20 text-green-300"
+                            : overdue
+                              ? "bg-red-500/20 text-red-300"
+                              : "bg-white/10 text-white/70"
+                        }`}
+                      >
+                        {a.status === "COMPLETED"
+                          ? "Done"
+                          : overdue
+                            ? "Overdue"
+                            : "Pending"}
+                      </span>
+                      <span className="text-xs text-white/60">{a.points} pt</span>
+                    </div>
+                    <p className="text-sm font-medium truncate">{a.title}</p>
+                    {a.dueAt && a.status === "PENDING" && (
+                      <p className="text-xs text-white/50 mt-0.5">
+                        Due {a.dueAt.toLocaleDateString()}
+                      </p>
+                    )}
+                    {a.description && (
+                      <p className="text-xs text-white/60 mt-1 line-clamp-2">
+                        {a.description}
+                      </p>
+                    )}
+                  </div>
+                  {a.kind === "VIDEO" && a.videoId && a.status === "PENDING" && (
+                    <Link
+                      href={`/video/${a.videoId}`}
+                      className="text-xs px-3 py-1.5 rounded bg-brand-500 hover:bg-brand-600 shrink-0"
+                    >
+                      Open video
+                    </Link>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
       )}
 
       {modulesWithVideos.length === 0 ? (

@@ -52,6 +52,12 @@ export default async function AdminPage() {
         <h1 className="text-3xl font-bold">Admin</h1>
         <div className="flex items-center gap-2">
           <Link
+            href="/admin/assignments"
+            className="text-sm px-3 py-1.5 rounded bg-white/10 hover:bg-white/15"
+          >
+            Assignments
+          </Link>
+          <Link
             href="/admin/courses"
             className="text-sm px-3 py-1.5 rounded bg-white/10 hover:bg-white/15"
           >

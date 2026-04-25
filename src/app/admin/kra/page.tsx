@@ -99,6 +99,7 @@ export default async function KraPage({
               <th className="text-right p-3">Videos</th>
               <th className="text-right p-3">Quiz pts</th>
               <th className="text-right p-3">Deadline pts</th>
+              <th className="text-right p-3">Assignment pts</th>
               <th className="text-right p-3">Total</th>
               <th className="p-3"></th>
             </tr>

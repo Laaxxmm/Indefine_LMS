@@ -26,6 +26,9 @@ model User {
 
   progresses    VideoProgress[]
   attempts      QuizAttempt[]
+
+  assignments       Assignment[] @relation("AssignmentTarget")
+  assignmentsCreated Assignment[] @relation("AssignmentCreator")
 }
 
 enum Role {
@@ -109,6 +112,7 @@ model Video {
   module          Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
   quiz            Quiz?
   progresses      VideoProgress[]
+  assignments     Assignment[]
 }
 
 model VideoProgress {
@@ -201,4 +205,46 @@ enum DeadlineKind {
   QUARTERLY
   YEARLY
   CUSTOM
+}
+
+// -------------------- Assignments --------------------
+
+// Admin can assign two kinds of things to specific users:
+//   VIDEO — links to a Video; auto-completes when the user watches it
+//           (≥95%) AND passes its quiz (if one exists).
+//   TASK  — free-text instruction. Admin marks complete manually.
+// Each assignment carries its own KRA point value, which is awarded
+// only when the assignment moves to COMPLETED.
+
+model Assignment {
+  id            String           @id @default(cuid())
+  userId        String           // who it's assigned to
+  assignedById  String           // admin who created it
+  kind          AssignmentKind
+  videoId       String?          // populated for VIDEO kind
+  title         String           // shown in lists; for TASK this is the instruction
+  description   String?
+  points        Int              @default(0)
+  dueAt         DateTime?
+  status        AssignmentStatus @default(PENDING)
+  completedAt   DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  user        User  @relation("AssignmentTarget", fields: [userId], references: [id], onDelete: Cascade)
+  assignedBy  User  @relation("AssignmentCreator", fields: [assignedById], references: [id])
+  video       Video? @relation(fields: [videoId], references: [id], onDelete: SetNull)
+
+  @@index([userId, status])
+  @@index([videoId])
+}
+
+enum AssignmentKind {
+  VIDEO
+  TASK
+}
+
+enum AssignmentStatus {
+  PENDING
+  COMPLETED
 }

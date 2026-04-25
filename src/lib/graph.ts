@@ -54,7 +54,60 @@ export async function getUserGraphToken(userId: string): Promise<string | null> 
   const account = await prisma.account.findFirst({
     where: { userId, provider: "microsoft-entra-id" },
   });
-  return account?.access_token ?? null;
+  if (!account) return null;
+
+  // Token still valid (with 60s slack) → use as-is.
+  const now = Math.floor(Date.now() / 1000);
+  if (account.access_token && account.expires_at && account.expires_at > now + 60) {
+    return account.access_token;
+  }
+
+  // Need to refresh. Without a refresh token we can't, so fall back to whatever
+  // we have (may still work for a few seconds, otherwise caller errors).
+  if (!account.refresh_token) return account.access_token ?? null;
+
+  const tenant = process.env.MS_TENANT_ID;
+  const clientId = process.env.MS_CLIENT_ID;
+  const clientSecret = process.env.MS_CLIENT_SECRET;
+  if (!tenant || !clientId || !clientSecret) return account.access_token ?? null;
+
+  const res = await fetch(
+    `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: "refresh_token",
+        refresh_token: account.refresh_token,
+        scope: "openid profile email offline_access User.Read Files.Read.All",
+      }),
+    }
+  );
+  if (!res.ok) {
+    console.error("Refresh token failed:", await res.text());
+    return account.access_token ?? null;
+  }
+  const json = (await res.json()) as {
+    access_token: string;
+    expires_in: number;
+    refresh_token?: string;
+  };
+  await prisma.account.update({
+    where: {
+      provider_providerAccountId: {
+        provider: account.provider,
+        providerAccountId: account.providerAccountId,
+      },
+    },
+    data: {
+      access_token: json.access_token,
+      expires_at: now + json.expires_in,
+      refresh_token: json.refresh_token ?? account.refresh_token,
+    },
+  });
+  return json.access_token;
 }
 
 async function graphFetch<T>(path: string, token: string): Promise<T> {

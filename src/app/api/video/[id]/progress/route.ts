@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { refreshVideoAssignments } from "@/lib/assignments";
 import { z } from "zod";
 
 const Body = z.object({
@@ -50,6 +51,11 @@ export async function POST(
       watchedSeconds: Math.max(existing?.watchedSeconds ?? 0, lastPosition),
     },
   });
+
+  if (nextCompleted && !existing?.completed) {
+    // First time crossing the completion threshold — re-check assignments.
+    await refreshVideoAssignments(userId, videoId);
+  }
 
   return NextResponse.json({ ok: true, percent: nextPercent, completed: nextCompleted });
 }

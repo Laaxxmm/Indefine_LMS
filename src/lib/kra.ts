@@ -150,6 +150,7 @@ export interface KraSummary {
   videosTotal: number;
   bestQuizPoints: number; // sum of best-attempt percent / 10 across quizzes
   deadlinePoints: number; // sum of pointsAwarded across all course deadlines
+  assignmentPoints: number; // sum of points from completed assignments in window
   totalScore: number;
 }
 
@@ -194,8 +195,24 @@ export async function computeKraScores(opts: { from?: Date; to?: Date } = {}): P
       0
     );
 
+    const completedAssignments = await prisma.assignment.findMany({
+      where: {
+        userId: u.id,
+        status: "COMPLETED",
+        completedAt:
+          opts.from || opts.to ? { gte: opts.from, lte: opts.to } : undefined,
+      },
+      select: { points: true },
+    });
+    const assignmentPoints = completedAssignments.reduce(
+      (s, a) => s + a.points,
+      0
+    );
+
     const videoPoints = videosCompleted * 10;
-    const totalScore = Math.round(videoPoints + bestQuizPoints + deadlinePoints);
+    const totalScore = Math.round(
+      videoPoints + bestQuizPoints + deadlinePoints + assignmentPoints
+    );
 
     out.push({
       userId: u.id,
@@ -205,6 +222,7 @@ export async function computeKraScores(opts: { from?: Date; to?: Date } = {}): P
       videosTotal: totalVideos,
       bestQuizPoints: Math.round(bestQuizPoints),
       deadlinePoints,
+      assignmentPoints,
       totalScore,
     });
   }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { gradeAttempt } from "@/lib/quiz";
+import { refreshQuizAssignments } from "@/lib/assignments";
 import { z } from "zod";
 
 const Body = z.object({
@@ -61,6 +62,10 @@ export async function POST(
       answers: answers as object,
     },
   });
+
+  if (passed) {
+    await refreshQuizAssignments(userId, attempt.quizId);
+  }
 
   return NextResponse.json({
     attemptId: updated.id,

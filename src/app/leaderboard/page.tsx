@@ -20,7 +20,7 @@ export default async function Leaderboard() {
         </Link>
       </div>
       <p className="text-white/60 text-sm mb-6">
-        Score = videos × 10 + best-quiz % / 10 + on-time deadline points
+        Score = videos × 10 + best-quiz % / 10 + deadline points + assignment points
       </p>
 
       <div className="rounded-xl bg-white/5 border border-white/10 overflow-hidden">
@@ -32,6 +32,7 @@ export default async function Leaderboard() {
               <th className="text-right p-3">Videos</th>
               <th className="text-right p-3">Quiz pts</th>
               <th className="text-right p-3">Deadline pts</th>
+              <th className="text-right p-3">Assignment pts</th>
               <th className="text-right p-3">Total</th>
             </tr>
           </thead>
@@ -57,6 +58,7 @@ export default async function Leaderboard() {
                   </td>
                   <td className="p-3 text-right">{r.bestQuizPoints}</td>
                   <td className="p-3 text-right">{r.deadlinePoints}</td>
+                  <td className="p-3 text-right">{r.assignmentPoints}</td>
                   <td className="p-3 text-right font-semibold">
                     {r.totalScore}
                   </td>
