@@ -173,9 +173,29 @@ export async function getStreamUrl(
   itemId: string,
   token: string
 ): Promise<string | null> {
+  // Preferred: ask Graph for the metadata, which usually includes a
+  // pre-authenticated @microsoft.graph.downloadUrl. App-only tokens against
+  // SharePoint sometimes omit this field, so we have a fallback below.
   const item = await graphFetch<GraphDriveItem>(
     `/drives/${driveId}/items/${itemId}?$select=id,@microsoft.graph.downloadUrl`,
     token
   );
-  return item["@microsoft.graph.downloadUrl"] ?? null;
+  if (item["@microsoft.graph.downloadUrl"]) {
+    return item["@microsoft.graph.downloadUrl"];
+  }
+
+  // Fallback: hit /content directly. Graph responds with a 302 to a
+  // pre-authenticated CDN URL. We capture the Location header without
+  // following the redirect.
+  const res = await fetch(
+    `${GRAPH}/drives/${driveId}/items/${itemId}/content`,
+    {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+      redirect: "manual",
+    }
+  );
+  const location = res.headers.get("location");
+  if (location) return location;
+  return null;
 }

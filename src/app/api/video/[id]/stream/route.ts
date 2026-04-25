@@ -15,8 +15,10 @@ export async function GET(
   const video = await prisma.video.findUnique({ where: { id } });
   if (!video) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  let token = await getAppOnlyToken();
-  if (!token) token = await getUserGraphToken(userId);
+  // Prefer the user's delegated token for streaming — app-only tokens
+  // sometimes omit @microsoft.graph.downloadUrl on SharePoint items.
+  let token = await getUserGraphToken(userId);
+  if (!token) token = await getAppOnlyToken();
   if (!token) return NextResponse.json({ error: "No Graph token" }, { status: 500 });
 
   try {
