@@ -52,11 +52,17 @@ async function syncUsersAction(): Promise<void> {
   const cookieStore = await cookies();
   try {
     const r = await syncOrgUsers({ fallbackUserId: session.user.id });
-    cookieStore.set(
-      "admin_flash",
-      `users:ok:${r.added} added, ${r.updated} updated, ${r.total} total`,
-      { maxAge: 10, httpOnly: false }
-    );
+    const parts = [
+      `${r.total} active in M365`,
+      r.added ? `${r.added} added` : null,
+      r.updated ? `${r.updated} updated` : null,
+      r.reactivated ? `${r.reactivated} reactivated` : null,
+      r.deactivated ? `${r.deactivated} deactivated` : null,
+    ].filter(Boolean);
+    cookieStore.set("admin_flash", `users:ok:${parts.join(", ")}`, {
+      maxAge: 10,
+      httpOnly: false,
+    });
   } catch (e) {
     cookieStore.set(
       "admin_flash",
@@ -97,7 +103,7 @@ export default async function AdminOverview({
         },
         orderBy: [{ courseId: "asc" }, { order: "asc" }],
       }),
-      prisma.user.count(),
+      prisma.user.count({ where: { active: true } }),
       prisma.assignment.count(),
       prisma.assignment.count({ where: { status: "PENDING" } }),
     ]);
@@ -139,7 +145,7 @@ export default async function AdminOverview({
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
             <StatTile
               icon={Users}
-              label="Users"
+              label="Active users"
               value={userCount}
               tint="brand"
               href="/admin/assignments"

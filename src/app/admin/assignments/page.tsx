@@ -125,7 +125,10 @@ export default async function AdminAssignmentsPage({
   const filterStatus = sp.status || "";
 
   const [users, videos, modules, assignments] = await Promise.all([
-    prisma.user.findMany({ orderBy: { name: "asc" } }),
+    prisma.user.findMany({
+      where: { active: true },
+      orderBy: { name: "asc" },
+    }),
     prisma.video.findMany({
       include: { module: true },
       orderBy: [{ moduleId: "asc" }, { order: "asc" }],

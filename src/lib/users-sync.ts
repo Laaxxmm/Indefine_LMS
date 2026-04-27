@@ -1,6 +1,11 @@
 // Sync users from Microsoft Entra (M365 tenant) into our local User table
 // so admins can assign work to anyone in the org — even people who haven't
 // signed in to the LMS yet. Uses app-only Graph token + User.Read.All.
+//
+// Activity policy:
+//   - Users still enabled in M365 → active = true
+//   - Users we previously had but are now disabled / deleted → active = false
+//   - We never hard-delete; that preserves their assignment + progress history.
 
 import { prisma } from "@/lib/prisma";
 import { getAppOnlyToken, getUserGraphToken, listOrgUsers } from "@/lib/graph";
@@ -20,28 +25,34 @@ export async function syncOrgUsers(opts: { fallbackUserId?: string } = {}) {
   const orgUsers = await listOrgUsers(token);
   let added = 0;
   let updated = 0;
+  let deactivated = 0;
+  let reactivated = 0;
+
+  const seenEmails = new Set<string>();
 
   for (const u of orgUsers) {
     const email = (u.mail || u.userPrincipalName || "").toLowerCase().trim();
     if (!email) continue;
+    seenEmails.add(email);
 
     const existing = await prisma.user.findUnique({ where: { email } });
     const isAdmin = adminEmails.includes(email);
 
     if (existing) {
-      const newName = u.displayName ?? existing.name;
-      if (
-        existing.name !== newName ||
-        (isAdmin && existing.role !== "ADMIN")
-      ) {
-        await prisma.user.update({
-          where: { id: existing.id },
-          data: {
-            name: newName,
-            ...(isAdmin && existing.role !== "ADMIN" ? { role: "ADMIN" } : {}),
-          },
-        });
-        updated++;
+      const wasInactive = !existing.active;
+      const data: Record<string, unknown> = {};
+      if (existing.name !== (u.displayName ?? existing.name)) {
+        data.name = u.displayName ?? existing.name;
+      }
+      if (isAdmin && existing.role !== "ADMIN") data.role = "ADMIN";
+      if (wasInactive) {
+        data.active = true;
+        data.deactivatedAt = null;
+        reactivated++;
+      }
+      if (Object.keys(data).length > 0) {
+        await prisma.user.update({ where: { id: existing.id }, data });
+        if (!wasInactive) updated++;
       }
     } else {
       await prisma.user.create({
@@ -49,11 +60,33 @@ export async function syncOrgUsers(opts: { fallbackUserId?: string } = {}) {
           email,
           name: u.displayName,
           role: isAdmin ? "ADMIN" : "EMPLOYEE",
+          active: true,
         },
       });
       added++;
     }
   }
 
-  return { added, updated, total: orgUsers.length };
+  // Anyone in our DB whose email no longer shows up in the Graph response
+  // (or who's there but disabled — we filtered those out in listOrgUsers)
+  // gets marked inactive. We never delete.
+  const stale = await prisma.user.findMany({
+    where: { active: true, email: { notIn: Array.from(seenEmails) } },
+    select: { id: true },
+  });
+  if (stale.length > 0) {
+    await prisma.user.updateMany({
+      where: { id: { in: stale.map((s) => s.id) } },
+      data: { active: false, deactivatedAt: new Date() },
+    });
+    deactivated = stale.length;
+  }
+
+  return {
+    added,
+    updated,
+    deactivated,
+    reactivated,
+    total: orgUsers.length,
+  };
 }
