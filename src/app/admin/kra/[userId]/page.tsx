@@ -62,24 +62,24 @@ export default async function EmployeeKraDetail({
       <div className="flex items-center justify-between mb-6 print:hidden">
         <Link
           href={`/admin/kra?from=${sp.from ?? ""}&to=${sp.to ?? ""}`}
-          className="text-sm text-white/60 hover:text-white"
+          className="text-sm text-ink-mute hover:text-ink"
         >
           ← KRA report
         </Link>
         <PrintButton />
       </div>
 
-      <div className="rounded-xl bg-white/5 border border-white/10 p-6 mb-6 print:bg-white print:text-black print:border-black">
+      <div className="rounded-2xl bg-white border border-border shadow-soft p-6 mb-6 print:bg-white print:text-black print:border-black">
         <h1 className="text-2xl font-bold">{user.name ?? user.email}</h1>
-        <p className="text-white/60 print:text-gray-700">{user.email}</p>
-        <p className="text-sm mt-2 text-white/60 print:text-gray-700">
+        <p className="text-ink-mute print:text-gray-700">{user.email}</p>
+        <p className="text-sm mt-2 text-ink-mute print:text-gray-700">
           KRA window: {sp.from ?? "—"} to {sp.to ?? "—"}
         </p>
       </div>
 
       <Section title="Course completion">
         <table className="w-full text-sm">
-          <thead className="text-white/60 print:text-gray-700">
+          <thead className="text-ink-mute print:text-gray-700">
             <tr>
               <th className="text-left p-2">Course</th>
               <th className="text-right p-2">Videos</th>
@@ -90,7 +90,7 @@ export default async function EmployeeKraDetail({
           </thead>
           <tbody>
             {courseStatuses.map((c) => (
-              <tr key={c.courseId} className="border-t border-white/10 print:border-gray-300">
+              <tr key={c.courseId} className="border-t border-border print:border-gray-300">
                 <td className="p-2">{c.courseTitle}</td>
                 <td className="p-2 text-right">
                   {c.videosCompleted} / {c.totalVideos}
@@ -112,7 +112,7 @@ export default async function EmployeeKraDetail({
 
       <Section title="Deadlines">
         <table className="w-full text-sm">
-          <thead className="text-white/60 print:text-gray-700">
+          <thead className="text-ink-mute print:text-gray-700">
             <tr>
               <th className="text-left p-2">Course</th>
               <th className="text-left p-2">Kind</th>
@@ -124,7 +124,7 @@ export default async function EmployeeKraDetail({
           <tbody>
             {courseStatuses.flatMap((c) =>
               c.deadlines.map((d) => (
-                <tr key={d.id} className="border-t border-white/10 print:border-gray-300">
+                <tr key={d.id} className="border-t border-border print:border-gray-300">
                   <td className="p-2">{c.courseTitle}</td>
                   <td className="p-2">{d.kind.toLowerCase()}</td>
                   <td className="p-2 text-right">
@@ -137,7 +137,7 @@ export default async function EmployeeKraDetail({
                 </tr>
               ))
             )}
-            <tr className="border-t-2 border-white/30 print:border-black font-semibold">
+            <tr className="border-t-2 border-ink/30 print:border-black font-semibold">
               <td className="p-2" colSpan={4}>
                 Total deadline points
               </td>
@@ -149,7 +149,7 @@ export default async function EmployeeKraDetail({
 
       <Section title="Quiz attempts (best per quiz)">
         <table className="w-full text-sm">
-          <thead className="text-white/60 print:text-gray-700">
+          <thead className="text-ink-mute print:text-gray-700">
             <tr>
               <th className="text-left p-2">Video</th>
               <th className="text-right p-2">Score</th>
@@ -159,7 +159,7 @@ export default async function EmployeeKraDetail({
           </thead>
           <tbody>
             {Array.from(bestPerQuiz.values()).map((a) => (
-              <tr key={a.id} className="border-t border-white/10 print:border-gray-300">
+              <tr key={a.id} className="border-t border-border print:border-gray-300">
                 <td className="p-2">{a.quiz.video.title}</td>
                 <td className="p-2 text-right">{a.percent.toFixed(0)}%</td>
                 <td className="p-2 text-right">
@@ -172,7 +172,7 @@ export default async function EmployeeKraDetail({
             ))}
             {bestPerQuiz.size === 0 && (
               <tr>
-                <td className="p-2 text-white/50" colSpan={4}>
+                <td className="p-2 text-ink-faint" colSpan={4}>
                   No quiz attempts in this window.
                 </td>
               </tr>
@@ -186,7 +186,7 @@ export default async function EmployeeKraDetail({
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-xl bg-white/5 border border-white/10 p-5 mb-5 print:bg-white print:text-black print:border-black">
+    <section className="rounded-2xl bg-white border border-border shadow-soft p-5 mb-5 print:bg-white print:text-black print:border-black">
       <h2 className="text-lg font-semibold mb-3">{title}</h2>
       {children}
     </section>

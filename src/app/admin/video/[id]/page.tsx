@@ -92,13 +92,13 @@ export default async function AdminVideoPage({
 
   return (
     <main className="min-h-screen px-6 py-10 max-w-3xl mx-auto">
-      <Link href="/admin" className="text-sm text-white/60 hover:text-white">
+      <Link href="/admin" className="text-sm text-ink-mute hover:text-ink">
         ← Admin
       </Link>
       <h1 className="text-2xl font-bold mt-4">{video.title}</h1>
-      <p className="text-white/60 text-sm mb-8">Edit quiz settings and questions</p>
+      <p className="text-ink-mute text-sm mb-8">Edit quiz settings and questions</p>
 
-      <section className="rounded-xl bg-white/5 border border-white/10 p-6 mb-8">
+      <section className="rounded-2xl bg-white border border-border shadow-soft p-6 mb-8">
         <h2 className="text-lg font-semibold mb-4">Quiz settings</h2>
         <form action={saveQuizSettings} className="grid sm:grid-cols-2 gap-4">
           <input type="hidden" name="videoId" value={video.id} />
@@ -139,7 +139,7 @@ export default async function AdminVideoPage({
             defaultValue={quiz?.maxAttempts?.toString() ?? ""}
           />
           <div className="sm:col-span-2">
-            <button className="px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600">
+            <button className="px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white">
               Save settings
             </button>
           </div>
@@ -147,18 +147,18 @@ export default async function AdminVideoPage({
       </section>
 
       {quiz && (
-        <section className="rounded-xl bg-white/5 border border-white/10 p-6 mb-8">
+        <section className="rounded-2xl bg-white border border-border shadow-soft p-6 mb-8">
           <h2 className="text-lg font-semibold mb-4">
             Questions ({quiz.questions.length})
           </h2>
           {quiz.questions.length === 0 && (
-            <p className="text-white/60 text-sm mb-4">No questions yet.</p>
+            <p className="text-ink-mute text-sm mb-4">No questions yet.</p>
           )}
           <div className="space-y-3">
             {quiz.questions.map((q, i) => (
               <div
                 key={q.id}
-                className="rounded-lg bg-white/5 border border-white/10 p-4"
+                className="rounded-xl bg-white border border-border shadow-soft p-4"
               >
                 <div className="flex items-start justify-between gap-3">
                   <p className="font-medium">
@@ -167,7 +167,7 @@ export default async function AdminVideoPage({
                   <form action={deleteQuestion}>
                     <input type="hidden" name="id" value={q.id} />
                     <input type="hidden" name="videoId" value={video.id} />
-                    <button className="text-xs text-red-300 hover:text-red-200">
+                    <button className="text-xs text-rose-600 hover:text-rose-500">
                       Delete
                     </button>
                   </form>
@@ -177,7 +177,7 @@ export default async function AdminVideoPage({
                     <li
                       key={o.id}
                       className={
-                        o.isCorrect ? "text-green-300" : "text-white/70"
+                        o.isCorrect ? "text-emerald-600" : "text-ink-soft"
                       }
                     >
                       {o.isCorrect ? "✓" : "○"} {o.text}
@@ -188,7 +188,7 @@ export default async function AdminVideoPage({
             ))}
           </div>
 
-          <form action={addQuestion} className="mt-6 space-y-3 border-t border-white/10 pt-6">
+          <form action={addQuestion} className="mt-6 space-y-3 border-t border-border pt-6">
             <input type="hidden" name="quizId" value={quiz.id} />
             <input type="hidden" name="videoId" value={video.id} />
             <Field label="Question text" name="text" required colSpan />
@@ -207,11 +207,11 @@ export default async function AdminVideoPage({
                 <input
                   name={`opt${i}`}
                   placeholder={`Option ${i + 1}${i < 2 ? " (required)" : ""}`}
-                  className="flex-1 bg-white/5 border border-white/10 rounded px-3 py-2 text-sm"
+                  className="flex-1 bg-muted border border-border rounded px-3 py-2 text-sm"
                 />
               </div>
             ))}
-            <button className="px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600">
+            <button className="px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white">
               Add question
             </button>
           </form>
@@ -219,7 +219,7 @@ export default async function AdminVideoPage({
       )}
 
       {!quiz && (
-        <p className="text-white/60 text-sm">
+        <p className="text-ink-mute text-sm">
           Save the quiz settings above to start adding questions.
         </p>
       )}
@@ -237,10 +237,10 @@ function Field({
 }) {
   return (
     <label className={`block ${colSpan ? "sm:col-span-2" : ""}`}>
-      <span className="block text-sm text-white/60 mb-1">{label}</span>
+      <span className="block text-sm text-ink-mute mb-1">{label}</span>
       <input
         {...input}
-        className="w-full bg-white/5 border border-white/10 rounded px-3 py-2 text-sm"
+        className="w-full bg-muted border border-border rounded px-3 py-2 text-sm"
       />
     </label>
   );

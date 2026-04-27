@@ -35,20 +35,30 @@ export default async function QuizPage({
   );
 
   return (
-    <main className="min-h-screen px-6 py-10 max-w-3xl mx-auto">
-      <Link href={`/video/${quiz.videoId}`} className="text-sm text-white/60 hover:text-white">
+    <main className="min-h-screen px-6 py-8 max-w-3xl mx-auto">
+      <Link
+        href={`/video/${quiz.videoId}`}
+        className="text-sm text-ink-mute hover:text-ink inline-flex items-center gap-2 mb-4"
+      >
         ← {quiz.video.title}
       </Link>
-      <h1 className="text-2xl font-bold mt-4">{quiz.title}</h1>
-      <p className="text-white/60 text-sm mt-1 mb-6">
-        {quiz.timeLimitSec / 60} min • Pass {quiz.passPercent}%
-        {quiz.maxAttempts && ` • ${quiz.attempts.length} / ${quiz.maxAttempts} attempts used`}
+      <h1 className="font-display text-3xl font-extrabold mt-2">{quiz.title}</h1>
+      <p className="text-ink-mute text-sm mt-1 mb-6">
+        {quiz.timeLimitSec / 60} min · Pass {quiz.passPercent}%
+        {quiz.maxAttempts &&
+          ` · ${quiz.attempts.length} / ${quiz.maxAttempts} attempts used`}
       </p>
 
       {best && (
-        <div className="mb-6 rounded-lg bg-white/5 border border-white/10 p-4 text-sm">
+        <div className="mb-6 rounded-2xl bg-white border border-border shadow-soft p-4 text-sm">
           Best so far:{" "}
-          <span className={best.passed ? "text-green-300" : "text-yellow-300"}>
+          <span
+            className={
+              best.passed
+                ? "text-emerald-600 font-bold"
+                : "text-amber-600 font-bold"
+            }
+          >
             {best.percent.toFixed(0)}% ({best.passed ? "passed" : "not passed"})
           </span>
         </div>
@@ -57,7 +67,7 @@ export default async function QuizPage({
       {gate.ok ? (
         <QuizPlayer quizId={id} />
       ) : (
-        <div className="rounded-xl bg-white/5 border border-white/10 p-6 text-white/70">
+        <div className="rounded-2xl bg-white border border-border shadow-soft p-6 text-ink-soft">
           {gate.reason}
         </div>
       )}

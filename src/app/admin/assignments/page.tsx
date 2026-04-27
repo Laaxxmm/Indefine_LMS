@@ -105,49 +105,54 @@ export default async function AdminAssignmentsPage({
   ]);
 
   return (
-    <main className="min-h-screen px-6 py-8 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between mb-8 flex-wrap gap-3">
-        <h1 className="text-3xl font-bold">Assignments</h1>
-        <Link href="/admin" className="text-sm text-white/60 hover:text-white">
-          ← Admin
-        </Link>
+    <main className="px-6 py-8 max-w-5xl">
+      <div className="mb-8">
+        <p className="text-xs uppercase tracking-wider font-semibold text-ink-faint mb-1">
+          Admin · Assignments
+        </p>
+        <h1 className="font-display text-3xl font-bold tracking-tight">
+          Assignments
+        </h1>
+        <p className="text-ink-mute mt-1 text-sm">
+          Assign videos or custom tasks to specific employees. Points roll into KRA.
+        </p>
       </div>
 
       {/* Create form */}
-      <section className="rounded-xl bg-white/5 border border-white/10 p-5 mb-8">
-        <h2 className="text-lg font-semibold mb-4">Create assignment</h2>
+      <section className="rounded-2xl bg-white border border-border p-6 mb-8 shadow-soft">
+        <h2 className="font-display text-lg font-bold mb-4">Create assignment</h2>
         <form action={createAssignments} className="space-y-4">
           <div className="grid sm:grid-cols-2 gap-4">
             <label className="text-sm">
-              <span className="block text-white/60 mb-1">Kind</span>
+              <span className="block text-ink-mute mb-1">Kind</span>
               <select
                 name="kind"
                 defaultValue="VIDEO"
-                className="w-full bg-white/5 border border-white/10 rounded px-3 py-2"
+                className="w-full bg-white border border-border shadow-soft rounded px-3 py-2"
               >
                 <option value="VIDEO">Video — auto-completes when watched + quiz passed</option>
                 <option value="TASK">Task — admin marks complete manually</option>
               </select>
             </label>
             <label className="text-sm">
-              <span className="block text-white/60 mb-1">KRA points on completion</span>
+              <span className="block text-ink-mute mb-1">KRA points on completion</span>
               <input
                 type="number"
                 name="points"
                 min={0}
                 defaultValue={10}
-                className="w-full bg-white/5 border border-white/10 rounded px-3 py-2"
+                className="w-full bg-white border border-border shadow-soft rounded px-3 py-2"
               />
             </label>
           </div>
 
           <label className="block text-sm">
-            <span className="block text-white/60 mb-1">
+            <span className="block text-ink-mute mb-1">
               Pick video (for VIDEO kind)
             </span>
             <select
               name="videoId"
-              className="w-full bg-white/5 border border-white/10 rounded px-3 py-2"
+              className="w-full bg-white border border-border shadow-soft rounded px-3 py-2"
             >
               <option value="">— none —</option>
               {videos.map((v) => (
@@ -159,42 +164,42 @@ export default async function AdminAssignmentsPage({
           </label>
 
           <label className="block text-sm">
-            <span className="block text-white/60 mb-1">
+            <span className="block text-ink-mute mb-1">
               Title (required for TASK; optional for VIDEO — uses video name if blank)
             </span>
             <input
               name="title"
               placeholder="e.g. Read the new audit checklist and write a summary"
-              className="w-full bg-white/5 border border-white/10 rounded px-3 py-2"
+              className="w-full bg-white border border-border shadow-soft rounded px-3 py-2"
             />
           </label>
 
           <label className="block text-sm">
-            <span className="block text-white/60 mb-1">Description (optional)</span>
+            <span className="block text-ink-mute mb-1">Description (optional)</span>
             <textarea
               name="description"
               rows={3}
-              className="w-full bg-white/5 border border-white/10 rounded px-3 py-2"
+              className="w-full bg-white border border-border shadow-soft rounded px-3 py-2"
             />
           </label>
 
           <div className="grid sm:grid-cols-2 gap-4">
             <label className="text-sm">
-              <span className="block text-white/60 mb-1">Due date (optional)</span>
+              <span className="block text-ink-mute mb-1">Due date (optional)</span>
               <input
                 type="date"
                 name="dueAt"
-                className="w-full bg-white/5 border border-white/10 rounded px-3 py-2"
+                className="w-full bg-white border border-border shadow-soft rounded px-3 py-2"
               />
             </label>
           </div>
 
           <fieldset className="text-sm">
-            <legend className="text-white/60 mb-2">
+            <legend className="text-ink-mute mb-2">
               Assign to ({users.length} user{users.length === 1 ? "" : "s"} available)
             </legend>
             {users.length === 0 ? (
-              <div className="rounded border border-white/10 p-4 bg-white/5 text-sm text-white/60">
+              <div className="rounded border border-border p-4 bg-muted text-sm text-ink-mute">
                 No users yet.{" "}
                 <Link href="/admin" className="text-brand-500 hover:text-brand-600 underline">
                   Sync users from M365
@@ -202,11 +207,11 @@ export default async function AdminAssignmentsPage({
                 from the admin home first.
               </div>
             ) : (
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-1.5 max-h-64 overflow-y-auto rounded border border-white/10 p-3 bg-white/5">
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-1.5 max-h-64 overflow-y-auto rounded border border-border p-3 bg-muted">
                 {users.map((u) => (
                   <label
                     key={u.id}
-                    className="flex items-center gap-2 hover:bg-white/5 rounded px-2 py-1 cursor-pointer"
+                    className="flex items-center gap-2 hover:bg-muted rounded px-2 py-1 cursor-pointer"
                   >
                     <input
                       type="checkbox"
@@ -216,7 +221,7 @@ export default async function AdminAssignmentsPage({
                     />
                     <span className="truncate">
                       {u.name ?? u.email}
-                      <span className="text-white/40 text-xs ml-1">
+                      <span className="text-ink-faint text-xs ml-1">
                         {u.email}
                       </span>
                     </span>
@@ -224,7 +229,7 @@ export default async function AdminAssignmentsPage({
                 ))}
               </div>
             )}
-            <p className="text-xs text-white/50 mt-2">
+            <p className="text-xs text-ink-faint mt-2">
               Tip: tick multiple users to create one assignment per person in a single click.
             </p>
           </fieldset>
@@ -240,7 +245,7 @@ export default async function AdminAssignmentsPage({
         <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
           <h2 className="text-lg font-semibold">
             All assignments{" "}
-            <span className="text-white/50 font-normal text-sm">
+            <span className="text-ink-faint font-normal text-sm">
               ({assignments.length})
             </span>
           </h2>
@@ -248,7 +253,7 @@ export default async function AdminAssignmentsPage({
             <select
               name="user"
               defaultValue={filterUser}
-              className="bg-white/5 border border-white/10 rounded px-2 py-1.5"
+              className="bg-white border border-border shadow-soft rounded px-2 py-1.5"
             >
               <option value="">All users</option>
               {users.map((u) => (
@@ -260,40 +265,40 @@ export default async function AdminAssignmentsPage({
             <select
               name="status"
               defaultValue={filterStatus}
-              className="bg-white/5 border border-white/10 rounded px-2 py-1.5"
+              className="bg-white border border-border shadow-soft rounded px-2 py-1.5"
             >
               <option value="">All statuses</option>
               <option value="PENDING">Pending</option>
               <option value="COMPLETED">Completed</option>
             </select>
-            <button className="px-3 py-1.5 rounded bg-white/10 hover:bg-white/15">
+            <button className="px-3 py-1.5 rounded bg-muted hover:bg-border">
               Filter
             </button>
           </form>
         </div>
 
         {assignments.length === 0 && (
-          <p className="text-white/60 text-sm py-6 text-center bg-white/5 border border-white/10 rounded-xl">
+          <p className="text-ink-mute text-sm py-6 text-center bg-white border border-border shadow-soft rounded-xl">
             No assignments yet.
           </p>
         )}
 
-        <div className="rounded-xl bg-white/5 border border-white/10 overflow-hidden">
+        <div className="rounded-xl bg-white border border-border shadow-soft overflow-hidden">
           {assignments.map((a) => {
             const overdue =
               a.status === "PENDING" && a.dueAt && a.dueAt < new Date();
             return (
               <div
                 key={a.id}
-                className="px-5 py-3 border-b border-white/5 last:border-0 flex items-start justify-between gap-4"
+                className="px-5 py-3 border-b border-border last:border-0 flex items-start justify-between gap-4"
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span
                       className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full ${
                         a.kind === "VIDEO"
-                          ? "bg-blue-500/20 text-blue-300"
-                          : "bg-purple-500/20 text-purple-300"
+                          ? "bg-brand-50 text-brand-700"
+                          : "bg-violet-50 text-violet-700"
                       }`}
                     >
                       {a.kind}
@@ -301,10 +306,10 @@ export default async function AdminAssignmentsPage({
                     <span
                       className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full ${
                         a.status === "COMPLETED"
-                          ? "bg-green-500/20 text-green-300"
+                          ? "bg-emerald-50 text-emerald-700"
                           : overdue
-                            ? "bg-red-500/20 text-red-300"
-                            : "bg-white/10 text-white/70"
+                            ? "bg-rose-50 text-rose-700"
+                            : "bg-muted text-ink-soft"
                       }`}
                     >
                       {a.status === "COMPLETED"
@@ -313,13 +318,13 @@ export default async function AdminAssignmentsPage({
                           ? "Overdue"
                           : "Pending"}
                     </span>
-                    <span className="text-xs text-white/60">
+                    <span className="text-xs text-ink-mute">
                       {a.points} pt
                     </span>
                   </div>
                   <p className="font-medium mt-1 truncate">{a.title}</p>
-                  <p className="text-xs text-white/60 mt-0.5">
-                    Assigned to <strong className="text-white/80">{a.user.name ?? a.user.email}</strong>
+                  <p className="text-xs text-ink-mute mt-0.5">
+                    Assigned to <strong className="text-ink">{a.user.name ?? a.user.email}</strong>
                     {a.dueAt && ` · due ${a.dueAt.toLocaleDateString()}`}
                     {a.completedAt && ` · completed ${a.completedAt.toLocaleDateString()}`}
                   </p>

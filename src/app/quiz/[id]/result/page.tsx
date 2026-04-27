@@ -43,25 +43,22 @@ export default async function QuizResult({
 
       <div className="animate-slide-up">
         <div
-          className={`rounded-3xl border-2 p-10 text-center relative overflow-hidden ${
+          className={`rounded-3xl border p-10 text-center relative overflow-hidden shadow-pop ${
             passed
-              ? "bg-gradient-to-br from-accent-mint/10 to-brand-500/10 border-accent-mint/40 shadow-glow"
-              : "bg-gradient-to-br from-accent-gold/10 to-accent-rose/5 border-accent-gold/30"
+              ? "bg-gradient-to-br from-emerald-50 to-brand-50 border-emerald-200"
+              : "bg-gradient-to-br from-amber-50 to-rose-50 border-amber-200"
           }`}
         >
-          {/* Decorative glow */}
           <div
             className={`absolute -top-20 left-1/2 -translate-x-1/2 w-72 h-72 rounded-full blur-3xl pointer-events-none ${
-              passed ? "bg-accent-mint/30" : "bg-accent-gold/20"
+              passed ? "bg-emerald-200/40" : "bg-amber-200/40"
             }`}
           />
 
           <div className="relative">
             <div
               className={`w-20 h-20 rounded-full mx-auto mb-5 flex items-center justify-center ${
-                passed
-                  ? "bg-accent-mint/20 text-accent-mint"
-                  : "bg-accent-gold/20 text-accent-gold"
+                passed ? "bg-emerald-100 text-emerald-600" : "bg-amber-100 text-amber-600"
               }`}
             >
               {passed ? (
@@ -72,41 +69,40 @@ export default async function QuizResult({
             </div>
 
             {passed && (
-              <p className="inline-flex items-center gap-2 text-xs uppercase tracking-wider font-semibold text-accent-mint mb-2">
+              <p className="inline-flex items-center gap-2 text-xs uppercase tracking-wider font-bold text-emerald-600 mb-2">
                 <PartyPopper className="w-4 h-4" />
                 Congratulations
               </p>
             )}
 
-            <p className="text-xs text-white/50 uppercase tracking-wide mb-2">
+            <p className="text-xs text-ink-faint uppercase tracking-wider font-semibold mb-2">
               {auto ? "Time expired — auto-submitted" : "Quiz submitted"}
             </p>
 
-            <h1 className="text-7xl font-bold tracking-tight mb-3">
-              <span
-                className={passed ? "text-gradient" : "text-white"}
-              >
+            <h1 className="font-display text-7xl font-extrabold tracking-tight mb-3">
+              <span className={passed ? "text-gradient" : "text-ink"}>
                 {percent.toFixed(0)}%
               </span>
             </h1>
 
             <p
-              className={`text-xl font-semibold mb-2 ${
-                passed ? "text-accent-mint" : "text-accent-gold"
+              className={`font-display text-xl font-bold mb-2 ${
+                passed ? "text-emerald-600" : "text-amber-600"
               }`}
             >
               {passed ? "Quiz passed!" : "Almost there"}
             </p>
-            <p className="text-white/60 text-sm">
+            <p className="text-ink-mute text-sm">
               {score} / {max} points · pass mark {quiz.passPercent}%
             </p>
 
             {passed ? (
-              <p className="mt-6 text-sm text-white/70 max-w-md mx-auto">
-                Nice work — your score has been added to the leaderboard. Keep the streak going.
+              <p className="mt-6 text-sm text-ink-soft max-w-md mx-auto">
+                Nice work — your score has been added to the leaderboard. Keep the
+                streak going.
               </p>
             ) : (
-              <p className="mt-6 text-sm text-white/70 max-w-md mx-auto">
+              <p className="mt-6 text-sm text-ink-soft max-w-md mx-auto">
                 You needed {quiz.passPercent}% to pass. Rewatch the video and give
                 it another shot — you&apos;ve got this.
               </p>
@@ -117,7 +113,7 @@ export default async function QuizResult({
         <div className="mt-8 flex gap-3 justify-center flex-wrap">
           <Link
             href={`/video/${quiz.videoId}`}
-            className="px-4 py-2.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-medium inline-flex items-center gap-2 transition"
+            className="px-4 py-2.5 rounded-lg bg-white hover:bg-muted border border-border text-sm font-medium inline-flex items-center gap-2 shadow-soft transition"
           >
             <ArrowLeft className="w-4 h-4" />
             Back to video
@@ -125,7 +121,7 @@ export default async function QuizResult({
           {!passed && (
             <Link
               href={`/quiz/${id}`}
-              className="px-4 py-2.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-medium inline-flex items-center gap-2 transition"
+              className="px-4 py-2.5 rounded-lg bg-white hover:bg-muted border border-border text-sm font-medium inline-flex items-center gap-2 shadow-soft transition"
             >
               <RotateCcw className="w-4 h-4" />
               Retake
@@ -133,7 +129,7 @@ export default async function QuizResult({
           )}
           <Link
             href="/dashboard"
-            className="px-4 py-2.5 rounded-lg bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-400 hover:to-brand-500 text-sm font-semibold inline-flex items-center gap-2 shadow-glow transition"
+            className="px-4 py-2.5 rounded-lg bg-gradient-to-r from-brand-500 to-accent-violet text-white text-sm font-semibold inline-flex items-center gap-2 shadow-pop hover:opacity-95 transition"
           >
             Dashboard
           </Link>

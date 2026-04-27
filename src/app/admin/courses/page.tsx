@@ -73,13 +73,13 @@ export default async function AdminCoursesPage() {
     <main className="min-h-screen px-6 py-10 max-w-4xl mx-auto">
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-3xl font-bold">Courses & deadlines</h1>
-        <Link href="/admin" className="text-sm text-white/60 hover:text-white">
+        <Link href="/admin" className="text-sm text-ink-mute hover:text-ink">
           ← Admin
         </Link>
       </div>
 
       {courses.length === 0 && (
-        <p className="text-white/60">
+        <p className="text-ink-mute">
           No courses yet — sync OneDrive from the admin home to create the default course.
         </p>
       )}
@@ -90,7 +90,7 @@ export default async function AdminCoursesPage() {
           return (
             <section
               key={c.id}
-              className="rounded-xl bg-white/5 border border-white/10 p-6"
+              className="rounded-2xl bg-white border border-border shadow-soft p-6"
             >
               <form action={updateCourse} className="grid sm:grid-cols-2 gap-3 mb-6">
                 <input type="hidden" name="id" value={c.id} />
@@ -111,18 +111,18 @@ export default async function AdminCoursesPage() {
                   Published
                 </label>
                 <div className="flex items-center justify-end gap-3">
-                  <span className="text-xs text-white/50">{videoCount} videos</span>
+                  <span className="text-xs text-ink-faint">{videoCount} videos</span>
                   <button className="px-3 py-1.5 rounded bg-brand-500 hover:bg-brand-600 text-sm">
                     Save
                   </button>
                 </div>
               </form>
 
-              <h3 className="text-sm font-semibold text-white/80 mb-3">
+              <h3 className="text-sm font-semibold text-ink mb-3">
                 Deadlines ({c.deadlines.length})
               </h3>
               {c.deadlines.length === 0 && (
-                <p className="text-xs text-white/50 mb-3">
+                <p className="text-xs text-ink-faint mb-3">
                   No deadlines yet.
                 </p>
               )}
@@ -130,7 +130,7 @@ export default async function AdminCoursesPage() {
                 {c.deadlines.map((d) => (
                   <div
                     key={d.id}
-                    className="flex items-center justify-between rounded bg-white/5 border border-white/10 px-3 py-2 text-sm"
+                    className="flex items-center justify-between rounded bg-muted border border-border px-3 py-2 text-sm"
                   >
                     <div>
                       <span className="font-medium">{d.kind}</span> •{" "}
@@ -139,7 +139,7 @@ export default async function AdminCoursesPage() {
                     </div>
                     <form action={deleteDeadline}>
                       <input type="hidden" name="id" value={d.id} />
-                      <button className="text-xs text-red-300 hover:text-red-200">
+                      <button className="text-xs text-rose-600 hover:text-rose-500">
                         Delete
                       </button>
                     </form>
@@ -149,15 +149,15 @@ export default async function AdminCoursesPage() {
 
               <form
                 action={addDeadline}
-                className="grid sm:grid-cols-5 gap-2 items-end border-t border-white/10 pt-4"
+                className="grid sm:grid-cols-5 gap-2 items-end border-t border-border pt-4"
               >
                 <input type="hidden" name="courseId" value={c.id} />
                 <label className="text-sm">
-                  <span className="block text-white/60 mb-1">Kind</span>
+                  <span className="block text-ink-mute mb-1">Kind</span>
                   <select
                     name="kind"
                     defaultValue="CUSTOM"
-                    className="w-full bg-white/5 border border-white/10 rounded px-2 py-1.5"
+                    className="w-full bg-muted border border-border rounded px-2 py-1.5"
                   >
                     <option value="MONTHLY">Monthly</option>
                     <option value="QUARTERLY">Quarterly</option>
@@ -200,10 +200,10 @@ function Field({
 }) {
   return (
     <label className={`text-sm ${colSpan ? "sm:col-span-2" : ""}`}>
-      <span className="block text-white/60 mb-1">{label}</span>
+      <span className="block text-ink-mute mb-1">{label}</span>
       <input
         {...input}
-        className="w-full bg-white/5 border border-white/10 rounded px-2 py-1.5"
+        className="w-full bg-muted border border-border rounded px-2 py-1.5"
       />
     </label>
   );

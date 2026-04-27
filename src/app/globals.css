@@ -2,11 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap");
 
 :root {
-  --bg: #0a0e1a;
-  --fg: #e6e8ef;
+  --bg: #f6f7fb;
+  --fg: #0f172a;
 }
 
 * {
@@ -21,66 +21,70 @@ body {
   font-feature-settings: "ss01", "cv01";
 }
 
-/* Subtle radial backdrop on body */
-body {
-  background-image:
-    radial-gradient(at 20% 0%, rgba(59, 98, 246, 0.18) 0px, transparent 50%),
-    radial-gradient(at 80% 100%, rgba(139, 92, 246, 0.12) 0px, transparent 50%);
-  background-attachment: fixed;
+/* Soft gradient blobs in the page backdrop */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(at 12% 10%, rgba(99, 102, 241, 0.08) 0px, transparent 45%),
+    radial-gradient(at 88% 8%, rgba(139, 92, 246, 0.07) 0px, transparent 40%),
+    radial-gradient(at 80% 95%, rgba(14, 165, 233, 0.05) 0px, transparent 45%);
+  pointer-events: none;
 }
 
-/* Scrollbar polish */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
 }
 ::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.02);
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
+  background: rgb(15 23 42 / 0.12);
+  border-radius: 999px;
+  border: 3px solid var(--bg);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.18);
+  background: rgb(15 23 42 / 0.22);
 }
 
-/* Card glow on hover */
 .card-hover {
-  transition: transform 0.2s ease, box-shadow 0.2s ease,
-    border-color 0.2s ease;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
 }
 .card-hover:hover {
   transform: translateY(-2px);
 }
 
-/* Gradient text utility */
 .text-gradient {
-  background: linear-gradient(135deg, #5d80ff 0%, #8b5cf6 100%);
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
 
-/* Shimmer for loading skeletons */
 .shimmer {
   background: linear-gradient(
     90deg,
-    rgba(255, 255, 255, 0.05) 0%,
-    rgba(255, 255, 255, 0.1) 50%,
-    rgba(255, 255, 255, 0.05) 100%
+    rgba(15, 23, 42, 0.04) 0%,
+    rgba(15, 23, 42, 0.08) 50%,
+    rgba(15, 23, 42, 0.04) 100%
   );
   background-size: 200% 100%;
   animation: shimmer 2s linear infinite;
 }
 
 @media print {
+  body::before {
+    display: none;
+  }
   html,
   body {
     background: #fff;
     color: #000;
-  }
-  body {
-    background-image: none;
   }
 }

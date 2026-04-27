@@ -86,14 +86,14 @@ export default async function VideoPage({
       <header className="flex items-center justify-between gap-4 mb-5 flex-wrap">
         <Link
           href="/dashboard"
-          className="text-sm text-white/60 hover:text-white inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition"
+          className="text-sm text-ink-mute hover:text-ink inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-white hover:bg-muted border border-border shadow-soft transition"
         >
           <ArrowLeft className="w-4 h-4" />
           Dashboard
         </Link>
         <div className="flex items-center gap-3">
-          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10">
-            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-brand-500 to-accent-violet flex items-center justify-center text-xs font-semibold">
+          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-border shadow-soft">
+            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-brand-500 to-accent-violet flex items-center justify-center text-xs font-semibold text-white">
               {(session.user.name ?? "?").slice(0, 1).toUpperCase()}
             </div>
             <span className="text-sm font-medium">{session.user.name}</span>
@@ -104,7 +104,7 @@ export default async function VideoPage({
               await signOut({ redirectTo: "/" });
             }}
           >
-            <button className="text-xs px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 inline-flex items-center gap-1.5 transition">
+            <button className="text-xs px-3 py-2 rounded-lg bg-white hover:bg-muted border border-border shadow-soft inline-flex items-center gap-1.5 transition">
               <LogOut className="w-3.5 h-3.5" />
               Sign out
             </button>
@@ -115,12 +115,12 @@ export default async function VideoPage({
       <div className="grid lg:grid-cols-[1fr_340px] gap-6">
         {/* Main column — big player + quiz */}
         <div className="min-w-0">
-          <h1 className="text-xl sm:text-2xl font-bold mb-1">
-            {prettifyName(video.title)}
-          </h1>
-          <p className="text-white/50 text-xs mb-4">
+          <p className="text-[10px] uppercase tracking-wider font-semibold text-ink-faint mb-1">
             {video.module.course.title} · {video.module.title}
           </p>
+          <h1 className="font-display text-xl sm:text-2xl font-extrabold mb-4 leading-tight">
+            {prettifyName(video.title)}
+          </h1>
 
           <VideoPlayer
             videoId={video.id}
@@ -129,24 +129,26 @@ export default async function VideoPage({
           />
 
           {video.quiz && (
-            <section className="mt-6 rounded-2xl bg-bg-card border border-white/10 p-5">
+            <section className="mt-6 rounded-2xl bg-white border border-border p-5 shadow-soft">
               <div className="flex items-start justify-between flex-wrap gap-3">
                 <div className="flex items-start gap-3">
-                  <div className="w-11 h-11 rounded-xl bg-accent-gold/15 text-accent-gold flex items-center justify-center shrink-0">
+                  <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
                     <GraduationCap className="w-5 h-5" />
                   </div>
                   <div>
-                    <h2 className="text-lg font-semibold">{video.quiz.title}</h2>
-                    <p className="text-xs text-white/60 mt-1 flex items-center gap-2 flex-wrap">
+                    <h2 className="font-display text-lg font-bold">
+                      {video.quiz.title}
+                    </h2>
+                    <p className="text-xs text-ink-mute mt-1 flex items-center gap-2 flex-wrap">
                       <span className="inline-flex items-center gap-1">
                         <Clock className="w-3 h-3" />
                         {Math.round(video.quiz.timeLimitSec / 60)} min
                       </span>
-                      <span className="text-white/20">·</span>
+                      <span className="text-ink-faint">·</span>
                       <span>Pass {video.quiz.passPercent}%</span>
                       {video.quiz.maxAttempts && (
                         <>
-                          <span className="text-white/20">·</span>
+                          <span className="text-ink-faint">·</span>
                           <span>Max {video.quiz.maxAttempts} attempts</span>
                         </>
                       )}
@@ -157,8 +159,8 @@ export default async function VideoPage({
                         <span
                           className={
                             bestAttempt.passed
-                              ? "text-accent-mint font-semibold"
-                              : "text-accent-gold font-semibold"
+                              ? "text-emerald-600 font-bold"
+                              : "text-amber-600 font-bold"
                           }
                         >
                           {bestAttempt.percent.toFixed(0)}%
@@ -171,29 +173,29 @@ export default async function VideoPage({
                 {quizUnlocked ? (
                   <Link
                     href={`/quiz/${video.quiz.id}`}
-                    className="px-4 py-2 rounded-lg bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-400 hover:to-brand-500 font-medium shadow-glow transition"
+                    className="px-4 py-2 rounded-lg bg-gradient-to-r from-brand-500 to-accent-violet text-white font-medium shadow-pop hover:opacity-95 transition"
                   >
                     {bestAttempt ? "Retake quiz" : "Start quiz"}
                   </Link>
                 ) : (
-                  <div className="text-xs text-white/50 px-3 py-2 rounded-lg bg-white/5 border border-white/10">
+                  <div className="text-xs text-ink-mute px-3 py-2 rounded-lg bg-muted border border-border">
                     Watch {unlockAt}% to unlock
                   </div>
                 )}
               </div>
 
               {video.quiz.attempts.length > 0 && (
-                <div className="mt-5 pt-5 border-t border-white/10">
-                  <p className="text-sm font-medium mb-2">
+                <div className="mt-5 pt-5 border-t border-border">
+                  <p className="text-sm font-semibold mb-2">
                     Attempt history ({video.quiz.attempts.length})
                   </p>
                   <div className="space-y-1.5">
                     {video.quiz.attempts.map((a, i) => (
                       <div
                         key={a.id}
-                        className="text-xs flex items-center justify-between bg-white/5 rounded px-3 py-2"
+                        className="text-xs flex items-center justify-between bg-muted rounded-lg px-3 py-2"
                       >
-                        <span className="text-white/60">
+                        <span className="text-ink-mute">
                           #{video.quiz!.attempts.length - i} ·{" "}
                           {a.submittedAt
                             ? a.submittedAt.toLocaleString()
@@ -202,10 +204,10 @@ export default async function VideoPage({
                         <span
                           className={
                             a.passed
-                              ? "text-green-300"
+                              ? "text-emerald-600 font-semibold"
                               : a.submittedAt
-                                ? "text-yellow-300"
-                                : "text-white/50"
+                                ? "text-amber-600 font-semibold"
+                                : "text-ink-faint"
                           }
                         >
                           {a.submittedAt ? `${a.percent.toFixed(0)}%` : "—"}
@@ -221,25 +223,25 @@ export default async function VideoPage({
         </div>
 
         {/* Sidebar — module video list */}
-        <aside className="lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto rounded-xl bg-white/5 border border-white/10">
-          <div className="px-4 py-3 border-b border-white/10 sticky top-0 bg-[#0b1020]/95 backdrop-blur z-10">
-            <p className="text-xs uppercase text-white/50 tracking-wide">
+        <aside className="lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto rounded-2xl bg-white border border-border shadow-soft">
+          <div className="px-4 py-3 border-b border-border sticky top-0 bg-white/95 backdrop-blur z-10">
+            <p className="text-[10px] uppercase tracking-wider font-semibold text-ink-faint">
               {video.module.title}
             </p>
-            <p className="text-sm font-medium mt-0.5">
+            <p className="text-sm font-semibold mt-0.5">
               {moduleDone} / {moduleVideos.length} videos completed
             </p>
-            <div className="mt-2 h-1.5 bg-white/10 rounded-full overflow-hidden">
+            <div className="mt-2 h-1.5 bg-muted rounded-full overflow-hidden">
               <div
-                className="h-full bg-brand-500 transition-all"
+                className="h-full bg-gradient-to-r from-brand-500 to-accent-violet transition-all"
                 style={{ width: `${modulePct}%` }}
               />
             </div>
-            <p className="text-[10px] text-white/50 mt-1 text-right">
+            <p className="text-[10px] text-ink-mute mt-1 text-right font-medium">
               {Math.round(modulePct)}% module progress
             </p>
           </div>
-          <div className="divide-y divide-white/5">
+          <div className="divide-y divide-border">
             {video.module.videos.map((v, i) => {
               const p = v.progresses[0];
               const pct = Math.round(p?.percent ?? 0);
@@ -251,27 +253,27 @@ export default async function VideoPage({
                   href={`/video/${v.id}`}
                   className={`block px-4 py-3 transition ${
                     isActive
-                      ? "bg-brand-500/15 border-l-2 border-brand-500"
-                      : "hover:bg-white/5"
+                      ? "bg-brand-50 border-l-[3px] border-brand-500"
+                      : "hover:bg-muted/50"
                   }`}
                 >
                   <div className="flex items-start gap-3">
                     <div
-                      className={`w-7 h-7 rounded text-xs font-semibold flex items-center justify-center shrink-0 ${
+                      className={`w-7 h-7 rounded-lg text-xs font-bold flex items-center justify-center shrink-0 ${
                         p?.completed
-                          ? "bg-green-500/20 text-green-300"
+                          ? "bg-emerald-100 text-emerald-700"
                           : isActive
-                            ? "bg-brand-500/30 text-brand-500"
-                            : "bg-white/10 text-white/60"
+                            ? "bg-brand-100 text-brand-600"
+                            : "bg-muted text-ink-mute"
                       }`}
                     >
                       {p?.completed ? "✓" : i + 1}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm leading-snug line-clamp-2">
+                      <p className="text-sm leading-snug line-clamp-2 font-medium">
                         {prettifyName(v.title)}
                       </p>
-                      <div className="flex items-center gap-2 mt-1.5 text-[11px] text-white/50">
+                      <div className="flex items-center gap-2 mt-1.5 text-[11px] text-ink-mute">
                         {formatDuration(v.durationSeconds) && (
                           <span>{formatDuration(v.durationSeconds)}</span>
                         )}
@@ -280,7 +282,7 @@ export default async function VideoPage({
                             <span>·</span>
                             <span
                               className={
-                                passed ? "text-green-300" : "text-white/50"
+                                passed ? "text-emerald-600 font-semibold" : "text-ink-mute"
                               }
                             >
                               Quiz
@@ -288,7 +290,7 @@ export default async function VideoPage({
                           </>
                         )}
                       </div>
-                      <div className="mt-2 h-0.5 bg-white/10 rounded-full overflow-hidden">
+                      <div className="mt-2 h-0.5 bg-border rounded-full overflow-hidden">
                         <div
                           className="h-full bg-brand-500"
                           style={{ width: `${Math.min(100, pct)}%` }}
