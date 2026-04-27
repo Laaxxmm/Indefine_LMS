@@ -2,6 +2,26 @@ import type { Config } from "tailwindcss";
 
 export default {
   content: ["./src/**/*.{js,ts,jsx,tsx,mdx}"],
+  // Recap slide gradients are passed as runtime string props to <SlideShell>.
+  // Tailwind's JIT scanner usually picks them up because the literals do
+  // appear in source, but we safelist explicitly so they can never be
+  // accidentally tree-shaken from a stale build cache.
+  safelist: [
+    "bg-gradient-to-br",
+    "from-brand-500", "via-violet-500", "to-rose-500",
+    "from-cyan-500", "to-brand-600",
+    "from-indigo-600", "via-violet-600", "to-purple-700",
+    "from-orange-500", "via-rose-500", "to-pink-600",
+    "from-emerald-500", "to-teal-700",
+    "from-rose-500", "to-amber-500",
+    "from-pink-500", "to-red-600",
+    "from-violet-600", "to-fuchsia-600",
+    "from-amber-400", "via-orange-500",
+    "from-slate-900", "via-violet-900", "to-brand-900",
+    "from-emerald-500", "to-teal-600",
+    "from-amber-100", "to-rose-50",
+    "from-amber-100", "to-amber-50",
+  ],
   theme: {
     extend: {
       fontFamily: {

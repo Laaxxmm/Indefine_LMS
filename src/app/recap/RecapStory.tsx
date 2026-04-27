@@ -73,7 +73,7 @@ export default function RecapStory({ recap }: { recap: RecapPayload }) {
   const Slide = slides[index];
 
   return (
-    <div className="fixed inset-0 z-50 bg-black overflow-hidden flex items-center justify-center">
+    <div className="fixed inset-0 z-50 bg-slate-950 overflow-hidden">
       {/* Progress bars */}
       <div className="absolute top-3 left-3 right-3 flex gap-1.5 z-30">
         {slides.map((_, i) => (
@@ -129,11 +129,8 @@ export default function RecapStory({ recap }: { recap: RecapPayload }) {
         <ChevronRight className="w-6 h-6 text-white/0 group-hover:text-white/70 transition" />
       </button>
 
-      {/* Slide */}
-      <div
-        key={index}
-        className="relative w-full h-full flex items-center justify-center animate-fade-in"
-      >
+      {/* Slide — absolute fills the overlay */}
+      <div key={index} className="absolute inset-0 animate-fade-in">
         {Slide}
       </div>
     </div>
@@ -171,7 +168,7 @@ function SlideShell({
 }) {
   return (
     <div
-      className={`w-full h-full flex flex-col items-center justify-center text-white px-8 relative overflow-hidden ${bg}`}
+      className={`absolute inset-0 flex flex-col items-center justify-center text-white px-8 overflow-hidden bg-slate-900 ${bg}`}
     >
       <div className="absolute -top-32 -left-32 w-96 h-96 bg-white/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-white/10 rounded-full blur-3xl pointer-events-none" />
