@@ -10,6 +10,7 @@ import {
   BarChart3,
   Sparkles,
   CheckCircle2,
+  MessageCircle,
   type LucideIcon,
 } from "lucide-react";
 
@@ -21,6 +22,7 @@ const ICONS: Record<string, LucideIcon> = {
   BarChart3,
   Sparkles,
   CheckCircle2,
+  MessageCircle,
 };
 
 export default function AdminNav({

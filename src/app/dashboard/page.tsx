@@ -15,6 +15,11 @@ import {
 } from "@/lib/trajectory";
 import TrajectoryRings, { RingLegend } from "./TrajectoryRings";
 import {
+  checkinUrgency,
+  computeCheckinStreak,
+  currentWeekStart,
+} from "@/lib/checkins";
+import {
   Flame,
   Sparkles,
   Trophy,
@@ -30,6 +35,7 @@ import {
   ShieldCheck,
   LogOut,
   Rocket,
+  MessageCircle,
 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -114,6 +120,17 @@ export default async function Dashboard() {
   });
   const wizardDone = !!wizardUser?.wizardSubmittedAt;
 
+  // Weekly check-in state
+  const ws = currentWeekStart();
+  const [thisWeekCheckin, checkinStreak] = await Promise.all([
+    prisma.weeklyCheckin.findUnique({
+      where: { userId_weekStart: { userId, weekStart: ws } },
+    }),
+    computeCheckinStreak(userId),
+  ]);
+  const urgency = checkinUrgency();
+  const showCheckinBanner = !thisWeekCheckin && urgency !== "off";
+
   const me = leaderboard.find((r) => r.userId === userId);
   const myRank = me ? leaderboard.findIndex((r) => r.userId === userId) + 1 : null;
   const myPoints = me?.totalScore ?? 0;
@@ -190,6 +207,50 @@ export default async function Dashboard() {
           </form>
         </div>
       </header>
+
+      {/* Weekly check-in CTA */}
+      {showCheckinBanner && (
+        <Link
+          href="/checkin"
+          className={`block mb-6 rounded-2xl p-5 border shadow-soft hover:shadow-lift transition relative overflow-hidden ${
+            urgency === "loud"
+              ? "bg-gradient-to-r from-amber-100 to-rose-50 border-amber-200"
+              : "bg-white border-border"
+          }`}
+        >
+          <div className="flex items-center gap-4">
+            <div
+              className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
+                urgency === "loud"
+                  ? "bg-amber-500 text-white"
+                  : "bg-amber-50 text-amber-600"
+              }`}
+            >
+              <MessageCircle className="w-6 h-6" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] uppercase tracking-wider font-bold text-ink-faint">
+                Weekly check-in · 90 seconds
+                {checkinStreak.current > 0 && (
+                  <span className="text-amber-600 ml-2">
+                    🔥 {checkinStreak.current}-week streak
+                  </span>
+                )}
+              </p>
+              <p className="font-display text-lg font-bold mt-0.5">
+                {urgency === "loud"
+                  ? "It's reflection time — how was your week?"
+                  : "Take a breath and reflect →"}
+              </p>
+              <p className="text-sm text-ink-mute mt-0.5">
+                Three short answers about what worked, what blocked you, and
+                what&apos;s next.
+              </p>
+            </div>
+            <ArrowRight className="w-5 h-5 text-ink-faint hidden sm:block" />
+          </div>
+        </Link>
+      )}
 
       {/* Wizard CTA */}
       {!wizardDone && trajectory.cycle && (

@@ -44,6 +44,7 @@ export default async function AdminLayout({
               { href: "/admin/courses", label: "Courses & Deadlines", icon: "CalendarClock" },
               { href: "/admin/trajectory", label: "Trajectory", icon: "Sparkles" },
               { href: "/admin/approvals", label: "Approvals", icon: "CheckCircle2" },
+              { href: "/admin/checkins", label: "Check-ins", icon: "MessageCircle" },
               { href: "/admin/kra", label: "KRA Reports", icon: "BarChart3" },
             ]}
           />
