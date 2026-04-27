@@ -2,19 +2,16 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { Users, Save } from "lucide-react";
-import type { EmployeeLevel } from "@prisma/client";
+import { Users, Save, Building2 } from "lucide-react";
+import type { EmployeeLevel, Department } from "@prisma/client";
+import {
+  ACTIVE_LEVELS,
+  DEPARTMENTS,
+  departmentLabel,
+  levelLabel,
+} from "@/lib/ca-firm";
 
 export const dynamic = "force-dynamic";
-
-const LEVELS: EmployeeLevel[] = [
-  "TRAINEE",
-  "ASSOCIATE",
-  "SENIOR",
-  "LEAD",
-  "MANAGER",
-  "PARTNER",
-];
 
 async function saveHierarchy(formData: FormData) {
   "use server";
@@ -22,46 +19,68 @@ async function saveHierarchy(formData: FormData) {
   if (session?.user?.role !== "ADMIN") return;
 
   const ops: Promise<unknown>[] = [];
+  // Group by user — collect all fields from this submission then apply once.
+  const updates = new Map<string, Record<string, unknown>>();
   for (const [key, value] of formData.entries()) {
-    if (key.startsWith("manager_")) {
-      const userId = key.slice("manager_".length);
-      const managerId = String(value).trim();
-      ops.push(
-        prisma.user.update({
-          where: { id: userId },
-          data: { managerId: managerId || null },
-        })
-      );
-    } else if (key.startsWith("level_")) {
-      const userId = key.slice("level_".length);
-      const level = String(value) as EmployeeLevel;
-      if (LEVELS.includes(level)) {
-        ops.push(
-          prisma.user.update({
-            where: { id: userId },
-            data: { level },
-          })
-        );
-      }
+    const m = key.match(/^(manager|level|department|branch)_(.+)$/);
+    if (!m) continue;
+    const field = m[1];
+    const userId = m[2];
+    const cur = updates.get(userId) ?? {};
+    const v = String(value).trim();
+
+    if (field === "manager") cur.managerId = v || null;
+    else if (field === "level" && ACTIVE_LEVELS.includes(v as EmployeeLevel))
+      cur.level = v;
+    else if (
+      field === "department" &&
+      DEPARTMENTS.includes(v as Department)
+    )
+      cur.department = v;
+    else if (field === "branch") cur.branchId = v || null;
+
+    updates.set(userId, cur);
+  }
+
+  for (const [userId, data] of updates) {
+    if (Object.keys(data).length > 0) {
+      ops.push(prisma.user.update({ where: { id: userId }, data }));
     }
   }
   await Promise.all(ops);
   revalidatePath("/admin/team");
   revalidatePath("/team");
+  revalidatePath("/leaderboard");
 }
 
-export default async function AdminTeamPage() {
+export default async function AdminTeamPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
   const session = await auth();
   if (!session?.user) redirect("/");
   if (session.user.role !== "ADMIN") redirect("/dashboard");
+  const sp = await searchParams;
 
-  const users = await prisma.user.findMany({
-    where: { active: true },
-    orderBy: [{ level: "desc" }, { name: "asc" }],
-  });
+  const [users, branches] = await Promise.all([
+    prisma.user.findMany({
+      where: {
+        active: true,
+        ...(sp.branch ? { branchId: sp.branch } : {}),
+        ...(sp.dept ? { department: sp.dept as Department } : {}),
+      },
+      include: { branch: true },
+      orderBy: [{ department: "asc" }, { level: "desc" }, { name: "asc" }],
+    }),
+    prisma.branch.findMany({
+      where: { isActive: true },
+      orderBy: { name: "asc" },
+    }),
+  ]);
 
   return (
-    <main className="px-6 py-8 max-w-5xl">
+    <main className="px-6 py-8 max-w-6xl">
       <div className="mb-8">
         <p className="text-xs uppercase tracking-wider font-semibold text-ink-faint mb-1">
           Admin · Team
@@ -70,14 +89,59 @@ export default async function AdminTeamPage() {
           Team & hierarchy
         </h1>
         <p className="text-ink-mute mt-1 text-sm">
-          Set each employee&apos;s level and assign their manager. Managers see
-          their direct reports&apos; trajectory rings and coaching prompts on{" "}
-          <code className="text-ink font-mono text-[11px] bg-muted px-1.5 py-0.5 rounded">
-            /team
-          </code>
-          .
+          Set each person&apos;s level, department, branch and manager. The
+          combination drives their KRA targets, leaderboard placement and
+          who-reports-to-whom.
         </p>
       </div>
+
+      {/* Filters */}
+      <form
+        method="GET"
+        className="rounded-2xl bg-white border border-border shadow-soft p-4 mb-4 flex items-end gap-3 flex-wrap"
+      >
+        <label className="text-sm">
+          <span className="block text-ink-mute mb-1">Branch</span>
+          <select
+            name="branch"
+            defaultValue={sp.branch ?? ""}
+            className="bg-white border border-border rounded-lg px-2 py-1.5 text-sm"
+          >
+            <option value="">All branches</option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.code} · {b.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm">
+          <span className="block text-ink-mute mb-1">Department</span>
+          <select
+            name="dept"
+            defaultValue={sp.dept ?? ""}
+            className="bg-white border border-border rounded-lg px-2 py-1.5 text-sm"
+          >
+            <option value="">All departments</option>
+            {DEPARTMENTS.map((d) => (
+              <option key={d} value={d}>
+                {departmentLabel(d)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button className="text-xs px-3 py-1.5 rounded-lg bg-ink hover:bg-ink-soft text-white font-medium transition">
+          Apply
+        </button>
+        {(sp.branch || sp.dept) && (
+          <a
+            href="/admin/team"
+            className="text-xs px-3 py-1.5 rounded-lg bg-white border border-border hover:bg-muted transition"
+          >
+            Clear
+          </a>
+        )}
+      </form>
 
       <form
         action={saveHierarchy}
@@ -86,7 +150,7 @@ export default async function AdminTeamPage() {
         <div className="px-5 py-4 border-b border-border bg-muted/40 flex items-center gap-2">
           <Users className="w-4 h-4 text-ink-mute" />
           <p className="font-display font-bold text-sm">
-            {users.length} active user{users.length === 1 ? "" : "s"}
+            {users.length} user{users.length === 1 ? "" : "s"}
           </p>
         </div>
         <div className="overflow-x-auto">
@@ -95,14 +159,14 @@ export default async function AdminTeamPage() {
               <tr>
                 <th className="text-left p-3 pl-5">Employee</th>
                 <th className="text-left p-3">Level</th>
+                <th className="text-left p-3">Dept</th>
+                <th className="text-left p-3">Branch</th>
                 <th className="text-left p-3 pr-5">Manager</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {users.map((u) => {
-                const possibleManagers = users.filter(
-                  (m) => m.id !== u.id
-                );
+                const possibleManagers = users.filter((m) => m.id !== u.id);
                 return (
                   <tr key={u.id} className="hover:bg-muted/30 transition">
                     <td className="p-3 pl-5">
@@ -114,19 +178,52 @@ export default async function AdminTeamPage() {
                           <p className="font-semibold truncate">
                             {u.name ?? u.email}
                           </p>
-                          <p className="text-xs text-ink-faint truncate">{u.email}</p>
+                          <p className="text-xs text-ink-faint truncate">
+                            {u.email}
+                          </p>
                         </div>
                       </div>
                     </td>
                     <td className="p-3">
                       <select
                         name={`level_${u.id}`}
-                        defaultValue={u.level}
-                        className="bg-white border border-border rounded-lg px-2 py-1.5 text-sm"
+                        defaultValue={
+                          ACTIVE_LEVELS.includes(u.level)
+                            ? u.level
+                            : "EXECUTIVE"
+                        }
+                        className="bg-white border border-border rounded-lg px-2 py-1.5 text-xs"
                       >
-                        {LEVELS.map((lv) => (
+                        {ACTIVE_LEVELS.map((lv) => (
                           <option key={lv} value={lv}>
-                            {lv}
+                            {levelLabel(lv)}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="p-3">
+                      <select
+                        name={`department_${u.id}`}
+                        defaultValue={u.department}
+                        className="bg-white border border-border rounded-lg px-2 py-1.5 text-xs"
+                      >
+                        {DEPARTMENTS.map((d) => (
+                          <option key={d} value={d}>
+                            {departmentLabel(d)}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="p-3">
+                      <select
+                        name={`branch_${u.id}`}
+                        defaultValue={u.branchId ?? ""}
+                        className="bg-white border border-border rounded-lg px-2 py-1.5 text-xs"
+                      >
+                        <option value="">— none —</option>
+                        {branches.map((b) => (
+                          <option key={b.id} value={b.id}>
+                            {b.code}
                           </option>
                         ))}
                       </select>
@@ -135,12 +232,12 @@ export default async function AdminTeamPage() {
                       <select
                         name={`manager_${u.id}`}
                         defaultValue={u.managerId ?? ""}
-                        className="bg-white border border-border rounded-lg px-2 py-1.5 text-sm w-full max-w-xs"
+                        className="bg-white border border-border rounded-lg px-2 py-1.5 text-xs w-full max-w-[200px]"
                       >
                         <option value="">— none —</option>
                         {possibleManagers.map((m) => (
                           <option key={m.id} value={m.id}>
-                            {m.name ?? m.email} · {m.level}
+                            {m.name ?? m.email}
                           </option>
                         ))}
                       </select>
@@ -151,7 +248,14 @@ export default async function AdminTeamPage() {
             </tbody>
           </table>
         </div>
-        <div className="px-5 py-4 border-t border-border bg-muted/40">
+        <div className="px-5 py-4 border-t border-border bg-muted/40 flex items-center justify-between">
+          <p className="text-xs text-ink-mute inline-flex items-center gap-1.5">
+            <Building2 className="w-3.5 h-3.5" />
+            Manage branches at{" "}
+            <a href="/admin/branches" className="text-brand-600 hover:underline">
+              /admin/branches
+            </a>
+          </p>
           <button className="px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold inline-flex items-center gap-2 shadow-pop transition">
             <Save className="w-4 h-4" />
             Save changes

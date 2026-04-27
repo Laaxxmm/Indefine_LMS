@@ -47,6 +47,72 @@ export interface TrajectorySummary {
   };
 }
 
+// Default targets per level, calibrated for a CA / financial firm.
+// Articles + Executives are still learning, so Mastery/Delivery targets
+// are gentler; Managers and Partners weigh Initiative + Vision higher.
+const TARGETS_BY_LEVEL: Record<TrackKind, Record<EmployeeLevel, number>> = {
+  MASTERY: {
+    TRAINEE: 70, ASSOCIATE: 75, SENIOR: 80, LEAD: 80,
+    ARTICLE: 70,
+    EXECUTIVE: 75,
+    SENIOR_EXECUTIVE: 80,
+    ASSISTANT_MANAGER: 80,
+    MANAGER: 75,
+    SENIOR_MANAGER: 70,
+    PARTNER: 65,
+  },
+  DELIVERY: {
+    TRAINEE: 80, ASSOCIATE: 85, SENIOR: 90, LEAD: 90,
+    ARTICLE: 80,
+    EXECUTIVE: 85,
+    SENIOR_EXECUTIVE: 90,
+    ASSISTANT_MANAGER: 92,
+    MANAGER: 92,
+    SENIOR_MANAGER: 92,
+    PARTNER: 92,
+  },
+  INITIATIVE: {
+    TRAINEE: 1, ASSOCIATE: 2, SENIOR: 3, LEAD: 4,
+    ARTICLE: 1,
+    EXECUTIVE: 2,
+    SENIOR_EXECUTIVE: 3,
+    ASSISTANT_MANAGER: 4,
+    MANAGER: 5,
+    SENIOR_MANAGER: 6,
+    PARTNER: 8,
+  },
+  COLLABORATION: {
+    TRAINEE: 2, ASSOCIATE: 3, SENIOR: 4, LEAD: 5,
+    ARTICLE: 2,
+    EXECUTIVE: 3,
+    SENIOR_EXECUTIVE: 4,
+    ASSISTANT_MANAGER: 5,
+    MANAGER: 6,
+    SENIOR_MANAGER: 7,
+    PARTNER: 8,
+  },
+  VISION: {
+    TRAINEE: 70, ASSOCIATE: 75, SENIOR: 80, LEAD: 85,
+    ARTICLE: 70,
+    EXECUTIVE: 75,
+    SENIOR_EXECUTIVE: 80,
+    ASSISTANT_MANAGER: 85,
+    MANAGER: 85,
+    SENIOR_MANAGER: 90,
+    PARTNER: 90,
+  },
+  CRAFT: {
+    TRAINEE: 3.5, ASSOCIATE: 3.8, SENIOR: 4.0, LEAD: 4.2,
+    ARTICLE: 3.5,
+    EXECUTIVE: 3.8,
+    SENIOR_EXECUTIVE: 4.0,
+    ASSISTANT_MANAGER: 4.2,
+    MANAGER: 4.3,
+    SENIOR_MANAGER: 4.5,
+    PARTNER: 4.7,
+  },
+};
+
 export const TRACK_META: Record<
   TrackKind,
   { label: string; emoji: string; defaultTarget: Record<EmployeeLevel, number>; defaultWeight: number }
@@ -54,79 +120,37 @@ export const TRACK_META: Record<
   MASTERY: {
     label: "Mastery",
     emoji: "📚",
-    defaultTarget: {
-      TRAINEE: 70,
-      ASSOCIATE: 75,
-      SENIOR: 80,
-      LEAD: 80,
-      MANAGER: 75,
-      PARTNER: 70,
-    },
+    defaultTarget: TARGETS_BY_LEVEL.MASTERY,
     defaultWeight: 25,
   },
   DELIVERY: {
     label: "Delivery",
     emoji: "💪",
-    defaultTarget: {
-      TRAINEE: 80,
-      ASSOCIATE: 85,
-      SENIOR: 90,
-      LEAD: 90,
-      MANAGER: 90,
-      PARTNER: 90,
-    },
+    defaultTarget: TARGETS_BY_LEVEL.DELIVERY,
     defaultWeight: 25,
   },
   INITIATIVE: {
     label: "Initiative",
     emoji: "🌱",
-    defaultTarget: {
-      TRAINEE: 1,
-      ASSOCIATE: 2,
-      SENIOR: 3,
-      LEAD: 4,
-      MANAGER: 5,
-      PARTNER: 6,
-    },
+    defaultTarget: TARGETS_BY_LEVEL.INITIATIVE,
     defaultWeight: 15,
   },
   COLLABORATION: {
     label: "Collaboration",
     emoji: "🤝",
-    defaultTarget: {
-      TRAINEE: 2,
-      ASSOCIATE: 3,
-      SENIOR: 4,
-      LEAD: 5,
-      MANAGER: 6,
-      PARTNER: 6,
-    },
+    defaultTarget: TARGETS_BY_LEVEL.COLLABORATION,
     defaultWeight: 10,
   },
   VISION: {
     label: "Vision",
     emoji: "🎯",
-    defaultTarget: {
-      TRAINEE: 70,
-      ASSOCIATE: 75,
-      SENIOR: 80,
-      LEAD: 85,
-      MANAGER: 85,
-      PARTNER: 85,
-    },
+    defaultTarget: TARGETS_BY_LEVEL.VISION,
     defaultWeight: 15,
   },
   CRAFT: {
     label: "Craft",
     emoji: "⭐",
-    defaultTarget: {
-      TRAINEE: 3.5,
-      ASSOCIATE: 3.8,
-      SENIOR: 4.0,
-      LEAD: 4.2,
-      MANAGER: 4.3,
-      PARTNER: 4.5,
-    },
+    defaultTarget: TARGETS_BY_LEVEL.CRAFT,
     defaultWeight: 10,
   },
 };
@@ -234,14 +258,21 @@ export async function ensureDefaultCycle(): Promise<PerformanceCycle> {
     data: { name, startDate: start, endDate: end, isActive: true },
   });
 
-  // Seed default targets for every track × level combination
+  // Seed default targets for every track × level combination.
+  // Includes legacy values (TRAINEE/ASSOCIATE/SENIOR/LEAD) so users on
+  // those still get sensible targets while admins migrate them.
   const levels: EmployeeLevel[] = [
+    "ARTICLE",
+    "EXECUTIVE",
+    "SENIOR_EXECUTIVE",
+    "ASSISTANT_MANAGER",
+    "MANAGER",
+    "SENIOR_MANAGER",
+    "PARTNER",
     "TRAINEE",
     "ASSOCIATE",
     "SENIOR",
     "LEAD",
-    "MANAGER",
-    "PARTNER",
   ];
   const trackKinds: TrackKind[] = [
     "MASTERY",

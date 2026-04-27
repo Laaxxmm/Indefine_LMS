@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   MessageCircle,
   Users,
+  Building2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -25,6 +26,7 @@ const ICONS: Record<string, LucideIcon> = {
   CheckCircle2,
   MessageCircle,
   Users,
+  Building2,
 };
 
 export default function AdminNav({

@@ -19,7 +19,9 @@ model User {
   emailVerified DateTime?
   image         String?
   role          Role      @default(EMPLOYEE)
-  level         EmployeeLevel @default(ASSOCIATE)
+  level         EmployeeLevel @default(EXECUTIVE)
+  department    Department    @default(GENERAL)
+  branchId      String?
   managerId     String?
   active        Boolean   @default(true)
   deactivatedAt DateTime?
@@ -38,8 +40,9 @@ model User {
   assignments        Assignment[] @relation("AssignmentTarget")
   assignmentsCreated Assignment[] @relation("AssignmentCreator")
 
-  manager       User?  @relation("Reports", fields: [managerId], references: [id])
-  reports       User[] @relation("Reports")
+  manager       User?    @relation("Reports", fields: [managerId], references: [id])
+  reports       User[]   @relation("Reports")
+  branch        Branch?  @relation(fields: [branchId], references: [id])
 
   // Trajectory
   quests              Quest[]
@@ -54,17 +57,48 @@ model User {
 }
 
 enum EmployeeLevel {
-  TRAINEE
-  ASSOCIATE
-  SENIOR
-  LEAD
+  // Legacy values kept so existing rows don't break — UI hides these.
+  TRAINEE        @map("TRAINEE")
+  ASSOCIATE      @map("ASSOCIATE")
+  SENIOR         @map("SENIOR")
+  LEAD           @map("LEAD")
+  // CA-firm canonical levels
+  ARTICLE
+  EXECUTIVE
+  SENIOR_EXECUTIVE
+  ASSISTANT_MANAGER
   MANAGER
+  SENIOR_MANAGER
   PARTNER
+}
+
+enum Department {
+  AUDIT
+  TAX
+  ACCOUNTS
+  ROC
+  TECH       // internal technology / engineering team
+  ADMIN      // operations / hr / finance / front office
+  GENERAL    // fallback / not-yet-assigned
 }
 
 enum Role {
   EMPLOYEE
   ADMIN
+}
+
+// Physical office location. Lets the firm scale across cities and
+// compare branch performance side-by-side.
+model Branch {
+  id        String   @id @default(cuid())
+  name      String   // "Bangalore HQ"
+  code      String   @unique  // short code "BLR" used in lists
+  city      String?
+  state     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  users     User[]
 }
 
 model Account {

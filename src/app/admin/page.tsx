@@ -19,6 +19,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Sparkles,
+  Building2,
 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -214,6 +215,13 @@ export default async function AdminOverview({
               Quick actions
             </h2>
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <QuickLink
+                icon={Building2}
+                href="/admin/branches"
+                title="Branches"
+                sub="Cities, codes, scores"
+                tint="sky"
+              />
               <QuickLink
                 icon={Sparkles}
                 href="/admin/trajectory"

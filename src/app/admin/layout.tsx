@@ -43,6 +43,7 @@ export default async function AdminLayout({
               { href: "/admin/assignments", label: "Assignments", icon: "Target" },
               { href: "/admin/courses", label: "Courses & Deadlines", icon: "CalendarClock" },
               { href: "/admin/team", label: "Team & hierarchy", icon: "Users" },
+              { href: "/admin/branches", label: "Branches", icon: "Building2" },
               { href: "/admin/trajectory", label: "Trajectory", icon: "Sparkles" },
               { href: "/admin/approvals", label: "Approvals", icon: "CheckCircle2" },
               { href: "/admin/checkins", label: "Check-ins", icon: "MessageCircle" },
