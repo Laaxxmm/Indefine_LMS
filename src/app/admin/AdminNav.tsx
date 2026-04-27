@@ -9,6 +9,7 @@ import {
   CalendarClock,
   BarChart3,
   Sparkles,
+  CheckCircle2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -19,6 +20,7 @@ const ICONS: Record<string, LucideIcon> = {
   CalendarClock,
   BarChart3,
   Sparkles,
+  CheckCircle2,
 };
 
 export default function AdminNav({

@@ -23,6 +23,10 @@ model User {
   managerId     String?
   active        Boolean   @default(true)
   deactivatedAt DateTime?
+  // Growth Wizard self-reflection — populated through the multi-step flow
+  strengths           Json?     // string[]
+  aspiration          String?   // free-text "where do you see yourself in 12mo"
+  wizardSubmittedAt   DateTime?
   createdAt     DateTime  @default(now())
 
   accounts      Account[]

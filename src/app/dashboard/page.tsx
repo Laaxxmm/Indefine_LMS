@@ -107,6 +107,12 @@ export default async function Dashboard() {
     (a, b) => a.scorePct - b.scorePct
   )[0];
 
+  const wizardUser = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { wizardSubmittedAt: true },
+  });
+  const wizardDone = !!wizardUser?.wizardSubmittedAt;
+
   const me = leaderboard.find((r) => r.userId === userId);
   const myRank = me ? leaderboard.findIndex((r) => r.userId === userId) + 1 : null;
   const myPoints = me?.totalScore ?? 0;
@@ -176,6 +182,34 @@ export default async function Dashboard() {
           </form>
         </div>
       </header>
+
+      {/* Wizard CTA */}
+      {!wizardDone && trajectory.cycle && (
+        <Link
+          href="/wizard"
+          className="block mb-6 rounded-2xl bg-gradient-to-r from-brand-500 to-accent-violet p-5 text-white shadow-pop hover:opacity-95 transition relative overflow-hidden"
+        >
+          <div className="absolute -top-12 -right-12 w-44 h-44 bg-white/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="relative flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+              <Sparkles className="w-6 h-6" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] uppercase tracking-wider font-bold text-white/80">
+                Set your trajectory · {trajectory.cycle.name}
+              </p>
+              <p className="font-display text-lg font-bold mt-0.5">
+                Take the 5-minute Growth Wizard →
+              </p>
+              <p className="text-sm text-white/85 mt-0.5">
+                Pick your strengths, set 3 quarterly quests, pitch a bold idea.
+                Make this year yours.
+              </p>
+            </div>
+            <ArrowRight className="w-5 h-5 hidden sm:block" />
+          </div>
+        </Link>
+      )}
 
       {/* Trajectory hero — Three rings + Tier */}
       {trajectory.cycle && (

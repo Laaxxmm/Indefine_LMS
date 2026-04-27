@@ -90,7 +90,7 @@ export default async function AdminOverview({
   const cookieStore = await cookies();
   const flash = cookieStore.get("admin_flash")?.value ?? null;
 
-  const [modules, userCount, assignmentCount, pendingAssignments] =
+  const [modules, userCount, assignmentCount, pendingAssignments, pendingApprovals] =
     await Promise.all([
       prisma.module.findMany({
         include: {
@@ -107,6 +107,10 @@ export default async function AdminOverview({
       prisma.user.count({ where: { active: true } }),
       prisma.assignment.count(),
       prisma.assignment.count({ where: { status: "PENDING" } }),
+      Promise.all([
+        prisma.quest.count({ where: { status: "PENDING_APPROVAL" } }),
+        prisma.initiative.count({ where: { status: "PITCHED" } }),
+      ]).then(([q, i]) => q + i),
     ]);
 
   const totalVideos = modules.reduce((s, m) => s + m.videos.length, 0);
@@ -167,12 +171,12 @@ export default async function AdminOverview({
               href="/admin?tab=videos"
             />
             <StatTile
-              icon={Target}
-              label="Pending assignments"
-              value={pendingAssignments}
-              sub={`${assignmentCount} total`}
+              icon={CheckCircle2}
+              label="Pending approvals"
+              value={pendingApprovals}
+              sub={`${pendingAssignments} pending tasks · ${assignmentCount} total`}
               tint="gold"
-              href="/admin/assignments"
+              href="/admin/approvals"
             />
           </div>
 
