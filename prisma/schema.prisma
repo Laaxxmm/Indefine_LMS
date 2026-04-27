@@ -437,6 +437,7 @@ enum EndorsementKind {
   INITIATIVE      // counts toward Initiative track
   MENTORSHIP      // counts toward Collaboration track
   CROSS_DEPT      // counts toward Collaboration track
+  CRAFT           // manager rating for Craft track (uses score 1-5)
 }
 
 model Endorsement {
@@ -444,6 +445,7 @@ model Endorsement {
   fromId     String
   toId       String
   kind       EndorsementKind
+  score      Int?            // 1-5 for CRAFT; null for count-based endorsements
   reason     String?
   approvedById String?       // for ones that need manager endorsement
   approvedAt DateTime?
@@ -453,6 +455,7 @@ model Endorsement {
   to         User @relation("EndorseTo", fields: [toId], references: [id], onDelete: Cascade)
 
   @@index([toId])
+  @@index([kind])
 }
 
 model WeeklyCheckin {

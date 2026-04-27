@@ -36,6 +36,7 @@ import {
   LogOut,
   Rocket,
   MessageCircle,
+  Users,
 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -131,6 +132,10 @@ export default async function Dashboard() {
   const urgency = checkinUrgency();
   const showCheckinBanner = !thisWeekCheckin && urgency !== "off";
 
+  const reportCount = await prisma.user.count({
+    where: { managerId: userId, active: true },
+  });
+
   const me = leaderboard.find((r) => r.userId === userId);
   const myRank = me ? leaderboard.findIndex((r) => r.userId === userId) + 1 : null;
   const myPoints = me?.totalScore ?? 0;
@@ -171,6 +176,18 @@ export default async function Dashboard() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {reportCount > 0 && (
+            <Link
+              href="/team"
+              className="px-3 py-2 rounded-lg bg-white hover:bg-muted border border-border text-sm flex items-center gap-2 shadow-soft transition"
+            >
+              <Users className="w-4 h-4 text-ink-mute" />
+              <span className="hidden sm:inline">My team</span>
+              <span className="text-[10px] tabular-nums px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold">
+                {reportCount}
+              </span>
+            </Link>
+          )}
           {role === "ADMIN" && (
             <Link
               href="/admin"

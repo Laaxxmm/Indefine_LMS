@@ -450,12 +450,33 @@ async function scoreVision(ctx: ScoringContext): Promise<{ actual: number; nextM
 }
 
 async function scoreCraft(ctx: ScoringContext): Promise<{ actual: number; nextMove: string }> {
-  // Manager rating placeholder — defaults to 3.5/5 until manager review system lands.
-  // Future: compute from CRAFT-kind reviews.
-  return {
-    actual: 3.5,
-    nextMove: "Manager rating will appear after your next 1:1",
-  };
+  const ratings = await prisma.endorsement.findMany({
+    where: {
+      toId: ctx.userId,
+      kind: "CRAFT",
+      createdAt: { gte: ctx.cycle.startDate, lte: ctx.cycle.endDate },
+    },
+    select: { score: true },
+  });
+  if (ratings.length === 0) {
+    return {
+      actual: 3.0,
+      nextMove: "Ask your manager for craft feedback in your next 1:1",
+    };
+  }
+  const valid = ratings.filter((r): r is { score: number } => typeof r.score === "number");
+  if (valid.length === 0) {
+    return {
+      actual: 3.0,
+      nextMove: "Manager hasn't rated craft yet this cycle",
+    };
+  }
+  const avg = valid.reduce((s, r) => s + r.score, 0) / valid.length;
+  let nextMove = "Solid craft rating — keep refining";
+  if (avg < 3) nextMove = "Pair with a senior on a piece of work this week";
+  else if (avg < 4) nextMove = "You're consistent — push for one stretch piece";
+  else nextMove = "Stellar craft 🌟 — share what works in a team session";
+  return { actual: avg, nextMove };
 }
 
 // -------------------- Compose --------------------
