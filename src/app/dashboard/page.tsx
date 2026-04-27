@@ -198,12 +198,14 @@ export default async function Dashboard() {
             </Link>
           )}
           <Link
-            href="/recap"
+            href="/recap/year"
             className="px-3 py-2 rounded-lg bg-gradient-to-r from-amber-100 to-rose-100 hover:from-amber-200 hover:to-rose-200 border border-amber-200 text-sm flex items-center gap-2 shadow-soft transition"
-            title="Your quarterly recap"
+            title="Year-in-Review"
           >
             <Sparkles className="w-4 h-4 text-amber-700" />
-            <span className="hidden sm:inline text-amber-800 font-semibold">Recap</span>
+            <span className="hidden sm:inline text-amber-800 font-semibold">
+              Recap
+            </span>
           </Link>
           <Link
             href="/initiatives"

@@ -2,9 +2,10 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { ensureDefaultCycle, TRACK_META, TIER_META } from "@/lib/trajectory";
+import { freezeQuarter, closeCycle } from "@/lib/snapshots";
 import { revalidatePath } from "next/cache";
 import type { EmployeeLevel, TrackKind } from "@prisma/client";
-import { Sparkles, Save, Plus } from "lucide-react";
+import { Sparkles, Save, Plus, Snowflake, Lock } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -62,6 +63,28 @@ async function saveTargets(formData: FormData) {
   void cycleId;
 }
 
+async function snapshotQuarter(formData: FormData) {
+  "use server";
+  const session = await auth();
+  if (session?.user?.role !== "ADMIN") return;
+  const cycleId = String(formData.get("cycleId"));
+  const quarter = Number(formData.get("quarter"));
+  if (!cycleId || ![1, 2, 3, 4].includes(quarter)) return;
+  await freezeQuarter(cycleId, quarter);
+  revalidatePath("/admin/trajectory");
+}
+
+async function closeActiveCycle(formData: FormData) {
+  "use server";
+  const session = await auth();
+  if (session?.user?.role !== "ADMIN") return;
+  const cycleId = String(formData.get("cycleId"));
+  if (!cycleId) return;
+  await closeCycle(cycleId);
+  revalidatePath("/admin/trajectory");
+  revalidatePath("/dashboard");
+}
+
 async function createCycle(formData: FormData) {
   "use server";
   await requireAdmin();
@@ -106,6 +129,16 @@ export default async function TrajectoryFrameworkPage() {
         where: { cycleId: activeCycle.id },
       })
     : [];
+
+  // Which quarters of the active cycle have been snapshotted?
+  const snapshottedQuarters = activeCycle
+    ? await prisma.tierAssignment.groupBy({
+        by: ["quarter"],
+        where: { cycleId: activeCycle.id },
+        _count: true,
+      })
+    : [];
+  const frozenSet = new Set(snapshottedQuarters.map((s) => s.quarter));
 
   // Build a target lookup: targets[track][level] = TrackTarget
   const targetByCell = new Map<string, (typeof targets)[number]>();
@@ -202,6 +235,87 @@ export default async function TrajectoryFrameworkPage() {
           </button>
         </form>
       </section>
+
+      {/* Snapshots + close */}
+      {activeCycle && (
+        <section className="mb-8 rounded-2xl bg-white border border-border shadow-soft p-6">
+          <div className="flex items-center gap-2 mb-3">
+            <Snowflake className="w-5 h-5 text-sky-600" />
+            <h2 className="font-display text-lg font-bold">
+              Snapshots · {activeCycle.name}
+            </h2>
+          </div>
+          <p className="text-xs text-ink-mute mb-4">
+            Snapshot a quarter when it ends to freeze every active user&apos;s
+            tier and track scores. Frozen rows survive any later target /
+            weight changes — they are what shows up in the Year-in-Review.
+          </p>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+            {[1, 2, 3, 4].map((q) => {
+              const frozen = frozenSet.has(q);
+              return (
+                <form
+                  key={q}
+                  action={snapshotQuarter}
+                  className={`rounded-xl border p-4 ${
+                    frozen
+                      ? "bg-emerald-50 border-emerald-200"
+                      : "bg-muted/40 border-border"
+                  }`}
+                >
+                  <input type="hidden" name="cycleId" value={activeCycle.id} />
+                  <input type="hidden" name="quarter" value={q} />
+                  <p className="text-xs uppercase tracking-wider font-bold text-ink-faint mb-1">
+                    Q{q}
+                  </p>
+                  <p
+                    className={`text-sm font-semibold mb-2 ${
+                      frozen ? "text-emerald-700" : "text-ink-soft"
+                    }`}
+                  >
+                    {frozen ? "Frozen ❄️" : "Live"}
+                  </p>
+                  <button
+                    type="submit"
+                    className={`w-full text-xs py-1.5 rounded-lg font-medium transition ${
+                      frozen
+                        ? "bg-emerald-100 hover:bg-emerald-200 text-emerald-700"
+                        : "bg-sky-500 hover:bg-sky-600 text-white"
+                    }`}
+                  >
+                    {frozen ? "Re-snapshot" : "Snapshot Q" + q}
+                  </button>
+                </form>
+              );
+            })}
+          </div>
+
+          <details className="border-t border-border pt-5">
+            <summary className="text-sm font-semibold text-rose-700 cursor-pointer hover:text-rose-800">
+              ⚠️ Close this cycle
+            </summary>
+            <div className="mt-4 rounded-xl bg-rose-50 border border-rose-200 p-4">
+              <p className="text-sm text-rose-800 mb-3">
+                Closing {activeCycle.name} will snapshot all 4 quarters and
+                deactivate this cycle. Employees will see their final
+                Year-in-Review and start the next cycle from zero. This is
+                irreversible — only use it at the end of the financial year.
+              </p>
+              <form action={closeActiveCycle}>
+                <input type="hidden" name="cycleId" value={activeCycle.id} />
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold inline-flex items-center gap-2 shadow-pop transition"
+                >
+                  <Lock className="w-4 h-4" />
+                  Close cycle
+                </button>
+              </form>
+            </div>
+          </details>
+        </section>
+      )}
 
       {/* Tracks + targets */}
       {activeCycle && (
