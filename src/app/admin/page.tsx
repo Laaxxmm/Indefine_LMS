@@ -5,23 +5,51 @@ import { prisma } from "@/lib/prisma";
 import { syncOneDriveVideos } from "@/lib/sync";
 import { syncOrgUsers } from "@/lib/users-sync";
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 
 export const dynamic = "force-dynamic";
 
-async function syncAction() {
+async function syncAction(): Promise<void> {
   "use server";
   const session = await auth();
-  if (session?.user?.role !== "ADMIN") throw new Error("Forbidden");
-  await syncOneDriveVideos({ fallbackUserId: session.user.id });
+  if (session?.user?.role !== "ADMIN") return;
+  try {
+    await syncOneDriveVideos({ fallbackUserId: session.user.id });
+  } catch (e) {
+    const cookieStore = await cookies();
+    cookieStore.set("admin_flash", `videos:error:${(e as Error).message.slice(0, 200)}`, {
+      maxAge: 10,
+      httpOnly: false,
+    });
+    revalidatePath("/admin");
+    return;
+  }
+  const cookieStore = await cookies();
+  cookieStore.set("admin_flash", "videos:ok", { maxAge: 10, httpOnly: false });
   revalidatePath("/admin");
   revalidatePath("/dashboard");
 }
 
-async function syncUsersAction() {
+async function syncUsersAction(): Promise<void> {
   "use server";
   const session = await auth();
-  if (session?.user?.role !== "ADMIN") throw new Error("Forbidden");
-  await syncOrgUsers({ fallbackUserId: session.user.id });
+  if (session?.user?.role !== "ADMIN") return;
+  try {
+    const r = await syncOrgUsers({ fallbackUserId: session.user.id });
+    const cookieStore = await cookies();
+    cookieStore.set(
+      "admin_flash",
+      `users:ok:${r.added} added, ${r.updated} updated, ${r.total} total`,
+      { maxAge: 10, httpOnly: false }
+    );
+  } catch (e) {
+    const cookieStore = await cookies();
+    cookieStore.set(
+      "admin_flash",
+      `users:error:${(e as Error).message.slice(0, 240)}`,
+      { maxAge: 10, httpOnly: false }
+    );
+  }
   revalidatePath("/admin");
   revalidatePath("/admin/assignments");
 }
@@ -46,6 +74,8 @@ export default async function AdminPage() {
   });
 
   const userCount = await prisma.user.count();
+  const cookieStore = await cookies();
+  const flash = cookieStore.get("admin_flash")?.value ?? null;
   const totalVideos = modules.reduce((s, m) => s + m.videos.length, 0);
   const totalQuizzes = modules.reduce(
     (s, m) => s + m.videos.filter((v) => v.quiz).length,
@@ -87,6 +117,8 @@ export default async function AdminPage() {
       </div>
 
       {/* Stat tiles */}
+      {flash && <FlashBanner flash={flash} />}
+
       <div className="grid sm:grid-cols-4 gap-3 mb-6">
         <Stat label="Users" value={userCount} />
         <Stat label="Modules" value={modules.length} />
@@ -199,6 +231,48 @@ export default async function AdminPage() {
         </div>
       </section>
     </main>
+  );
+}
+
+function FlashBanner({ flash }: { flash: string }) {
+  const [topic, level, ...rest] = flash.split(":");
+  const message = rest.join(":");
+  const isError = level === "error";
+  const label = topic === "videos" ? "Video sync" : "User sync";
+
+  return (
+    <div
+      className={`mb-6 rounded-xl border p-4 ${
+        isError
+          ? "bg-red-500/10 border-red-500/30"
+          : "bg-green-500/10 border-green-500/30"
+      }`}
+    >
+      <p className="text-sm font-semibold">
+        {label} {isError ? "failed" : "succeeded"}
+      </p>
+      {isError ? (
+        <>
+          <p className="text-sm text-white/70 mt-1 font-mono break-all">
+            {message || "Unknown error"}
+          </p>
+          {topic === "users" && /403|Forbidden|Authorization_RequestDenied/i.test(message) && (
+            <div className="mt-3 text-xs text-white/80 space-y-1">
+              <p className="font-medium">Likely fix:</p>
+              <ol className="list-decimal list-inside space-y-0.5 text-white/70">
+                <li>Entra → App registrations → Indefine LMS → API permissions</li>
+                <li>+ Add a permission → Microsoft Graph → Application permissions</li>
+                <li>Tick <code>User.Read.All</code> → Add permissions</li>
+                <li>Click <strong>Grant admin consent for SRCA</strong></li>
+                <li>Wait ~30 seconds, then click Sync users again</li>
+              </ol>
+            </div>
+          )}
+        </>
+      ) : (
+        <p className="text-sm text-white/70 mt-1">{message}</p>
+      )}
+    </div>
   );
 }
 
