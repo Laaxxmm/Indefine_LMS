@@ -29,6 +29,7 @@ import {
   ArrowRight,
   ShieldCheck,
   LogOut,
+  Rocket,
 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -163,11 +164,18 @@ export default async function Dashboard() {
             </Link>
           )}
           <Link
+            href="/initiatives"
+            className="px-3 py-2 rounded-lg bg-white hover:bg-muted border border-border text-sm flex items-center gap-2 shadow-soft transition"
+          >
+            <Rocket className="w-4 h-4 text-ink-mute" />
+            <span className="hidden sm:inline">Initiatives</span>
+          </Link>
+          <Link
             href="/leaderboard"
             className="px-3 py-2 rounded-lg bg-white hover:bg-muted border border-border text-sm flex items-center gap-2 shadow-soft transition"
           >
             <Trophy className="w-4 h-4 text-ink-mute" />
-            Leaderboard
+            <span className="hidden sm:inline">Leaderboard</span>
           </Link>
           <form
             action={async () => {

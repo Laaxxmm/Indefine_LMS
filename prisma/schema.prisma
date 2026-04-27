@@ -42,14 +42,15 @@ model User {
   reports       User[] @relation("Reports")
 
   // Trajectory
-  quests           Quest[]
-  questsApproved   Quest[]      @relation("QuestApprover")
-  initiatives      Initiative[]
-  endorsementsGiven Endorsement[] @relation("EndorseFrom")
-  endorsementsGot   Endorsement[] @relation("EndorseTo")
-  checkins         WeeklyCheckin[]
-  trackSnapshots   TrackSnapshot[]
-  tierAssignments  TierAssignment[]
+  quests              Quest[]
+  questsApproved      Quest[]      @relation("QuestApprover")
+  initiatives         Initiative[]
+  initiativeReactions InitiativeReaction[]
+  endorsementsGiven   Endorsement[] @relation("EndorseFrom")
+  endorsementsGot     Endorsement[] @relation("EndorseTo")
+  checkins            WeeklyCheckin[]
+  trackSnapshots      TrackSnapshot[]
+  tierAssignments     TierAssignment[]
 }
 
 enum EmployeeLevel {
@@ -407,8 +408,28 @@ model Initiative {
 
   user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   cycle       PerformanceCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  reactions   InitiativeReaction[]
 
   @@index([cycleId, status])
+}
+
+enum ReactionKind {
+  UPVOTE       // 🚀 generic support
+  INTERESTED   // 🙋 count me in
+}
+
+model InitiativeReaction {
+  id           String       @id @default(cuid())
+  initiativeId String
+  userId       String
+  kind         ReactionKind @default(UPVOTE)
+  createdAt    DateTime     @default(now())
+
+  initiative Initiative @relation(fields: [initiativeId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([initiativeId, userId, kind])
+  @@index([initiativeId])
 }
 
 enum EndorsementKind {
