@@ -16,8 +16,12 @@ async function requireAdmin() {
 async function createAssignments(formData: FormData) {
   "use server";
   const session = await requireAdmin();
-  const kind = String(formData.get("kind") || "VIDEO") as "VIDEO" | "TASK";
+  const kind = String(formData.get("kind") || "VIDEO") as
+    | "VIDEO"
+    | "MODULE"
+    | "TASK";
   const videoId = String(formData.get("videoId") || "") || null;
+  const moduleIds = formData.getAll("moduleIds").map(String).filter(Boolean);
   const title = String(formData.get("title") || "").trim();
   const description = String(formData.get("description") || "").trim() || null;
   const points = Number(formData.get("points") || 0);
@@ -26,27 +30,65 @@ async function createAssignments(formData: FormData) {
   const userIds = formData.getAll("userIds").map(String).filter(Boolean);
 
   if (kind === "VIDEO" && !videoId) return;
+  if (kind === "MODULE" && moduleIds.length === 0) return;
   if (kind === "TASK" && !title) return;
   if (userIds.length === 0) return;
 
-  let resolvedTitle = title;
-  if (kind === "VIDEO" && !title) {
-    const v = await prisma.video.findUnique({ where: { id: videoId! } });
-    resolvedTitle = v?.title ?? "Video";
+  const safePoints = Number.isFinite(points) ? points : 0;
+
+  if (kind === "MODULE") {
+    // Multi-module × multi-user bulk create. Each module's assignment uses
+    // that module's title (override-able with the title field if filled).
+    const modules = await prisma.module.findMany({
+      where: { id: { in: moduleIds } },
+      select: { id: true, title: true },
+    });
+    const data = userIds.flatMap((userId) =>
+      modules.map((m) => ({
+        userId,
+        assignedById: session.user.id,
+        kind: "MODULE" as const,
+        moduleId: m.id,
+        title: title || m.title,
+        description,
+        points: safePoints,
+        dueAt,
+      }))
+    );
+    if (data.length > 0) await prisma.assignment.createMany({ data });
+  } else if (kind === "VIDEO") {
+    let resolvedTitle = title;
+    if (!resolvedTitle) {
+      const v = await prisma.video.findUnique({ where: { id: videoId! } });
+      resolvedTitle = v?.title ?? "Video";
+    }
+    await prisma.assignment.createMany({
+      data: userIds.map((userId) => ({
+        userId,
+        assignedById: session.user.id,
+        kind: "VIDEO" as const,
+        videoId,
+        title: resolvedTitle,
+        description,
+        points: safePoints,
+        dueAt,
+      })),
+    });
+  } else {
+    // TASK
+    await prisma.assignment.createMany({
+      data: userIds.map((userId) => ({
+        userId,
+        assignedById: session.user.id,
+        kind: "TASK" as const,
+        title,
+        description,
+        points: safePoints,
+        dueAt,
+      })),
+    });
   }
 
-  await prisma.assignment.createMany({
-    data: userIds.map((userId) => ({
-      userId,
-      assignedById: session.user.id,
-      kind,
-      videoId: kind === "VIDEO" ? videoId : null,
-      title: resolvedTitle,
-      description,
-      points: Number.isFinite(points) ? points : 0,
-      dueAt,
-    })),
-  });
   revalidatePath("/admin/assignments");
   revalidatePath("/dashboard");
 }
@@ -82,11 +124,16 @@ export default async function AdminAssignmentsPage({
   const filterUser = sp.user || "";
   const filterStatus = sp.status || "";
 
-  const [users, videos, assignments] = await Promise.all([
+  const [users, videos, modules, assignments] = await Promise.all([
     prisma.user.findMany({ orderBy: { name: "asc" } }),
     prisma.video.findMany({
       include: { module: true },
       orderBy: [{ moduleId: "asc" }, { order: "asc" }],
+    }),
+    prisma.module.findMany({
+      where: { videos: { some: {} } },
+      include: { course: true, _count: { select: { videos: true } } },
+      orderBy: [{ courseId: "asc" }, { order: "asc" }],
     }),
     prisma.assignment.findMany({
       where: {
@@ -99,6 +146,7 @@ export default async function AdminAssignmentsPage({
         user: true,
         assignedBy: true,
         video: true,
+        module: { include: { videos: { select: { id: true }, orderBy: { order: "asc" }, take: 1 } } },
       },
       orderBy: [{ status: "asc" }, { dueAt: "asc" }, { createdAt: "desc" }],
     }),
@@ -127,28 +175,64 @@ export default async function AdminAssignmentsPage({
               <span className="block text-ink-mute mb-1">Kind</span>
               <select
                 name="kind"
-                defaultValue="VIDEO"
+                defaultValue="MODULE"
                 className="w-full bg-white border border-border shadow-soft rounded px-3 py-2"
               >
-                <option value="VIDEO">Video — auto-completes when watched + quiz passed</option>
+                <option value="MODULE">Module — completes when every video + quiz in the module is done</option>
+                <option value="VIDEO">Single video — completes when watched + quiz passed</option>
                 <option value="TASK">Task — admin marks complete manually</option>
               </select>
             </label>
             <label className="text-sm">
-              <span className="block text-ink-mute mb-1">KRA points on completion</span>
+              <span className="block text-ink-mute mb-1">
+                KRA points on completion (per assignment)
+              </span>
               <input
                 type="number"
                 name="points"
                 min={0}
-                defaultValue={10}
+                defaultValue={50}
                 className="w-full bg-white border border-border shadow-soft rounded px-3 py-2"
               />
             </label>
           </div>
 
+          <fieldset className="text-sm">
+            <legend className="text-ink-mute mb-2">
+              Pick modules (for MODULE kind — tick one or more)
+            </legend>
+            {modules.length === 0 ? (
+              <div className="rounded border border-border p-4 bg-muted text-sm text-ink-mute">
+                No modules yet. Sync videos from the Admin home first.
+              </div>
+            ) : (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-1.5 max-h-60 overflow-y-auto rounded border border-border p-3 bg-muted/40">
+                {modules.map((m) => (
+                  <label
+                    key={m.id}
+                    className="flex items-center gap-2 hover:bg-white rounded px-2 py-1.5 cursor-pointer transition"
+                  >
+                    <input
+                      type="checkbox"
+                      name="moduleIds"
+                      value={m.id}
+                      className="accent-brand-500"
+                    />
+                    <span className="truncate">
+                      <span className="font-medium">{m.title}</span>
+                      <span className="text-ink-faint text-xs ml-1">
+                        · {m._count.videos} videos
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </fieldset>
+
           <label className="block text-sm">
             <span className="block text-ink-mute mb-1">
-              Pick video (for VIDEO kind)
+              Single video (for VIDEO kind)
             </span>
             <select
               name="videoId"
@@ -165,11 +249,12 @@ export default async function AdminAssignmentsPage({
 
           <label className="block text-sm">
             <span className="block text-ink-mute mb-1">
-              Title (required for TASK; optional for VIDEO — uses video name if blank)
+              Title (required for TASK; optional for VIDEO/MODULE — uses the
+              video / module name if blank)
             </span>
             <input
               name="title"
-              placeholder="e.g. Read the new audit checklist and write a summary"
+              placeholder="e.g. Complete the Audit Standards module by Q2 end"
               className="w-full bg-white border border-border shadow-soft rounded px-3 py-2"
             />
           </label>
@@ -295,10 +380,12 @@ export default async function AdminAssignmentsPage({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span
-                      className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full ${
+                      className={`text-[10px] uppercase tracking-wide font-semibold px-2 py-0.5 rounded-full ${
                         a.kind === "VIDEO"
                           ? "bg-brand-50 text-brand-700"
-                          : "bg-violet-50 text-violet-700"
+                          : a.kind === "MODULE"
+                            ? "bg-emerald-50 text-emerald-700"
+                            : "bg-violet-50 text-violet-700"
                       }`}
                     >
                       {a.kind}

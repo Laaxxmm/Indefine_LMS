@@ -1,15 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import {
-  LayoutDashboard,
-  PlayCircle,
-  GraduationCap,
-  Target,
-  CalendarClock,
-  BarChart3,
-  ArrowLeft,
-} from "lucide-react";
+import { GraduationCap, ArrowLeft } from "lucide-react";
 import AdminNav from "./AdminNav";
 
 export const dynamic = "force-dynamic";
@@ -83,11 +75,3 @@ export default async function AdminLayout({
   );
 }
 
-// Re-export icons for AdminNav
-export const adminIcons = {
-  LayoutDashboard,
-  PlayCircle,
-  Target,
-  CalendarClock,
-  BarChart3,
-};

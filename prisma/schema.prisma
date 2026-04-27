@@ -95,6 +95,7 @@ model Module {
 
   course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
   videos      Video[]
+  assignments Assignment[]
 }
 
 model Video {
@@ -222,6 +223,7 @@ model Assignment {
   assignedById  String           // admin who created it
   kind          AssignmentKind
   videoId       String?          // populated for VIDEO kind
+  moduleId      String?          // populated for MODULE kind
   title         String           // shown in lists; for TASK this is the instruction
   description   String?
   points        Int              @default(0)
@@ -231,16 +233,19 @@ model Assignment {
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 
-  user        User  @relation("AssignmentTarget", fields: [userId], references: [id], onDelete: Cascade)
-  assignedBy  User  @relation("AssignmentCreator", fields: [assignedById], references: [id])
-  video       Video? @relation(fields: [videoId], references: [id], onDelete: SetNull)
+  user        User    @relation("AssignmentTarget", fields: [userId], references: [id], onDelete: Cascade)
+  assignedBy  User    @relation("AssignmentCreator", fields: [assignedById], references: [id])
+  video       Video?  @relation(fields: [videoId], references: [id], onDelete: SetNull)
+  module      Module? @relation(fields: [moduleId], references: [id], onDelete: SetNull)
 
   @@index([userId, status])
   @@index([videoId])
+  @@index([moduleId])
 }
 
 enum AssignmentKind {
   VIDEO
+  MODULE
   TASK
 }
 

@@ -54,7 +54,20 @@ export default async function Dashboard() {
   ] = await Promise.all([
     prisma.assignment.findMany({
       where: { userId },
-      include: { video: true },
+      include: {
+        video: true,
+        module: {
+          include: {
+            videos: {
+              orderBy: { order: "asc" },
+              include: {
+                progresses: { where: { userId } },
+                quiz: { include: { attempts: { where: { userId, passed: true }, take: 1 } } },
+              },
+            },
+          },
+        },
+      },
       orderBy: [{ status: "asc" }, { dueAt: "asc" }, { createdAt: "desc" }],
     }),
     prisma.module.findMany({
@@ -493,7 +506,9 @@ export default async function Dashboard() {
                         className={`text-[10px] uppercase tracking-wide font-semibold px-2 py-0.5 rounded-full ${
                           a.kind === "VIDEO"
                             ? "bg-brand-50 text-brand-700"
-                            : "bg-violet-50 text-violet-700"
+                            : a.kind === "MODULE"
+                              ? "bg-emerald-50 text-emerald-700"
+                              : "bg-violet-50 text-violet-700"
                         }`}
                       >
                         {a.kind}
@@ -529,16 +544,27 @@ export default async function Dashboard() {
                       </p>
                     )}
                   </div>
-                  {a.kind === "VIDEO" &&
-                    a.videoId &&
-                    a.status === "PENDING" && (
+                  {a.status === "PENDING" && (() => {
+                    const targetVideoId =
+                      a.kind === "VIDEO"
+                        ? a.videoId
+                        : a.kind === "MODULE" && a.module
+                          ? // Resume on first incomplete video, fall back to first.
+                            (a.module.videos.find(
+                              (v) => !v.progresses[0]?.completed
+                            )?.id ?? a.module.videos[0]?.id)
+                          : null;
+                    if (!targetVideoId) return null;
+                    return (
                       <Link
-                        href={`/video/${a.videoId}`}
+                        href={`/video/${targetVideoId}`}
                         className="text-xs px-3 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white font-medium shrink-0 flex items-center gap-1.5 shadow-pop transition"
                       >
-                        Open <ArrowRight className="w-3 h-3" />
+                        {a.kind === "MODULE" ? "Open module" : "Open"}{" "}
+                        <ArrowRight className="w-3 h-3" />
                       </Link>
-                    )}
+                    );
+                  })()}
                 </div>
               );
             })}
