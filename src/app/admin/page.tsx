@@ -18,6 +18,7 @@ import {
   BarChart3,
   CheckCircle2,
   AlertCircle,
+  Sparkles,
 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -209,6 +210,13 @@ export default async function AdminOverview({
               Quick actions
             </h2>
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <QuickLink
+                icon={Sparkles}
+                href="/admin/trajectory"
+                title="Trajectory framework"
+                sub="Tracks, weights, tiers"
+                tint="violet"
+              />
               <QuickLink
                 icon={Target}
                 href="/admin/assignments"

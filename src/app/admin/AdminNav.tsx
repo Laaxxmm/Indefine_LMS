@@ -8,6 +8,7 @@ import {
   Target,
   CalendarClock,
   BarChart3,
+  Sparkles,
   type LucideIcon,
 } from "lucide-react";
 
@@ -17,6 +18,7 @@ const ICONS: Record<string, LucideIcon> = {
   Target,
   CalendarClock,
   BarChart3,
+  Sparkles,
 };
 
 export default function AdminNav({

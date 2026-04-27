@@ -19,6 +19,8 @@ model User {
   emailVerified DateTime?
   image         String?
   role          Role      @default(EMPLOYEE)
+  level         EmployeeLevel @default(ASSOCIATE)
+  managerId     String?
   active        Boolean   @default(true)
   deactivatedAt DateTime?
   createdAt     DateTime  @default(now())
@@ -29,8 +31,30 @@ model User {
   progresses    VideoProgress[]
   attempts      QuizAttempt[]
 
-  assignments       Assignment[] @relation("AssignmentTarget")
+  assignments        Assignment[] @relation("AssignmentTarget")
   assignmentsCreated Assignment[] @relation("AssignmentCreator")
+
+  manager       User?  @relation("Reports", fields: [managerId], references: [id])
+  reports       User[] @relation("Reports")
+
+  // Trajectory
+  quests           Quest[]
+  questsApproved   Quest[]      @relation("QuestApprover")
+  initiatives      Initiative[]
+  endorsementsGiven Endorsement[] @relation("EndorseFrom")
+  endorsementsGot   Endorsement[] @relation("EndorseTo")
+  checkins         WeeklyCheckin[]
+  trackSnapshots   TrackSnapshot[]
+  tierAssignments  TierAssignment[]
+}
+
+enum EmployeeLevel {
+  TRAINEE
+  ASSOCIATE
+  SENIOR
+  LEAD
+  MANAGER
+  PARTNER
 }
 
 enum Role {
@@ -254,4 +278,206 @@ enum AssignmentKind {
 enum AssignmentStatus {
   PENDING
   COMPLETED
+}
+
+// -------------------- Trajectory (performance OS) --------------------
+
+// A "cycle" is a performance window (typically a financial year).
+// Quarters Q1-Q4 are derived from the cycle's start date.
+model PerformanceCycle {
+  id        String   @id @default(cuid())
+  name      String   // "FY 2026-27"
+  startDate DateTime
+  endDate   DateTime
+  isActive  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  targets         TrackTarget[]
+  quests          Quest[]
+  initiatives     Initiative[]
+  trackSnapshots  TrackSnapshot[]
+  tierAssignments TierAssignment[]
+  checkins        WeeklyCheckin[]
+}
+
+enum TrackKind {
+  MASTERY        // Auto: training compliance + best quiz scores
+  DELIVERY       // Auto: task/module completion, on-time finishes
+  INITIATIVE     // Self-log: initiatives kicked off, trainings led
+  COLLABORATION  // Self-log: cross-team help, mentorship
+  VISION         // Self-set: quarterly milestones on annual goals
+  CRAFT          // Manager-rated: quality + soft skills
+}
+
+// Per-cycle, per-level target + weight for each track.
+// Score per track is normalized: actual / target * 100, capped at 100.
+// Total score is the weighted sum of all six.
+model TrackTarget {
+  id        String        @id @default(cuid())
+  cycleId   String
+  trackKind TrackKind
+  level     EmployeeLevel
+  target    Float         // raw value to score 100 (e.g. 12 modules)
+  weight    Int           // % contribution to total tier score (0-100)
+
+  cycle     PerformanceCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+
+  @@unique([cycleId, trackKind, level])
+}
+
+enum TierKind {
+  STELLAR        // 90-100
+  SOARING        // 80-89
+  SOLID          // 70-79
+  GROWING        // 60-69
+  FOCUSED        // 50-59
+  RECALIBRATING  // < 50
+}
+
+enum QuestStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  ACTIVE
+  COMPLETED
+  MISSED
+}
+
+model Quest {
+  id          String      @id @default(cuid())
+  userId      String
+  cycleId     String
+  title       String
+  description String?
+  why         String?     // why this matters to the employee
+  weight      Int         @default(10)  // contributes to VISION track
+  status      QuestStatus @default(DRAFT)
+  approvedById String?
+  approvedAt  DateTime?
+  completedAt DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cycle       PerformanceCycle  @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  approvedBy  User?             @relation("QuestApprover", fields: [approvedById], references: [id])
+  milestones  QuestMilestone[]
+
+  @@index([userId, cycleId])
+  @@index([status])
+}
+
+model QuestMilestone {
+  id          String    @id @default(cuid())
+  questId     String
+  title       String
+  quarter     Int       // 1-4
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+
+  quest       Quest @relation(fields: [questId], references: [id], onDelete: Cascade)
+}
+
+enum InitiativeStatus {
+  PITCHED
+  FUNDED
+  ACTIVE
+  SHIPPED
+  ARCHIVED
+}
+
+model Initiative {
+  id          String           @id @default(cuid())
+  userId      String
+  cycleId     String
+  title       String
+  description String?
+  impact      String?          // expected impact statement
+  status      InitiativeStatus @default(PITCHED)
+  fundedById  String?
+  fundedAt    DateTime?
+  shippedAt   DateTime?
+  upvotes     Int              @default(0)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cycle       PerformanceCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+
+  @@index([cycleId, status])
+}
+
+enum EndorsementKind {
+  COLLABORATION   // counts toward Collaboration track
+  INITIATIVE      // counts toward Initiative track
+  MENTORSHIP      // counts toward Collaboration track
+  CROSS_DEPT      // counts toward Collaboration track
+}
+
+model Endorsement {
+  id         String          @id @default(cuid())
+  fromId     String
+  toId       String
+  kind       EndorsementKind
+  reason     String?
+  approvedById String?       // for ones that need manager endorsement
+  approvedAt DateTime?
+  createdAt  DateTime        @default(now())
+
+  from       User @relation("EndorseFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  to         User @relation("EndorseTo", fields: [toId], references: [id], onDelete: Cascade)
+
+  @@index([toId])
+}
+
+model WeeklyCheckin {
+  id          String   @id @default(cuid())
+  userId      String
+  cycleId     String
+  weekStart   DateTime // Monday 00:00 UTC of that week
+  whatWorked  String?
+  whatBlocked String?
+  nextFocus   String?
+  managerReply String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cycle PerformanceCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, weekStart])
+}
+
+// Frozen quarterly snapshots — populated when a quarter ends so historical
+// trends survive even if targets / weights change later.
+model TrackSnapshot {
+  id        String           @id @default(cuid())
+  userId    String
+  cycleId   String
+  quarter   Int
+  trackKind TrackKind
+  actual    Float
+  scorePct  Float
+  weighted  Float
+  createdAt DateTime         @default(now())
+
+  user  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cycle PerformanceCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, cycleId, quarter, trackKind])
+}
+
+model TierAssignment {
+  id         String           @id @default(cuid())
+  userId     String
+  cycleId    String
+  quarter    Int
+  tier       TierKind
+  totalScore Float
+  computedAt DateTime         @default(now())
+
+  user  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cycle PerformanceCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, cycleId, quarter])
 }

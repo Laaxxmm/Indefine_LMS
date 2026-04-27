@@ -42,6 +42,7 @@ export default async function AdminLayout({
               { href: "/admin?tab=videos", label: "Videos & Quizzes", icon: "PlayCircle" },
               { href: "/admin/assignments", label: "Assignments", icon: "Target" },
               { href: "/admin/courses", label: "Courses & Deadlines", icon: "CalendarClock" },
+              { href: "/admin/trajectory", label: "Trajectory", icon: "Sparkles" },
               { href: "/admin/kra", label: "KRA Reports", icon: "BarChart3" },
             ]}
           />

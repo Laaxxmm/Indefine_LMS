@@ -9,6 +9,12 @@ import {
   computeStreak,
 } from "@/lib/gamification";
 import {
+  computeTrajectory,
+  ensureDefaultCycle,
+  TIER_META,
+} from "@/lib/trajectory";
+import TrajectoryRings, { RingLegend } from "./TrajectoryRings";
+import {
   Flame,
   Sparkles,
   Trophy,
@@ -44,6 +50,9 @@ export default async function Dashboard() {
   const userId = session.user.id;
   const role = session.user.role;
 
+  // Make sure a cycle + targets exist before we score.
+  await ensureDefaultCycle();
+
   const [
     myAssignments,
     modules,
@@ -51,6 +60,7 @@ export default async function Dashboard() {
     streak,
     achievements,
     leaderboard,
+    trajectory,
   ] = await Promise.all([
     prisma.assignment.findMany({
       where: { userId },
@@ -88,7 +98,14 @@ export default async function Dashboard() {
     computeStreak(userId),
     computeAchievements(userId),
     computeKraScores(),
+    computeTrajectory(userId),
   ]);
+
+  const tier = TIER_META[trajectory.tier];
+  // Pick top "next move" — the lowest-scoring track's hint
+  const focusTrack = [...trajectory.tracks].sort(
+    (a, b) => a.scorePct - b.scorePct
+  )[0];
 
   const me = leaderboard.find((r) => r.userId === userId);
   const myRank = me ? leaderboard.findIndex((r) => r.userId === userId) + 1 : null;
@@ -160,7 +177,110 @@ export default async function Dashboard() {
         </div>
       </header>
 
-      {/* Hero */}
+      {/* Trajectory hero — Three rings + Tier */}
+      {trajectory.cycle && (
+        <section className={`rounded-3xl ${tier.bg} ${tier.glow} border border-border p-6 sm:p-8 mb-6 relative overflow-hidden animate-fade-in`}>
+          <div className="grid lg:grid-cols-[auto_1fr_auto] gap-6 items-center">
+            {/* Rings */}
+            <div className="relative flex items-center justify-center">
+              <TrajectoryRings
+                mastery={trajectory.rings.mastery}
+                delivery={trajectory.rings.delivery}
+                growth={trajectory.rings.growth}
+                size={170}
+              />
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <p className="text-[10px] uppercase tracking-wider font-bold text-ink-faint">
+                  Tier
+                </p>
+                <p className={`font-display text-xl font-extrabold ${tier.fg}`}>
+                  {tier.label}
+                </p>
+              </div>
+            </div>
+
+            {/* Mid — narrative + next move */}
+            <div className="min-w-0">
+              <p className="text-[10px] uppercase tracking-wider font-bold text-ink-faint mb-1">
+                Trajectory · Q{trajectory.quarter} · {trajectory.cycle.name}
+              </p>
+              <h2 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight mb-1">
+                {tier.label === "Stellar"
+                  ? "You're flying."
+                  : tier.label === "Soaring"
+                    ? "You're soaring."
+                    : tier.label === "Solid"
+                      ? "You're solid."
+                      : tier.label === "Growing"
+                        ? "You're growing."
+                        : tier.label === "Focused"
+                          ? "Time to refocus."
+                          : "Let's recalibrate."}
+              </h2>
+              <p className="text-ink-soft mb-4 max-w-md">{tier.blurb}</p>
+
+              {focusTrack && (
+                <div className="rounded-xl bg-white/70 backdrop-blur border border-border p-3 max-w-md">
+                  <p className="text-[10px] uppercase tracking-wider font-bold text-ink-faint mb-1">
+                    Next move · {focusTrack.emoji} {focusTrack.label}
+                  </p>
+                  <p className="text-sm font-medium text-ink">{focusTrack.nextMove}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Right — ring legend + score */}
+            <div className="lg:min-w-[180px] rounded-xl bg-white/70 backdrop-blur border border-border p-4">
+              <p className="text-[10px] uppercase tracking-wider font-bold text-ink-faint mb-2">
+                Total score
+              </p>
+              <p className="font-display text-3xl font-extrabold tabular-nums">
+                {Math.round(trajectory.totalScore)}
+                <span className="text-base text-ink-faint font-semibold">/100</span>
+              </p>
+              <div className="mt-3 pt-3 border-t border-border">
+                <RingLegend
+                  mastery={trajectory.rings.mastery}
+                  delivery={trajectory.rings.delivery}
+                  growth={trajectory.rings.growth}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Track tiles */}
+          <div className="grid grid-cols-3 lg:grid-cols-6 gap-2 mt-5">
+            {trajectory.tracks.map((t) => (
+              <div
+                key={t.kind}
+                className="rounded-lg bg-white/70 backdrop-blur border border-border px-3 py-2.5"
+                title={t.nextMove}
+              >
+                <div className="flex items-center justify-between text-xs mb-1">
+                  <span className="font-medium">
+                    <span className="mr-1">{t.emoji}</span>
+                    {t.label}
+                  </span>
+                </div>
+                <div className="flex items-end justify-between gap-2">
+                  <p className="font-display text-lg font-bold tabular-nums leading-none">
+                    {Math.round(t.scorePct)}
+                  </p>
+                  <p className="text-[10px] text-ink-faint">{t.weight}% wt</p>
+                </div>
+                <div className="mt-1.5 h-0.5 bg-border rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-brand-500 to-accent-violet"
+                    style={{ width: `${t.scorePct}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Welcome hero */}
       <section className="rounded-3xl bg-gradient-to-br from-brand-500 via-brand-600 to-accent-violet p-6 sm:p-8 mb-6 text-white relative overflow-hidden animate-fade-in">
         <div className="absolute -top-20 -right-20 w-72 h-72 bg-white/10 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -bottom-32 -left-20 w-96 h-96 bg-accent-violet/30 rounded-full blur-3xl pointer-events-none" />
