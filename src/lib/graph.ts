@@ -220,17 +220,23 @@ export interface GraphOrgUser {
   userPrincipalName: string;
   jobTitle?: string | null;
   accountEnabled: boolean;
+  assignedLicenses?: { skuId: string }[];
+  userType?: string | null;  // "Member" or "Guest"
 }
 
 /**
- * Fetch all enabled users in the M365 tenant. Requires User.Read.All
- * Application permission with admin consent on the Entra app.
+ * Fetch all enabled + licensed Member users in the M365 tenant.
+ * Mirrors the M365 admin "Active users · Licensed users" filter so
+ * service accounts, shared mailboxes, guests, and unlicensed accounts
+ * are excluded automatically.
+ *
+ * Requires User.Read.All Application permission with admin consent.
  */
 export async function listOrgUsers(token: string): Promise<GraphOrgUser[]> {
   const out: GraphOrgUser[] = [];
   let url:
     | string
-    | undefined = `${GRAPH}/users?$select=id,displayName,mail,userPrincipalName,jobTitle,accountEnabled&$top=999`;
+    | undefined = `${GRAPH}/users?$select=id,displayName,mail,userPrincipalName,jobTitle,accountEnabled,assignedLicenses,userType&$top=999`;
   while (url) {
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
@@ -244,7 +250,14 @@ export async function listOrgUsers(token: string): Promise<GraphOrgUser[]> {
       "@odata.nextLink"?: string;
     };
     for (const u of json.value) {
-      if (u.accountEnabled) out.push(u);
+      // Three filters that match the M365 admin "Active · Licensed" view:
+      //   1. accountEnabled — sign-in not blocked
+      //   2. has at least one assigned license
+      //   3. userType is Member (not Guest / external)
+      const enabled = u.accountEnabled === true;
+      const licensed = (u.assignedLicenses?.length ?? 0) > 0;
+      const isMember = !u.userType || u.userType.toLowerCase() === "member";
+      if (enabled && licensed && isMember) out.push(u);
     }
     url = json["@odata.nextLink"];
   }

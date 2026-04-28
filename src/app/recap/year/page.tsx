@@ -34,14 +34,12 @@ export default async function YearRecap() {
       : 0;
 
   return (
-    <main className="min-h-screen relative overflow-hidden">
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-violet-900 to-rose-900 -z-10" />
-      <div className="absolute top-0 -left-40 w-[40rem] h-[40rem] bg-brand-500/30 rounded-full blur-3xl pointer-events-none -z-10" />
-      <div className="absolute bottom-0 -right-40 w-[40rem] h-[40rem] bg-rose-500/20 rounded-full blur-3xl pointer-events-none -z-10" />
+    <main className="min-h-screen relative overflow-hidden text-white bg-gradient-to-br from-slate-900 via-violet-900 to-rose-900">
+      <div className="absolute top-0 -left-40 w-[40rem] h-[40rem] bg-brand-500/30 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-0 -right-40 w-[40rem] h-[40rem] bg-rose-500/20 rounded-full blur-3xl pointer-events-none" />
 
       {/* Top bar */}
-      <header className="px-6 py-4 flex items-center justify-between text-white/90">
+      <header className="relative z-10 px-6 py-4 flex items-center justify-between text-white/90">
         <Link
           href="/dashboard"
           className="text-sm inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/15 backdrop-blur border border-white/15 transition"
@@ -54,7 +52,7 @@ export default async function YearRecap() {
         </span>
       </header>
 
-      <div className="px-6 py-8 max-w-5xl mx-auto text-white">
+      <div className="relative z-10 px-6 py-8 max-w-5xl mx-auto text-white">
         {/* Hero */}
         <div className="text-center mb-12 animate-slide-up">
           <p className="text-7xl mb-3">{recap.topMomentEmoji}</p>

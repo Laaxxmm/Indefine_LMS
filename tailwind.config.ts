@@ -17,7 +17,7 @@ export default {
     "from-pink-500", "to-red-600",
     "from-violet-600", "to-fuchsia-600",
     "from-amber-400", "via-orange-500",
-    "from-slate-900", "via-violet-900", "to-brand-900",
+    "from-slate-900", "via-violet-900", "to-brand-900", "to-rose-900",
     "from-emerald-500", "to-teal-600",
     "from-amber-100", "to-rose-50",
     "from-amber-100", "to-amber-50",
