@@ -3,6 +3,7 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { QuizGenerator } from "./QuizGenerator";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,44 @@ async function requireAdmin() {
   if (!session?.user) redirect("/");
   if (session.user.role !== "ADMIN") redirect("/dashboard");
   return session;
+}
+
+async function addGeneratedQuestion(data: {
+  videoId: string;
+  text: string;
+  options: { text: string; isCorrect: boolean }[];
+}): Promise<{ ok: boolean; error?: string }> {
+  "use server";
+  const session = await auth();
+  if (!session?.user || session.user.role !== "ADMIN") {
+    return { ok: false, error: "Unauthorized" };
+  }
+  const text = data.text?.trim();
+  if (!text) return { ok: false, error: "Missing question text" };
+  const opts = (data.options ?? [])
+    .map((o, i) => ({ text: o.text?.trim() ?? "", isCorrect: !!o.isCorrect, order: i }))
+    .filter((o) => o.text);
+  if (opts.length < 2) return { ok: false, error: "Need at least 2 options" };
+  if (opts.filter((o) => o.isCorrect).length !== 1) {
+    return { ok: false, error: "Need exactly one correct option" };
+  }
+  const quiz = await prisma.quiz.findUnique({
+    where: { videoId: data.videoId },
+    select: { id: true },
+  });
+  if (!quiz) return { ok: false, error: "Quiz does not exist for this video yet" };
+
+  const count = await prisma.question.count({ where: { quizId: quiz.id } });
+  await prisma.question.create({
+    data: {
+      quizId: quiz.id,
+      text,
+      order: count,
+      options: { create: opts },
+    },
+  });
+  revalidatePath(`/admin/video/${data.videoId}`);
+  return { ok: true };
 }
 
 async function saveQuizSettings(formData: FormData) {
@@ -145,6 +184,13 @@ export default async function AdminVideoPage({
           </div>
         </form>
       </section>
+
+      <QuizGenerator
+        videoId={video.id}
+        quizExists={!!quiz}
+        addAction={addGeneratedQuestion}
+        geminiConfigured={!!process.env.GEMINI_API_KEY}
+      />
 
       {quiz && (
         <section className="rounded-2xl bg-white border border-border shadow-soft p-6 mb-8">
