@@ -37,6 +37,9 @@ import {
   Rocket,
   MessageCircle,
   Users,
+  Clock,
+  Fingerprint,
+  ExternalLink,
 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -474,6 +477,55 @@ export default async function Dashboard() {
               sub="Earned"
             />
           </div>
+        </div>
+      </section>
+
+      {/* Attendance & daily punch */}
+      <section className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-display text-lg font-bold flex items-center gap-2">
+            <Clock className="w-5 h-5 text-brand-500" />
+            Attendance & daily punch
+          </h2>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <a
+            href="https://streamlining.greythr.com/"
+            target="_blank"
+            rel="noreferrer"
+            className="group rounded-2xl bg-white border border-border hover:border-brand-200 hover:shadow-lift shadow-soft p-5 flex items-center gap-4 transition"
+          >
+            <div className="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+              <Fingerprint className="w-6 h-6" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] uppercase tracking-wide text-ink-faint font-semibold">
+                Punch in / out
+              </p>
+              <p className="font-semibold">greytHR</p>
+              <p className="text-sm text-ink-mute">Mark your daily attendance</p>
+            </div>
+            <ExternalLink className="w-4 h-4 text-ink-faint group-hover:text-brand-500 transition shrink-0" />
+          </a>
+
+          <a
+            href="https://practice.turia.in/"
+            target="_blank"
+            rel="noreferrer"
+            className="group rounded-2xl bg-white border border-border hover:border-brand-200 hover:shadow-lift shadow-soft p-5 flex items-center gap-4 transition"
+          >
+            <div className="w-12 h-12 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center shrink-0">
+              <Clock className="w-6 h-6" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] uppercase tracking-wide text-ink-faint font-semibold">
+                Practice portal
+              </p>
+              <p className="font-semibold">Turia</p>
+              <p className="text-sm text-ink-mute">Log in to your workspace</p>
+            </div>
+            <ExternalLink className="w-4 h-4 text-ink-faint group-hover:text-brand-500 transition shrink-0" />
+          </a>
         </div>
       </section>
 

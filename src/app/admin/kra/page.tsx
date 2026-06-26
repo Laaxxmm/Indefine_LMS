@@ -100,6 +100,7 @@ export default async function KraPage({
               <th className="text-right p-3">Quiz pts</th>
               <th className="text-right p-3">Deadline pts</th>
               <th className="text-right p-3">Assignment pts</th>
+              <th className="text-right p-3">Attendance pts</th>
               <th className="text-right p-3">Total</th>
               <th className="p-3"></th>
             </tr>
@@ -117,6 +118,8 @@ export default async function KraPage({
                 </td>
                 <td className="p-3 text-right">{r.bestQuizPoints}</td>
                 <td className="p-3 text-right">{r.deadlinePoints}</td>
+                <td className="p-3 text-right">{r.assignmentPoints}</td>
+                <td className="p-3 text-right">{r.attendancePoints}</td>
                 <td className="p-3 text-right font-semibold">{r.totalScore}</td>
                 <td className="p-3 text-right">
                   <Link

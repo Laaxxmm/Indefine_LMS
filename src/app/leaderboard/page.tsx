@@ -276,6 +276,7 @@ export default async function Leaderboard({
                         <Stat label="Quiz" value={r.bestQuizPoints} />
                         <Stat label="DDL" value={r.deadlinePoints} />
                         <Stat label="Asgn" value={r.assignmentPoints} />
+                        <Stat label="Att" value={r.attendancePoints} />
                       </div>
                       <div className="text-right shrink-0">
                         <p className="font-display text-lg font-bold tabular-nums">

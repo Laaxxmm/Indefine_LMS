@@ -151,6 +151,7 @@ export interface KraSummary {
   bestQuizPoints: number; // sum of best-attempt percent / 10 across quizzes
   deadlinePoints: number; // sum of pointsAwarded across all course deadlines
   assignmentPoints: number; // sum of points from completed assignments in window
+  attendancePoints: number; // sum of monthly attendance points in window
   totalScore: number;
 }
 
@@ -168,6 +169,19 @@ export async function computeKraScores(opts: { from?: Date; to?: Date } = {}): P
     },
   });
   const totalVideos = await prisma.video.count();
+
+  // Attendance points for the window, fetched once and grouped by user.
+  const attendanceRows = await prisma.attendanceRecord.findMany({
+    where: {
+      periodMonth:
+        opts.from || opts.to ? { gte: opts.from, lte: opts.to } : undefined,
+    },
+    select: { userId: true, points: true },
+  });
+  const attendanceByUser = new Map<string, number>();
+  for (const r of attendanceRows) {
+    attendanceByUser.set(r.userId, (attendanceByUser.get(r.userId) ?? 0) + r.points);
+  }
 
   const out: KraSummary[] = [];
   for (const u of users) {
@@ -209,9 +223,11 @@ export async function computeKraScores(opts: { from?: Date; to?: Date } = {}): P
       0
     );
 
+    const attendancePoints = attendanceByUser.get(u.id) ?? 0;
+
     const videoPoints = videosCompleted * 10;
     const totalScore = Math.round(
-      videoPoints + bestQuizPoints + deadlinePoints + assignmentPoints
+      videoPoints + bestQuizPoints + deadlinePoints + assignmentPoints + attendancePoints
     );
 
     out.push({
@@ -223,6 +239,7 @@ export async function computeKraScores(opts: { from?: Date; to?: Date } = {}): P
       bestQuizPoints: Math.round(bestQuizPoints),
       deadlinePoints,
       assignmentPoints,
+      attendancePoints,
       totalScore,
     });
   }

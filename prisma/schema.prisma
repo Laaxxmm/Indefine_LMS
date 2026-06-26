@@ -54,6 +54,7 @@ model User {
   checkins            WeeklyCheckin[]
   trackSnapshots      TrackSnapshot[]
   tierAssignments     TierAssignment[]
+  attendances         AttendanceRecord[]
 }
 
 enum EmployeeLevel {
@@ -168,6 +169,9 @@ model Video {
   moduleId        String
   title           String
   description     String?
+  // Pasted script / notes (e.g. the NotebookLM source) used to ground AI quiz
+  // generation. Saving this triggers an auto-generated 20-question quiz.
+  sourceText      String?  @db.Text
   // Microsoft Graph identifiers — driveId + itemId let us re-fetch fresh stream URLs
   graphDriveId    String
   graphItemId     String
@@ -317,6 +321,32 @@ enum AssignmentKind {
 enum AssignmentStatus {
   PENDING
   COMPLETED
+}
+
+// -------------------- Attendance (greytHR / Turia import) --------------------
+
+// One row per employee per month, imported from the HR system's CSV export.
+// Attendance % awards flat KRA points (same idea as Deadline points) that feed
+// the leaderboard total in computeKraScores().
+model AttendanceRecord {
+  id            String   @id @default(cuid())
+  userId        String
+  periodMonth   DateTime // first day of the covered month, UTC midnight
+  workingDays   Float    // total working / payable days in the period
+  presentDays   Float    // days present (supports half-days)
+  lateMarks     Int      @default(0)
+  attendancePct Float    // presentDays / workingDays * 100, stored for transparency
+  points        Int      // KRA points awarded for this month
+  source        String   @default("greytHR")
+  note          String?
+  importedById  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, periodMonth])
+  @@index([periodMonth])
 }
 
 // -------------------- Trajectory (performance OS) --------------------

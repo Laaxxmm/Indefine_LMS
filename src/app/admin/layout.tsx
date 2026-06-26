@@ -47,6 +47,7 @@ export default async function AdminLayout({
               { href: "/admin/trajectory", label: "Trajectory", icon: "Sparkles" },
               { href: "/admin/approvals", label: "Approvals", icon: "CheckCircle2" },
               { href: "/admin/checkins", label: "Check-ins", icon: "MessageCircle" },
+              { href: "/admin/attendance", label: "Attendance", icon: "Fingerprint" },
               { href: "/admin/kra", label: "KRA Reports", icon: "BarChart3" },
             ]}
           />

@@ -80,7 +80,7 @@ export async function GET(req: Request) {
   lines.push("=== Summary ===");
   lines.push(
     toCsv([
-      ["Name", "Email", "Videos completed", "Videos total", "Quiz pts", "Deadline pts", "Total"],
+      ["Name", "Email", "Videos completed", "Videos total", "Quiz pts", "Deadline pts", "Assignment pts", "Attendance pts", "Total"],
       ...summary.map((r) => [
         r.name,
         r.email,
@@ -88,6 +88,8 @@ export async function GET(req: Request) {
         r.videosTotal,
         r.bestQuizPoints,
         r.deadlinePoints,
+        r.assignmentPoints,
+        r.attendancePoints,
         r.totalScore,
       ]),
     ])

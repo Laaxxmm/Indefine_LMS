@@ -29,6 +29,7 @@ type Props = {
     options: { text: string; isCorrect: boolean }[];
   }) => Promise<{ ok: boolean; error?: string }>;
   geminiConfigured: boolean;
+  defaultSourceText?: string;
 };
 
 const DIFFICULTIES: { value: Difficulty; label: string; hint: string }[] = [
@@ -53,8 +54,14 @@ function validateDraft(d: Draft): boolean {
   return true;
 }
 
-export function QuizGenerator({ videoId, quizExists, addAction, geminiConfigured }: Props) {
-  const [sourceText, setSourceText] = useState("");
+export function QuizGenerator({
+  videoId,
+  quizExists,
+  addAction,
+  geminiConfigured,
+  defaultSourceText = "",
+}: Props) {
+  const [sourceText, setSourceText] = useState(defaultSourceText);
   const [count, setCount] = useState(5);
   const [difficulty, setDifficulty] = useState<Difficulty>("MEDIUM");
   const [loading, setLoading] = useState(false);
@@ -260,24 +267,34 @@ export function QuizGenerator({ videoId, quizExists, addAction, geminiConfigured
           </div>
 
           <div>
-            <div className="text-sm text-ink-mute mb-2">
-              Number of questions: <span className="font-semibold text-ink">{count}</span>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-ink-mute">Number of questions</span>
+              <input
+                type="number"
+                min={3}
+                max={100}
+                value={count}
+                onChange={(e) =>
+                  setCount(Math.max(3, Math.min(100, Number(e.target.value) || 3)))
+                }
+                className="w-16 bg-muted border border-border rounded px-2 py-1 text-sm text-right font-semibold"
+              />
             </div>
             <input
               type="range"
               min={3}
-              max={15}
+              max={100}
               value={count}
               onChange={(e) => setCount(Number(e.target.value))}
               className="w-full accent-brand-500"
             />
             <div className="flex justify-between text-xs text-ink-mute mt-1">
               <span>3</span>
-              <span>15</span>
+              <span>100</span>
             </div>
             <p className="text-xs text-ink-mute mt-3">
-              Gemini may return fewer if the source can&apos;t support that many grounded questions —
-              that&apos;s by design.
+              Large sets are generated in batches and may take longer. Gemini returns fewer if the
+              source can&apos;t support that many grounded questions — that&apos;s by design.
             </p>
           </div>
         </div>
