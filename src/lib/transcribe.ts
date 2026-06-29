@@ -10,7 +10,7 @@
 // The transcript is what later grounds the quiz — so quiz questions stay
 // verifiable against real spoken content, keeping the generator's guardrails.
 
-import { resolveGeminiModel } from "@/lib/gemini";
+import { resolveGeminiModel, isThinkingModel } from "@/lib/gemini";
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com";
 
@@ -164,7 +164,11 @@ export async function transcribeVideo(opts: {
               ],
             },
           ],
-          generationConfig: { temperature: 0, maxOutputTokens: 8192 },
+          generationConfig: {
+            temperature: 0,
+            maxOutputTokens: isThinkingModel(model) ? 16384 : 8192,
+            ...(isThinkingModel(model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+          },
         }),
         signal: AbortSignal.timeout(GENERATE_TIMEOUT_MS),
       }

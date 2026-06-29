@@ -9,6 +9,13 @@ const BASE = "https://generativelanguage.googleapis.com";
 
 let cached: string | null = null;
 
+// Gemini 2.5+ (and newer) ship with "thinking" on by default, which spends the
+// output-token budget before producing the answer — truncating structured JSON.
+// We disable it for our deterministic calls.
+export function isThinkingModel(model: string): boolean {
+  return /2\.5|gemini-[3-9]/i.test(model);
+}
+
 export function resetGeminiModelCache() {
   cached = null;
 }

@@ -20,7 +20,7 @@
 // repeat them. Each batch runs the full validation above.
 
 import { z } from "zod";
-import { resolveGeminiModel } from "@/lib/gemini";
+import { resolveGeminiModel, isThinkingModel } from "@/lib/gemini";
 
 export type Difficulty = "EASY" | "MEDIUM" | "HARD" | "MIXED";
 
@@ -242,6 +242,10 @@ async function generateBatch(args: {
     avoid: args.avoid,
   });
 
+  // Gemini 2.5+ "thinking" eats the output-token budget before writing the JSON,
+  // which truncates structured output. Disable it and give extra headroom.
+  const thinking = isThinkingModel(args.model);
+
   let res: Response;
   try {
     res = await fetch(url, {
@@ -251,9 +255,10 @@ async function generateBatch(args: {
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         generationConfig: {
           temperature: 0.3,
-          maxOutputTokens: 8192,
+          maxOutputTokens: thinking ? 16384 : 8192,
           responseMimeType: "application/json",
           responseSchema: GEMINI_RESPONSE_SCHEMA,
+          ...(thinking ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
         },
       }),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
