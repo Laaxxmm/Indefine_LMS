@@ -20,6 +20,7 @@
 // repeat them. Each batch runs the full validation above.
 
 import { z } from "zod";
+import { resolveGeminiModel } from "@/lib/gemini";
 
 export type Difficulty = "EASY" | "MEDIUM" | "HARD" | "MIXED";
 
@@ -346,7 +347,7 @@ export async function generateQuiz(input: GenerateInput): Promise<GenerateResult
   }
 
   const target = Math.max(MIN_COUNT, Math.min(MAX_COUNT, Math.round(input.count || MIN_COUNT)));
-  const model = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+  const model = await resolveGeminiModel(apiKey);
   const normalisedSource = normalise(sourceText);
 
   const collected: DraftQuestion[] = [];

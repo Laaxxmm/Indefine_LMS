@@ -154,10 +154,16 @@ export function BulkQuizRunner({ videos }: { videos: VideoLite[] }) {
             <StatusIcon status={it.status} />
             <div className="min-w-0 flex-1">
               <p className="font-medium truncate">{it.title}</p>
-              <p className="text-xs text-ink-faint truncate">
-                {it.moduleTitle}
-                {it.message ? <span className="text-ink-mute"> · {it.message}</span> : null}
-              </p>
+              <p className="text-xs text-ink-faint truncate">{it.moduleTitle}</p>
+              {it.message && (
+                <p
+                  className={`text-xs mt-0.5 break-words ${
+                    it.status === "failed" ? "text-rose-600" : "text-ink-mute"
+                  }`}
+                >
+                  {it.message}
+                </p>
+              )}
             </div>
             {(it.status === "pending" || it.status === "failed") && !running && (
               <button

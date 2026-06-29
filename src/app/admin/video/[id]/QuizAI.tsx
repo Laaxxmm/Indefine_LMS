@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Sparkles, Loader2, Check, X, Pencil, Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Sparkles, Loader2, Check, X, Pencil, Plus, FileText } from "lucide-react";
 
 type Difficulty = "EASY" | "MEDIUM" | "HARD" | "MIXED";
 
@@ -13,23 +14,24 @@ type DraftQuestion = {
 };
 
 type DraftStatus = "pending" | "saving" | "added" | "rejected";
-
-type Draft = DraftQuestion & {
-  localId: string;
-  status: DraftStatus;
-  editing: boolean;
-};
+type Draft = DraftQuestion & { localId: string; status: DraftStatus; editing: boolean };
 
 type Props = {
   videoId: string;
-  quizExists: boolean;
+  savedSourceText: string;
+  geminiConfigured: boolean;
+  generateAndAddAction: (data: {
+    videoId: string;
+    sourceText: string;
+    count: number;
+    difficulty: Difficulty;
+  }) => Promise<{ ok: boolean; generated?: number; dropped?: number; error?: string }>;
+  saveScriptAction: (data: { videoId: string; sourceText: string }) => Promise<{ ok: boolean; error?: string }>;
   addAction: (data: {
     videoId: string;
     text: string;
     options: { text: string; isCorrect: boolean }[];
   }) => Promise<{ ok: boolean; error?: string }>;
-  geminiConfigured: boolean;
-  defaultSourceText?: string;
 };
 
 const DIFFICULTIES: { value: Difficulty; label: string; hint: string }[] = [
@@ -40,10 +42,7 @@ const DIFFICULTIES: { value: Difficulty; label: string; hint: string }[] = [
 ];
 
 let idCounter = 0;
-function makeLocalId(): string {
-  idCounter += 1;
-  return `d${idCounter}`;
-}
+const makeLocalId = () => `d${(idCounter += 1)}`;
 
 function validateDraft(d: Draft): boolean {
   if (!d.text.trim()) return false;
@@ -54,39 +53,68 @@ function validateDraft(d: Draft): boolean {
   return true;
 }
 
-export function QuizGenerator({
+export function QuizAI({
   videoId,
-  quizExists,
-  addAction,
+  savedSourceText,
   geminiConfigured,
-  defaultSourceText = "",
+  generateAndAddAction,
+  saveScriptAction,
+  addAction,
 }: Props) {
-  const [sourceText, setSourceText] = useState(defaultSourceText);
-  const [count, setCount] = useState(5);
+  const router = useRouter();
+  const [sourceText, setSourceText] = useState(savedSourceText);
+  const [count, setCount] = useState(20);
   const [difficulty, setDifficulty] = useState<Difficulty>("MEDIUM");
-  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState<null | "live" | "review" | "save">(null);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [dropped, setDropped] = useState(0);
-  const [bulkPending, startBulk] = useTransition();
+  const [, startBulk] = useTransition();
 
-  const charCount = sourceText.length;
+  const charCount = sourceText.trim().length;
   const charsOk = charCount >= 200;
 
-  async function handleGenerate() {
+  function resetMsgs() {
     setError(null);
-    setDropped(0);
-    if (!quizExists) {
-      setError("Save the quiz settings above first — questions need a quiz to attach to.");
-      return;
-    }
-    if (!charsOk) {
-      setError(`Paste at least 200 characters of source material (you have ${charCount}).`);
-      return;
-    }
-    setLoading(true);
+    setSuccess(null);
+  }
+
+  async function generateAndAdd() {
+    resetMsgs();
     setDrafts([]);
+    if (!charsOk) {
+      setError(`Paste at least 200 characters of script/notes (you have ${charCount}).`);
+      return;
+    }
+    setBusy("live");
     try {
+      const res = await generateAndAddAction({ videoId, sourceText, count, difficulty });
+      if (res.ok) {
+        setSuccess(
+          `Added ${res.generated} question${res.generated === 1 ? "" : "s"} to the quiz` +
+            (res.dropped ? ` · ${res.dropped} dropped by guardrails` : "") +
+            "."
+        );
+        router.refresh();
+      } else {
+        setError(res.error || "Generation failed.");
+      }
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function reviewFirst() {
+    resetMsgs();
+    if (!charsOk) {
+      setError(`Paste at least 200 characters of script/notes (you have ${charCount}).`);
+      return;
+    }
+    setBusy("review");
+    try {
+      // Persist the script first so it's reusable, then fetch drafts.
+      await saveScriptAction({ videoId, sourceText });
       const res = await fetch("/api/admin/quiz/generate", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -107,9 +135,21 @@ export function QuizGenerator({
       );
       setDropped(data.dropped ?? 0);
     } catch (e) {
-      setError((e as Error).message || "Could not reach the server.");
+      setError((e as Error).message);
     } finally {
-      setLoading(false);
+      setBusy(null);
+    }
+  }
+
+  async function saveScriptOnly() {
+    resetMsgs();
+    setBusy("save");
+    try {
+      const res = await saveScriptAction({ videoId, sourceText });
+      if (res.ok) setSuccess("Script saved.");
+      else setError(res.error || "Could not save.");
+    } finally {
+      setBusy(null);
     }
   }
 
@@ -117,33 +157,22 @@ export function QuizGenerator({
     setDrafts((prev) => prev.map((d) => (d.localId === localId ? { ...d, ...patch } : d)));
   }
 
-  function updateOption(
-    localId: string,
-    idx: number,
-    patch: Partial<{ text: string; isCorrect: boolean }>
-  ) {
+  function updateOption(localId: string, idx: number, patch: Partial<{ text: string; isCorrect: boolean }>) {
     setDrafts((prev) =>
       prev.map((d) => {
         if (d.localId !== localId) return d;
-        const options = d.options.map((o, i) => {
-          if (i !== idx) {
-            // Marking one option correct clears the rest.
-            return patch.isCorrect ? { ...o, isCorrect: false } : o;
-          }
-          return { ...o, ...patch };
-        });
+        const options = d.options.map((o, i) =>
+          i !== idx ? (patch.isCorrect ? { ...o, isCorrect: false } : o) : { ...o, ...patch }
+        );
         return { ...d, options };
       })
     );
   }
 
-  // Commit a single draft. Guards against double-submit via the "saving" status.
   async function commitDraft(d: Draft): Promise<boolean> {
     if (d.status !== "pending") return false;
     if (!validateDraft(d)) {
-      setError(
-        "A question is incomplete: needs text, non-empty options, and exactly one correct answer."
-      );
+      setError("A question needs text, non-empty options, and exactly one correct answer.");
       return false;
     }
     updateDraft(d.localId, { status: "saving" });
@@ -155,6 +184,7 @@ export function QuizGenerator({
       });
       if (res.ok) {
         updateDraft(d.localId, { status: "added", editing: false });
+        router.refresh();
         return true;
       }
       updateDraft(d.localId, { status: "pending" });
@@ -162,21 +192,14 @@ export function QuizGenerator({
       return false;
     } catch (e) {
       updateDraft(d.localId, { status: "pending" });
-      setError((e as Error).message || "Failed to add question.");
+      setError((e as Error).message);
       return false;
     }
   }
 
-  function addOne(d: Draft) {
-    setError(null);
-    void commitDraft(d);
-  }
-
   function addAll() {
-    setError(null);
+    resetMsgs();
     startBulk(async () => {
-      // Sequential on purpose — keeps question order stable and avoids racing
-      // the per-draft "saving" guard.
       for (const d of drafts) {
         if (d.status === "pending") {
           const ok = await commitDraft(d);
@@ -187,27 +210,17 @@ export function QuizGenerator({
   }
 
   const pendingCount = drafts.filter((d) => d.status === "pending").length;
-  const addedCount = drafts.filter((d) => d.status === "added").length;
 
   if (!geminiConfigured) {
     return (
       <section className="rounded-2xl bg-white border border-border shadow-soft p-6 mb-8">
         <div className="flex items-center gap-2 mb-2">
           <Sparkles className="w-5 h-5 text-brand-500" />
-          <h2 className="text-lg font-semibold">AI quiz generator</h2>
+          <h2 className="text-lg font-semibold">AI quiz questions</h2>
         </div>
         <p className="text-sm text-ink-mute">
-          Set <code className="px-1 rounded bg-muted text-xs">GEMINI_API_KEY</code> in your
-          environment to enable AI-assisted question generation. Get a key at{" "}
-          <a
-            href="https://aistudio.google.com/app/apikey"
-            target="_blank"
-            rel="noreferrer"
-            className="text-brand-500 underline"
-          >
-            aistudio.google.com
-          </a>
-          .
+          Set <code className="px-1 rounded bg-muted text-xs">GEMINI_API_KEY</code> on the server to
+          enable AI generation.
         </p>
       </section>
     );
@@ -215,118 +228,125 @@ export function QuizGenerator({
 
   return (
     <section className="rounded-2xl bg-white border border-border shadow-soft p-6 mb-8">
-      <div className="flex items-center gap-2 mb-2">
+      <div className="flex items-center gap-2 mb-1">
         <Sparkles className="w-5 h-5 text-brand-500" />
-        <h2 className="text-lg font-semibold">Generate questions with AI</h2>
+        <h2 className="text-lg font-semibold">AI quiz questions</h2>
       </div>
-      <p className="text-sm text-ink-mute mb-5">
-        Paste the video script or notes. Gemini drafts questions <em>only</em> from this text — each
-        one comes with the exact source quote that proves the answer. Review, edit, then add the
-        ones you like.
+      <p className="text-sm text-ink-mute mb-4">
+        Paste the video script or notes once. Gemini writes questions <em>only</em> from this text —
+        each backed by a source quote. <strong>Generate &amp; add</strong> saves them straight to the
+        quiz; <strong>Review first</strong> lets you approve each one. No script? Use{" "}
+        <strong>Auto-quiz (AI)</strong> in the sidebar to have Gemini watch the video.
       </p>
 
-      <div className="space-y-4">
-        <label className="block">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-sm text-ink-mute">
-              Source material (script, notes, transcript)
-            </span>
-            <span className={`text-xs ${charsOk ? "text-emerald-600" : "text-ink-mute"}`}>
-              {charCount.toLocaleString()} chars {charsOk ? "✓" : "(min 200)"}
-            </span>
-          </div>
-          <textarea
-            value={sourceText}
-            onChange={(e) => setSourceText(e.target.value)}
-            rows={10}
-            placeholder="Paste the script or NotebookLM source notes here. The more detail, the better the questions."
-            className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm font-mono leading-relaxed resize-y"
-          />
-        </label>
+      <label className="block mb-4">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-sm text-ink-mute">Script / notes</span>
+          <span className={`text-xs ${charsOk ? "text-emerald-600" : "text-ink-mute"}`}>
+            {charCount.toLocaleString()} chars {charsOk ? "✓" : "(min 200)"}
+          </span>
+        </div>
+        <textarea
+          value={sourceText}
+          onChange={(e) => setSourceText(e.target.value)}
+          rows={8}
+          placeholder="Paste the video script or NotebookLM source notes here…"
+          className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm font-mono leading-relaxed resize-y"
+        />
+      </label>
 
-        <div className="grid sm:grid-cols-2 gap-5">
-          <div>
-            <div className="text-sm text-ink-mute mb-2">Difficulty</div>
-            <div className="grid grid-cols-2 gap-2">
-              {DIFFICULTIES.map((d) => (
-                <button
-                  key={d.value}
-                  type="button"
-                  onClick={() => setDifficulty(d.value)}
-                  className={`rounded-lg border px-3 py-2 text-left text-sm transition ${
-                    difficulty === d.value
-                      ? "border-brand-500 bg-brand-50 text-brand-600"
-                      : "border-border bg-white hover:border-brand-300"
-                  }`}
-                >
-                  <div className="font-medium">{d.label}</div>
-                  <div className="text-xs text-ink-mute">{d.hint}</div>
-                </button>
-              ))}
-            </div>
+      <div className="grid sm:grid-cols-2 gap-5 mb-5">
+        <div>
+          <div className="text-sm text-ink-mute mb-2">Difficulty</div>
+          <div className="grid grid-cols-2 gap-2">
+            {DIFFICULTIES.map((d) => (
+              <button
+                key={d.value}
+                type="button"
+                onClick={() => setDifficulty(d.value)}
+                className={`rounded-lg border px-3 py-2 text-left text-sm transition ${
+                  difficulty === d.value
+                    ? "border-brand-500 bg-brand-50 text-brand-600"
+                    : "border-border bg-white hover:border-brand-300"
+                }`}
+              >
+                <div className="font-medium">{d.label}</div>
+                <div className="text-xs text-ink-mute">{d.hint}</div>
+              </button>
+            ))}
           </div>
-
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-ink-mute">Number of questions</span>
-              <input
-                type="number"
-                min={3}
-                max={100}
-                value={count}
-                onChange={(e) =>
-                  setCount(Math.max(3, Math.min(100, Number(e.target.value) || 3)))
-                }
-                className="w-16 bg-muted border border-border rounded px-2 py-1 text-sm text-right font-semibold"
-              />
-            </div>
+        </div>
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm text-ink-mute">Number of questions</span>
             <input
-              type="range"
+              type="number"
               min={3}
               max={100}
               value={count}
-              onChange={(e) => setCount(Number(e.target.value))}
-              className="w-full accent-brand-500"
+              onChange={(e) => setCount(Math.max(3, Math.min(100, Number(e.target.value) || 3)))}
+              className="w-16 bg-muted border border-border rounded px-2 py-1 text-sm text-right font-semibold"
             />
-            <div className="flex justify-between text-xs text-ink-mute mt-1">
-              <span>3</span>
-              <span>100</span>
-            </div>
-            <p className="text-xs text-ink-mute mt-3">
-              Large sets are generated in batches and may take longer. Gemini returns fewer if the
-              source can&apos;t support that many grounded questions — that&apos;s by design.
-            </p>
           </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={handleGenerate}
-            disabled={loading || !quizExists}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white disabled:opacity-50"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Generating…
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4" />
-                Generate questions
-              </>
-            )}
-          </button>
-          {!quizExists && <span className="text-xs text-ink-mute">Save quiz settings first.</span>}
-        </div>
-
-        {error && (
-          <div className="rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-sm px-3 py-2">
-            {error}
+          <input
+            type="range"
+            min={3}
+            max={100}
+            value={count}
+            onChange={(e) => setCount(Number(e.target.value))}
+            className="w-full accent-brand-500"
+          />
+          <div className="flex justify-between text-xs text-ink-mute mt-1">
+            <span>3</span>
+            <span>100</span>
           </div>
-        )}
+          <p className="text-xs text-ink-mute mt-2">
+            Large sets generate in batches and take longer. Fewer come back if the source can&apos;t
+            support that many grounded questions.
+          </p>
+        </div>
       </div>
+
+      <div className="flex items-center gap-3 flex-wrap">
+        <button
+          type="button"
+          onClick={generateAndAdd}
+          disabled={busy !== null}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white disabled:opacity-50"
+        >
+          {busy === "live" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+          {busy === "live" ? "Generating…" : "Generate & add to quiz"}
+        </button>
+        <button
+          type="button"
+          onClick={reviewFirst}
+          disabled={busy !== null}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border hover:bg-muted text-sm disabled:opacity-50"
+        >
+          {busy === "review" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+          Review first
+        </button>
+        <button
+          type="button"
+          onClick={saveScriptOnly}
+          disabled={busy !== null || charCount === 0}
+          className="inline-flex items-center gap-1.5 text-sm text-ink-mute hover:text-ink disabled:opacity-50"
+        >
+          {busy === "save" ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+          Save script only
+        </button>
+      </div>
+
+      {error && (
+        <div className="mt-4 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-sm px-3 py-2">
+          {error}
+        </div>
+      )}
+      {success && (
+        <div className="mt-4 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm px-3 py-2">
+          {success}
+        </div>
+      )}
 
       {drafts.length > 0 && (
         <div className="mt-8 border-t border-border pt-6">
@@ -336,34 +356,18 @@ export function QuizGenerator({
               <span className="text-ink-mute font-normal">
                 {" "}
                 — {pendingCount} pending
-                {addedCount > 0 && `, ${addedCount} added`}
                 {dropped > 0 && `, ${dropped} dropped by guardrails`}
               </span>
             </h3>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={addAll}
-                disabled={bulkPending || pendingCount === 0}
-                className="text-sm px-3 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-600 text-white disabled:opacity-50"
-              >
-                {bulkPending ? "Adding…" : `Add all ${pendingCount}`}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setDrafts([]);
-                  setDropped(0);
-                  setError(null);
-                }}
-                disabled={bulkPending}
-                className="text-sm px-3 py-1.5 rounded-lg border border-border hover:bg-muted disabled:opacity-50"
-              >
-                Clear
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={addAll}
+              disabled={pendingCount === 0}
+              className="text-sm px-3 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-600 text-white disabled:opacity-50"
+            >
+              Add all {pendingCount}
+            </button>
           </div>
-
           <div className="space-y-3">
             {drafts.map((d, i) => (
               <DraftCard
@@ -372,7 +376,7 @@ export function QuizGenerator({
                 index={i}
                 onUpdate={updateDraft}
                 onUpdateOption={updateOption}
-                onAdd={() => addOne(d)}
+                onAdd={() => commitDraft(d)}
               />
             ))}
           </div>
@@ -392,15 +396,10 @@ function DraftCard({
   draft: Draft;
   index: number;
   onUpdate: (id: string, patch: Partial<Draft>) => void;
-  onUpdateOption: (
-    id: string,
-    idx: number,
-    patch: Partial<{ text: string; isCorrect: boolean }>
-  ) => void;
+  onUpdateOption: (id: string, idx: number, patch: Partial<{ text: string; isCorrect: boolean }>) => void;
   onAdd: () => void;
 }) {
   if (draft.status === "rejected") return null;
-
   if (draft.status === "added") {
     return (
       <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 flex items-center gap-2">
@@ -409,7 +408,6 @@ function DraftCard({
       </div>
     );
   }
-
   const saving = draft.status === "saving";
   const badgeTone =
     draft.difficulty === "EASY"
@@ -450,11 +448,7 @@ function DraftCard({
             disabled={saving}
             className="inline-flex items-center gap-1 text-sm px-3 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-600 text-white disabled:opacity-60"
           >
-            {saving ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Plus className="w-3.5 h-3.5" />
-            )}
+            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
             {saving ? "Adding…" : "Add"}
           </button>
         </div>
@@ -493,9 +487,7 @@ function DraftCard({
                 className="flex-1 bg-muted border border-border rounded px-2 py-1 text-sm"
               />
             ) : (
-              <span className={o.isCorrect ? "text-emerald-700 font-medium" : "text-ink-soft"}>
-                {o.text}
-              </span>
+              <span className={o.isCorrect ? "text-emerald-700 font-medium" : "text-ink-soft"}>{o.text}</span>
             )}
           </li>
         ))}

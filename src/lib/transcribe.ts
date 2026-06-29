@@ -10,6 +10,8 @@
 // The transcript is what later grounds the quiz — so quiz questions stay
 // verifiable against real spoken content, keeping the generator's guardrails.
 
+import { resolveGeminiModel } from "@/lib/gemini";
+
 const GEMINI_BASE = "https://generativelanguage.googleapis.com";
 
 const DEFAULT_MAX_BYTES = 250 * 1024 * 1024; // 250 MB — NotebookLM overviews are far smaller
@@ -37,7 +39,7 @@ export async function transcribeVideo(opts: {
   maxBytes?: number;
 }): Promise<TranscribeResult> {
   const apiKey = opts.apiKey;
-  const model = opts.model || process.env.GEMINI_MODEL || "gemini-2.0-flash";
+  const model = opts.model || (await resolveGeminiModel(apiKey));
   const mimeType = opts.mimeType || "video/mp4";
   const maxBytes = opts.maxBytes ?? DEFAULT_MAX_BYTES;
 

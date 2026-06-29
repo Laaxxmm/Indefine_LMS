@@ -3,8 +3,7 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { QuizGenerator } from "./QuizGenerator";
-import { ScriptAutoGen } from "./ScriptAutoGen";
+import { QuizAI } from "./QuizAI";
 import { generateQuiz } from "@/lib/quiz-gen";
 
 export const dynamic = "force-dynamic";
@@ -54,108 +53,85 @@ async function addGeneratedQuestion(data: {
   return { ok: true };
 }
 
-type ScriptResult = {
-  ok: boolean;
-  generated?: number;
-  dropped?: number;
-  skipped?: "short" | "has-questions" | "no-key";
-  message?: string;
-  error?: string;
-};
-
-// Save the video's script and, if the quiz is still empty, auto-generate a
-// 20-question medium quiz from it (live — no review tray).
-async function saveScriptAndGenerate(data: {
+// Persist the video's script/notes (and make sure a quiz row exists to attach to).
+async function saveScript(data: {
   videoId: string;
   sourceText: string;
-}): Promise<ScriptResult> {
+}): Promise<{ ok: boolean; error?: string }> {
   "use server";
   const session = await auth();
   if (!session?.user || session.user.role !== "ADMIN") {
     return { ok: false, error: "Unauthorized" };
   }
-  const videoId = data.videoId;
   const sourceText = (data.sourceText ?? "").trim();
-
   const video = await prisma.video.findUnique({
-    where: { id: videoId },
+    where: { id: data.videoId },
+    select: { id: true, title: true },
+  });
+  if (!video) return { ok: false, error: "Video not found" };
+
+  await prisma.video.update({
+    where: { id: video.id },
+    data: { sourceText: sourceText || null },
+  });
+  const existing = await prisma.quiz.findUnique({ where: { videoId: video.id }, select: { id: true } });
+  if (!existing) {
+    await prisma.quiz.create({ data: { videoId: video.id, title: `${video.title} quiz` } });
+  }
+  revalidatePath(`/admin/video/${video.id}`);
+  return { ok: true };
+}
+
+// Generate questions from the pasted script and append them to the quiz live.
+async function generateAndAddLive(data: {
+  videoId: string;
+  sourceText: string;
+  count: number;
+  difficulty: "EASY" | "MEDIUM" | "HARD" | "MIXED";
+}): Promise<{ ok: boolean; generated?: number; dropped?: number; error?: string }> {
+  "use server";
+  const session = await auth();
+  if (!session?.user || session.user.role !== "ADMIN") {
+    return { ok: false, error: "Unauthorized" };
+  }
+  const sourceText = (data.sourceText ?? "").trim();
+  if (sourceText.length < 200) {
+    return { ok: false, error: "Add at least 200 characters of source text." };
+  }
+  const video = await prisma.video.findUnique({
+    where: { id: data.videoId },
     select: { id: true, title: true, description: true },
   });
   if (!video) return { ok: false, error: "Video not found" };
 
-  // Persist the script (empty string clears it).
-  await prisma.video.update({
-    where: { id: videoId },
-    data: { sourceText: sourceText || null },
-  });
-
-  // Ensure a quiz exists to attach questions to.
-  let quiz = await prisma.quiz.findUnique({
-    where: { videoId },
-    select: { id: true, _count: { select: { questions: true } } },
-  });
-  if (!quiz) {
-    const created = await prisma.quiz.create({
-      data: { videoId, title: `${video.title} quiz` },
-    });
-    quiz = { id: created.id, _count: { questions: 0 } };
-  }
-  revalidatePath(`/admin/video/${videoId}`);
-
-  // Auto-generate only when the quiz is empty, so we never clobber an edited quiz.
-  if (quiz._count.questions > 0) {
-    return {
-      ok: true,
-      skipped: "has-questions",
-      message: `Script saved. This quiz already has ${quiz._count.questions} question${
-        quiz._count.questions === 1 ? "" : "s"
-      } — use the AI panel below to add more.`,
-    };
-  }
-  if (sourceText.length < 200) {
-    return {
-      ok: true,
-      skipped: "short",
-      message: "Script saved. Add at least 200 characters to auto-generate a quiz.",
-    };
-  }
-  if (!process.env.GEMINI_API_KEY) {
-    return {
-      ok: true,
-      skipped: "no-key",
-      message: "Script saved. Set GEMINI_API_KEY to auto-generate questions.",
-    };
-  }
+  await prisma.video.update({ where: { id: video.id }, data: { sourceText } });
 
   const result = await generateQuiz({
     videoTitle: video.title,
     videoDescription: video.description,
     sourceText,
-    count: 20,
-    difficulty: "MEDIUM",
+    count: data.count,
+    difficulty: data.difficulty,
   });
-  if (!result.ok) {
-    return { ok: false, error: `Script saved, but generation failed: ${result.error}` };
-  }
+  if (!result.ok) return { ok: false, error: result.error };
 
-  let order = 0;
+  const existing = await prisma.quiz.findUnique({ where: { videoId: video.id }, select: { id: true } });
+  const quizId =
+    existing?.id ??
+    (await prisma.quiz.create({ data: { videoId: video.id, title: `${video.title} quiz` } })).id;
+
+  let order = await prisma.question.count({ where: { quizId } });
   for (const q of result.questions) {
     await prisma.question.create({
       data: {
-        quizId: quiz.id,
+        quizId,
         text: q.text,
         order: order++,
-        options: {
-          create: q.options.map((o, i) => ({
-            text: o.text,
-            isCorrect: o.isCorrect,
-            order: i,
-          })),
-        },
+        options: { create: q.options.map((o, i) => ({ text: o.text, isCorrect: o.isCorrect, order: i })) },
       },
     });
   }
-  revalidatePath(`/admin/video/${videoId}`);
+  revalidatePath(`/admin/video/${video.id}`);
   return { ok: true, generated: result.questions.length, dropped: result.dropped };
 }
 
@@ -244,13 +220,6 @@ export default async function AdminVideoPage({
       <h1 className="text-2xl font-bold mt-4">{video.title}</h1>
       <p className="text-ink-mute text-sm mb-8">Edit quiz settings and questions</p>
 
-      <ScriptAutoGen
-        videoId={video.id}
-        defaultSourceText={video.sourceText ?? ""}
-        quizQuestionCount={quiz?.questions.length ?? 0}
-        saveAction={saveScriptAndGenerate}
-      />
-
       <section className="rounded-2xl bg-white border border-border shadow-soft p-6 mb-8">
         <h2 className="text-lg font-semibold mb-4">Quiz settings</h2>
         <form action={saveQuizSettings} className="grid sm:grid-cols-2 gap-4">
@@ -299,12 +268,13 @@ export default async function AdminVideoPage({
         </form>
       </section>
 
-      <QuizGenerator
+      <QuizAI
         videoId={video.id}
-        quizExists={!!quiz}
-        addAction={addGeneratedQuestion}
+        savedSourceText={video.sourceText ?? ""}
         geminiConfigured={!!process.env.GEMINI_API_KEY}
-        defaultSourceText={video.sourceText ?? ""}
+        generateAndAddAction={generateAndAddLive}
+        saveScriptAction={saveScript}
+        addAction={addGeneratedQuestion}
       />
 
       {quiz && (
