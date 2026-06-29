@@ -40,6 +40,7 @@ export default async function AdminLayout({
             items={[
               { href: "/admin", label: "Overview", icon: "LayoutDashboard" },
               { href: "/admin?tab=videos", label: "Videos & Quizzes", icon: "PlayCircle" },
+              { href: "/admin/auto-quiz", label: "Auto-quiz (AI)", icon: "Sparkles" },
               { href: "/admin/assignments", label: "Assignments", icon: "Target" },
               { href: "/admin/courses", label: "Courses & Deadlines", icon: "CalendarClock" },
               { href: "/admin/team", label: "Team & hierarchy", icon: "Users" },
