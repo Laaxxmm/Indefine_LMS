@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Play, Square, CheckCircle2, XCircle, MinusCircle, Sparkles } from "lucide-react";
 
-type VideoLite = { id: string; title: string; moduleTitle: string };
+type VideoLite = { id: string; title: string; moduleTitle: string; questionCount: number };
 
 type Status = "pending" | "working" | "done" | "skipped" | "failed";
 
@@ -25,7 +25,15 @@ const PER_VIDEO_TIMEOUT_MS = 480_000; // 8 min hard ceiling per video
 export function BulkQuizRunner({ videos }: { videos: VideoLite[] }) {
   const router = useRouter();
   const [items, setItems] = useState<Item[]>(
-    videos.map((v) => ({ ...v, status: "pending" }))
+    videos.map((v) =>
+      v.questionCount > 0
+        ? {
+            ...v,
+            status: "done" as Status,
+            message: `Quiz ready · ${v.questionCount} question${v.questionCount === 1 ? "" : "s"}`,
+          }
+        : { ...v, status: "pending" as Status }
+    )
   );
   const [running, setRunning] = useState(false);
   const stopRef = useRef(false);
@@ -113,10 +121,12 @@ export function BulkQuizRunner({ videos }: { videos: VideoLite[] }) {
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
             <p className="font-semibold">
-              {videos.length} video{videos.length === 1 ? "" : "s"} without a quiz
+              {counts.done} of {videos.length} video{videos.length === 1 ? "" : "s"} have a quiz ✓
             </p>
             <p className="text-sm text-ink-mute mt-0.5">
-              {counts.done} done · {counts.skipped} skipped · {counts.failed} failed · {remaining} to go
+              {remaining} to generate
+              {counts.failed > 0 ? ` · ${counts.failed} failed` : ""}
+              {counts.skipped > 0 ? ` · ${counts.skipped} skipped` : ""}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -142,10 +152,16 @@ export function BulkQuizRunner({ videos }: { videos: VideoLite[] }) {
             )}
           </div>
         </div>
-        <div className="mt-3 rounded-lg bg-amber-50 border border-amber-100 text-amber-700 text-xs px-3 py-2">
-          Each video is downloaded, sent to Gemini to transcribe, then turned into a grounded 20-question
-          quiz. Expect <strong>1–3 minutes per video</strong>. Keep this tab open while it runs.
-        </div>
+        {remaining > 0 ? (
+          <div className="mt-3 rounded-lg bg-amber-50 border border-amber-100 text-amber-700 text-xs px-3 py-2">
+            Each video is downloaded, sent to Gemini to transcribe, then turned into a grounded 20-question
+            quiz. Expect <strong>1–3 minutes per video</strong>. Keep this tab open while it runs.
+          </div>
+        ) : (
+          <div className="mt-3 rounded-lg bg-emerald-50 border border-emerald-100 text-emerald-700 text-xs px-3 py-2">
+            ✓ Every video has a quiz — nothing left to generate.
+          </div>
+        )}
       </div>
 
       <div className="rounded-2xl bg-white border border-border shadow-soft divide-y divide-border overflow-hidden">
@@ -158,7 +174,11 @@ export function BulkQuizRunner({ videos }: { videos: VideoLite[] }) {
               {it.message && (
                 <p
                   className={`text-xs mt-0.5 break-words ${
-                    it.status === "failed" ? "text-rose-600" : "text-ink-mute"
+                    it.status === "failed"
+                      ? "text-rose-600"
+                      : it.status === "done"
+                      ? "text-emerald-600"
+                      : "text-ink-mute"
                   }`}
                 >
                   {it.message}

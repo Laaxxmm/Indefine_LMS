@@ -11,18 +11,29 @@ export default async function AutoQuizPage() {
   if (!session?.user) redirect("/");
   if (session.user.role !== "ADMIN") redirect("/dashboard");
 
-  // Videos that have no quiz, or a quiz with zero questions.
+  // Every video, with how many quiz questions it already has, so completed
+  // ones can show a persistent ✓ and we never regenerate them.
   const videos = await prisma.video.findMany({
-    where: {
-      OR: [{ quiz: { is: null } }, { quiz: { questions: { none: {} } } }],
-    },
     select: {
       id: true,
       title: true,
       module: { select: { title: true, course: { select: { title: true } } } },
+      quiz: { select: { _count: { select: { questions: true } } } },
     },
     orderBy: [{ moduleId: "asc" }, { order: "asc" }],
   });
+
+  // Pending (no questions yet) first so the actionable ones are on top.
+  const items = videos
+    .map((v) => ({
+      id: v.id,
+      title: v.title,
+      moduleTitle: v.module?.course?.title
+        ? `${v.module.course.title} · ${v.module.title}`
+        : v.module?.title ?? "—",
+      questionCount: v.quiz?._count.questions ?? 0,
+    }))
+    .sort((a, b) => (a.questionCount > 0 ? 1 : 0) - (b.questionCount > 0 ? 1 : 0));
 
   const geminiConfigured = !!process.env.GEMINI_API_KEY;
 
@@ -45,15 +56,7 @@ export default async function AutoQuizPage() {
           </p>
         </div>
       ) : (
-        <BulkQuizRunner
-          videos={videos.map((v) => ({
-            id: v.id,
-            title: v.title,
-            moduleTitle: v.module?.course?.title
-              ? `${v.module.course.title} · ${v.module.title}`
-              : v.module?.title ?? "—",
-          }))}
-        />
+        <BulkQuizRunner videos={items} />
       )}
     </main>
   );
