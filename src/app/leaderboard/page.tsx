@@ -202,7 +202,7 @@ export default async function Leaderboard({
                   rank={2}
                   row={top3[1]}
                   isMe={top3[1].userId === session.user.id}
-                  height="h-48 sm:h-56"
+                  height="min-h-[12rem] sm:min-h-[14rem]"
                 />
               )}
               {top3[0] && (
@@ -210,7 +210,7 @@ export default async function Leaderboard({
                   rank={1}
                   row={top3[0]}
                   isMe={top3[0].userId === session.user.id}
-                  height="h-60 sm:h-72"
+                  height="min-h-[15rem] sm:min-h-[18rem]"
                 />
               )}
               {top3[2] && (
@@ -218,7 +218,7 @@ export default async function Leaderboard({
                   rank={3}
                   row={top3[2]}
                   isMe={top3[2].userId === session.user.id}
-                  height="h-40 sm:h-48"
+                  height="min-h-[10rem] sm:min-h-[12rem]"
                 />
               )}
             </div>
