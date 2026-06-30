@@ -19,6 +19,15 @@ export async function POST(
   const userId = session.user.id;
   const { id: videoId } = await params;
 
+  // Only record progress for videos in a published course (admins exempt).
+  const accessible = await prisma.video.findUnique({
+    where: { id: videoId },
+    select: { module: { select: { course: { select: { published: true } } } } },
+  });
+  if (!accessible || (session.user.role !== "ADMIN" && !accessible.module?.course?.published)) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   const json = await req.json().catch(() => null);
   const parsed = Body.safeParse(json);
   if (!parsed.success) return NextResponse.json({ error: "Bad body" }, { status: 400 });

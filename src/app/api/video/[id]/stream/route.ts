@@ -12,8 +12,18 @@ export async function GET(
   const userId = session.user.id;
 
   const { id } = await params;
-  const video = await prisma.video.findUnique({ where: { id } });
-  if (!video) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const video = await prisma.video.findUnique({
+    where: { id },
+    include: { module: { include: { course: { select: { published: true } } } } },
+  });
+  // Employees may only stream videos in a published course (the same content
+  // the dashboard shows). Admins can preview anything.
+  if (
+    !video ||
+    (session.user.role !== "ADMIN" && !video.module?.course?.published)
+  ) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 
   // Prefer the user's delegated token for streaming — app-only tokens
   // sometimes omit @microsoft.graph.downloadUrl on SharePoint items.

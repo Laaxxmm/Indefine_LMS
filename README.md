@@ -1,67 +1,60 @@
 # Indefine LMS
 
-Internal Learning Management System for ~16 employees. Streams NotebookLM-generated
-videos from a shared OneDrive folder, gates each video behind an MCQ quiz, tracks
-per-employee progress, and rolls everything up into a leaderboard for KRA/appraisal.
+Internal Learning Management System for a CA firm (~16 employees, multi-branch ready).
+Streams training videos from a shared OneDrive/SharePoint folder, gates each video
+behind an MCQ quiz, generates quizzes with AI, tracks per-employee progress and
+attendance, and rolls everything into a KRA-linked leaderboard and a quarterly
+performance "Trajectory".
 
 **Stack:** Next.js 15 (App Router) · TypeScript · Tailwind · Prisma · PostgreSQL ·
-NextAuth v5 (Microsoft Entra ID / Azure AD) · Microsoft Graph API.
+NextAuth v5 (Microsoft Entra ID) · Microsoft Graph API · Google Gemini · Railway.
+
+> **No credentials live in this repo.** Every secret is read from environment variables;
+> `.env` is gitignored and only `.env.example` (with empty placeholders) is tracked.
 
 ---
 
-## Status
+## Documentation
 
-- [x] **Phase 1** — Microsoft 365 SSO, OneDrive sync, video player with heartbeat, dashboard, leaderboard
-- [x] **Phase 2** — Quiz player (timer, MCQ, server-side grading, attempts), admin quiz editor
-- [x] **Phase 3** — Deadlines (monthly/quarterly/yearly/custom), course-completion detection, KRA scoring on leaderboard, dashboard countdown widget
-- [x] **Phase 4** — Date-range KRA dashboard, per-employee printable detail page, CSV export
-
-### KRA report (admin)
-
-`/admin/kra` — pick an appraisal window (defaults to the current April–March
-financial year). Shows every employee with videos completed, quiz points,
-deadline points, and total score for the window. Two outputs:
-
-- **CSV:** one file with three sections — summary table, per-deadline rows,
-  best-quiz-per-user rows. Filters all by `dueAt` / `submittedAt` inside the window.
-- **Printable detail page:** `/admin/kra/[userId]` — clean print stylesheet
-  (light background, black text). "Print / save as PDF" button uses the
-  browser's native PDF printer, so no extra dependency.
-
-### Course completion + KRA scoring
-
-A user "completes a course" when:
-1. Every video in every module of that course has `VideoProgress.completed = true`
-2. Every quiz attached to those videos has at least one `QuizAttempt.passed = true`
-
-The completion timestamp is the latest of those events. For each `Deadline` on
-the course, we compare `completedAt` to `dueAt`:
-
-| Outcome | Points awarded |
+| Doc | What's in it |
 |---|---|
-| Completed before `dueAt` | `pointsOnTime` |
-| Completed after `dueAt` | `pointsLate` |
-| Not yet completed, `dueAt` in future | 0 (state: `pending`) |
-| Not yet completed, `dueAt` passed | 0 (state: `missed`) |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Site map + full **flowcharts** (auth, sync, quiz, AI, KRA, trajectory) |
+| [docs/EMPLOYEE_GUIDE.md](docs/EMPLOYEE_GUIDE.md) | Employee handout — how to use the portal |
+| [docs/TEST_REPORT.md](docs/TEST_REPORT.md) | End-to-end audit results + manual test checklist |
 
-Final leaderboard score per user:
-`videos × 10 + Σ(best-quiz % / 10) + Σ(deadline points awarded)`
+---
 
-Admin sets deadlines at **/admin/courses**.
+## Features
 
-### Quiz flow
+**Learning**
+- Microsoft 365 SSO (single sign-on; no separate passwords)
+- OneDrive/SharePoint video streaming via Graph (videos never re-hosted)
+- Video player with resume, **playback speed (0.5×–2×)**, and monotonic watch tracking
+- MCQ quizzes: server-side grading, timer, unlock at % watched, retakes, best-score-wins
 
-1. User watches a video → server tracks % watched (monotonic).
-2. Once they hit `unlockAtPercent` (default 90%), the quiz unlocks.
-3. They click **Start quiz** → `POST /api/quiz/[id]/start` creates a `QuizAttempt` and returns
-   the questions with correct answers stripped.
-4. Client renders MCQs with a sticky timer (color goes red in the last 30s).
-5. On submit (manual or auto on timeout) → `POST /api/quiz/[id]/submit`. The server re-grades
-   using its own copy of `isCorrect` (clients never see it), enforces the timer
-   with a 5s grace, and stores `score`, `maxScore`, `percent`, `passed`, and the
-   raw `answers` JSON for review.
-6. User lands on `/quiz/[id]/result` with their score and a Retake button if they didn't pass.
-7. Best score per quiz feeds the leaderboard.
+**AI quiz generation (Gemini)**
+- Paste a script → generate up to **100** grounded questions (batched), review or add live
+- **Auto-quiz**: Gemini watches each video, transcribes it, and builds a grounded quiz —
+  no script needed; completed videos show a persistent ✓
+- **Guardrails**: every question must cite a verbatim quote from the source, or it's dropped
+
+**Performance & KRA**
+- Deadlines (monthly/quarterly/yearly/custom) with on-time vs late points
+- Attendance import from **greytHR** monthly CSV → KRA points
+- KRA appraisal report with date-range filter, per-employee detail page, and CSV export
+- Leaderboard (people + branches) showing the full score breakdown
+- "Trajectory": Growth Wizard, 6 tracks, tiers, weekly check-ins, initiatives, year-end Recap
+
+**Admin**
+- One-click OneDrive sync + M365 licensed-user sync
+- Quiz editor, courses/modules/deadlines, assignments, team & branch management
+
+---
+
+## Screenshots
+
+Add screenshots to `docs/screenshots/` and link them here. Suggested captures are
+listed in the [employee guide appendix](docs/EMPLOYEE_GUIDE.md#appendix--screenshot-checklist).
 
 ---
 
@@ -72,69 +65,66 @@ Admin sets deadlines at **/admin/courses**.
 In [entra.microsoft.com](https://entra.microsoft.com) → **App registrations** → **New registration**:
 
 - **Name:** Indefine LMS
-- **Supported account types:** Single tenant (your org only)
+- **Supported account types:** Single tenant
 - **Redirect URI:** Web → `http://localhost:3000/api/auth/callback/microsoft-entra-id`
   (add your Railway prod URL too once deployed)
 
-After creation, note the **Application (client) ID** and **Directory (tenant) ID**.
-
-Then under the new app:
-
-- **Certificates & secrets** → New client secret → copy the secret **value** (not the ID)
-- **API permissions** → Add a permission → Microsoft Graph:
+Then under the app:
+- **Certificates & secrets** → new client secret → copy the secret **value**
+- **API permissions** → Microsoft Graph:
   - **Delegated:** `openid`, `profile`, `email`, `offline_access`, `User.Read`, `Files.Read.All`
-  - **Application:** `Files.Read.All` (so the server can list videos for any user)
-  - Click **Grant admin consent for {tenant}** at the top — required for application perms
+  - **Application:** `Files.Read.All`, `User.Read.All` (for server-side video listing + user sync)
+  - Click **Grant admin consent** (required for application permissions)
 
-### 2. Find your OneDrive video folder IDs
+### 2. OneDrive/SharePoint video folder
 
-You need `GRAPH_DRIVE_ID` and `GRAPH_VIDEOS_FOLDER_ID`.
-
-Easiest path — Graph Explorer ([developer.microsoft.com/graph/graph-explorer](https://developer.microsoft.com/graph/graph-explorer)) signed in as someone with access:
-
-```
-GET https://graph.microsoft.com/v1.0/me/drive          → driveId is `id`
-GET https://graph.microsoft.com/v1.0/me/drive/root/children
-```
-
-Navigate into the videos folder and grab its `id` for `GRAPH_VIDEOS_FOLDER_ID`.
-
-If videos live on a SharePoint site instead of personal OneDrive:
-
-```
-GET /sites?search={sitename}
-GET /sites/{site-id}/drives
-GET /drives/{drive-id}/root/children
-```
+Find the **drive id** and the **videos folder path** (Graph Explorer:
+`GET /me/drive` for the drive id, then browse to your videos folder). These map to
+`GRAPH_DRIVE_ID` and `GRAPH_VIDEOS_FOLDER_PATH`.
 
 ### 3. Database
 
-Provision a Postgres on Railway (or local). Copy the connection string into `DATABASE_URL`.
+Provision a PostgreSQL (Railway or local) and set `DATABASE_URL`.
 
-### 4. Environment
+### 4. Gemini (AI quizzes — optional)
+
+Create a key at [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey)
+and set `GEMINI_API_KEY`. Leave `GEMINI_MODEL` blank to auto-detect a working model.
+Without a key, the AI panels show a "set GEMINI_API_KEY" note and the rest of the app works.
+
+### 5. Environment & run
 
 ```bash
-cp .env.example .env
-# fill in every value
-```
-
-Then push the schema:
-
-```bash
+cp .env.example .env     # then fill in every value (see table below)
 npm install
-npx prisma db push
+npx prisma db push       # create the database schema
+npm run dev              # http://localhost:3000
 ```
 
-### 5. Run
+Sign in with a Microsoft account whose email is in `ADMIN_EMAILS` — that user becomes
+`ADMIN` on first login. Then go to **/admin → Sync now** to import videos.
 
-```bash
-npm run dev
-# http://localhost:3000
-```
+---
 
-Sign in with a Microsoft account whose email matches `ADMIN_EMAILS` in `.env`.
-On first login that user gets `ADMIN` role automatically. Then go to **/admin** →
-**Sync now** to pull videos from OneDrive.
+## Environment variables
+
+Names and purpose only — **never commit real values**. See `.env.example`.
+
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `AUTH_SECRET` | NextAuth session encryption secret (`openssl rand -base64 32`) |
+| `AUTH_URL` | App base URL (`http://localhost:3000` / your Railway domain) |
+| `AUTH_TRUST_HOST` | `true` behind Railway's proxy |
+| `AUTH_MICROSOFT_ENTRA_ID_ID` | Entra application (client) ID |
+| `AUTH_MICROSOFT_ENTRA_ID_SECRET` | Entra client secret value |
+| `AUTH_MICROSOFT_ENTRA_ID_ISSUER` | `https://login.microsoftonline.com/<tenant-id>/v2.0` |
+| `GRAPH_DRIVE_ID` | Drive holding the videos |
+| `GRAPH_VIDEOS_FOLDER_PATH` | Path to the videos folder within the drive |
+| `MS_TENANT_ID` / `MS_CLIENT_ID` / `MS_CLIENT_SECRET` | App-only Graph access (server-side listing + user sync) |
+| `ADMIN_EMAILS` | Comma-separated admin emails (auto-promoted to ADMIN) |
+| `GEMINI_API_KEY` | Google Gemini key (optional — enables AI quizzes) |
+| `GEMINI_MODEL` | Optional model override; blank = auto-detect |
 
 ---
 
@@ -142,12 +132,11 @@ On first login that user gets `ADMIN` role automatically. Then go to **/admin** 
 
 1. Push this repo to GitHub.
 2. Railway → **New Project** → **Deploy from GitHub repo**.
-3. Add a Postgres service in the same project. Railway auto-injects `DATABASE_URL`.
-4. Set the rest of the env vars from `.env.example` in the service Variables tab.
-5. Set `AUTH_URL` to your Railway domain (e.g. `https://lms-indefine.up.railway.app`)
-   and add the same `/api/auth/callback/microsoft-entra-id` URI to the Entra app.
-6. Build command: `npm run build`. Start command: `npm start`.
-7. Add a release/deploy command: `npx prisma db push` (or set up migrations).
+3. Add a **PostgreSQL** service in the same project (Railway injects `DATABASE_URL`).
+4. Set the remaining variables from the table above in the service **Variables** tab.
+5. Set `AUTH_URL` to your Railway domain and add the matching `/api/auth/callback/...`
+   redirect URI to the Entra app.
+6. Build: `npm run build` · Start: `npm start` (the start script runs `prisma db push`).
 
 ---
 
@@ -156,37 +145,39 @@ On first login that user gets `ADMIN` role automatically. Then go to **/admin** 
 ```
 src/
   app/
-    page.tsx                    sign-in
-    dashboard/page.tsx          employee landing
-    video/[id]/                 player + heartbeat
-    quiz/[id]/                  Phase 2 stub
-    admin/page.tsx              OneDrive sync, video list
-    leaderboard/page.tsx
+    page.tsx                 sign-in
+    dashboard/               employee landing
+    video/[id]/              player + heartbeat + speed control
+    quiz/[id]/               MCQ player, result
+    leaderboard/ team/ initiatives/ checkin/ recap/ wizard/
+    admin/                   overview, video quiz editor, auto-quiz, courses,
+                             attendance, kra, team, branches, trajectory, …
     api/
-      auth/[...nextauth]/       NextAuth handlers
-      video/[id]/stream         resolves a fresh Graph download URL
-      video/[id]/progress       receives heartbeat updates
+      auth/[...nextauth]/    NextAuth handlers
+      video/[id]/stream      fresh Graph download URL
+      video/[id]/progress    watch heartbeat
+      quiz/[id]/start|submit start (answers stripped) / submit (server re-grade)
+      admin/quiz/generate    AI quiz drafts (review)
+      admin/quiz/from-video  transcribe + auto-generate
+      admin/kra/export       KRA CSV
   lib/
-    auth.ts                     NextAuth config (Entra provider, Prisma adapter)
-    prisma.ts                   shared Prisma client
-    graph.ts                    Graph API helpers (app-only + delegated tokens)
-    sync.ts                     imports OneDrive folder into DB
-  middleware.ts                 redirects unauthed users to /
-prisma/schema.prisma            full data model
+    auth.ts prisma.ts graph.ts sync.ts users-sync.ts
+    quiz.ts quiz-gen.ts gemini.ts transcribe.ts auto-quiz.ts
+    kra.ts attendance.ts trajectory.ts gamification.ts checkins.ts …
+  middleware.ts              redirects unauthenticated users to /
+prisma/schema.prisma         full data model
+docs/                        architecture, employee guide, test report
 ```
 
 ---
 
-## Why this design
+## Security model (summary)
 
-- **No video re-hosting.** OneDrive holds the bytes; we only store metadata (driveId +
-  itemId). Each play resolves a fresh short-lived stream URL via Graph, so videos
-  stay private and storage costs nothing extra.
-- **App-only Graph token** for video listing/streaming so the experience is the
-  same for every user regardless of their personal OneDrive permissions. Falls
-  back to the user's delegated token if app-only isn't granted yet.
-- **Database sessions** (not JWT) so admin role flips and revocations take effect
-  immediately, and so the user's Graph access_token is fetchable from the DB
-  for the delegated fallback path.
-- **Monotonic progress** — we never lower `percent` on the server, even if the
-  user scrubs back. Quiz unlock only triggers forward.
+- **Database sessions** so role changes/revocations apply immediately.
+- Every `/admin/*` page redirects non-admins; every admin API returns `401` for non-admins.
+- **Quizzes are graded server-side** — clients never receive correct answers or report scores.
+- **AI questions are grounded** — each must quote the source verbatim or it's dropped.
+- **No video re-hosting** — only metadata is stored; each play resolves a short-lived URL.
+- App-only Graph token for consistent listing, with a delegated fallback.
+
+See [docs/TEST_REPORT.md](docs/TEST_REPORT.md) for the full audit.

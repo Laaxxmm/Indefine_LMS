@@ -40,14 +40,11 @@ export async function POST(
     return NextResponse.json({ error: "Already submitted" }, { status: 409 });
   }
 
-  // Server-side timer enforcement — accept submissions up to a 5s grace
-  // period past the limit, but anything later is rejected.
-  const elapsed = Math.floor((Date.now() - attempt.startedAt.getTime()) / 1000);
-  if (elapsed > attempt.quiz.timeLimitSec + 5) {
-    // Auto-submit with the answers we have so the user still gets credit
-    // for what they answered — they just can't add new ones after expiry.
-  }
-
+  // The timer is a client-side guard (the player auto-submits when it hits 0).
+  // The server grades whatever answers arrive regardless of timing, so a late
+  // submission still earns credit for what was answered — fair for an internal,
+  // best-score-wins quiz with retakes. No score can be forged: gradeAttempt uses
+  // the server's own isCorrect flags; the client never sends a score.
   const { score, maxScore, percent } = gradeAttempt(attempt.quiz.questions, answers);
   const passed = percent >= attempt.quiz.passPercent;
 

@@ -12,6 +12,15 @@ export async function POST(
   const userId = session.user.id;
   const { id: quizId } = await params;
 
+  // Block quizzes whose video is in an unpublished course (admins exempt).
+  const access = await prisma.quiz.findUnique({
+    where: { id: quizId },
+    select: { video: { select: { module: { select: { course: { select: { published: true } } } } } } },
+  });
+  if (!access || (session.user.role !== "ADMIN" && !access.video?.module?.course?.published)) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   const gate = await canStartAttempt(userId, quizId);
   if (!gate.ok) return NextResponse.json({ error: gate.reason }, { status: 403 });
 
