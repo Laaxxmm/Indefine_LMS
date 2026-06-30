@@ -202,7 +202,7 @@ export default async function Dashboard() {
           )}
           <Link
             href="/recap/year"
-            className="px-3 py-2 rounded-lg bg-gradient-to-r from-amber-100 to-rose-100 hover:from-amber-200 hover:to-rose-200 border border-amber-200 text-sm flex items-center gap-2 shadow-soft transition"
+            className="px-3 py-2 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 text-sm flex items-center gap-2 shadow-soft transition"
             title="Year-in-Review"
           >
             <Sparkles className="w-4 h-4 text-amber-700" />
@@ -244,7 +244,7 @@ export default async function Dashboard() {
           href="/checkin"
           className={`block mb-6 rounded-2xl p-5 border shadow-soft hover:shadow-lift transition relative overflow-hidden ${
             urgency === "loud"
-              ? "bg-gradient-to-r from-amber-100 to-rose-50 border-amber-200"
+              ? "bg-amber-50 border-amber-200"
               : "bg-white border-border"
           }`}
         >
@@ -286,26 +286,25 @@ export default async function Dashboard() {
       {!wizardDone && trajectory.cycle && (
         <Link
           href="/wizard"
-          className="block mb-6 rounded-2xl bg-gradient-to-r from-brand-500 to-accent-violet p-5 text-white shadow-pop hover:opacity-95 transition relative overflow-hidden"
+          className="block mb-6 rounded-2xl bg-brand-50 border border-brand-100 p-5 hover:bg-brand-100/60 transition"
         >
-          <div className="absolute -top-12 -right-12 w-44 h-44 bg-white/10 rounded-full blur-3xl pointer-events-none" />
-          <div className="relative flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center shrink-0">
               <Sparkles className="w-6 h-6" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-[10px] uppercase tracking-wider font-bold text-white/80">
+              <p className="text-[10px] uppercase tracking-wider font-bold text-brand-600">
                 Set your trajectory · {trajectory.cycle.name}
               </p>
-              <p className="font-display text-lg font-bold mt-0.5">
+              <p className="font-display text-lg font-bold mt-0.5 text-ink">
                 Take the 5-minute Growth Wizard →
               </p>
-              <p className="text-sm text-white/85 mt-0.5">
+              <p className="text-sm text-ink-mute mt-0.5">
                 Pick your strengths, set 3 quarterly quests, pitch a bold idea.
                 Make this year yours.
               </p>
             </div>
-            <ArrowRight className="w-5 h-5 hidden sm:block" />
+            <ArrowRight className="w-5 h-5 text-brand-400 hidden sm:block" />
           </div>
         </Link>
       )}
@@ -353,7 +352,7 @@ export default async function Dashboard() {
               <p className="text-ink-soft mb-4 max-w-md">{tier.blurb}</p>
 
               {focusTrack && (
-                <div className="rounded-xl bg-white/70 backdrop-blur border border-border p-3 max-w-md">
+                <div className="rounded-xl bg-muted border border-border p-3 max-w-md">
                   <p className="text-[10px] uppercase tracking-wider font-bold text-ink-faint mb-1">
                     Next move · {focusTrack.emoji} {focusTrack.label}
                   </p>
@@ -363,7 +362,7 @@ export default async function Dashboard() {
             </div>
 
             {/* Right — ring legend + score */}
-            <div className="lg:min-w-[180px] rounded-xl bg-white/70 backdrop-blur border border-border p-4">
+            <div className="lg:min-w-[180px] rounded-xl bg-muted border border-border p-4">
               <p className="text-[10px] uppercase tracking-wider font-bold text-ink-faint mb-2">
                 Total score
               </p>
@@ -386,7 +385,7 @@ export default async function Dashboard() {
             {trajectory.tracks.map((t) => (
               <div
                 key={t.kind}
-                className="rounded-lg bg-white/70 backdrop-blur border border-border px-3 py-2.5"
+                className="rounded-lg bg-muted border border-border px-3 py-2.5"
                 title={t.nextMove}
               >
                 <div className="flex items-center justify-between text-xs mb-1">
@@ -403,7 +402,7 @@ export default async function Dashboard() {
                 </div>
                 <div className="mt-1.5 h-0.5 bg-border rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-gradient-to-r from-brand-500 to-accent-violet"
+                    className="h-full bg-brand-500"
                     style={{ width: `${t.scorePct}%` }}
                   />
                 </div>
@@ -414,17 +413,14 @@ export default async function Dashboard() {
       )}
 
       {/* Welcome hero */}
-      <section className="rounded-3xl bg-gradient-to-br from-brand-500 via-brand-600 to-accent-violet p-6 sm:p-8 mb-6 text-white relative overflow-hidden animate-fade-in">
-        <div className="absolute -top-20 -right-20 w-72 h-72 bg-white/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-32 -left-20 w-96 h-96 bg-accent-violet/30 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="relative grid lg:grid-cols-[1.4fr_1fr] gap-6 items-center">
+      <section className="rounded-3xl bg-white border border-border shadow-soft p-6 sm:p-8 mb-6 animate-fade-in">
+        <div className="grid lg:grid-cols-[1.4fr_1fr] gap-6 items-center">
           <div>
-            <p className="text-sm text-white/70 mb-1">{greeting()},</p>
-            <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight mb-2">
+            <p className="text-sm text-ink-mute mb-1">{greeting()},</p>
+            <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight mb-2 text-ink">
               {firstName(session.user.name)} 👋
             </h1>
-            <p className="text-white/80 max-w-md mb-5 leading-relaxed">
+            <p className="text-ink-soft max-w-md mb-5 leading-relaxed">
               {streak.activeToday
                 ? `You're on a ${streak.current}-day streak — keep the momentum going.`
                 : streak.current > 0
@@ -434,15 +430,15 @@ export default async function Dashboard() {
 
             <div className="flex items-center gap-3 flex-wrap">
               <div className="flex-1 min-w-[200px] max-w-md">
-                <div className="flex items-center justify-between text-xs text-white/80 mb-1.5 font-medium">
+                <div className="flex items-center justify-between text-xs text-ink-mute mb-1.5 font-medium">
                   <span>Level {level.level}</span>
                   <span>
                     {level.pointsIntoLevel} / {level.pointsForNextLevel} XP
                   </span>
                 </div>
-                <div className="h-2 bg-white/20 rounded-full overflow-hidden">
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-white rounded-full transition-all"
+                    className="h-full bg-brand-500 rounded-full transition-all"
                     style={{ width: `${level.pctToNext}%` }}
                   />
                 </div>
@@ -892,18 +888,18 @@ function StatTile({
 }) {
   return (
     <div
-      className={`rounded-2xl bg-white/15 backdrop-blur border border-white/20 p-3.5 ${dim ? "opacity-70" : ""}`}
+      className={`rounded-2xl bg-muted border border-border p-3.5 ${dim ? "opacity-60" : ""}`}
     >
       <div className="flex items-center gap-2 mb-2">
-        <div className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center">
-          <Icon className="w-3.5 h-3.5 text-white" />
+        <div className="w-7 h-7 rounded-lg bg-brand-100 text-brand-600 flex items-center justify-center">
+          <Icon className="w-3.5 h-3.5" />
         </div>
-        <span className="text-[10px] uppercase tracking-wide text-white/80 font-semibold">
+        <span className="text-[10px] uppercase tracking-wide text-ink-mute font-semibold">
           {label}
         </span>
       </div>
-      <p className="font-display text-xl font-extrabold leading-none">{value}</p>
-      <p className="text-[10px] text-white/70 mt-1">{sub}</p>
+      <p className="font-display text-xl font-extrabold leading-none text-ink">{value}</p>
+      <p className="text-[10px] text-ink-faint mt-1">{sub}</p>
     </div>
   );
 }
