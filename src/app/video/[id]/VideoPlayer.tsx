@@ -117,14 +117,14 @@ export default function VideoPlayer({
 
   if (error) {
     return (
-      <div className="aspect-video rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white/70">
+      <div className="aspect-video rounded-xl bg-muted border border-border flex items-center justify-center text-ink-mute">
         {error}
       </div>
     );
   }
   if (!src) {
     return (
-      <div className="aspect-video rounded-xl bg-white/5 border border-white/10 animate-pulse" />
+      <div className="aspect-video rounded-xl bg-muted border border-border animate-pulse" />
     );
   }
 
@@ -141,7 +141,7 @@ export default function VideoPlayer({
         className="w-full rounded-xl bg-black"
       />
       <div className="mt-3 flex items-center gap-2 flex-wrap">
-        <span className="text-xs text-white/50 mr-1">Speed</span>
+        <span className="text-xs text-ink-mute mr-1">Speed</span>
         {SPEEDS.map((s) => (
           <button
             key={s}
@@ -150,7 +150,7 @@ export default function VideoPlayer({
             className={`text-xs px-2.5 py-1 rounded-md border transition tabular-nums ${
               speed === s
                 ? "bg-brand-500 border-brand-500 text-white"
-                : "bg-white/5 border-white/10 text-white/70 hover:bg-white/10"
+                : "bg-muted border-border text-ink-soft hover:bg-border"
             }`}
             aria-pressed={speed === s}
           >
@@ -158,13 +158,13 @@ export default function VideoPlayer({
           </button>
         ))}
       </div>
-      <div className="mt-3 h-1.5 bg-white/10 rounded">
+      <div className="mt-3 h-1.5 bg-muted rounded">
         <div
           className="h-1.5 bg-brand-500 rounded transition-all"
           style={{ width: `${percent}%` }}
         />
       </div>
-      <p className="text-xs text-white/50 mt-1">{Math.round(percent)}% watched</p>
+      <p className="text-xs text-ink-mute mt-1">{Math.round(percent)}% watched</p>
     </div>
   );
 }
