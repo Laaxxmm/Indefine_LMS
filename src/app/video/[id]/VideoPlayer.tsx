@@ -15,7 +15,10 @@ export default function VideoPlayer({
   const [src, setSrc] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [percent, setPercent] = useState(initialPercent);
+  const [speed, setSpeed] = useState(1);
   const lastSent = useRef(0);
+
+  const SPEEDS = [0.5, 1, 1.25, 1.5, 1.75, 2];
 
   useEffect(() => {
     let cancelled = false;
@@ -44,6 +47,19 @@ export default function VideoPlayer({
     v.addEventListener("loadedmetadata", onLoaded);
     return () => v.removeEventListener("loadedmetadata", onLoaded);
   }, [src, initialPosition]);
+
+  // Apply playback speed — and re-apply after a (re)load, since the browser
+  // resets playbackRate to 1 whenever the media source changes.
+  useEffect(() => {
+    const v = ref.current;
+    if (!v) return;
+    v.playbackRate = speed;
+    const apply = () => {
+      v.playbackRate = speed;
+    };
+    v.addEventListener("loadeddata", apply);
+    return () => v.removeEventListener("loadeddata", apply);
+  }, [speed, src]);
 
   // Heartbeat: every 10s of playback push progress to server
   useEffect(() => {
@@ -124,6 +140,24 @@ export default function VideoPlayer({
         onContextMenu={(e) => e.preventDefault()}
         className="w-full rounded-xl bg-black"
       />
+      <div className="mt-3 flex items-center gap-2 flex-wrap">
+        <span className="text-xs text-white/50 mr-1">Speed</span>
+        {SPEEDS.map((s) => (
+          <button
+            key={s}
+            type="button"
+            onClick={() => setSpeed(s)}
+            className={`text-xs px-2.5 py-1 rounded-md border transition tabular-nums ${
+              speed === s
+                ? "bg-brand-500 border-brand-500 text-white"
+                : "bg-white/5 border-white/10 text-white/70 hover:bg-white/10"
+            }`}
+            aria-pressed={speed === s}
+          >
+            {s}×
+          </button>
+        ))}
+      </div>
       <div className="mt-3 h-1.5 bg-white/10 rounded">
         <div
           className="h-1.5 bg-brand-500 rounded transition-all"
