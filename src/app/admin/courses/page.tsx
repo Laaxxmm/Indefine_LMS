@@ -64,7 +64,20 @@ export default async function AdminCoursesPage() {
   const courses = await prisma.course.findMany({
     include: {
       deadlines: { orderBy: { dueAt: "asc" } },
-      modules: { include: { _count: { select: { videos: true } } } },
+      modules: {
+        orderBy: { order: "asc" },
+        include: {
+          _count: { select: { videos: true } },
+          videos: {
+            orderBy: { order: "asc" },
+            select: {
+              id: true,
+              title: true,
+              quiz: { select: { _count: { select: { questions: true } } } },
+            },
+          },
+        },
+      },
     },
     orderBy: { order: "asc" },
   });
@@ -117,6 +130,59 @@ export default async function AdminCoursesPage() {
                   </button>
                 </div>
               </form>
+
+              <div className="mb-6">
+                <h3 className="text-sm font-semibold text-ink mb-3">
+                  Modules ({c.modules.length})
+                </h3>
+                {c.modules.length === 0 ? (
+                  <p className="text-xs text-ink-faint">
+                    No modules yet — sync OneDrive from the admin home to import videos.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {c.modules.map((m) => (
+                      <div
+                        key={m.id}
+                        className="rounded-xl border border-border overflow-hidden"
+                      >
+                        <div className="flex items-center justify-between px-3 py-2 bg-muted">
+                          <span className="text-sm font-medium">{m.title}</span>
+                          <span className="text-xs text-ink-faint">
+                            {m._count.videos} video{m._count.videos === 1 ? "" : "s"}
+                          </span>
+                        </div>
+                        {m.videos.length > 0 && (
+                          <ul className="divide-y divide-border">
+                            {m.videos.map((v) => {
+                              const qCount = v.quiz?._count.questions ?? 0;
+                              return (
+                                <li key={v.id}>
+                                  <Link
+                                    href={`/admin/video/${v.id}`}
+                                    className="flex items-center justify-between gap-2 px-3 py-2 text-sm hover:bg-muted/50 transition"
+                                  >
+                                    <span className="truncate">{v.title}</span>
+                                    <span
+                                      className={`text-xs shrink-0 px-2 py-0.5 rounded-full ${
+                                        qCount > 0
+                                          ? "bg-emerald-100 text-emerald-700"
+                                          : "bg-white text-ink-faint border border-border"
+                                      }`}
+                                    >
+                                      {qCount > 0 ? `✓ ${qCount} Qs` : "No quiz"}
+                                    </span>
+                                  </Link>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               <h3 className="text-sm font-semibold text-ink mb-3">
                 Deadlines ({c.deadlines.length})
