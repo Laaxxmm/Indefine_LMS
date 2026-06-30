@@ -155,8 +155,13 @@ export interface KraSummary {
   totalScore: number;
 }
 
-export async function computeKraScores(opts: { from?: Date; to?: Date } = {}): Promise<KraSummary[]> {
+export async function computeKraScores(
+  opts: { from?: Date; to?: Date; includeInactive?: boolean } = {}
+): Promise<KraSummary[]> {
   const users = await prisma.user.findMany({
+    // Only current live users (active = licensed M365 members). Departed /
+    // unlicensed / disabled accounts are excluded unless explicitly requested.
+    where: opts.includeInactive ? undefined : { active: true },
     include: {
       attempts: {
         where: {
