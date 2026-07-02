@@ -21,6 +21,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           scope: "openid profile email offline_access User.Read Files.Read.All",
         },
       },
+      // Employees are pre-provisioned by the admin-triggered org sync
+      // (users-sync.ts), which creates a User row with no linked Account
+      // before that person ever signs in. Without this flag, NextAuth
+      // refuses to link their first real sign-in to that row and throws
+      // OAuthAccountNotLinked. Safe here because Microsoft Entra ID is the
+      // ONLY provider and the only source of pre-created rows is this same
+      // trusted tenant (via an admin-only sync) — there's no other provider
+      // an attacker could use to plant a row with someone else's email first.
+      allowDangerousEmailAccountLinking: true,
     }),
   ],
   pages: { signIn: "/" },
