@@ -61,10 +61,29 @@ export default function VideoPlayer({
     return () => v.removeEventListener("loadeddata", apply);
   }, [speed, src]);
 
-  // Heartbeat: every 10s of playback push progress to server
+  // Heartbeat: every 10s of playback push progress to server.
+  //
+  // Deliberately a plain fetch, NOT navigator.sendBeacon. sendBeacon is
+  // fire-and-forget with zero visibility into failures, and some corporate
+  // proxies / endpoint-security / ad-blocking software silently drop beacon
+  // requests (they use the same API real analytics trackers do). A normal
+  // fetch is indistinguishable from any other request the office network
+  // already allows, and failures are at least catchable/loggable.
   useEffect(() => {
     const v = ref.current;
     if (!v) return;
+
+    function sendProgress(payload: { lastPosition: number; percent: number; completed: boolean }) {
+      fetch(`/api/video/${videoId}/progress`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        keepalive: true, // best-effort delivery even if the tab is closing/navigating
+      }).catch((e) => {
+        console.warn("Failed to save video progress:", e);
+      });
+    }
+
     const onTimeUpdate = () => {
       if (!v.duration) return;
       const now = Date.now();
@@ -72,39 +91,14 @@ export default function VideoPlayer({
       lastSent.current = now;
       const pct = Math.min(100, (v.currentTime / v.duration) * 100);
       setPercent(pct);
-      navigator.sendBeacon?.(
-        `/api/video/${videoId}/progress`,
-        new Blob(
-          [
-            JSON.stringify({
-              lastPosition: Math.floor(v.currentTime),
-              percent: pct,
-              completed: pct >= 95,
-            }),
-          ],
-          { type: "application/json" }
-        )
-      ) ||
-        fetch(`/api/video/${videoId}/progress`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            lastPosition: Math.floor(v.currentTime),
-            percent: pct,
-            completed: pct >= 95,
-          }),
-        });
+      sendProgress({
+        lastPosition: Math.floor(v.currentTime),
+        percent: pct,
+        completed: pct >= 95,
+      });
     };
     const onEnded = () => {
-      fetch(`/api/video/${videoId}/progress`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          lastPosition: Math.floor(v.currentTime),
-          percent: 100,
-          completed: true,
-        }),
-      });
+      sendProgress({ lastPosition: Math.floor(v.currentTime), percent: 100, completed: true });
       setPercent(100);
     };
     v.addEventListener("timeupdate", onTimeUpdate);
