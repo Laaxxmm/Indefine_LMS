@@ -16,6 +16,7 @@ export default function VideoPlayer({
   const [error, setError] = useState<string | null>(null);
   const [percent, setPercent] = useState(initialPercent);
   const [speed, setSpeed] = useState(1);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const lastSent = useRef(0);
 
   const SPEEDS = [0.5, 1, 1.25, 1.5, 1.75, 2];
@@ -69,6 +70,11 @@ export default function VideoPlayer({
   // requests (they use the same API real analytics trackers do). A normal
   // fetch is indistinguishable from any other request the office network
   // already allows, and failures are at least catchable/loggable.
+  //
+  // Important: fetch() only REJECTS on a network-level failure (DNS, CORS,
+  // connection refused). An HTTP error response (401/404/500) resolves
+  // normally with res.ok === false — so we must check that explicitly, or
+  // a rejected/blocked request looks identical to a successful one.
   useEffect(() => {
     const v = ref.current;
     if (!v) return;
@@ -79,9 +85,20 @@ export default function VideoPlayer({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
         keepalive: true, // best-effort delivery even if the tab is closing/navigating
-      }).catch((e) => {
-        console.warn("Failed to save video progress:", e);
-      });
+      })
+        .then(async (res) => {
+          if (!res.ok) {
+            const detail = await res.text().catch(() => "");
+            console.warn(`Video progress save failed (HTTP ${res.status}): ${detail}`);
+            setSaveError(`Progress isn't saving (server error ${res.status}). Tell your admin.`);
+            return;
+          }
+          setSaveError(null);
+        })
+        .catch((e) => {
+          console.warn("Video progress network error:", e);
+          setSaveError("Progress isn't saving — request never reached the server. Try a different network.");
+        });
     }
 
     const onTimeUpdate = () => {
@@ -159,6 +176,11 @@ export default function VideoPlayer({
         />
       </div>
       <p className="text-xs text-ink-mute mt-1">{Math.round(percent)}% watched</p>
+      {saveError && (
+        <p className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 mt-2">
+          ⚠ {saveError}
+        </p>
+      )}
     </div>
   );
 }
