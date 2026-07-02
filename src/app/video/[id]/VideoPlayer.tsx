@@ -160,7 +160,12 @@ export default function VideoPlayer({
       v.removeEventListener("timeupdate", onTimeUpdate);
       v.removeEventListener("ended", onEnded);
     };
-  }, [videoId]);
+    // `src` is required here: on the first render `src` is still null, so no
+    // <video> element exists yet and `ref.current` is null — this effect
+    // bailed out via the `if (!v) return` above and never attached anything.
+    // Without `src` in the deps, it never re-ran once the element mounted,
+    // so the listeners were silently never attached, for every video, ever.
+  }, [videoId, src]);
 
   if (error) {
     return (
