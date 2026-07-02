@@ -19,36 +19,6 @@ export default function VideoPlayer({
   const [saveError, setSaveError] = useState<string | null>(null);
   const lastSent = useRef(0);
 
-  // --- TEMPORARY diagnostics for an active progress-not-saving investigation.
-  // Remove once confirmed fixed. Lets a single screenshot show exactly what's
-  // happening client-side (event firing, duration/readiness, save outcome)
-  // without needing DevTools access on someone else's machine.
-  const debugCounts = useRef({ timeupdates: 0, heartbeats: 0, lastResult: "none yet" });
-  const [debugView, setDebugView] = useState({
-    timeupdates: 0,
-    heartbeats: 0,
-    lastResult: "none yet",
-    duration: 0,
-    currentTime: 0,
-    readyState: 0,
-    networkState: 0,
-    paused: true,
-  });
-  useEffect(() => {
-    const id = setInterval(() => {
-      const v = ref.current;
-      setDebugView({
-        ...debugCounts.current,
-        duration: v?.duration ?? 0,
-        currentTime: v?.currentTime ?? 0,
-        readyState: v?.readyState ?? 0,
-        networkState: v?.networkState ?? 0,
-        paused: v?.paused ?? true,
-      });
-    }, 1000);
-    return () => clearInterval(id);
-  }, []);
-
   const SPEEDS = [0.5, 1, 1.25, 1.5, 1.75, 2];
 
   useEffect(() => {
@@ -110,8 +80,6 @@ export default function VideoPlayer({
     if (!v) return;
 
     function sendProgress(payload: { lastPosition: number; percent: number; completed: boolean }) {
-      debugCounts.current.heartbeats++;
-      debugCounts.current.lastResult = "pending…";
       fetch(`/api/video/${videoId}/progress`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -121,23 +89,19 @@ export default function VideoPlayer({
         .then(async (res) => {
           if (!res.ok) {
             const detail = await res.text().catch(() => "");
-            debugCounts.current.lastResult = `HTTP ${res.status}${detail ? `: ${detail.slice(0, 100)}` : ""}`;
             console.warn(`Video progress save failed (HTTP ${res.status}): ${detail}`);
             setSaveError(`Progress isn't saving (server error ${res.status}). Tell your admin.`);
             return;
           }
-          debugCounts.current.lastResult = `OK @ ${new Date().toLocaleTimeString()}`;
           setSaveError(null);
         })
         .catch((e) => {
-          debugCounts.current.lastResult = `network error: ${(e as Error).message}`;
           console.warn("Video progress network error:", e);
           setSaveError("Progress isn't saving — request never reached the server. Try a different network.");
         });
     }
 
     const onTimeUpdate = () => {
-      debugCounts.current.timeupdates++;
       if (!v.duration) return;
       const now = Date.now();
       if (now - lastSent.current < 10_000) return;
@@ -222,12 +186,6 @@ export default function VideoPlayer({
           ⚠ {saveError}
         </p>
       )}
-      <p className="text-[10px] font-mono text-ink-faint mt-2 leading-relaxed break-all">
-        debug (temporary): duration={debugView.duration.toFixed(1)}s · time={debugView.currentTime.toFixed(1)}s ·
-        paused={String(debugView.paused)} · ready={debugView.readyState} · net={debugView.networkState} ·
-        timeupdate events={debugView.timeupdates} · heartbeats sent={debugView.heartbeats} · last=
-        {debugView.lastResult}
-      </p>
     </div>
   );
 }
