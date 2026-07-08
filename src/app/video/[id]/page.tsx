@@ -126,6 +126,7 @@ export default async function VideoPage({
             videoId={video.id}
             initialPosition={progress?.lastPosition ?? 0}
             initialPercent={progress?.percent ?? 0}
+            unlockAtPercent={unlockAt}
           />
 
           {video.quiz && (

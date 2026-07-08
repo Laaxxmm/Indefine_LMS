@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +21,7 @@ async function createAssignments(formData: FormData) {
     | "VIDEO"
     | "MODULE"
     | "TASK";
-  const videoId = String(formData.get("videoId") || "") || null;
+  const videoIds = formData.getAll("videoIds").map(String).filter(Boolean);
   const moduleIds = formData.getAll("moduleIds").map(String).filter(Boolean);
   const title = String(formData.get("title") || "").trim();
   const description = String(formData.get("description") || "").trim() || null;
@@ -29,7 +30,7 @@ async function createAssignments(formData: FormData) {
   const dueAt = dueAtRaw ? new Date(dueAtRaw) : null;
   const userIds = formData.getAll("userIds").map(String).filter(Boolean);
 
-  if (kind === "VIDEO" && !videoId) return;
+  if (kind === "VIDEO" && videoIds.length === 0) return;
   if (kind === "MODULE" && moduleIds.length === 0) return;
   if (kind === "TASK" && !title) return;
   if (userIds.length === 0) return;
@@ -57,23 +58,25 @@ async function createAssignments(formData: FormData) {
     );
     if (data.length > 0) await prisma.assignment.createMany({ data });
   } else if (kind === "VIDEO") {
-    let resolvedTitle = title;
-    if (!resolvedTitle) {
-      const v = await prisma.video.findUnique({ where: { id: videoId! } });
-      resolvedTitle = v?.title ?? "Video";
-    }
-    await prisma.assignment.createMany({
-      data: userIds.map((userId) => ({
+    // Multi-video × multi-user: one assignment per (video, user). Each uses its
+    // own video's title unless a title override is provided.
+    const vids = await prisma.video.findMany({
+      where: { id: { in: videoIds } },
+      select: { id: true, title: true },
+    });
+    const data = userIds.flatMap((userId) =>
+      vids.map((v) => ({
         userId,
         assignedById: session.user.id,
         kind: "VIDEO" as const,
-        videoId,
-        title: resolvedTitle,
+        videoId: v.id,
+        title: title || v.title,
         description,
         points: safePoints,
         dueAt,
-      })),
-    });
+      }))
+    );
+    if (data.length > 0) await prisma.assignment.createMany({ data });
   } else {
     // TASK
     await prisma.assignment.createMany({
@@ -182,7 +185,7 @@ export default async function AdminAssignmentsPage({
                 className="w-full bg-white border border-border shadow-soft rounded px-3 py-2"
               >
                 <option value="MODULE">Module — completes when every video + quiz in the module is done</option>
-                <option value="VIDEO">Single video — completes when watched + quiz passed</option>
+                <option value="VIDEO">Video(s) — pick one or more; completes when watched + quiz passed</option>
                 <option value="TASK">Task — admin marks complete manually</option>
               </select>
             </label>
@@ -233,22 +236,38 @@ export default async function AdminAssignmentsPage({
             )}
           </fieldset>
 
-          <label className="block text-sm">
-            <span className="block text-ink-mute mb-1">
-              Single video (for VIDEO kind)
-            </span>
-            <select
-              name="videoId"
-              className="w-full bg-white border border-border shadow-soft rounded px-3 py-2"
-            >
-              <option value="">— none —</option>
-              {videos.map((v) => (
-                <option key={v.id} value={v.id}>
-                  [{v.module.title}] {v.title}
-                </option>
-              ))}
-            </select>
-          </label>
+          <fieldset className="text-sm">
+            <legend className="text-ink-mute mb-2">
+              Pick videos (for VIDEO kind — tick one or more)
+            </legend>
+            {videos.length === 0 ? (
+              <div className="rounded border border-border p-4 bg-muted text-sm text-ink-mute">
+                No videos yet. Sync from the Admin home first.
+              </div>
+            ) : (
+              <div className="grid sm:grid-cols-2 gap-1.5 max-h-60 overflow-y-auto rounded border border-border p-3 bg-muted/40">
+                {videos.map((v) => (
+                  <label
+                    key={v.id}
+                    className="flex items-center gap-2 hover:bg-white rounded px-2 py-1.5 cursor-pointer transition"
+                  >
+                    <input
+                      type="checkbox"
+                      name="videoIds"
+                      value={v.id}
+                      className="accent-brand-500"
+                    />
+                    <span className="truncate">
+                      <span className="font-medium">{v.title}</span>
+                      <span className="text-ink-faint text-xs ml-1">
+                        · {v.module.title}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </fieldset>
 
           <label className="block text-sm">
             <span className="block text-ink-mute mb-1">
@@ -322,9 +341,9 @@ export default async function AdminAssignmentsPage({
             </p>
           </fieldset>
 
-          <button className="px-5 py-2.5 rounded-lg bg-brand-500 hover:bg-brand-600 font-medium">
+          <SubmitButton className="px-5 py-2.5 rounded-lg bg-brand-500 hover:bg-brand-600 text-white font-medium">
             Create assignment(s)
-          </button>
+          </SubmitButton>
         </form>
       </section>
 

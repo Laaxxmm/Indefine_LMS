@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { Users, Save, Building2 } from "lucide-react";
+import { SubmitButton } from "@/components/SubmitButton";
 import type { EmployeeLevel, Department } from "@prisma/client";
 import {
   ACTIVE_LEVELS,
@@ -289,10 +290,10 @@ export default async function AdminTeamPage({
               /admin/branches
             </a>
           </p>
-          <button className="px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold inline-flex items-center gap-2 shadow-pop transition">
+          <SubmitButton className="px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold shadow-pop">
             <Save className="w-4 h-4" />
             Save changes
-          </button>
+          </SubmitButton>
         </div>
       </form>
     </main>

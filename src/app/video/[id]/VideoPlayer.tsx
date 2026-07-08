@@ -1,16 +1,20 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function VideoPlayer({
   videoId,
   initialPosition,
   initialPercent,
+  unlockAtPercent,
 }: {
   videoId: string;
   initialPosition: number;
   initialPercent: number;
+  unlockAtPercent: number;
 }) {
+  const router = useRouter();
   const ref = useRef<HTMLVideoElement>(null);
   const [src, setSrc] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -18,6 +22,9 @@ export default function VideoPlayer({
   const [speed, setSpeed] = useState(1);
   const [saveError, setSaveError] = useState<string | null>(null);
   const lastSent = useRef(0);
+  // Once we cross the quiz-unlock threshold we re-render the server page so the
+  // quiz activates without a manual refresh. Guard so it only happens once.
+  const unlockRefreshed = useRef(initialPercent >= unlockAtPercent);
 
   const SPEEDS = [0.5, 1, 1.25, 1.5, 1.75, 2];
 
@@ -103,11 +110,30 @@ export default function VideoPlayer({
 
     const onTimeUpdate = () => {
       if (!v.duration) return;
+      const pct = Math.min(100, (v.currentTime / v.duration) * 100);
+      setPercent(pct); // smooth on-screen progress bar
+
+      // Live quiz unlock: the instant we cross the threshold, persist it and
+      // re-render the server page so the quiz activates — no manual refresh.
+      // router.refresh() preserves client state, so the video keeps playing.
+      if (!unlockRefreshed.current && pct >= unlockAtPercent) {
+        unlockRefreshed.current = true;
+        fetch(`/api/video/${videoId}/progress`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            lastPosition: Math.floor(v.currentTime),
+            percent: pct,
+            completed: pct >= 95,
+          }),
+          keepalive: true,
+        }).finally(() => router.refresh());
+      }
+
+      // Throttled network heartbeat (every 10s).
       const now = Date.now();
       if (now - lastSent.current < 10_000) return;
       lastSent.current = now;
-      const pct = Math.min(100, (v.currentTime / v.duration) * 100);
-      setPercent(pct);
       sendProgress({
         lastPosition: Math.floor(v.currentTime),
         percent: pct,
@@ -129,7 +155,7 @@ export default function VideoPlayer({
     // bailed out via the `if (!v) return` above and never attached anything.
     // Without `src` in the deps, it never re-ran once the element mounted,
     // so the listeners were silently never attached, for every video, ever.
-  }, [videoId, src]);
+  }, [videoId, src, unlockAtPercent, router]);
 
   if (error) {
     return (

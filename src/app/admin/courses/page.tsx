@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export const dynamic = "force-dynamic";
 
@@ -125,9 +126,9 @@ export default async function AdminCoursesPage() {
                 </label>
                 <div className="flex items-center justify-end gap-3">
                   <span className="text-xs text-ink-faint">{videoCount} videos</span>
-                  <button className="px-3 py-1.5 rounded bg-brand-500 hover:bg-brand-600 text-sm">
+                  <SubmitButton className="px-3 py-1.5 rounded bg-brand-500 hover:bg-brand-600 text-white text-sm">
                     Save
-                  </button>
+                  </SubmitButton>
                 </div>
               </form>
 
@@ -244,9 +245,9 @@ export default async function AdminCoursesPage() {
                   type="number"
                   defaultValue={0}
                 />
-                <button className="px-3 py-2 rounded bg-brand-500 hover:bg-brand-600 text-sm">
+                <SubmitButton className="px-3 py-2 rounded bg-brand-500 hover:bg-brand-600 text-white text-sm">
                   Add deadline
-                </button>
+                </SubmitButton>
               </form>
             </section>
           );

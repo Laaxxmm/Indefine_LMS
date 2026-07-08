@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { QuizAI } from "./QuizAI";
 import { generateQuiz } from "@/lib/quiz-gen";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export const dynamic = "force-dynamic";
 
@@ -261,9 +262,9 @@ export default async function AdminVideoPage({
             defaultValue={quiz?.maxAttempts?.toString() ?? ""}
           />
           <div className="sm:col-span-2">
-            <button className="px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white">
+            <SubmitButton className="px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white">
               Save settings
-            </button>
+            </SubmitButton>
           </div>
         </form>
       </section>
@@ -342,9 +343,9 @@ export default async function AdminVideoPage({
                 />
               </div>
             ))}
-            <button className="px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white">
+            <SubmitButton className="px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white">
               Add question
-            </button>
+            </SubmitButton>
           </form>
         </section>
       )}

@@ -476,6 +476,134 @@ export default async function Dashboard() {
         </div>
       </section>
 
+      {/* Courses — moved up so employees see the actual training first */}
+      <section id="courses" className="mb-8">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-display text-xl font-bold">Your courses</h2>
+          {modulesWithVideos.length > 0 && (
+            <span className="text-xs text-ink-faint">
+              {modulesWithVideos.length} module
+              {modulesWithVideos.length === 1 ? "" : "s"}
+            </span>
+          )}
+        </div>
+
+        {modulesWithVideos.length === 0 ? (
+          <div className="rounded-2xl bg-white border border-dashed border-border p-12 text-center shadow-soft">
+            <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
+              <PlayCircle className="w-8 h-8 text-ink-faint" />
+            </div>
+            <p className="text-ink mb-1 font-medium">No courses yet</p>
+            <p className="text-ink-mute text-sm mb-5">
+              {role === "ADMIN"
+                ? "Sync your SharePoint folder to import videos."
+                : "Check back soon — your admin is setting things up."}
+            </p>
+            {role === "ADMIN" && (
+              <Link
+                href="/admin"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-sm font-medium text-white transition shadow-pop"
+              >
+                Open admin <ArrowRight className="w-4 h-4" />
+              </Link>
+            )}
+          </div>
+        ) : (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {modulesWithVideos.map((m, idx) => {
+              const total = m.videos.length;
+              const done = m.videos.filter((v) => v.progresses[0]?.completed).length;
+              const pct = total > 0 ? (done / total) * 100 : 0;
+              const totalDuration = m.videos.reduce(
+                (s, v) => s + (v.durationSeconds ?? 0),
+                0
+              );
+              const totalQuizzes = m.videos.filter((v) => v.quiz).length;
+              const passedQuizzes = m.videos.filter((v) =>
+                v.quiz?.attempts.some((a) => a.passed)
+              ).length;
+              const nextVideo =
+                m.videos.find((v) => !v.progresses[0]?.completed) ?? m.videos[0];
+              const isComplete = done === total;
+              const accent = ACCENT_PALETTE[idx % ACCENT_PALETTE.length];
+
+              return (
+                <Link
+                  key={m.id}
+                  href={`/video/${nextVideo.id}`}
+                  className="group card-hover rounded-2xl bg-white border border-border hover:border-brand-200 hover:shadow-lift shadow-soft p-5 flex flex-col relative overflow-hidden"
+                >
+                  <div
+                    className="absolute top-0 left-0 right-0 h-1"
+                    style={{ background: accent.bar }}
+                  />
+
+                  <div className="flex items-start justify-between mb-4">
+                    <div
+                      className="w-11 h-11 rounded-xl flex items-center justify-center"
+                      style={{ background: accent.bg, color: accent.fg }}
+                    >
+                      <PlayCircle className="w-5 h-5" />
+                    </div>
+                    {isComplete && (
+                      <span className="text-[10px] uppercase tracking-wide font-semibold px-2 py-1 rounded-full bg-emerald-100 text-emerald-700">
+                        Complete
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="text-[10px] uppercase tracking-wide text-ink-faint font-semibold mb-1">
+                    {m.course.title}
+                  </p>
+                  <h3 className="font-display text-lg font-bold mb-3 leading-tight">
+                    {m.title}
+                  </h3>
+
+                  <div className="flex items-center gap-3 text-xs text-ink-mute mb-4 flex-wrap">
+                    <span>{total} video{total === 1 ? "" : "s"}</span>
+                    {totalQuizzes > 0 && (
+                      <>
+                        <span className="text-ink-faint">·</span>
+                        <span>{totalQuizzes} quiz{totalQuizzes === 1 ? "" : "zes"}</span>
+                      </>
+                    )}
+                    {totalDuration > 0 && (
+                      <>
+                        <span className="text-ink-faint">·</span>
+                        <span>{formatTotalDuration(totalDuration)}</span>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="mt-auto">
+                    <div className="flex items-center justify-between text-xs text-ink-mute mb-1.5">
+                      <span>
+                        {done}/{total} videos
+                        {totalQuizzes > 0 &&
+                          ` · ${passedQuizzes}/${totalQuizzes} quizzes`}
+                      </span>
+                      <span className="font-semibold text-ink">
+                        {Math.round(pct)}%
+                      </span>
+                    </div>
+                    <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className="h-full transition-all"
+                        style={{ width: `${pct}%`, background: accent.bar }}
+                      />
+                    </div>
+                    <div className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-brand-600 group-hover:translate-x-0.5 transition">
+                      {done === 0 ? "Start course" : "Continue"}
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
       {/* Attendance & daily punch */}
       <section className="mb-6">
         <div className="flex items-center justify-between mb-3">
@@ -655,134 +783,6 @@ export default async function Dashboard() {
             );
           })}
         </div>
-      </section>
-
-      {/* Courses */}
-      <section className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-display text-xl font-bold">Your courses</h2>
-          {modulesWithVideos.length > 0 && (
-            <span className="text-xs text-ink-faint">
-              {modulesWithVideos.length} module
-              {modulesWithVideos.length === 1 ? "" : "s"}
-            </span>
-          )}
-        </div>
-
-        {modulesWithVideos.length === 0 ? (
-          <div className="rounded-2xl bg-white border border-dashed border-border p-12 text-center shadow-soft">
-            <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
-              <PlayCircle className="w-8 h-8 text-ink-faint" />
-            </div>
-            <p className="text-ink mb-1 font-medium">No courses yet</p>
-            <p className="text-ink-mute text-sm mb-5">
-              {role === "ADMIN"
-                ? "Sync your SharePoint folder to import videos."
-                : "Check back soon — your admin is setting things up."}
-            </p>
-            {role === "ADMIN" && (
-              <Link
-                href="/admin"
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-sm font-medium text-white transition shadow-pop"
-              >
-                Open admin <ArrowRight className="w-4 h-4" />
-              </Link>
-            )}
-          </div>
-        ) : (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {modulesWithVideos.map((m, idx) => {
-              const total = m.videos.length;
-              const done = m.videos.filter((v) => v.progresses[0]?.completed).length;
-              const pct = total > 0 ? (done / total) * 100 : 0;
-              const totalDuration = m.videos.reduce(
-                (s, v) => s + (v.durationSeconds ?? 0),
-                0
-              );
-              const totalQuizzes = m.videos.filter((v) => v.quiz).length;
-              const passedQuizzes = m.videos.filter((v) =>
-                v.quiz?.attempts.some((a) => a.passed)
-              ).length;
-              const nextVideo =
-                m.videos.find((v) => !v.progresses[0]?.completed) ?? m.videos[0];
-              const isComplete = done === total;
-              const accent = ACCENT_PALETTE[idx % ACCENT_PALETTE.length];
-
-              return (
-                <Link
-                  key={m.id}
-                  href={`/video/${nextVideo.id}`}
-                  className="group card-hover rounded-2xl bg-white border border-border hover:border-brand-200 hover:shadow-lift shadow-soft p-5 flex flex-col relative overflow-hidden"
-                >
-                  <div
-                    className="absolute top-0 left-0 right-0 h-1"
-                    style={{ background: accent.bar }}
-                  />
-
-                  <div className="flex items-start justify-between mb-4">
-                    <div
-                      className="w-11 h-11 rounded-xl flex items-center justify-center"
-                      style={{ background: accent.bg, color: accent.fg }}
-                    >
-                      <PlayCircle className="w-5 h-5" />
-                    </div>
-                    {isComplete && (
-                      <span className="text-[10px] uppercase tracking-wide font-semibold px-2 py-1 rounded-full bg-emerald-100 text-emerald-700">
-                        Complete
-                      </span>
-                    )}
-                  </div>
-
-                  <p className="text-[10px] uppercase tracking-wide text-ink-faint font-semibold mb-1">
-                    {m.course.title}
-                  </p>
-                  <h3 className="font-display text-lg font-bold mb-3 leading-tight">
-                    {m.title}
-                  </h3>
-
-                  <div className="flex items-center gap-3 text-xs text-ink-mute mb-4 flex-wrap">
-                    <span>{total} video{total === 1 ? "" : "s"}</span>
-                    {totalQuizzes > 0 && (
-                      <>
-                        <span className="text-ink-faint">·</span>
-                        <span>{totalQuizzes} quiz{totalQuizzes === 1 ? "" : "zes"}</span>
-                      </>
-                    )}
-                    {totalDuration > 0 && (
-                      <>
-                        <span className="text-ink-faint">·</span>
-                        <span>{formatTotalDuration(totalDuration)}</span>
-                      </>
-                    )}
-                  </div>
-
-                  <div className="mt-auto">
-                    <div className="flex items-center justify-between text-xs text-ink-mute mb-1.5">
-                      <span>
-                        {done}/{total} videos
-                        {totalQuizzes > 0 &&
-                          ` · ${passedQuizzes}/${totalQuizzes} quizzes`}
-                      </span>
-                      <span className="font-semibold text-ink">
-                        {Math.round(pct)}%
-                      </span>
-                    </div>
-                    <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className="h-full transition-all"
-                        style={{ width: `${pct}%`, background: accent.bar }}
-                      />
-                    </div>
-                    <div className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-brand-600 group-hover:translate-x-0.5 transition">
-                      {done === 0 ? "Start course" : "Continue"}
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </div>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        )}
       </section>
 
       {/* Assignments full list */}
