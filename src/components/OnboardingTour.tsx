@@ -102,7 +102,7 @@ export function OnboardingTour({ steps }: { steps: TourStep[] }) {
           setActive(true);
         }}
         aria-label="Help and product tour"
-        className="fixed bottom-5 right-5 z-40 w-11 h-11 rounded-full bg-red-500 hover:bg-red-600 text-white shadow-lift flex items-center justify-center transition"
+        className="fixed bottom-5 right-5 z-40 w-11 h-11 rounded-full bg-brand-500 hover:bg-brand-600 text-white shadow-lift flex items-center justify-center transition"
         title="Help & tour"
       >
         <HelpCircle className="w-5 h-5" />
@@ -138,7 +138,7 @@ export function OnboardingTour({ steps }: { steps: TourStep[] }) {
             className="rounded-2xl bg-white shadow-lift border border-border p-5 animate-fade-in"
           >
             <div className="flex items-start justify-between gap-3 mb-2">
-              <p className="text-[10px] uppercase tracking-wider font-bold text-red-500">
+              <p className="text-[10px] uppercase tracking-wider font-bold text-brand-600">
                 Step {i + 1} of {steps.length}
               </p>
               <button
@@ -175,7 +175,7 @@ export function OnboardingTour({ steps }: { steps: TourStep[] }) {
                 <button
                   type="button"
                   onClick={next}
-                  className="inline-flex items-center gap-1 text-sm px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white font-medium"
+                  className="inline-flex items-center gap-1 text-sm px-3 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-600 text-white font-medium"
                 >
                   {i >= steps.length - 1 ? "Done" : "Next"}
                   {i < steps.length - 1 && <ArrowRight className="w-3.5 h-3.5" />}
