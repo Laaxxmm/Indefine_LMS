@@ -17,12 +17,13 @@ async function saveHierarchy(formData: FormData) {
   "use server";
   const session = await auth();
   if (session?.user?.role !== "ADMIN") return;
+  const meId = session.user.id;
 
   const ops: Promise<unknown>[] = [];
   // Group by user — collect all fields from this submission then apply once.
   const updates = new Map<string, Record<string, unknown>>();
   for (const [key, value] of formData.entries()) {
-    const m = key.match(/^(manager|level|department|branch)_(.+)$/);
+    const m = key.match(/^(manager|level|department|branch|role)_(.+)$/);
     if (!m) continue;
     const field = m[1];
     const userId = m[2];
@@ -38,9 +39,14 @@ async function saveHierarchy(formData: FormData) {
     )
       cur.department = v;
     else if (field === "branch") cur.branchId = v || null;
+    else if (field === "role" && (v === "ADMIN" || v === "EMPLOYEE")) cur.role = v;
 
     updates.set(userId, cur);
   }
+
+  // Never let an admin change their own role here — prevents self-lockout.
+  const self = updates.get(meId);
+  if (self && "role" in self) delete self.role;
 
   for (const [userId, data] of updates) {
     if (Object.keys(data).length > 0) {
@@ -91,7 +97,9 @@ export default async function AdminTeamPage({
         <p className="text-ink-mute mt-1 text-sm">
           Set each person&apos;s level, department, branch and manager. The
           combination drives their KRA targets, leaderboard placement and
-          who-reports-to-whom.
+          who-reports-to-whom. <strong className="text-ink">Admin access</strong>{" "}
+          grants the full admin area — it&apos;s separate from the career
+          <em> Level</em> (Partner, Manager, …), which is just org hierarchy.
         </p>
       </div>
 
@@ -158,6 +166,7 @@ export default async function AdminTeamPage({
             <thead className="text-xs text-ink-faint">
               <tr>
                 <th className="text-left p-3 pl-5">Employee</th>
+                <th className="text-left p-3">Admin access</th>
                 <th className="text-left p-3">Level</th>
                 <th className="text-left p-3">Dept</th>
                 <th className="text-left p-3">Branch</th>
@@ -167,6 +176,7 @@ export default async function AdminTeamPage({
             <tbody className="divide-y divide-border">
               {users.map((u) => {
                 const possibleManagers = users.filter((m) => m.id !== u.id);
+                const isSelf = u.id === session.user.id;
                 return (
                   <tr key={u.id} className="hover:bg-muted/30 transition">
                     <td className="p-3 pl-5">
@@ -183,6 +193,29 @@ export default async function AdminTeamPage({
                           </p>
                         </div>
                       </div>
+                    </td>
+                    <td className="p-3">
+                      {isSelf ? (
+                        <span
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-brand-700 bg-brand-50 border border-brand-200 rounded-lg px-2 py-1.5"
+                          title="You can't change your own admin access"
+                        >
+                          Admin · you
+                        </span>
+                      ) : (
+                        <select
+                          name={`role_${u.id}`}
+                          defaultValue={u.role}
+                          className={`border rounded-lg px-2 py-1.5 text-xs font-semibold ${
+                            u.role === "ADMIN"
+                              ? "bg-brand-50 border-brand-300 text-brand-700"
+                              : "bg-white border-border text-ink-soft"
+                          }`}
+                        >
+                          <option value="EMPLOYEE">Employee</option>
+                          <option value="ADMIN">Admin</option>
+                        </select>
+                      )}
                     </td>
                     <td className="p-3">
                       <select
