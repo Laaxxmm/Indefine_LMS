@@ -10,6 +10,7 @@ import { prisma } from "@/lib/prisma";
 import { getAppOnlyToken, getUserGraphToken, getStreamUrl } from "@/lib/graph";
 import { transcribeVideo } from "@/lib/transcribe";
 import { generateQuiz } from "@/lib/quiz-gen";
+import { getQuizDefaults } from "@/lib/settings";
 
 const MAX_TRANSCRIPT_CHARS = 28_000; // stay under generateQuiz's source limit
 
@@ -95,7 +96,9 @@ export async function autoQuizFromVideo(
   // Ensure a quiz exists, then save the questions live.
   let quizId = video.quiz?.id;
   if (!quizId) {
-    const created = await prisma.quiz.create({ data: { videoId: video.id, title: `${video.title} quiz` } });
+    const created = await prisma.quiz.create({
+      data: { videoId: video.id, title: `${video.title} quiz`, ...(await getQuizDefaults()) },
+    });
     quizId = created.id;
   }
   let order = 0;

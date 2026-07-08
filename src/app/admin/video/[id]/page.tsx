@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { QuizAI } from "./QuizAI";
 import { generateQuiz } from "@/lib/quiz-gen";
+import { getQuizDefaults } from "@/lib/settings";
 import { SubmitButton } from "@/components/SubmitButton";
 
 export const dynamic = "force-dynamic";
@@ -77,7 +78,9 @@ async function saveScript(data: {
   });
   const existing = await prisma.quiz.findUnique({ where: { videoId: video.id }, select: { id: true } });
   if (!existing) {
-    await prisma.quiz.create({ data: { videoId: video.id, title: `${video.title} quiz` } });
+    await prisma.quiz.create({
+      data: { videoId: video.id, title: `${video.title} quiz`, ...(await getQuizDefaults()) },
+    });
   }
   revalidatePath(`/admin/video/${video.id}`);
   return { ok: true };
@@ -119,7 +122,11 @@ async function generateAndAddLive(data: {
   const existing = await prisma.quiz.findUnique({ where: { videoId: video.id }, select: { id: true } });
   const quizId =
     existing?.id ??
-    (await prisma.quiz.create({ data: { videoId: video.id, title: `${video.title} quiz` } })).id;
+    (
+      await prisma.quiz.create({
+        data: { videoId: video.id, title: `${video.title} quiz`, ...(await getQuizDefaults()) },
+      })
+    ).id;
 
   let order = await prisma.question.count({ where: { quizId } });
   for (const q of result.questions) {

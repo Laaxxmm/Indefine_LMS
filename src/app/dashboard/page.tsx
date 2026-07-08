@@ -14,6 +14,7 @@ import {
   TIER_META,
 } from "@/lib/trajectory";
 import TrajectoryRings, { RingLegend } from "./TrajectoryRings";
+import { OnboardingTour, type TourStep } from "@/components/OnboardingTour";
 import {
   checkinUrgency,
   computeCheckinStreak,
@@ -43,6 +44,37 @@ import {
 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
+
+const TOUR_STEPS: TourStep[] = [
+  {
+    title: "Welcome to Indefine LMS 👋",
+    body: "A quick 30-second tour of the essentials. You can replay it any time from the ? button in the corner.",
+  },
+  {
+    selector: "#courses",
+    title: "Your training",
+    body: "Your courses live here. Click one to start watching — each video's quiz unlocks automatically as you watch.",
+  },
+  {
+    selector: "[data-tour='trajectory']",
+    title: "Your growth score",
+    body: "Your Trajectory tracks Mastery, Delivery and Growth through the year and rolls them into a tier.",
+  },
+  {
+    selector: "[data-tour='attendance']",
+    title: "Daily attendance",
+    body: "Punch in and out on greytHR from here — your attendance counts toward your KRA score.",
+  },
+  {
+    selector: "[data-tour='leaderboard']",
+    title: "Leaderboard",
+    body: "See how you rank. Points come from videos watched, quizzes passed, deadlines and attendance.",
+  },
+  {
+    title: "You're all set 🎉",
+    body: "Watch a video today to start your streak. Tap the ? button anytime to see this tour again.",
+  },
+];
 
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   Flame,
@@ -219,6 +251,7 @@ export default async function Dashboard() {
           </Link>
           <Link
             href="/leaderboard"
+            data-tour="leaderboard"
             className="px-3 py-2 rounded-lg bg-white hover:bg-muted border border-border text-sm flex items-center gap-2 shadow-soft transition"
           >
             <Trophy className="w-4 h-4 text-ink-mute" />
@@ -311,7 +344,7 @@ export default async function Dashboard() {
 
       {/* Trajectory hero — Three rings + Tier */}
       {trajectory.cycle && (
-        <section className={`rounded-3xl ${tier.bg} ${tier.glow} border border-border p-6 sm:p-8 mb-6 relative overflow-hidden animate-fade-in`}>
+        <section data-tour="trajectory" className={`rounded-3xl ${tier.bg} ${tier.glow} border border-border p-6 sm:p-8 mb-6 relative overflow-hidden animate-fade-in`}>
           <div className="grid lg:grid-cols-[auto_1fr_auto] gap-6 items-center">
             {/* Rings */}
             <div className="relative flex items-center justify-center">
@@ -605,7 +638,7 @@ export default async function Dashboard() {
       </section>
 
       {/* Attendance & daily punch */}
-      <section className="mb-6">
+      <section data-tour="attendance" className="mb-6">
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-display text-lg font-bold flex items-center gap-2">
             <Clock className="w-5 h-5 text-brand-500" />
@@ -869,6 +902,8 @@ export default async function Dashboard() {
           </div>
         </section>
       )}
+
+      <OnboardingTour steps={TOUR_STEPS} />
     </main>
   );
 }

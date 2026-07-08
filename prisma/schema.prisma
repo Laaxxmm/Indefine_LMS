@@ -218,6 +218,16 @@ model Quiz {
   attempts        QuizAttempt[]
 }
 
+// App-wide settings (single row, id = 1). Holds the default quiz timing/pass
+// applied to newly auto-generated quizzes.
+model Settings {
+  id                  Int      @id @default(1)
+  quizTimeLimitSec    Int      @default(600) // 10 min
+  quizPassPercent     Int      @default(70)
+  quizUnlockAtPercent Int      @default(90)
+  updatedAt           DateTime @updatedAt
+}
+
 model Question {
   id        String   @id @default(cuid())
   quizId    String

@@ -14,6 +14,7 @@ import {
   Users,
   Building2,
   Fingerprint,
+  Settings,
   type LucideIcon,
 } from "lucide-react";
 
@@ -29,6 +30,7 @@ const ICONS: Record<string, LucideIcon> = {
   Users,
   Building2,
   Fingerprint,
+  Settings,
 };
 
 export default function AdminNav({
