@@ -196,16 +196,17 @@ export default async function Dashboard() {
   const unlockedCount = achievements.filter((a) => a.unlocked).length;
 
   return (
-    <main className="min-h-screen px-4 sm:px-6 py-6 max-w-7xl mx-auto">
+    <div className="min-h-screen bg-[#0a0e1a] text-slate-200">
+    <main className="px-4 sm:px-6 py-6 max-w-7xl mx-auto">
       {/* Top bar */}
       <header className="flex items-center justify-between gap-4 mb-8 flex-wrap">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-500 to-accent-violet flex items-center justify-center shadow-pop">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500 to-red-700 flex items-center justify-center shadow-[0_8px_24px_-8px_rgba(239,68,68,0.6)]">
             <GraduationCap className="w-5 h-5 text-white" />
           </div>
           <div>
-            <p className="text-xs text-ink-faint leading-none">Indefine LMS</p>
-            <p className="text-sm font-semibold leading-tight mt-0.5">
+            <p className="text-xs text-slate-500 leading-none">Indefine LMS</p>
+            <p className="text-sm font-semibold leading-tight mt-0.5 text-white">
               {session.user.name}
             </p>
           </div>
@@ -214,11 +215,11 @@ export default async function Dashboard() {
           {reportCount > 0 && (
             <Link
               href="/team"
-              className="px-3 py-2 rounded-lg bg-white hover:bg-muted border border-border text-sm flex items-center gap-2 shadow-soft transition"
+              className="px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-sm text-slate-300 flex items-center gap-2 transition"
             >
-              <Users className="w-4 h-4 text-ink-mute" />
+              <Users className="w-4 h-4 text-slate-400" />
               <span className="hidden sm:inline">My team</span>
-              <span className="text-[10px] tabular-nums px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold">
+              <span className="text-[10px] tabular-nums px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold">
                 {reportCount}
               </span>
             </Link>
@@ -226,35 +227,35 @@ export default async function Dashboard() {
           {role === "ADMIN" && (
             <Link
               href="/admin"
-              className="px-3 py-2 rounded-lg bg-white hover:bg-muted border border-border text-sm flex items-center gap-2 shadow-soft transition"
+              className="px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-sm text-slate-300 flex items-center gap-2 transition"
             >
-              <ShieldCheck className="w-4 h-4 text-ink-mute" />
+              <ShieldCheck className="w-4 h-4 text-slate-400" />
               Admin
             </Link>
           )}
           <Link
             href="/recap/year"
-            className="px-3 py-2 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 text-sm flex items-center gap-2 shadow-soft transition"
+            className="px-3 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-sm flex items-center gap-2 transition"
             title="Year-in-Review"
           >
-            <Sparkles className="w-4 h-4 text-amber-700" />
-            <span className="hidden sm:inline text-amber-800 font-semibold">
+            <Sparkles className="w-4 h-4 text-red-400" />
+            <span className="hidden sm:inline text-red-300 font-semibold">
               Recap
             </span>
           </Link>
           <Link
             href="/initiatives"
-            className="px-3 py-2 rounded-lg bg-white hover:bg-muted border border-border text-sm flex items-center gap-2 shadow-soft transition"
+            className="px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-sm text-slate-300 flex items-center gap-2 transition"
           >
-            <Rocket className="w-4 h-4 text-ink-mute" />
+            <Rocket className="w-4 h-4 text-slate-400" />
             <span className="hidden sm:inline">Initiatives</span>
           </Link>
           <Link
             href="/leaderboard"
             data-tour="leaderboard"
-            className="px-3 py-2 rounded-lg bg-white hover:bg-muted border border-border text-sm flex items-center gap-2 shadow-soft transition"
+            className="px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-sm text-slate-300 flex items-center gap-2 transition"
           >
-            <Trophy className="w-4 h-4 text-ink-mute" />
+            <Trophy className="w-4 h-4 text-slate-400" />
             <span className="hidden sm:inline">Leaderboard</span>
           </Link>
           <form
@@ -263,8 +264,8 @@ export default async function Dashboard() {
               await signOut({ redirectTo: "/" });
             }}
           >
-            <button className="px-3 py-2 rounded-lg bg-white hover:bg-muted border border-border text-sm flex items-center gap-2 shadow-soft transition">
-              <LogOut className="w-4 h-4 text-ink-mute" />
+            <button className="px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-sm text-slate-300 flex items-center gap-2 transition">
+              <LogOut className="w-4 h-4 text-slate-400" />
               <span className="hidden sm:inline">Sign out</span>
             </button>
           </form>
@@ -275,42 +276,42 @@ export default async function Dashboard() {
       {showCheckinBanner && (
         <Link
           href="/checkin"
-          className={`block mb-6 rounded-2xl p-5 border shadow-soft hover:shadow-lift transition relative overflow-hidden ${
+          className={`block mb-6 rounded-2xl p-5 border transition relative overflow-hidden ${
             urgency === "loud"
-              ? "bg-amber-50 border-amber-200"
-              : "bg-white border-border"
+              ? "bg-red-500/10 border-red-500/30 hover:bg-red-500/15"
+              : "bg-[#111a2e] border-white/10 hover:border-white/20"
           }`}
         >
           <div className="flex items-center gap-4">
             <div
               className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
                 urgency === "loud"
-                  ? "bg-amber-500 text-white"
-                  : "bg-amber-50 text-amber-600"
+                  ? "bg-red-500 text-white"
+                  : "bg-red-500/15 text-red-400"
               }`}
             >
               <MessageCircle className="w-6 h-6" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-[10px] uppercase tracking-wider font-bold text-ink-faint">
+              <p className="text-[10px] uppercase tracking-wider font-bold text-slate-500">
                 Weekly check-in · 90 seconds
                 {checkinStreak.current > 0 && (
-                  <span className="text-amber-600 ml-2">
+                  <span className="text-red-400 ml-2">
                     🔥 {checkinStreak.current}-week streak
                   </span>
                 )}
               </p>
-              <p className="font-display text-lg font-bold mt-0.5">
+              <p className="font-display text-lg font-bold mt-0.5 text-white">
                 {urgency === "loud"
                   ? "It's reflection time — how was your week?"
                   : "Take a breath and reflect →"}
               </p>
-              <p className="text-sm text-ink-mute mt-0.5">
+              <p className="text-sm text-slate-400 mt-0.5">
                 Three short answers about what worked, what blocked you, and
                 what&apos;s next.
               </p>
             </div>
-            <ArrowRight className="w-5 h-5 text-ink-faint hidden sm:block" />
+            <ArrowRight className="w-5 h-5 text-slate-500 hidden sm:block" />
           </div>
         </Link>
       )}
@@ -319,33 +320,34 @@ export default async function Dashboard() {
       {!wizardDone && trajectory.cycle && (
         <Link
           href="/wizard"
-          className="block mb-6 rounded-2xl bg-brand-50 border border-brand-100 p-5 hover:bg-brand-100/60 transition"
+          className="block mb-6 rounded-2xl bg-[#111a2e] border border-white/10 p-5 hover:border-red-500/40 transition"
         >
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center shrink-0">
+            <div className="w-12 h-12 rounded-xl bg-red-500/15 text-red-400 flex items-center justify-center shrink-0">
               <Sparkles className="w-6 h-6" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-[10px] uppercase tracking-wider font-bold text-brand-600">
+              <p className="text-[10px] uppercase tracking-wider font-bold text-red-400">
                 Set your trajectory · {trajectory.cycle.name}
               </p>
-              <p className="font-display text-lg font-bold mt-0.5 text-ink">
+              <p className="font-display text-lg font-bold mt-0.5 text-white">
                 Take the 5-minute Growth Wizard →
               </p>
-              <p className="text-sm text-ink-mute mt-0.5">
+              <p className="text-sm text-slate-400 mt-0.5">
                 Pick your strengths, set 3 quarterly quests, pitch a bold idea.
                 Make this year yours.
               </p>
             </div>
-            <ArrowRight className="w-5 h-5 text-brand-400 hidden sm:block" />
+            <ArrowRight className="w-5 h-5 text-red-400 hidden sm:block" />
           </div>
         </Link>
       )}
 
       {/* Trajectory hero — Three rings + Tier */}
       {trajectory.cycle && (
-        <section data-tour="trajectory" className={`rounded-3xl ${tier.bg} ${tier.glow} border border-border p-6 sm:p-8 mb-6 relative overflow-hidden animate-fade-in`}>
-          <div className="grid lg:grid-cols-[auto_1fr_auto] gap-6 items-center">
+        <section data-tour="trajectory" className="rounded-3xl bg-gradient-to-br from-[#141d33] to-[#0d1424] border border-white/10 p-6 sm:p-8 mb-6 relative overflow-hidden animate-fade-in">
+          <div className="absolute -top-20 -right-16 w-64 h-64 bg-red-600/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="relative grid lg:grid-cols-[auto_1fr_auto] gap-6 items-center">
             {/* Rings */}
             <div className="relative flex items-center justify-center">
               <TrajectoryRings
@@ -355,10 +357,10 @@ export default async function Dashboard() {
                 size={170}
               />
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <p className="text-[10px] uppercase tracking-wider font-bold text-ink-faint">
+                <p className="text-[10px] uppercase tracking-wider font-bold text-slate-500">
                   Tier
                 </p>
-                <p className={`font-display text-xl font-extrabold ${tier.fg}`}>
+                <p className="font-display text-xl font-extrabold text-white">
                   {tier.label}
                 </p>
               </div>
@@ -366,10 +368,10 @@ export default async function Dashboard() {
 
             {/* Mid — narrative + next move */}
             <div className="min-w-0">
-              <p className="text-[10px] uppercase tracking-wider font-bold text-ink-faint mb-1">
+              <p className="text-[10px] uppercase tracking-wider font-bold text-red-400 mb-1">
                 Trajectory · Q{trajectory.quarter} · {trajectory.cycle.name}
               </p>
-              <h2 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight mb-1">
+              <h2 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight mb-1 text-white">
                 {tier.label === "Stellar"
                   ? "You're flying."
                   : tier.label === "Soaring"
@@ -382,28 +384,28 @@ export default async function Dashboard() {
                           ? "Time to refocus."
                           : "Let's recalibrate."}
               </h2>
-              <p className="text-ink-soft mb-4 max-w-md">{tier.blurb}</p>
+              <p className="text-slate-400 mb-4 max-w-md">{tier.blurb}</p>
 
               {focusTrack && (
-                <div className="rounded-xl bg-muted border border-border p-3 max-w-md">
-                  <p className="text-[10px] uppercase tracking-wider font-bold text-ink-faint mb-1">
+                <div className="rounded-xl bg-white/5 border border-white/10 p-3 max-w-md">
+                  <p className="text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1">
                     Next move · {focusTrack.emoji} {focusTrack.label}
                   </p>
-                  <p className="text-sm font-medium text-ink">{focusTrack.nextMove}</p>
+                  <p className="text-sm font-medium text-slate-200">{focusTrack.nextMove}</p>
                 </div>
               )}
             </div>
 
             {/* Right — ring legend + score */}
-            <div className="lg:min-w-[180px] rounded-xl bg-muted border border-border p-4">
-              <p className="text-[10px] uppercase tracking-wider font-bold text-ink-faint mb-2">
+            <div className="lg:min-w-[180px] rounded-xl bg-white/5 border border-white/10 p-4">
+              <p className="text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-2">
                 Total score
               </p>
-              <p className="font-display text-3xl font-extrabold tabular-nums">
+              <p className="font-display text-3xl font-extrabold tabular-nums text-white">
                 {Math.round(trajectory.totalScore)}
-                <span className="text-base text-ink-faint font-semibold">/100</span>
+                <span className="text-base text-slate-500 font-semibold">/100</span>
               </p>
-              <div className="mt-3 pt-3 border-t border-border">
+              <div className="mt-3 pt-3 border-t border-white/10">
                 <RingLegend
                   mastery={trajectory.rings.mastery}
                   delivery={trajectory.rings.delivery}
@@ -414,28 +416,28 @@ export default async function Dashboard() {
           </div>
 
           {/* Track tiles */}
-          <div className="grid grid-cols-3 lg:grid-cols-6 gap-2 mt-5">
+          <div className="relative grid grid-cols-3 lg:grid-cols-6 gap-2 mt-5">
             {trajectory.tracks.map((t) => (
               <div
                 key={t.kind}
-                className="rounded-lg bg-muted border border-border px-3 py-2.5"
+                className="rounded-lg bg-white/5 border border-white/10 px-3 py-2.5"
                 title={t.nextMove}
               >
                 <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="font-medium">
+                  <span className="font-medium text-slate-300">
                     <span className="mr-1">{t.emoji}</span>
                     {t.label}
                   </span>
                 </div>
                 <div className="flex items-end justify-between gap-2">
-                  <p className="font-display text-lg font-bold tabular-nums leading-none">
+                  <p className="font-display text-lg font-bold tabular-nums leading-none text-white">
                     {Math.round(t.scorePct)}
                   </p>
-                  <p className="text-[10px] text-ink-faint">{t.weight}% wt</p>
+                  <p className="text-[10px] text-slate-500">{t.weight}% wt</p>
                 </div>
-                <div className="mt-1.5 h-0.5 bg-border rounded-full overflow-hidden">
+                <div className="mt-1.5 h-0.5 bg-white/10 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-brand-500"
+                    className="h-full bg-red-500"
                     style={{ width: `${t.scorePct}%` }}
                   />
                 </div>
@@ -446,14 +448,16 @@ export default async function Dashboard() {
       )}
 
       {/* Welcome hero */}
-      <section className="rounded-3xl bg-white border border-border shadow-soft p-6 sm:p-8 mb-6 animate-fade-in">
-        <div className="grid lg:grid-cols-[1.4fr_1fr] gap-6 items-center">
+      <section className="rounded-3xl bg-gradient-to-br from-[#1a2138] via-[#131a2e] to-[#0b0f1c] border border-white/10 p-6 sm:p-8 mb-6 animate-fade-in relative overflow-hidden">
+        <div className="absolute -top-24 -left-16 w-72 h-72 bg-red-600/15 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute top-0 left-0 h-full w-1.5 bg-gradient-to-b from-red-500 to-red-700" />
+        <div className="relative grid lg:grid-cols-[1.4fr_1fr] gap-6 items-center">
           <div>
-            <p className="text-sm text-ink-mute mb-1">{greeting()},</p>
-            <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight mb-2 text-ink">
+            <p className="text-sm text-slate-400 mb-1">{greeting()},</p>
+            <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight mb-2 text-white">
               {firstName(session.user.name)} 👋
             </h1>
-            <p className="text-ink-soft max-w-md mb-5 leading-relaxed">
+            <p className="text-slate-300 max-w-md mb-5 leading-relaxed">
               {streak.activeToday
                 ? `You're on a ${streak.current}-day streak — keep the momentum going.`
                 : streak.current > 0
@@ -463,15 +467,15 @@ export default async function Dashboard() {
 
             <div className="flex items-center gap-3 flex-wrap">
               <div className="flex-1 min-w-[200px] max-w-md">
-                <div className="flex items-center justify-between text-xs text-ink-mute mb-1.5 font-medium">
+                <div className="flex items-center justify-between text-xs text-slate-400 mb-1.5 font-medium">
                   <span>Level {level.level}</span>
                   <span>
                     {level.pointsIntoLevel} / {level.pointsForNextLevel} XP
                   </span>
                 </div>
-                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                <div className="h-2 bg-white/10 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-brand-500 rounded-full transition-all"
+                    className="h-full bg-gradient-to-r from-red-500 to-red-600 rounded-full transition-all"
                     style={{ width: `${level.pctToNext}%` }}
                   />
                 </div>
@@ -512,9 +516,9 @@ export default async function Dashboard() {
       {/* Courses — moved up so employees see the actual training first */}
       <section id="courses" className="mb-8">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-display text-xl font-bold">Your courses</h2>
+          <h2 className="font-display text-xl font-bold text-white">Your courses</h2>
           {modulesWithVideos.length > 0 && (
-            <span className="text-xs text-ink-faint">
+            <span className="text-xs text-slate-500">
               {modulesWithVideos.length} module
               {modulesWithVideos.length === 1 ? "" : "s"}
             </span>
@@ -522,12 +526,12 @@ export default async function Dashboard() {
         </div>
 
         {modulesWithVideos.length === 0 ? (
-          <div className="rounded-2xl bg-white border border-dashed border-border p-12 text-center shadow-soft">
-            <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
-              <PlayCircle className="w-8 h-8 text-ink-faint" />
+          <div className="rounded-2xl bg-[#111a2e] border border-dashed border-white/15 p-12 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center mx-auto mb-4">
+              <PlayCircle className="w-8 h-8 text-slate-500" />
             </div>
-            <p className="text-ink mb-1 font-medium">No courses yet</p>
-            <p className="text-ink-mute text-sm mb-5">
+            <p className="text-white mb-1 font-medium">No courses yet</p>
+            <p className="text-slate-400 text-sm mb-5">
               {role === "ADMIN"
                 ? "Sync your SharePoint folder to import videos."
                 : "Check back soon — your admin is setting things up."}
@@ -564,7 +568,7 @@ export default async function Dashboard() {
                 <Link
                   key={m.id}
                   href={`/video/${nextVideo.id}`}
-                  className="group card-hover rounded-2xl bg-white border border-border hover:border-brand-200 hover:shadow-lift shadow-soft p-5 flex flex-col relative overflow-hidden"
+                  className="group card-hover rounded-2xl bg-[#111a2e] border border-white/10 hover:border-red-500/40 hover:bg-[#16223c] p-5 flex flex-col relative overflow-hidden transition"
                 >
                   <div
                     className="absolute top-0 left-0 right-0 h-1"
@@ -579,53 +583,53 @@ export default async function Dashboard() {
                       <PlayCircle className="w-5 h-5" />
                     </div>
                     {isComplete && (
-                      <span className="text-[10px] uppercase tracking-wide font-semibold px-2 py-1 rounded-full bg-emerald-100 text-emerald-700">
+                      <span className="text-[10px] uppercase tracking-wide font-semibold px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-300">
                         Complete
                       </span>
                     )}
                   </div>
 
-                  <p className="text-[10px] uppercase tracking-wide text-ink-faint font-semibold mb-1">
+                  <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold mb-1">
                     {m.course.title}
                   </p>
-                  <h3 className="font-display text-lg font-bold mb-3 leading-tight">
+                  <h3 className="font-display text-lg font-bold mb-3 leading-tight text-white">
                     {m.title}
                   </h3>
 
-                  <div className="flex items-center gap-3 text-xs text-ink-mute mb-4 flex-wrap">
+                  <div className="flex items-center gap-3 text-xs text-slate-400 mb-4 flex-wrap">
                     <span>{total} video{total === 1 ? "" : "s"}</span>
                     {totalQuizzes > 0 && (
                       <>
-                        <span className="text-ink-faint">·</span>
+                        <span className="text-slate-600">·</span>
                         <span>{totalQuizzes} quiz{totalQuizzes === 1 ? "" : "zes"}</span>
                       </>
                     )}
                     {totalDuration > 0 && (
                       <>
-                        <span className="text-ink-faint">·</span>
+                        <span className="text-slate-600">·</span>
                         <span>{formatTotalDuration(totalDuration)}</span>
                       </>
                     )}
                   </div>
 
                   <div className="mt-auto">
-                    <div className="flex items-center justify-between text-xs text-ink-mute mb-1.5">
+                    <div className="flex items-center justify-between text-xs text-slate-400 mb-1.5">
                       <span>
                         {done}/{total} videos
                         {totalQuizzes > 0 &&
                           ` · ${passedQuizzes}/${totalQuizzes} quizzes`}
                       </span>
-                      <span className="font-semibold text-ink">
+                      <span className="font-semibold text-white">
                         {Math.round(pct)}%
                       </span>
                     </div>
-                    <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
                       <div
                         className="h-full transition-all"
                         style={{ width: `${pct}%`, background: accent.bar }}
                       />
                     </div>
-                    <div className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-brand-600 group-hover:translate-x-0.5 transition">
+                    <div className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-red-400 group-hover:translate-x-0.5 transition">
                       {done === 0 ? "Start course" : "Continue"}
                       <ArrowRight className="w-3.5 h-3.5" />
                     </div>
@@ -640,8 +644,8 @@ export default async function Dashboard() {
       {/* Attendance & daily punch */}
       <section data-tour="attendance" className="mb-6">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="font-display text-lg font-bold flex items-center gap-2">
-            <Clock className="w-5 h-5 text-brand-500" />
+          <h2 className="font-display text-lg font-bold flex items-center gap-2 text-white">
+            <Clock className="w-5 h-5 text-red-400" />
             Attendance & daily punch
           </h2>
         </div>
@@ -650,38 +654,38 @@ export default async function Dashboard() {
             href="https://streamlining.greythr.com/"
             target="_blank"
             rel="noreferrer"
-            className="group rounded-2xl bg-white border border-border hover:border-brand-200 hover:shadow-lift shadow-soft p-5 flex items-center gap-4 transition"
+            className="group rounded-2xl bg-[#111a2e] border border-white/10 hover:border-red-500/40 hover:bg-[#16223c] p-5 flex items-center gap-4 transition"
           >
-            <div className="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+            <div className="w-12 h-12 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0">
               <Fingerprint className="w-6 h-6" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-[10px] uppercase tracking-wide text-ink-faint font-semibold">
+              <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
                 Punch in / out
               </p>
-              <p className="font-semibold">greytHR</p>
-              <p className="text-sm text-ink-mute">Mark your daily attendance</p>
+              <p className="font-semibold text-white">greytHR</p>
+              <p className="text-sm text-slate-400">Mark your daily attendance</p>
             </div>
-            <ExternalLink className="w-4 h-4 text-ink-faint group-hover:text-brand-500 transition shrink-0" />
+            <ExternalLink className="w-4 h-4 text-slate-500 group-hover:text-red-400 transition shrink-0" />
           </a>
 
           <a
             href="https://practice.turia.in/"
             target="_blank"
             rel="noreferrer"
-            className="group rounded-2xl bg-white border border-border hover:border-brand-200 hover:shadow-lift shadow-soft p-5 flex items-center gap-4 transition"
+            className="group rounded-2xl bg-[#111a2e] border border-white/10 hover:border-red-500/40 hover:bg-[#16223c] p-5 flex items-center gap-4 transition"
           >
-            <div className="w-12 h-12 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center shrink-0">
+            <div className="w-12 h-12 rounded-xl bg-red-500/15 text-red-400 flex items-center justify-center shrink-0">
               <Clock className="w-6 h-6" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-[10px] uppercase tracking-wide text-ink-faint font-semibold">
+              <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
                 Practice portal
               </p>
-              <p className="font-semibold">Turia</p>
-              <p className="text-sm text-ink-mute">Log in to your workspace</p>
+              <p className="font-semibold text-white">Turia</p>
+              <p className="text-sm text-slate-400">Log in to your workspace</p>
             </div>
-            <ExternalLink className="w-4 h-4 text-ink-faint group-hover:text-brand-500 transition shrink-0" />
+            <ExternalLink className="w-4 h-4 text-slate-500 group-hover:text-red-400 transition shrink-0" />
           </a>
         </div>
       </section>
@@ -691,33 +695,33 @@ export default async function Dashboard() {
         <div className="grid lg:grid-cols-2 gap-4 mb-6">
           {upcoming && daysUntil != null && (
             <div
-              className={`rounded-2xl p-5 flex items-center gap-4 shadow-soft border ${
+              className={`rounded-2xl p-5 flex items-center gap-4 border ${
                 daysUntil <= 3
-                  ? "bg-rose-50 border-rose-200"
+                  ? "bg-red-500/10 border-red-500/30"
                   : daysUntil <= 7
-                    ? "bg-amber-50 border-amber-200"
-                    : "bg-white border-border"
+                    ? "bg-amber-500/10 border-amber-500/30"
+                    : "bg-[#111a2e] border-white/10"
               }`}
             >
               <div
                 className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
                   daysUntil <= 3
-                    ? "bg-rose-100 text-rose-600"
+                    ? "bg-red-500/20 text-red-400"
                     : daysUntil <= 7
-                      ? "bg-amber-100 text-amber-600"
-                      : "bg-muted text-ink-mute"
+                      ? "bg-amber-500/20 text-amber-400"
+                      : "bg-white/5 text-slate-400"
                 }`}
               >
                 <Calendar className="w-6 h-6" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs uppercase tracking-wide text-ink-faint font-semibold">
+                <p className="text-xs uppercase tracking-wide text-slate-500 font-semibold">
                   Next deadline · {upcoming.kind.toLowerCase()}
                 </p>
-                <p className="font-semibold mt-0.5 truncate">
+                <p className="font-semibold mt-0.5 truncate text-white">
                   {upcoming.courseTitle}
                 </p>
-                <p className="text-sm text-ink-mute mt-0.5">
+                <p className="text-sm text-slate-400 mt-0.5">
                   {daysUntil === 0
                     ? "Due today"
                     : daysUntil === 1
@@ -732,20 +736,20 @@ export default async function Dashboard() {
           {myAssignments.length > 0 && (
             <Link
               href="#assignments"
-              className="rounded-2xl bg-white border border-border p-5 flex items-center gap-4 hover:border-brand-200 hover:shadow-lift shadow-soft transition"
+              className="rounded-2xl bg-[#111a2e] border border-white/10 p-5 flex items-center gap-4 hover:border-red-500/40 hover:bg-[#16223c] transition"
             >
-              <div className="w-12 h-12 rounded-xl bg-violet-100 text-violet-600 flex items-center justify-center shrink-0">
+              <div className="w-12 h-12 rounded-xl bg-red-500/15 text-red-400 flex items-center justify-center shrink-0">
                 <Target className="w-6 h-6" />
               </div>
               <div className="flex-1">
-                <p className="text-xs uppercase tracking-wide text-ink-faint font-semibold">
+                <p className="text-xs uppercase tracking-wide text-slate-500 font-semibold">
                   My assignments
                 </p>
-                <p className="font-semibold mt-0.5">
+                <p className="font-semibold mt-0.5 text-white">
                   {myAssignments.filter((a) => a.status === "PENDING").length}{" "}
                   pending
                 </p>
-                <p className="text-sm text-ink-mute mt-0.5">
+                <p className="text-sm text-slate-400 mt-0.5">
                   {myAssignments.reduce(
                     (s, a) => s + (a.status === "COMPLETED" ? a.points : 0),
                     0
@@ -753,7 +757,7 @@ export default async function Dashboard() {
                   / {myAssignments.reduce((s, a) => s + a.points, 0)} pts earned
                 </p>
               </div>
-              <ArrowRight className="w-5 h-5 text-ink-faint" />
+              <ArrowRight className="w-5 h-5 text-slate-500" />
             </Link>
           )}
         </div>
@@ -762,11 +766,11 @@ export default async function Dashboard() {
       {/* Achievements */}
       <section className="mb-8">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="font-display text-lg font-bold flex items-center gap-2">
-            <Award className="w-5 h-5 text-accent-gold" />
+          <h2 className="font-display text-lg font-bold flex items-center gap-2 text-white">
+            <Award className="w-5 h-5 text-amber-400" />
             Achievements
           </h2>
-          <span className="text-xs text-ink-faint">
+          <span className="text-xs text-slate-500">
             {unlockedCount} / {achievements.length} unlocked
           </span>
         </div>
@@ -776,16 +780,16 @@ export default async function Dashboard() {
             return (
               <div
                 key={a.id}
-                className={`group relative rounded-2xl border p-3 flex flex-col items-center gap-2 transition shadow-soft ${
+                className={`group relative rounded-2xl border p-3 flex flex-col items-center gap-2 transition ${
                   a.unlocked
-                    ? "bg-white border-border"
-                    : "bg-muted/60 border-border/60 opacity-70"
+                    ? "bg-[#111a2e] border-white/10"
+                    : "bg-white/[0.03] border-white/5 opacity-60"
                 }`}
                 title={a.description}
               >
                 <div
                   className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                    a.unlocked ? ACHIEVEMENT_TINT[a.color] : "bg-white text-ink-faint"
+                    a.unlocked ? ACHIEVEMENT_TINT[a.color] : "bg-white/5 text-slate-600"
                   }`}
                 >
                   {a.unlocked ? (
@@ -794,13 +798,13 @@ export default async function Dashboard() {
                     <Lock className="w-4 h-4" />
                   )}
                 </div>
-                <p className="text-[10px] text-center font-semibold leading-tight">
+                <p className="text-[10px] text-center font-semibold leading-tight text-slate-200">
                   {a.title}
                 </p>
                 {a.progress && !a.unlocked && (
-                  <div className="w-full h-0.5 bg-ink/10 rounded-full overflow-hidden">
+                  <div className="w-full h-0.5 bg-white/10 rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-ink/40"
+                      className="h-full bg-white/40"
                       style={{
                         width: `${(a.progress.current / a.progress.target) * 100}%`,
                       }}
@@ -821,8 +825,8 @@ export default async function Dashboard() {
       {/* Assignments full list */}
       {myAssignments.length > 0 && (
         <section id="assignments" className="mb-8">
-          <h2 className="font-display text-xl font-bold mb-4">My assignments</h2>
-          <div className="rounded-2xl bg-white border border-border divide-y divide-border shadow-soft overflow-hidden">
+          <h2 className="font-display text-xl font-bold mb-4 text-white">My assignments</h2>
+          <div className="rounded-2xl bg-[#111a2e] border border-white/10 divide-y divide-white/10 overflow-hidden">
             {myAssignments.map((a) => {
               const overdue =
                 a.status === "PENDING" && a.dueAt && a.dueAt < new Date();
@@ -836,10 +840,10 @@ export default async function Dashboard() {
                       <span
                         className={`text-[10px] uppercase tracking-wide font-semibold px-2 py-0.5 rounded-full ${
                           a.kind === "VIDEO"
-                            ? "bg-brand-50 text-brand-700"
+                            ? "bg-red-500/20 text-red-300"
                             : a.kind === "MODULE"
-                              ? "bg-emerald-50 text-emerald-700"
-                              : "bg-violet-50 text-violet-700"
+                              ? "bg-emerald-500/20 text-emerald-300"
+                              : "bg-violet-500/20 text-violet-300"
                         }`}
                       >
                         {a.kind}
@@ -847,10 +851,10 @@ export default async function Dashboard() {
                       <span
                         className={`text-[10px] uppercase tracking-wide font-semibold px-2 py-0.5 rounded-full ${
                           a.status === "COMPLETED"
-                            ? "bg-emerald-50 text-emerald-700"
+                            ? "bg-emerald-500/20 text-emerald-300"
                             : overdue
-                              ? "bg-rose-50 text-rose-700"
-                              : "bg-muted text-ink-mute"
+                              ? "bg-red-500/20 text-red-300"
+                              : "bg-white/10 text-slate-400"
                         }`}
                       >
                         {a.status === "COMPLETED"
@@ -859,18 +863,18 @@ export default async function Dashboard() {
                             ? "Overdue"
                             : "Pending"}
                       </span>
-                      <span className="text-xs text-amber-600 font-bold">
+                      <span className="text-xs text-amber-400 font-bold">
                         +{a.points} pt
                       </span>
                     </div>
-                    <p className="font-medium truncate">{a.title}</p>
+                    <p className="font-medium truncate text-white">{a.title}</p>
                     {a.dueAt && a.status === "PENDING" && (
-                      <p className="text-xs text-ink-mute mt-0.5">
+                      <p className="text-xs text-slate-400 mt-0.5">
                         Due {a.dueAt.toLocaleDateString()}
                       </p>
                     )}
                     {a.description && (
-                      <p className="text-xs text-ink-mute mt-1 line-clamp-2">
+                      <p className="text-xs text-slate-400 mt-1 line-clamp-2">
                         {a.description}
                       </p>
                     )}
@@ -889,7 +893,7 @@ export default async function Dashboard() {
                     return (
                       <Link
                         href={`/video/${targetVideoId}`}
-                        className="text-xs px-3 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white font-medium shrink-0 flex items-center gap-1.5 shadow-pop transition"
+                        className="text-xs px-3 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white font-medium shrink-0 flex items-center gap-1.5 transition"
                       >
                         {a.kind === "MODULE" ? "Open module" : "Open"}{" "}
                         <ArrowRight className="w-3 h-3" />
@@ -904,7 +908,8 @@ export default async function Dashboard() {
       )}
 
       <OnboardingTour steps={TOUR_STEPS} />
-    </main>
+      </main>
+    </div>
   );
 }
 
@@ -923,18 +928,18 @@ function StatTile({
 }) {
   return (
     <div
-      className={`rounded-2xl bg-muted border border-border p-3.5 ${dim ? "opacity-60" : ""}`}
+      className={`rounded-2xl bg-white/5 border border-white/10 p-3.5 ${dim ? "opacity-50" : ""}`}
     >
       <div className="flex items-center gap-2 mb-2">
-        <div className="w-7 h-7 rounded-lg bg-brand-100 text-brand-600 flex items-center justify-center">
+        <div className="w-7 h-7 rounded-lg bg-red-500/15 text-red-400 flex items-center justify-center">
           <Icon className="w-3.5 h-3.5" />
         </div>
-        <span className="text-[10px] uppercase tracking-wide text-ink-mute font-semibold">
+        <span className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold">
           {label}
         </span>
       </div>
-      <p className="font-display text-xl font-extrabold leading-none text-ink">{value}</p>
-      <p className="text-[10px] text-ink-faint mt-1">{sub}</p>
+      <p className="font-display text-xl font-extrabold leading-none text-white">{value}</p>
+      <p className="text-[10px] text-slate-500 mt-1">{sub}</p>
     </div>
   );
 }

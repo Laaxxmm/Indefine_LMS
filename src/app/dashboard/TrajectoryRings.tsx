@@ -131,8 +131,8 @@ function LegendRow({
   return (
     <div className="flex items-center gap-2">
       <Icon className={`w-4 h-4 ${colorClass}`} />
-      <span className="text-ink-soft font-medium">{label}</span>
-      <span className="ml-auto tabular-nums font-semibold">{Math.round(pct)}%</span>
+      <span className="text-slate-300 font-medium">{label}</span>
+      <span className="ml-auto tabular-nums font-semibold text-white">{Math.round(pct)}%</span>
     </div>
   );
 }
