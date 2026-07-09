@@ -25,46 +25,47 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
-        display: ["Plus Jakarta Sans", "Inter", "sans-serif"],
+        sans: ["Plus Jakarta Sans", "ui-sans-serif", "system-ui", "sans-serif"],
+        display: ["Schibsted Grotesk", "Plus Jakarta Sans", "sans-serif"],
       },
       colors: {
-        // Surfaces (light theme)
-        page: "#f6f7fb",
+        // Surfaces — Indefine 2.0 brand
+        page: "#f5f5fb",
         card: "#ffffff",
-        muted: "#f3f4f8",
-        border: "#e5e7eb",
+        muted: "#f1f0f7",
+        border: "#ececf3",
         ink: {
-          DEFAULT: "#0f172a",
-          soft: "#334155",
-          mute: "#64748b",
-          faint: "#94a3b8",
+          DEFAULT: "#15132b",
+          soft: "#3a3852",
+          mute: "#6c6a82",
+          faint: "#b7b5c6",
         },
         brand: {
-          50: "#eef2ff",
-          100: "#e0e7ff",
-          200: "#c7d2fe",
-          300: "#a5b4fc",
-          400: "#818cf8",
-          500: "#6366f1",
-          600: "#4f46e5",
-          700: "#4338ca",
-          800: "#3730a3",
-          900: "#312e81",
+          50: "#eeebff", // brand-soft
+          100: "#e0dbff",
+          200: "#c7befb",
+          300: "#a99cf5",
+          400: "#8a6bf5",
+          500: "#5b4be6", // brand
+          600: "#4b37d8", // brand-ink
+          700: "#3d2cb8",
+          800: "#2f2196",
+          900: "#241a72",
         },
         accent: {
-          gold: "#f59e0b",
-          mint: "#10b981",
+          coral: "#ff6b4a",
+          gold: "#ffb020",
+          mint: "#17b978",
           rose: "#f43f5e",
           violet: "#8b5cf6",
           sky: "#0ea5e9",
         },
       },
       boxShadow: {
-        soft: "0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.06)",
-        lift: "0 4px 12px -2px rgb(15 23 42 / 0.08), 0 2px 6px -2px rgb(15 23 42 / 0.05)",
-        pop: "0 12px 24px -8px rgb(99 102 241 / 0.25), 0 4px 12px -4px rgb(99 102 241 / 0.15)",
-        ring: "0 0 0 4px rgb(99 102 241 / 0.12)",
+        soft: "0 1px 2px 0 rgb(20 19 43 / 0.04), 0 1px 3px 0 rgb(20 19 43 / 0.06)",
+        lift: "0 10px 30px -18px rgb(20 19 43 / 0.25)",
+        pop: "0 12px 24px -8px rgb(91 75 230 / 0.28), 0 4px 12px -4px rgb(91 75 230 / 0.18)",
+        ring: "0 0 0 4px rgb(91 75 230 / 0.14)",
       },
       backgroundImage: {
         "grid-faint":
