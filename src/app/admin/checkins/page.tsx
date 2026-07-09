@@ -63,10 +63,10 @@ export default async function AdminCheckinsPage({
     <main className="px-6 py-8 max-w-5xl">
       <div className="mb-8 flex items-end justify-between flex-wrap gap-3">
         <div>
-          <p className="text-xs uppercase tracking-wider font-semibold text-ink-faint mb-1">
+          <p className="text-[11px] uppercase tracking-[0.14em] font-extrabold text-accent-coral mb-1.5">
             Admin · Check-ins
           </p>
-          <h1 className="font-display text-3xl font-bold tracking-tight">
+          <h1 className="font-display text-[32px] font-extrabold tracking-[-0.02em] leading-none">
             Weekly check-ins
           </h1>
           <p className="text-ink-mute mt-1 text-sm">

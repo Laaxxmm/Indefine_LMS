@@ -222,14 +222,24 @@ export default async function AdminVideoPage({
 
   return (
     <main className="min-h-screen px-6 py-10 max-w-3xl mx-auto">
-      <Link href="/admin" className="text-sm text-ink-mute hover:text-ink">
+      <Link
+        href="/admin"
+        className="text-sm text-ink-mute hover:text-ink inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white hover:bg-muted border border-border shadow-soft transition"
+      >
         ← Admin
       </Link>
-      <h1 className="text-2xl font-bold mt-4">{video.title}</h1>
-      <p className="text-ink-mute text-sm mb-8">Edit quiz settings and questions</p>
+      <div className="mt-5 mb-8">
+        <p className="text-[11px] uppercase tracking-[0.14em] font-extrabold text-accent-coral mb-1.5">
+          Admin · Edit quiz
+        </p>
+        <h1 className="font-display text-[30px] font-extrabold tracking-[-0.02em] leading-tight">
+          {video.title}
+        </h1>
+        <p className="text-ink-mute text-sm mt-2">Edit quiz settings and questions</p>
+      </div>
 
       <section className="rounded-2xl bg-white border border-border shadow-soft p-6 mb-8">
-        <h2 className="text-lg font-semibold mb-4">Quiz settings</h2>
+        <h2 className="font-display text-lg font-bold mb-4">Quiz settings</h2>
         <form action={saveQuizSettings} className="grid sm:grid-cols-2 gap-4">
           <input type="hidden" name="videoId" value={video.id} />
           <Field
@@ -287,7 +297,7 @@ export default async function AdminVideoPage({
 
       {quiz && (
         <section className="rounded-2xl bg-white border border-border shadow-soft p-6 mb-8">
-          <h2 className="text-lg font-semibold mb-4">
+          <h2 className="font-display text-lg font-bold mb-4">
             Questions ({quiz.questions.length})
           </h2>
           {quiz.questions.length === 0 && (

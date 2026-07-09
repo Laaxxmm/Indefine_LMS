@@ -85,9 +85,19 @@ export default async function AdminCoursesPage() {
 
   return (
     <main className="min-h-screen px-6 py-10 max-w-4xl mx-auto">
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold">Courses & deadlines</h1>
-        <Link href="/admin" className="text-sm text-ink-mute hover:text-ink">
+      <div className="mb-8 flex items-end justify-between flex-wrap gap-4">
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.14em] font-extrabold text-accent-coral mb-1.5">
+            Admin · Courses
+          </p>
+          <h1 className="font-display text-[32px] font-extrabold tracking-[-0.02em] leading-none">
+            Courses & deadlines
+          </h1>
+        </div>
+        <Link
+          href="/admin"
+          className="text-sm text-ink-mute hover:text-ink inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white hover:bg-muted border border-border shadow-soft transition shrink-0"
+        >
           ← Admin
         </Link>
       </div>

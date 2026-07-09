@@ -70,7 +70,7 @@ export default async function EmployeeKraDetail({
       </div>
 
       <div className="rounded-2xl bg-white border border-border shadow-soft p-6 mb-6 print:bg-white print:text-black print:border-black">
-        <h1 className="text-2xl font-bold">{user.name ?? user.email}</h1>
+        <h1 className="font-display text-[26px] font-extrabold tracking-[-0.02em]">{user.name ?? user.email}</h1>
         <p className="text-ink-mute print:text-gray-700">{user.email}</p>
         <p className="text-sm mt-2 text-ink-mute print:text-gray-700">
           KRA window: {sp.from ?? "—"} to {sp.to ?? "—"}
@@ -187,7 +187,7 @@ export default async function EmployeeKraDetail({
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="rounded-2xl bg-white border border-border shadow-soft p-5 mb-5 print:bg-white print:text-black print:border-black">
-      <h2 className="text-lg font-semibold mb-3">{title}</h2>
+      <h2 className="font-display text-lg font-bold mb-3">{title}</h2>
       {children}
     </section>
   );

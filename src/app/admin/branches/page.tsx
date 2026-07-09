@@ -89,10 +89,10 @@ export default async function BranchesPage() {
   return (
     <main className="px-6 py-8 max-w-5xl">
       <div className="mb-8">
-        <p className="text-xs uppercase tracking-wider font-semibold text-ink-faint mb-1">
+        <p className="text-[11px] uppercase tracking-[0.14em] font-extrabold text-accent-coral mb-1.5">
           Admin · Branches
         </p>
-        <h1 className="font-display text-3xl font-bold tracking-tight">
+        <h1 className="font-display text-[32px] font-extrabold tracking-[-0.02em] leading-none">
           Branches
         </h1>
         <p className="text-ink-mute mt-1 text-sm">

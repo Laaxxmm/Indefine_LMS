@@ -56,17 +56,26 @@ export default async function AdminSettingsPage() {
 
   return (
     <main className="px-6 py-8 max-w-2xl mx-auto">
-      <div className="flex items-center gap-2 mb-1">
-        <SettingsIcon className="w-6 h-6 text-brand-500" />
-        <h1 className="text-2xl font-bold">Settings</h1>
+      <div className="mb-8 flex items-start gap-3.5">
+        <div className="w-12 h-12 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+          <SettingsIcon className="w-5 h-5" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-[11px] uppercase tracking-[0.14em] font-extrabold text-accent-coral mb-1">
+            Admin · Settings
+          </p>
+          <h1 className="font-display text-[30px] font-extrabold tracking-[-0.02em] leading-none">
+            Settings
+          </h1>
+          <p className="text-ink-mute mt-2 text-sm max-w-2xl">
+            Global defaults applied to <strong>newly</strong> generated quizzes. Any individual quiz can
+            still be overridden on its video page.
+          </p>
+        </div>
       </div>
-      <p className="text-ink-mute text-sm mb-8">
-        Global defaults applied to <strong>newly</strong> generated quizzes. Any individual quiz can
-        still be overridden on its video page.
-      </p>
 
       <section className="rounded-2xl bg-white border border-border shadow-soft p-6">
-        <h2 className="text-lg font-semibold mb-1">Default quiz settings</h2>
+        <h2 className="font-display text-lg font-bold mb-1">Default quiz settings</h2>
         <p className="text-sm text-ink-mute mb-5">
           New auto-generated quizzes use these values.
         </p>

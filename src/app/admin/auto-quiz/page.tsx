@@ -39,14 +39,23 @@ export default async function AutoQuizPage() {
 
   return (
     <main className="px-6 py-8 max-w-4xl mx-auto">
-      <div className="flex items-center gap-2 mb-1">
-        <Sparkles className="w-6 h-6 text-brand-500" />
-        <h1 className="text-2xl font-bold">Auto-generate quizzes</h1>
+      <div className="mb-8 flex items-start gap-3.5">
+        <div className="w-12 h-12 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+          <Sparkles className="w-5 h-5" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-[11px] uppercase tracking-[0.14em] font-extrabold text-accent-coral mb-1">
+            Admin · AI quizzes
+          </p>
+          <h1 className="font-display text-[30px] font-extrabold tracking-[-0.02em] leading-none">
+            Auto-generate quizzes
+          </h1>
+          <p className="text-ink-mute mt-2 text-sm max-w-2xl">
+            Gemini watches each video, transcribes it, and builds a grounded 20-question medium quiz —
+            no script needed. The transcript is saved to the video so you can review or regenerate later.
+          </p>
+        </div>
       </div>
-      <p className="text-ink-mute text-sm mb-8">
-        Gemini watches each video, transcribes it, and builds a grounded 20-question medium quiz —
-        no script needed. The transcript is saved to the video so you can review or regenerate later.
-      </p>
 
       {!geminiConfigured ? (
         <div className="rounded-2xl bg-white border border-border shadow-soft p-6">

@@ -120,13 +120,22 @@ export default async function AdminAttendancePage() {
 
   return (
     <main className="px-6 py-8 max-w-5xl mx-auto">
-      <div className="flex items-center gap-2 mb-1">
-        <Fingerprint className="w-6 h-6 text-brand-500" />
-        <h1 className="text-2xl font-bold">Attendance</h1>
+      <div className="mb-8 flex items-start gap-3.5">
+        <div className="w-12 h-12 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+          <Fingerprint className="w-5 h-5" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-[11px] uppercase tracking-[0.14em] font-extrabold text-accent-coral mb-1">
+            Admin · Attendance
+          </p>
+          <h1 className="font-display text-[30px] font-extrabold tracking-[-0.02em] leading-none">
+            Attendance
+          </h1>
+          <p className="text-ink-mute mt-2 text-sm max-w-2xl">
+            Import attendance from greytHR each month. Points feed the KRA leaderboard total.
+          </p>
+        </div>
       </div>
-      <p className="text-ink-mute text-sm mb-8">
-        Import attendance from greytHR each month. Points feed the KRA leaderboard total.
-      </p>
 
       <AttendanceImporter
         users={users.map((u) => ({ id: u.id, name: u.name ?? "", email: u.email }))}
@@ -135,7 +144,7 @@ export default async function AdminAttendancePage() {
       />
 
       <section>
-        <h2 className="text-lg font-semibold mb-4">Imported records</h2>
+        <h2 className="font-display text-lg font-bold mb-4">Imported records</h2>
         {records.length === 0 ? (
           <div className="rounded-2xl bg-white border border-dashed border-border p-10 text-center text-ink-mute text-sm">
             No attendance imported yet. Upload a monthly CSV above to get started.
