@@ -1,7 +1,8 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { GraduationCap, ArrowLeft } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
+import { LogoMark } from "@/components/Logo";
 import AdminNav from "./AdminNav";
 
 export const dynamic = "force-dynamic";
@@ -18,17 +19,15 @@ export default async function AdminLayout({
   return (
     <div className="min-h-screen flex">
       {/* Sidebar */}
-      <aside className="hidden lg:flex w-64 shrink-0 border-r border-border bg-white/80 backdrop-blur flex-col">
+      <aside className="hidden lg:flex w-64 shrink-0 border-r border-border bg-card flex-col sticky top-0 h-screen">
         <div className="px-5 py-5 border-b border-border">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-brand-500 to-accent-violet flex items-center justify-center shadow-pop">
-              <GraduationCap className="w-5 h-5 text-white" />
-            </div>
+            <LogoMark size={36} />
             <div>
-              <p className="font-display text-sm font-bold leading-tight">
-                Indefine LMS
+              <p className="font-display text-[15px] font-extrabold leading-tight tracking-[-0.02em]">
+                indefine
               </p>
-              <p className="text-[10px] text-ink-faint uppercase tracking-wider font-semibold">
+              <p className="text-[10px] text-ink-faint uppercase tracking-[0.16em] font-extrabold">
                 Admin
               </p>
             </div>

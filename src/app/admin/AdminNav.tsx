@@ -65,7 +65,7 @@ export default function AdminNav({
             href={it.href}
             className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition ${
               isActive
-                ? "bg-brand-50 text-brand-700 font-semibold"
+                ? "bg-brand-50 text-brand-600 font-bold"
                 : "text-ink-soft hover:bg-muted"
             }`}
           >
