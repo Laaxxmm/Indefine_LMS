@@ -442,14 +442,14 @@ export default async function AdminAssignmentsPage({
                   {a.status === "PENDING" && a.kind === "TASK" && (
                     <form action={markComplete}>
                       <input type="hidden" name="id" value={a.id} />
-                      <button className="text-xs px-3 py-1.5 rounded bg-green-500/20 hover:bg-green-500/30 text-green-300">
+                      <button className="text-xs px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold border border-emerald-200 transition">
                         Mark complete
                       </button>
                     </form>
                   )}
                   <form action={deleteAssignment}>
                     <input type="hidden" name="id" value={a.id} />
-                    <button className="text-xs px-2 py-1.5 rounded text-red-300 hover:text-red-200 hover:bg-red-500/10">
+                    <button className="text-xs px-2 py-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 font-semibold transition">
                       Delete
                     </button>
                   </form>

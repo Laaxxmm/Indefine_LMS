@@ -179,9 +179,9 @@ export const TIER_META: Record<
   SOARING: {
     label: "Soaring",
     minPct: 80,
-    color: "indigo",
+    color: "brand",
     bg: "bg-card",
-    fg: "text-indigo-700",
+    fg: "text-brand-700",
     glow: "shadow-soft",
     blurb: "Exceeding expectations — keep flying.",
   },

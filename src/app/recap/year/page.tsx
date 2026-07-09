@@ -34,7 +34,7 @@ export default async function YearRecap() {
       : 0;
 
   return (
-    <main className="min-h-screen relative overflow-hidden text-white bg-gradient-to-br from-slate-900 via-violet-900 to-rose-900">
+    <main className="min-h-screen relative overflow-hidden text-white bg-gradient-to-br from-ink via-violet-900 to-rose-900">
       <div className="absolute top-0 -left-40 w-[40rem] h-[40rem] bg-brand-500/30 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-0 -right-40 w-[40rem] h-[40rem] bg-rose-500/20 rounded-full blur-3xl pointer-events-none" />
 
@@ -190,7 +190,7 @@ export default async function YearRecap() {
 
         {/* Final tier */}
         <div className="rounded-3xl bg-gradient-to-br from-amber-400 via-rose-400 to-violet-500 p-1 mb-10">
-          <div className="rounded-3xl bg-slate-900 p-8 text-center">
+          <div className="rounded-3xl bg-ink p-8 text-center">
             <Sparkles className="w-10 h-10 mx-auto mb-3 text-amber-300" />
             <p className="text-sm uppercase tracking-[0.3em] font-bold text-white/70 mb-2">
               Where you stand

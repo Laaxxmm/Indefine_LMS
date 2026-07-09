@@ -73,7 +73,7 @@ export default function RecapStory({ recap }: { recap: RecapPayload }) {
   const Slide = slides[index];
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950 overflow-hidden">
+    <div className="fixed inset-0 z-50 bg-ink overflow-hidden">
       {/* Progress bars */}
       <div className="absolute top-3 left-3 right-3 flex gap-1.5 z-30">
         {slides.map((_, i) => (
@@ -168,7 +168,7 @@ function SlideShell({
 }) {
   return (
     <div
-      className={`absolute inset-0 flex flex-col items-center justify-center text-white px-8 overflow-hidden bg-slate-900 ${bg}`}
+      className={`absolute inset-0 flex flex-col items-center justify-center text-white px-8 overflow-hidden bg-ink ${bg}`}
     >
       <div className="absolute -top-32 -left-32 w-96 h-96 bg-white/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-white/10 rounded-full blur-3xl pointer-events-none" />
@@ -219,7 +219,7 @@ function IntroSlide({ recap }: { recap: RecapPayload }) {
 function HoursSlide({ recap }: { recap: RecapPayload }) {
   const hours = Math.round(recap.hoursLearned * 10) / 10;
   return (
-    <SlideShell bg="bg-gradient-to-br from-cyan-500 to-brand-600">
+    <SlideShell bg="bg-gradient-to-br from-sky-500 to-brand-600">
       <Clock className="w-10 h-10 mx-auto mb-3 opacity-80" />
       <Title>You spent</Title>
       <Big>{hours}h</Big>
@@ -233,7 +233,7 @@ function HoursSlide({ recap }: { recap: RecapPayload }) {
 
 function MasterySlide({ recap }: { recap: RecapPayload }) {
   return (
-    <SlideShell bg="bg-gradient-to-br from-indigo-600 via-violet-600 to-purple-700">
+    <SlideShell bg="bg-gradient-to-br from-brand-600 via-violet-600 to-brand-800">
       <PlayCircle className="w-10 h-10 mx-auto mb-3 opacity-80" />
       <Title>You finished</Title>
       <Big>
@@ -257,7 +257,7 @@ function MasterySlide({ recap }: { recap: RecapPayload }) {
 
 function StreakSlide({ recap }: { recap: RecapPayload }) {
   return (
-    <SlideShell bg="bg-gradient-to-br from-orange-500 via-rose-500 to-pink-600">
+    <SlideShell bg="bg-gradient-to-br from-accent-coral via-rose-500 to-accent-rose">
       <Flame className="w-12 h-12 mx-auto mb-3 opacity-90" />
       <Title>Your longest streak</Title>
       <Big>{recap.bestStreak}</Big>
@@ -273,7 +273,7 @@ function StreakSlide({ recap }: { recap: RecapPayload }) {
 
 function TopTrackSlide({ recap }: { recap: RecapPayload }) {
   return (
-    <SlideShell bg="bg-gradient-to-br from-emerald-500 to-teal-700">
+    <SlideShell bg="bg-gradient-to-br from-accent-mint to-emerald-700">
       <p className="text-7xl mb-4">{recap.topTrack.emoji}</p>
       <Title>Your strongest track</Title>
       <Big>{recap.topTrack.label}</Big>
@@ -319,7 +319,7 @@ function InitiativeSlide({ recap }: { recap: RecapPayload }) {
 
 function EndorseSlide({ recap }: { recap: RecapPayload }) {
   return (
-    <SlideShell bg="bg-gradient-to-br from-pink-500 via-rose-500 to-red-600">
+    <SlideShell bg="bg-gradient-to-br from-accent-rose via-rose-600 to-accent-coral">
       <Heart className="w-12 h-12 mx-auto mb-3 opacity-90" />
       <Title>Your team gave you</Title>
       <Big>{recap.endorsementsReceived}</Big>
@@ -333,7 +333,7 @@ function EndorseSlide({ recap }: { recap: RecapPayload }) {
 
 function QuestsSlide({ recap }: { recap: RecapPayload }) {
   return (
-    <SlideShell bg="bg-gradient-to-br from-violet-600 to-fuchsia-600">
+    <SlideShell bg="bg-gradient-to-br from-violet-600 to-accent-rose">
       <Target className="w-12 h-12 mx-auto mb-3 opacity-90" />
       <Title>Your quests</Title>
       <p className="text-3xl text-white/95 font-semibold mb-2">
@@ -355,7 +355,7 @@ function QuestsSlide({ recap }: { recap: RecapPayload }) {
 function TierSlide({ recap }: { recap: RecapPayload }) {
   const tier = TIER_META[recap.tier];
   return (
-    <SlideShell bg="bg-gradient-to-br from-amber-400 via-orange-500 to-rose-500">
+    <SlideShell bg="bg-gradient-to-br from-accent-gold via-accent-coral to-rose-500">
       <Trophy className="w-14 h-14 mx-auto mb-3 opacity-90" />
       <p className="text-sm uppercase tracking-[0.3em] font-semibold text-white/80 mb-3">
         Your tier this quarter
@@ -375,7 +375,7 @@ function TierSlide({ recap }: { recap: RecapPayload }) {
 function ShareSlide({ recap }: { recap: RecapPayload }) {
   const tier = TIER_META[recap.tier];
   return (
-    <SlideShell bg="bg-gradient-to-br from-slate-900 via-violet-900 to-brand-900">
+    <SlideShell bg="bg-gradient-to-br from-ink via-violet-900 to-brand-900">
       <Sparkles className="w-10 h-10 mx-auto mb-3 opacity-90" />
       <p className="text-sm uppercase tracking-[0.3em] font-semibold text-white/70 mb-2">
         That&apos;s a wrap

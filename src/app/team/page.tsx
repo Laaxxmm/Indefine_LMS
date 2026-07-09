@@ -60,7 +60,7 @@ export default async function TeamPage() {
       </header>
 
       {/* Hero */}
-      <section className="rounded-3xl bg-gradient-to-br from-emerald-500 to-teal-600 p-6 sm:p-8 mb-6 text-white relative overflow-hidden">
+      <section className="rounded-3xl bg-gradient-to-br from-accent-mint to-emerald-700 p-6 sm:p-8 mb-6 text-white relative overflow-hidden">
         <div className="absolute -top-20 -right-20 w-72 h-72 bg-white/10 rounded-full blur-3xl pointer-events-none" />
         <div className="relative grid lg:grid-cols-[1.5fr_1fr] gap-4 items-center">
           <div>

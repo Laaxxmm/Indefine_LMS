@@ -129,10 +129,10 @@ export default async function AdminOverview({
     <main className="px-6 py-8 max-w-6xl">
       <div className="mb-8 flex items-end justify-between flex-wrap gap-4">
         <div>
-          <p className="text-xs uppercase tracking-wider font-semibold text-ink-faint mb-1">
-            Welcome back
+          <p className="text-[11px] uppercase tracking-[0.14em] font-extrabold text-accent-coral mb-1.5">
+            {tab === "videos" ? "Content library" : "Welcome back"}
           </p>
-          <h1 className="font-display text-3xl font-bold tracking-tight">
+          <h1 className="font-display text-[32px] font-extrabold tracking-[-0.02em] leading-none">
             {tab === "videos" ? "Videos & Quizzes" : "Overview"}
           </h1>
           <p className="text-ink-mute mt-1 text-sm">
