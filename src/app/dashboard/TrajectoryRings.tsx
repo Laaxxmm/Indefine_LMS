@@ -39,23 +39,23 @@ export default function TrajectoryRings({
       <svg width={size} height={size} className="-rotate-90">
         <defs>
           <linearGradient id="rg-mastery" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#6366f1" />
+            <stop offset="0%" stopColor="#5B4BE6" />
             <stop offset="100%" stopColor="#8b5cf6" />
           </linearGradient>
           <linearGradient id="rg-delivery" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#10b981" />
-            <stop offset="100%" stopColor="#06b6d4" />
+            <stop offset="0%" stopColor="#17B978" />
+            <stop offset="100%" stopColor="#0EA5E9" />
           </linearGradient>
           <linearGradient id="rg-growth" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#f59e0b" />
+            <stop offset="0%" stopColor="#FFB020" />
             <stop offset="100%" stopColor="#f43f5e" />
           </linearGradient>
         </defs>
 
         {/* Tracks */}
-        <circle cx={center} cy={center} r={r1} fill="none" stroke="rgba(99,102,241,0.12)" strokeWidth={stroke} />
-        <circle cx={center} cy={center} r={r2} fill="none" stroke="rgba(16,185,129,0.12)" strokeWidth={stroke} />
-        <circle cx={center} cy={center} r={r3} fill="none" stroke="rgba(245,158,11,0.12)" strokeWidth={stroke} />
+        <circle cx={center} cy={center} r={r1} fill="none" stroke="rgba(91,75,230,0.12)" strokeWidth={stroke} />
+        <circle cx={center} cy={center} r={r2} fill="none" stroke="rgba(23,185,120,0.12)" strokeWidth={stroke} />
+        <circle cx={center} cy={center} r={r3} fill="none" stroke="rgba(255,176,32,0.12)" strokeWidth={stroke} />
 
         {/* Filled */}
         <circle

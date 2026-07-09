@@ -13,7 +13,7 @@ export default function Celebration({ passed }: { passed: boolean }) {
         angle: originX < 0.5 ? 60 : 120,
         spread: 60,
         origin: { x: originX, y: 0.6 },
-        colors: ["#3b62f6", "#8b5cf6", "#fbbf24", "#10b981", "#f43f5e"],
+        colors: ["#5B4BE6", "#8B5CF6", "#FFB020", "#17B978", "#F43F5E", "#FF6B4A"],
         scalar: 1.1,
         ticks: 200,
       });
