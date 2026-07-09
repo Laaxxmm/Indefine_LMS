@@ -94,7 +94,7 @@ export default function QuizPlayer({ quizId }: { quizId: string }) {
     return (
       <button
         onClick={start}
-        className="px-6 py-3 rounded-xl bg-gradient-to-r from-brand-500 to-accent-violet text-white font-semibold shadow-pop hover:opacity-95 transition"
+        className="px-7 py-3.5 rounded-[14px] bg-brand-500 hover:bg-brand-600 text-white font-bold transition"
       >
         Start quiz
       </button>
@@ -128,16 +128,17 @@ export default function QuizPlayer({ quizId }: { quizId: string }) {
   return (
     <div>
       <div
-        className={`sticky top-2 z-10 mb-6 flex items-center justify-between rounded-xl px-4 py-3 backdrop-blur shadow-soft ${
-          lowTime
-            ? "bg-rose-50 border border-rose-200"
-            : "bg-white border border-border"
+        className={`sticky top-2 z-10 mb-6 flex items-center justify-between rounded-2xl px-5 py-4 backdrop-blur border ${
+          lowTime ? "bg-rose-50 border-rose-200" : "border-[#DDD6FA]"
         }`}
+        style={lowTime ? undefined : { background: "linear-gradient(135deg,#EEEBFF,#F5F2FF)" }}
       >
-        <span className="text-sm text-ink-mute font-medium">Time remaining</span>
+        <span className={`font-bold text-sm ${lowTime ? "text-rose-600" : "text-brand-600"}`}>
+          ⏱ Time remaining
+        </span>
         <span
-          className={`font-mono text-lg font-bold tabular-nums ${
-            lowTime ? "text-rose-600" : "text-ink"
+          className={`font-display font-extrabold text-[22px] tabular-nums ${
+            lowTime ? "text-rose-600" : "text-brand-600"
           }`}
         >
           {String(mins).padStart(2, "0")}:{String(secs).padStart(2, "0")}
@@ -148,22 +149,20 @@ export default function QuizPlayer({ quizId }: { quizId: string }) {
         {data.questions.map((q, i) => (
           <fieldset
             key={q.id}
-            className="rounded-2xl bg-white border border-border p-5 shadow-soft"
+            className="rounded-2xl bg-card border border-border p-5 sm:p-6"
           >
-            <legend className="text-xs uppercase tracking-wider font-semibold text-ink-faint px-2">
+            <legend className="text-[11px] uppercase tracking-[0.1em] font-extrabold text-accent-coral px-1">
               Question {i + 1} of {data.questions.length} · {q.points} pt
             </legend>
-            <p className="font-medium mb-4 mt-1">{q.text}</p>
-            <div className="space-y-2">
+            <p className="font-display font-bold text-[17px] mb-4 mt-1">{q.text}</p>
+            <div className="space-y-2.5">
               {q.options.map((o) => {
                 const checked = answers[q.id] === o.id;
                 return (
                   <label
                     key={o.id}
-                    className={`flex items-center gap-3 rounded-xl border px-4 py-3 cursor-pointer transition ${
-                      checked
-                        ? "border-brand-500 bg-brand-50 shadow-ring"
-                        : "border-border hover:bg-muted/50"
+                    className={`flex items-center gap-3 rounded-[14px] border-[1.5px] px-4 py-3.5 cursor-pointer transition ${
+                      checked ? "border-brand-500 bg-brand-50" : "border-border hover:bg-muted/50"
                     }`}
                   >
                     <input
@@ -171,12 +170,17 @@ export default function QuizPlayer({ quizId }: { quizId: string }) {
                       name={q.id}
                       value={o.id}
                       checked={checked}
-                      onChange={() =>
-                        setAnswers((a) => ({ ...a, [q.id]: o.id }))
-                      }
-                      className="accent-brand-500"
+                      onChange={() => setAnswers((a) => ({ ...a, [q.id]: o.id }))}
+                      className="sr-only"
                     />
-                    <span>{o.text}</span>
+                    <span
+                      className={`w-5 h-5 rounded-full border-[1.5px] grid place-items-center shrink-0 transition ${
+                        checked ? "border-brand-500" : "border-ink-faint"
+                      }`}
+                    >
+                      {checked && <span className="w-2.5 h-2.5 rounded-full bg-brand-500" />}
+                    </span>
+                    <span className="font-semibold">{o.text}</span>
                   </label>
                 );
               })}
@@ -185,19 +189,17 @@ export default function QuizPlayer({ quizId }: { quizId: string }) {
         ))}
       </div>
 
-      <div className="mt-8 flex items-center justify-between">
-        <p className="text-sm text-ink-mute">
-          <span className="font-semibold text-ink">
-            {Object.keys(answers).length}
-          </span>{" "}
-          / {data.questions.length} answered
+      <div className="mt-8">
+        <p className="text-sm text-ink-mute text-center mb-3">
+          <span className="font-bold text-ink">{Object.keys(answers).length}</span> /{" "}
+          {data.questions.length} answered
         </p>
         <button
           onClick={() => submit(false)}
           disabled={state === "submitting"}
-          className="px-5 py-3 rounded-xl bg-gradient-to-r from-brand-500 to-accent-violet text-white font-semibold shadow-pop hover:opacity-95 disabled:opacity-50 transition"
+          className="w-full px-5 py-4 rounded-[14px] bg-brand-500 hover:bg-brand-600 text-white font-bold disabled:opacity-50 transition"
         >
-          {state === "submitting" ? "Submitting..." : "Submit quiz"}
+          {state === "submitting" ? "Submitting…" : "Submit quiz"}
         </button>
       </div>
     </div>

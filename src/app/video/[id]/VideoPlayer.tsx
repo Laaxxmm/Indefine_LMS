@@ -159,14 +159,14 @@ export default function VideoPlayer({
 
   if (error) {
     return (
-      <div className="aspect-video rounded-xl bg-muted border border-border flex items-center justify-center text-ink-mute">
+      <div className="aspect-video rounded-2xl bg-muted border border-border flex items-center justify-center text-ink-mute">
         {error}
       </div>
     );
   }
   if (!src) {
     return (
-      <div className="aspect-video rounded-xl bg-muted border border-border animate-pulse" />
+      <div className="aspect-video rounded-2xl bg-muted border border-border animate-pulse" />
     );
   }
 
@@ -180,7 +180,7 @@ export default function VideoPlayer({
         disablePictureInPicture
         disableRemotePlayback
         onContextMenu={(e) => e.preventDefault()}
-        className="w-full rounded-xl bg-black"
+        className="w-full rounded-2xl bg-black"
       />
       <div className="mt-3 flex items-center gap-2 flex-wrap">
         <span className="text-xs text-ink-mute mr-1">Speed</span>

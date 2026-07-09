@@ -82,31 +82,32 @@ export default async function VideoPage({
     moduleVideos.length > 0 ? (moduleDone / moduleVideos.length) * 100 : 0;
 
   return (
-    <main className="min-h-screen px-4 sm:px-6 py-4 max-w-[1600px] mx-auto">
-      <header className="flex items-center justify-between gap-4 mb-5 flex-wrap">
+    <main className="min-h-screen px-4 sm:px-6 py-5 max-w-[1240px] mx-auto">
+      <header className="flex items-center justify-between gap-4 mb-6 flex-wrap">
         <Link
           href="/dashboard"
-          className="text-sm text-ink-mute hover:text-ink inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-white hover:bg-muted border border-border shadow-soft transition"
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-card border border-border font-bold text-[13.5px] text-ink hover:bg-muted transition"
         >
           <ArrowLeft className="w-4 h-4" />
           Dashboard
         </Link>
-        <div className="flex items-center gap-3">
-          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-border shadow-soft">
-            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-brand-500 to-accent-violet flex items-center justify-center text-xs font-semibold text-white">
-              {(session.user.name ?? "?").slice(0, 1).toUpperCase()}
-            </div>
-            <span className="text-sm font-medium">{session.user.name}</span>
-          </div>
+        <div className="flex items-center gap-2.5">
+          <span
+            className="w-[34px] h-[34px] rounded-full grid place-items-center text-white font-extrabold text-sm"
+            style={{ background: "linear-gradient(135deg,#6D5BF0,#4B37D8)" }}
+          >
+            {(session.user.name ?? "?").slice(0, 1).toUpperCase()}
+          </span>
+          <span className="font-bold text-sm hidden sm:inline">{session.user.name}</span>
           <form
             action={async () => {
               "use server";
               await signOut({ redirectTo: "/" });
             }}
           >
-            <button className="text-xs px-3 py-2 rounded-lg bg-white hover:bg-muted border border-border shadow-soft inline-flex items-center gap-1.5 transition">
+            <button className="ml-1 text-xs px-3 py-2 rounded-xl bg-card border border-border font-semibold text-ink-soft hover:bg-muted inline-flex items-center gap-1.5 transition">
               <LogOut className="w-3.5 h-3.5" />
-              Sign out
+              <span className="hidden sm:inline">Sign out</span>
             </button>
           </form>
         </div>
@@ -115,10 +116,10 @@ export default async function VideoPage({
       <div className="grid lg:grid-cols-[1fr_340px] gap-6">
         {/* Main column — big player + quiz */}
         <div className="min-w-0">
-          <p className="text-[10px] uppercase tracking-wider font-semibold text-ink-faint mb-1">
+          <p className="text-[11px] uppercase tracking-[0.1em] font-extrabold text-accent-coral mb-1">
             {video.module.course.title} · {video.module.title}
           </p>
-          <h1 className="font-display text-xl sm:text-2xl font-extrabold mb-4 leading-tight">
+          <h1 className="font-display text-2xl sm:text-[32px] font-extrabold tracking-[-0.02em] mb-4 leading-tight">
             {prettifyName(video.title)}
           </h1>
 
@@ -130,7 +131,7 @@ export default async function VideoPage({
           />
 
           {video.quiz && (
-            <section className="mt-6 rounded-2xl bg-white border border-border p-5 shadow-soft">
+            <section className="mt-4 rounded-[18px] bg-card border border-border p-5">
               <div className="flex items-start justify-between flex-wrap gap-3">
                 <div className="flex items-start gap-3">
                   <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
@@ -174,7 +175,7 @@ export default async function VideoPage({
                 {quizUnlocked ? (
                   <Link
                     href={`/quiz/${video.quiz.id}`}
-                    className="px-4 py-2 rounded-lg bg-gradient-to-r from-brand-500 to-accent-violet text-white font-medium shadow-pop hover:opacity-95 transition"
+                    className="px-6 py-3 rounded-[13px] bg-brand-500 hover:bg-brand-600 text-white font-bold transition"
                   >
                     {bestAttempt ? "Retake quiz" : "Start quiz"}
                   </Link>
@@ -224,17 +225,17 @@ export default async function VideoPage({
         </div>
 
         {/* Sidebar — module video list */}
-        <aside className="lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto rounded-2xl bg-white border border-border shadow-soft">
-          <div className="px-4 py-3 border-b border-border sticky top-0 bg-white/95 backdrop-blur z-10">
-            <p className="text-[10px] uppercase tracking-wider font-semibold text-ink-faint">
+        <aside className="lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto rounded-[20px] bg-card border border-border">
+          <div className="px-4 py-3.5 border-b border-border sticky top-0 bg-card/95 backdrop-blur z-10">
+            <p className="text-[10px] uppercase tracking-[0.1em] font-extrabold text-ink-faint">
               {video.module.title}
             </p>
-            <p className="text-sm font-semibold mt-0.5">
+            <p className="font-display text-lg font-extrabold mt-0.5">
               {moduleDone} / {moduleVideos.length} videos completed
             </p>
-            <div className="mt-2 h-1.5 bg-muted rounded-full overflow-hidden">
+            <div className="mt-2 h-2 bg-muted rounded-full overflow-hidden">
               <div
-                className="h-full bg-gradient-to-r from-brand-500 to-accent-violet transition-all"
+                className="h-full bg-brand-500 transition-all"
                 style={{ width: `${modulePct}%` }}
               />
             </div>

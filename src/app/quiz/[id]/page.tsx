@@ -38,19 +38,19 @@ export default async function QuizPage({
     <main className="min-h-screen px-6 py-8 max-w-3xl mx-auto">
       <Link
         href={`/video/${quiz.videoId}`}
-        className="text-sm text-ink-mute hover:text-ink inline-flex items-center gap-2 mb-4"
+        className="text-[13.5px] font-bold text-ink-mute hover:text-ink inline-flex items-center gap-2 mb-3"
       >
         ← {quiz.video.title}
       </Link>
-      <h1 className="font-display text-3xl font-extrabold mt-2">{quiz.title}</h1>
-      <p className="text-ink-mute text-sm mt-1 mb-6">
+      <h1 className="font-display text-[38px] font-extrabold tracking-[-0.02em] leading-none">{quiz.title}</h1>
+      <p className="text-ink-mute text-sm font-semibold mt-2 mb-6">
         {quiz.timeLimitSec / 60} min · Pass {quiz.passPercent}%
         {quiz.maxAttempts &&
           ` · ${quiz.attempts.length} / ${quiz.maxAttempts} attempts used`}
       </p>
 
       {best && (
-        <div className="mb-6 rounded-2xl bg-white border border-border shadow-soft p-4 text-sm">
+        <div className="mb-6 rounded-[16px] bg-card border border-border p-4 text-sm font-semibold">
           Best so far:{" "}
           <span
             className={
@@ -67,7 +67,7 @@ export default async function QuizPage({
       {gate.ok ? (
         <QuizPlayer quizId={id} />
       ) : (
-        <div className="rounded-2xl bg-white border border-border shadow-soft p-6 text-ink-soft">
+        <div className="rounded-[16px] bg-card border border-border p-6 text-ink-soft font-semibold">
           {gate.reason}
         </div>
       )}
