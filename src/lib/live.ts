@@ -14,17 +14,20 @@
 import { prisma } from "@/lib/prisma";
 import {
   getUserGraphToken,
+  getAppOnlyToken,
   createTeamsEvent,
   ensureFolder,
   deleteEvent,
   resolveOnlineMeetingId,
   applyMeetingSettings,
   listMyRecordings,
+  listUserRecordings,
   copyDriveItem,
   pollCopyStatus,
   listFolderVideos,
   fetchMeetingTranscript,
   meetingHasEnded,
+  type RecordingCandidate,
 } from "@/lib/graph";
 import { syncOneDriveVideos } from "@/lib/sync";
 import { autoQuizFromVideo } from "@/lib/auto-quiz";
@@ -179,6 +182,35 @@ export async function confirmSessionEnded(sessionId: string): Promise<boolean> {
   return false;
 }
 
+/**
+ * Make sure the session's Teams meeting has our defaults applied — automatic
+ * cloud recording + organizer-only presenter. Auto-record is what guarantees
+ * the recording is attributed to (and stored in the OneDrive of) the ORGANIZER
+ * rather than whoever happened to click Record.
+ *
+ * scheduleLiveSession() already tries this once, but Teams often hasn't
+ * provisioned the online meeting yet at that moment, so the settings silently
+ * don't apply. The cron calls this for every upcoming session until it sticks.
+ * Idempotent and cheap.
+ */
+export async function ensureMeetingSettings(sessionId: string): Promise<boolean> {
+  const s = await prisma.liveSession.findUnique({ where: { id: sessionId } });
+  if (!s || s.status !== "SCHEDULED" || !s.joinUrl) return false;
+
+  const token = await getUserGraphToken(s.scheduledById);
+  if (!token) return false;
+
+  let meetingId = s.onlineMeetingId;
+  if (!meetingId) {
+    meetingId = await resolveOnlineMeetingId(token, s.joinUrl).catch(() => null);
+    if (!meetingId) return false;
+    await prisma.liveSession
+      .update({ where: { id: s.id }, data: { onlineMeetingId: meetingId } })
+      .catch(() => {});
+  }
+  return applyMeetingSettings(token, meetingId).catch(() => false);
+}
+
 // -------------------- Recording ingestion (Phase 2) --------------------
 
 export interface IngestResult {
@@ -223,30 +255,81 @@ export async function ingestRecording(sessionId: string): Promise<IngestResult> 
     // Copy was kicked off on a prior run but hasn't landed yet — wait, don't re-copy.
     return { status: "pending", message: "Recording copy still in progress." };
   } else {
-    // Find the source recording in the organizer's OneDrive /Recordings.
+    // Teams stores a meeting recording in the OneDrive /Recordings folder of
+    // WHOEVER started the recording — organizer if auto-record engaged, but
+    // any attendee who clicked Record otherwise. So: check the organizer's
+    // OneDrive first (delegated token), then fall back to scanning every
+    // invited attendee's OneDrive with the app-only token.
     const recs = await listMyRecordings(token);
-    const floor = s.startAt.getTime() - 10 * 60 * 1000; // 10-min grace pre-start
-    const match = recs.find(
-      (r) => new Date(r.createdDateTime).getTime() >= floor
-    );
+    let match = matchRecording(recs, s.title, s.startAt, {
+      requireTitleMatch: false, // organizer's own drive — time match is enough
+    });
+    let copyToken = token;
+    let searchedOthers = false;
+
+    if (!match) {
+      const appToken = await getAppOnlyToken();
+      if (appToken) {
+        searchedOthers = true;
+        const attendeeIds = Array.isArray(s.attendeeIds)
+          ? (s.attendeeIds as string[])
+          : [];
+        const candidates = await prisma.user.findMany({
+          where: { id: { in: attendeeIds.filter((id) => id !== s.scheduledById) } },
+          select: { email: true },
+        });
+        for (const u of candidates) {
+          if (!u.email) continue;
+          const theirs = await listUserRecordings(appToken, u.email).catch(
+            () => [] as RecordingCandidate[]
+          );
+          // Someone else's personal drive — insist the file name carries the
+          // meeting title so we never grab an unrelated recording of theirs.
+          const m = matchRecording(theirs, s.title, s.startAt, {
+            requireTitleMatch: true,
+          });
+          if (m) {
+            match = m;
+            copyToken = appToken; // organizer's token can't read their drive
+            break;
+          }
+        }
+      }
+    }
+
     if (!match || !match.driveId) {
-      return { status: "pending", message: "Recording not available yet." };
+      return {
+        status: "pending",
+        message: searchedOthers
+          ? "Recording not found in the organizer's or attendees' OneDrive /Recordings yet."
+          : "Recording not available yet in the organizer's OneDrive.",
+      };
     }
 
     const monitor = await copyDriveItem(
-      token,
+      copyToken,
       match.driveId,
       match.id,
       driveId,
       s.targetFolderId,
       `${sanitizeName(s.title)}.mp4`
     );
+    if (!monitor) {
+      // Copy never started — most likely the token lacks write permission
+      // (cross-drive copy with the app-only token needs Files.ReadWrite.All
+      // APPLICATION consent). Don't mark anything; surface it and retry later.
+      return {
+        status: "error",
+        message:
+          "Found the recording but couldn't start the copy — check the app has Files.ReadWrite.All (application) admin consent in Entra.",
+      };
+    }
     // Record that we've started the copy so a retry doesn't duplicate it.
     await prisma.liveSession.update({
       where: { id: s.id },
       data: { recordingItemId: match.id, status: "RECORDING_READY" },
     });
-    if (monitor) newItemId = await pollCopyStatus(monitor);
+    newItemId = await pollCopyStatus(monitor);
     if (!newItemId) {
       const landed = await listFolderVideos(driveId, s.targetFolderId, token);
       if (landed.length > 0) newItemId = landed[0].id;
@@ -340,6 +423,38 @@ export async function ensureTranscriptQuiz(sessionId: string): Promise<void> {
     fallbackUserId: s.scheduledById,
     noVideoFallback: true,
   });
+}
+
+/**
+ * Pick the session's recording out of a /Recordings listing (newest first).
+ * Time filter: created no earlier than 10 min before the scheduled start.
+ * Title filter: Teams names recordings "<subject>-YYYYMMDD_HHMMSS-Meeting
+ * Recording.mp4", so the meeting title appears in the file name. Optional for
+ * the organizer's own drive, mandatory when scanning other people's drives.
+ */
+function matchRecording(
+  recs: RecordingCandidate[],
+  title: string,
+  startAt: Date,
+  opts: { requireTitleMatch: boolean }
+): RecordingCandidate | null {
+  const floor = startAt.getTime() - 10 * 60 * 1000; // 10-min grace pre-start
+  const titleKey = normaliseTitle(title);
+  const timely = recs.filter(
+    (r) => new Date(r.createdDateTime).getTime() >= floor
+  );
+  const byTitle = timely.find((r) => normaliseTitle(r.name).includes(titleKey));
+  if (byTitle) return byTitle;
+  return opts.requireTitleMatch ? null : timely[0] ?? null;
+}
+
+/** Loose key for comparing a meeting title against a recording file name. */
+function normaliseTitle(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function escapeHtml(s: string): string {

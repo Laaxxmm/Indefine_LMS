@@ -73,7 +73,9 @@ Then under the app:
 - **Certificates & secrets** → new client secret → copy the secret **value**
 - **API permissions** → Microsoft Graph:
   - **Delegated:** `openid`, `profile`, `email`, `offline_access`, `User.Read`, `Files.Read.All`
-  - **Application:** `Files.Read.All`, `User.Read.All` (for server-side video listing + user sync)
+  - **Application:** `Files.ReadWrite.All`, `User.Read.All` (server-side video listing + user
+    sync + copying a live-session recording out of the recorder's OneDrive — read-only
+    `Files.Read.All` is enough for everything except that last copy)
   - Click **Grant admin consent** (required for application permissions)
 
 ### 2. OneDrive/SharePoint video folder

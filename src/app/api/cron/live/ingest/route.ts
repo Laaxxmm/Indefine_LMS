@@ -15,6 +15,7 @@ import {
   ingestRecording,
   ensureTranscriptQuiz,
   confirmSessionEnded,
+  ensureMeetingSettings,
 } from "@/lib/live";
 
 export const dynamic = "force-dynamic";
@@ -31,6 +32,21 @@ export async function GET(req: NextRequest) {
 
   const now = new Date();
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const weekAhead = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+  // Upcoming sessions: keep re-applying auto-record + organizer-only presenter
+  // until they stick. Teams provisions the online meeting some time after the
+  // calendar event is created, so the attempt made at schedule time often
+  // no-ops — without this retry the recording is attributed to whoever clicks
+  // Record and lands in THEIR OneDrive instead of the organizer's.
+  const upcoming = await prisma.liveSession.findMany({
+    where: { status: "SCHEDULED", startAt: { gt: now, lt: weekAhead } },
+    select: { id: true },
+    take: 20,
+  });
+  for (const s of upcoming) {
+    await ensureMeetingSettings(s.id).catch(() => {});
+  }
 
   // Finished, not-yet-ingested, not cancelled, within the last week.
   const due = await prisma.liveSession.findMany({

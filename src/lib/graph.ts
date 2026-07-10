@@ -479,17 +479,30 @@ export interface RecordingCandidate {
 }
 
 /**
- * List video files in the signed-in user's OneDrive /Recordings folder — where
- * Teams saves cloud recordings of non-channel meetings. Newest first.
+ * List video files in a OneDrive /Recordings folder — where Teams saves cloud
+ * recordings of non-channel meetings. Newest first (sorted client-side:
+ * $orderby on createdDateTime isn't reliably supported by Graph for children
+ * listings, and a rejected query would look identical to "no recordings").
  */
-export async function listMyRecordings(
-  token: string
+async function listRecordingsIn(
+  token: string,
+  drivePrefix: string // "/me/drive" or "/users/{idOrUpn}/drive"
 ): Promise<RecordingCandidate[]> {
   const res = await fetch(
-    `${GRAPH}/me/drive/root:/Recordings:/children?$select=id,name,file,createdDateTime,parentReference&$top=100&$orderby=createdDateTime desc`,
+    `${GRAPH}${drivePrefix}/root:/Recordings:/children?$select=id,name,file,createdDateTime,parentReference&$top=200`,
     { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }
   );
-  if (!res.ok) return [];
+  if (!res.ok) {
+    // 404 just means the user has never recorded anything (no folder yet).
+    if (res.status !== 404) {
+      console.error(
+        `Graph ${drivePrefix}/Recordings listing failed: ${res.status} ${await res
+          .text()
+          .catch(() => "")}`
+      );
+    }
+    return [];
+  }
   const json = (await res.json()) as {
     value?: {
       id: string;
@@ -506,7 +519,27 @@ export async function listMyRecordings(
       name: i.name,
       driveId: i.parentReference?.driveId ?? "",
       createdDateTime: i.createdDateTime,
-    }));
+    }))
+    .sort((a, b) => b.createdDateTime.localeCompare(a.createdDateTime));
+}
+
+/** The signed-in user's own /Recordings (delegated token). */
+export async function listMyRecordings(
+  token: string
+): Promise<RecordingCandidate[]> {
+  return listRecordingsIn(token, "/me/drive");
+}
+
+/**
+ * Another user's /Recordings, addressed by Entra object id or UPN/email.
+ * Requires an APP-ONLY token with Files.Read.All (application) — a delegated
+ * token cannot read other people's OneDrives.
+ */
+export async function listUserRecordings(
+  appToken: string,
+  userIdOrUpn: string
+): Promise<RecordingCandidate[]> {
+  return listRecordingsIn(appToken, `/users/${encodeURIComponent(userIdOrUpn)}/drive`);
 }
 
 /**
