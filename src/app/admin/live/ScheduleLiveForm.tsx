@@ -12,10 +12,15 @@ interface UserLite {
 
 export default function ScheduleLiveForm({
   users,
+  organizers,
+  currentUserId,
   action,
   defaultStart,
 }: {
   users: UserLite[];
+  /** Users who've signed in to the LMS (have a Microsoft token) — the only valid hosts. */
+  organizers: UserLite[];
+  currentUserId: string;
   action: (formData: FormData) => Promise<void>;
   defaultStart: string;
 }) {
@@ -111,6 +116,29 @@ export default function ScheduleLiveForm({
           </select>
         </label>
       </div>
+
+      <label className="block">
+        <span className="block text-[11px] uppercase tracking-[0.12em] font-extrabold text-ink-mute mb-1.5">
+          Organizer (host)
+        </span>
+        <select
+          name="organizerId"
+          defaultValue={currentUserId}
+          className="w-full sm:max-w-sm bg-white border border-border rounded-xl px-3 py-2.5 text-base font-medium focus:outline-none focus:ring-4 focus:ring-brand-500/15 focus:border-brand-500 transition"
+        >
+          {organizers.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.name ?? u.email}
+              {u.id === currentUserId ? " (you)" : ""}
+            </option>
+          ))}
+        </select>
+        <span className="block text-xs text-ink-faint mt-1">
+          The meeting is created on their calendar — they host it, can end it
+          for everyone, and the recording is saved (and pulled) via their
+          account. Only people who&apos;ve signed in to the LMS can be picked.
+        </span>
+      </label>
 
       {/* Attendees */}
       <div>

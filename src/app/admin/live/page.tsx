@@ -49,6 +49,18 @@ async function scheduleSession(formData: FormData) {
 
   if (!title || !courseTitle || !startLocal) return;
 
+  // Organizer = the Teams meeting host. The meeting is created with THEIR
+  // delegated token (on their calendar), so they must have signed in to the
+  // LMS at least once. Falls back to the scheduling admin.
+  let organizerId = String(formData.get("organizerId") || "") || session.user.id;
+  if (organizerId !== session.user.id) {
+    const ok = await prisma.account.findFirst({
+      where: { userId: organizerId, provider: "microsoft-entra-id" },
+      select: { id: true },
+    });
+    if (!ok) organizerId = session.user.id;
+  }
+
   // redirect() throws internally, so keep it OUT of the try/catch.
   let errMsg: string | null = null;
   try {
@@ -61,7 +73,7 @@ async function scheduleSession(formData: FormData) {
         durationMin: Number.isFinite(durationMin) ? durationMin : 60,
         attendeeUserIds,
       },
-      session.user.id
+      organizerId
     );
   } catch (e) {
     errMsg = (e as Error).message;
@@ -77,9 +89,9 @@ async function scheduleSession(formData: FormData) {
 
 async function cancelSession(formData: FormData) {
   "use server";
-  const session = await requireAdmin();
+  await requireAdmin();
   const id = String(formData.get("id"));
-  await cancelLiveSession(id, session.user.id);
+  await cancelLiveSession(id);
   revalidatePath("/admin/live");
   revalidatePath("/dashboard");
 }
@@ -160,15 +172,27 @@ export default async function AdminLivePage({
   const pullinfo = sp.pullinfo;
   const tab = sp.tab === "sessions" ? "sessions" : "schedule";
 
-  const [users, nameRows, allSessions] = await Promise.all([
-    prisma.user.findMany({
-      where: { active: true },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true, email: true },
-    }),
-    prisma.user.findMany({ select: { id: true, name: true, email: true } }),
-    prisma.liveSession.findMany({ orderBy: { startAt: "desc" } }),
-  ]);
+  const [users, nameRows, allSessions, linkedAccounts, session] =
+    await Promise.all([
+      prisma.user.findMany({
+        where: { active: true },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, email: true },
+      }),
+      prisma.user.findMany({ select: { id: true, name: true, email: true } }),
+      prisma.liveSession.findMany({ orderBy: { startAt: "desc" } }),
+      // Only people who've signed in to the LMS have a Microsoft token we can
+      // act as — they're the only valid meeting organizers.
+      prisma.account.findMany({
+        where: { provider: "microsoft-entra-id" },
+        select: { userId: true },
+      }),
+      auth(),
+    ]);
+
+  const canOrganize = new Set(linkedAccounts.map((a) => a.userId));
+  const organizers = users.filter((u) => canOrganize.has(u.id));
+  const currentUserId = session?.user?.id ?? "";
 
   const nameById = new Map(nameRows.map((u) => [u.id, u.name ?? u.email]));
   const now = Date.now();
@@ -271,13 +295,15 @@ export default async function AdminLivePage({
           <div>
             <h2 className="font-display text-lg font-bold">Schedule a session</h2>
             <p className="text-xs text-ink-mute mt-0.5">
-              Creates a Teams meeting on your calendar and invites the people you pick.
+              Creates a Teams meeting on the organizer&apos;s calendar and invites the people you pick.
             </p>
           </div>
         </div>
 
         <ScheduleLiveForm
           users={users}
+          organizers={organizers}
+          currentUserId={currentUserId}
           action={scheduleSession}
           defaultStart={defaultStart}
         />

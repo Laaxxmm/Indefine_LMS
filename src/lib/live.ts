@@ -58,7 +58,7 @@ export async function scheduleLiveSession(
   const token = await getUserGraphToken(organizerUserId);
   if (!token) {
     throw new Error(
-      "No Microsoft token for your account — sign out and back in, then try again."
+      "No Microsoft token for the chosen organizer — they need to sign in to the LMS once (or sign out and back in), then try again."
     );
   }
 
@@ -128,13 +128,12 @@ export async function scheduleLiveSession(
   }
 }
 
-export async function cancelLiveSession(
-  sessionId: string,
-  organizerUserId: string
-) {
+export async function cancelLiveSession(sessionId: string) {
   const s = await prisma.liveSession.findUnique({ where: { id: sessionId } });
   if (!s) return;
-  const token = await getUserGraphToken(organizerUserId);
+  // The calendar event lives on the ORGANIZER's calendar (who may not be the
+  // admin clicking Cancel), so the delete must run with their token.
+  const token = await getUserGraphToken(s.scheduledById);
   if (token && s.graphEventId) {
     await deleteEvent(token, s.graphEventId).catch(() => {});
   }
