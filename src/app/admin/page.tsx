@@ -20,6 +20,7 @@ import {
   AlertCircle,
   Sparkles,
   Building2,
+  ChevronDown,
 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -304,27 +305,30 @@ function VideosTab({
         {modules
           .filter((m) => m.videos.length > 0)
           .map((m) => (
-            <div
+            <details
               key={m.id}
-              className="rounded-2xl bg-white border border-border overflow-hidden shadow-soft"
+              className="rounded-2xl bg-white border border-border overflow-hidden shadow-soft group"
             >
-              <div className="px-5 py-4 bg-muted/40 border-b border-border flex items-center justify-between">
+              <summary className="px-5 py-4 bg-muted/40 flex items-center justify-between gap-3 cursor-pointer list-none select-none hover:bg-muted/60 transition [&::-webkit-details-marker]:hidden">
                 <div>
                   <p className="text-[10px] uppercase tracking-wider font-semibold text-ink-faint">
                     {m.course.title}
                   </p>
                   <h3 className="font-display font-bold mt-0.5">{m.title}</h3>
                 </div>
-                <div className="text-xs text-ink-mute text-right">
-                  <span className="font-semibold text-ink">{m.videos.length}</span>{" "}
-                  videos ·{" "}
-                  <span className="font-semibold text-ink">
-                    {m.videos.filter((v) => v.quiz).length}
-                  </span>{" "}
-                  with quizzes
+                <div className="flex items-center gap-3 shrink-0">
+                  <div className="text-xs text-ink-mute text-right">
+                    <span className="font-semibold text-ink">{m.videos.length}</span>{" "}
+                    videos ·{" "}
+                    <span className="font-semibold text-ink">
+                      {m.videos.filter((v) => v.quiz).length}
+                    </span>{" "}
+                    with quizzes
+                  </div>
+                  <ChevronDown className="w-4 h-4 text-ink-faint transition group-open:rotate-180" />
                 </div>
-              </div>
-              <div className="divide-y divide-border">
+              </summary>
+              <div className="divide-y divide-border border-t border-border">
                 {m.videos.map((v, i) => {
                   const qCount = v.quiz?._count.questions ?? 0;
                   const hasQuiz = !!v.quiz;
@@ -367,7 +371,7 @@ function VideosTab({
                   );
                 })}
               </div>
-            </div>
+            </details>
           ))}
       </div>
     </>

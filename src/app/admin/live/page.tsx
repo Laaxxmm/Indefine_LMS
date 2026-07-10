@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import {
@@ -66,7 +67,7 @@ async function scheduleSession(formData: FormData) {
   }
   revalidatePath("/admin/live");
   revalidatePath("/dashboard");
-  redirect("/admin/live?scheduled=1");
+  redirect("/admin/live?tab=sessions&scheduled=1");
 }
 
 async function cancelSession(formData: FormData) {
@@ -94,12 +95,23 @@ async function pullRecording(formData: FormData) {
 
 const STATUS_META: Record<string, { label: string; cls: string }> = {
   SCHEDULED: { label: "Scheduled", cls: "bg-brand-50 text-brand-700 border-brand-200" },
-  LIVE: { label: "Live now", cls: "bg-rose-50 text-rose-700 border-rose-200" },
-  ENDED: { label: "Ended", cls: "bg-muted text-ink-mute border-border" },
+  LIVE: { label: "● Live now", cls: "bg-rose-50 text-rose-700 border-rose-200" },
+  ENDED: { label: "Completed", cls: "bg-sky-50 text-sky-700 border-sky-200" },
   RECORDING_READY: { label: "Recording ready", cls: "bg-amber-50 text-amber-700 border-amber-200" },
   INGESTED: { label: "Published", cls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
   CANCELLED: { label: "Cancelled", cls: "bg-muted text-ink-faint border-border line-through" },
 };
+
+// The DB status only advances when the cron runs, so derive what to SHOW from
+// the clock: in-window ⇒ Live now, past end ⇒ Completed (unless the pipeline
+// has already moved it further along).
+function displayStatus(s: { status: string; startAt: Date; endAt: Date }): string {
+  if (s.status !== "SCHEDULED" && s.status !== "LIVE" && s.status !== "ENDED") return s.status;
+  const now = Date.now();
+  if (now < s.startAt.getTime()) return "SCHEDULED";
+  if (now <= s.endAt.getTime()) return "LIVE";
+  return "ENDED";
+}
 
 export default async function AdminLivePage({
   searchParams,
@@ -112,8 +124,9 @@ export default async function AdminLivePage({
   const error = sp.error;
   const pulled = sp.pulled === "1";
   const pullinfo = sp.pullinfo;
+  const tab = sp.tab === "sessions" ? "sessions" : "schedule";
 
-  const [users, nameRows, sessions] = await Promise.all([
+  const [users, nameRows, allSessions] = await Promise.all([
     prisma.user.findMany({
       where: { active: true },
       orderBy: { name: "asc" },
@@ -125,6 +138,15 @@ export default async function AdminLivePage({
 
   const nameById = new Map(nameRows.map((u) => [u.id, u.name ?? u.email]));
   const now = Date.now();
+
+  // Optional date-range filter (IST day bounds) on the Sessions tab.
+  const fromDate = sp.from ? new Date(`${sp.from}T00:00:00+05:30`) : null;
+  const toDate = sp.to ? new Date(`${sp.to}T23:59:59+05:30`) : null;
+  const sessions = allSessions.filter(
+    (s) =>
+      (!fromDate || s.startAt >= fromDate) && (!toDate || s.startAt <= toDate)
+  );
+
   const upcoming = sessions.filter(
     (s) => s.status !== "CANCELLED" && s.endAt.getTime() >= now
   );
@@ -188,7 +210,27 @@ export default async function AdminLivePage({
         </div>
       )}
 
-      {/* Schedule form */}
+      {/* Tabs */}
+      <div className="inline-flex items-center gap-1 bg-card p-1 rounded-full border border-border mb-6">
+        <Link
+          href="/admin/live"
+          className={`px-4 py-2 rounded-full text-[13px] font-bold transition ${
+            tab === "schedule" ? "bg-brand-500 text-white" : "text-ink-mute hover:text-ink"
+          }`}
+        >
+          Schedule
+        </Link>
+        <Link
+          href="/admin/live?tab=sessions"
+          className={`px-4 py-2 rounded-full text-[13px] font-bold transition ${
+            tab === "sessions" ? "bg-brand-500 text-white" : "text-ink-mute hover:text-ink"
+          }`}
+        >
+          All sessions ({allSessions.length})
+        </Link>
+      </div>
+
+      {tab === "schedule" && (
       <section className="rounded-2xl bg-white border border-border shadow-soft p-5 sm:p-6 mb-8">
         <div className="flex items-start gap-3 mb-5">
           <div className="w-11 h-11 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
@@ -224,10 +266,54 @@ export default async function AdminLivePage({
           </p>
         </div>
       </section>
+      )}
+
+      {tab === "sessions" && (
+      <>
+      {/* Date filter */}
+      <form
+        method="GET"
+        className="rounded-2xl bg-white border border-border shadow-soft p-4 mb-6 flex flex-wrap items-end gap-3 text-sm"
+      >
+        <input type="hidden" name="tab" value="sessions" />
+        <label>
+          <span className="block text-xs text-ink-mute mb-1 font-semibold">From</span>
+          <input
+            type="date"
+            name="from"
+            defaultValue={sp.from ?? ""}
+            className="bg-white border border-border rounded-lg px-3 py-2"
+          />
+        </label>
+        <label>
+          <span className="block text-xs text-ink-mute mb-1 font-semibold">To</span>
+          <input
+            type="date"
+            name="to"
+            defaultValue={sp.to ?? ""}
+            className="bg-white border border-border rounded-lg px-3 py-2"
+          />
+        </label>
+        <button className="px-4 py-2 rounded-lg bg-ink hover:bg-ink-soft text-white font-semibold transition">
+          Filter
+        </button>
+        {(sp.from || sp.to) && (
+          <Link
+            href="/admin/live?tab=sessions"
+            className="px-3 py-2 rounded-lg text-ink-mute hover:text-ink hover:bg-muted transition"
+          >
+            Clear
+          </Link>
+        )}
+        <span className="ml-auto text-xs text-ink-faint">
+          {sessions.length} session{sessions.length === 1 ? "" : "s"}
+          {(sp.from || sp.to) ? " in range" : ""}
+        </span>
+      </form>
 
       {/* Upcoming */}
       <h2 className="font-display text-sm uppercase tracking-wider font-semibold text-ink-faint mb-3">
-        Upcoming ({upcoming.length})
+        Live &amp; upcoming ({upcoming.length})
       </h2>
       {upcoming.length === 0 ? (
         <div className="rounded-2xl bg-white border border-dashed border-border p-10 text-center shadow-soft mb-8">
@@ -240,7 +326,7 @@ export default async function AdminLivePage({
             const attendeeCount = Array.isArray(s.attendeeIds)
               ? (s.attendeeIds as string[]).length
               : 0;
-            const meta = STATUS_META[s.status] ?? STATUS_META.SCHEDULED;
+            const meta = STATUS_META[displayStatus(s)] ?? STATUS_META.SCHEDULED;
             return (
               <div
                 key={s.id}
@@ -301,7 +387,7 @@ export default async function AdminLivePage({
           </h2>
           <div className="space-y-2">
             {past.map((s) => {
-              const meta = STATUS_META[s.status] ?? STATUS_META.ENDED;
+              const meta = STATUS_META[displayStatus(s)] ?? STATUS_META.ENDED;
               return (
                 <div
                   key={s.id}
@@ -342,6 +428,8 @@ export default async function AdminLivePage({
             })}
           </div>
         </>
+      )}
+      </>
       )}
     </main>
   );

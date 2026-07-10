@@ -4,6 +4,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { SubmitButton } from "@/components/SubmitButton";
+import { ChevronDown } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -153,16 +154,17 @@ export default async function AdminCoursesPage() {
                 ) : (
                   <div className="space-y-3">
                     {c.modules.map((m) => (
-                      <div
+                      <details
                         key={m.id}
-                        className="rounded-xl border border-border overflow-hidden"
+                        className="rounded-xl border border-border overflow-hidden group"
                       >
-                        <div className="flex items-center justify-between px-3 py-2 bg-muted">
+                        <summary className="flex items-center justify-between px-3 py-2 bg-muted cursor-pointer list-none select-none hover:bg-border/60 transition [&::-webkit-details-marker]:hidden">
                           <span className="text-sm font-medium">{m.title}</span>
-                          <span className="text-xs text-ink-faint">
+                          <span className="text-xs text-ink-faint inline-flex items-center gap-2">
                             {m._count.videos} video{m._count.videos === 1 ? "" : "s"}
+                            <ChevronDown className="w-3.5 h-3.5 transition group-open:rotate-180" />
                           </span>
-                        </div>
+                        </summary>
                         {m.videos.length > 0 && (
                           <ul className="divide-y divide-border">
                             {m.videos.map((v) => {
@@ -189,7 +191,7 @@ export default async function AdminCoursesPage() {
                             })}
                           </ul>
                         )}
-                      </div>
+                      </details>
                     ))}
                   </div>
                 )}

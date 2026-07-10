@@ -4,6 +4,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { SubmitButton } from "@/components/SubmitButton";
+import { ChevronDown } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -126,6 +127,7 @@ export default async function AdminAssignmentsPage({
   const sp = await searchParams;
   const filterUser = sp.user || "";
   const filterStatus = sp.status || "";
+  const tab = sp.tab === "list" ? "list" : "create";
 
   const [users, videos, modules, assignments] = await Promise.all([
     prisma.user.findMany({
@@ -158,6 +160,19 @@ export default async function AdminAssignmentsPage({
     }),
   ]);
 
+  // Group assignments by employee for the list tab.
+  const byUser = new Map<string, typeof assignments>();
+  for (const a of assignments) {
+    const list = byUser.get(a.userId) ?? [];
+    list.push(a);
+    byUser.set(a.userId, list);
+  }
+  const userGroups = [...byUser.values()].sort((x, y) =>
+    (x[0].user.name ?? x[0].user.email).localeCompare(
+      y[0].user.name ?? y[0].user.email
+    )
+  );
+
   return (
     <main className="px-6 py-8 max-w-5xl">
       <div className="mb-8">
@@ -172,7 +187,27 @@ export default async function AdminAssignmentsPage({
         </p>
       </div>
 
-      {/* Create form */}
+      {/* Tabs */}
+      <div className="inline-flex items-center gap-1 bg-card p-1 rounded-full border border-border mb-6">
+        <Link
+          href="/admin/assignments"
+          className={`px-4 py-2 rounded-full text-[13px] font-bold transition ${
+            tab === "create" ? "bg-brand-500 text-white" : "text-ink-mute hover:text-ink"
+          }`}
+        >
+          Create
+        </Link>
+        <Link
+          href="/admin/assignments?tab=list"
+          className={`px-4 py-2 rounded-full text-[13px] font-bold transition ${
+            tab === "list" ? "bg-brand-500 text-white" : "text-ink-mute hover:text-ink"
+          }`}
+        >
+          All assignments ({assignments.length})
+        </Link>
+      </div>
+
+      {tab === "create" && (
       <section className="rounded-2xl bg-white border border-border p-6 mb-8 shadow-soft">
         <h2 className="font-display text-lg font-bold mb-4">Create assignment</h2>
         <form action={createAssignments} className="space-y-4">
@@ -346,8 +381,9 @@ export default async function AdminAssignmentsPage({
           </SubmitButton>
         </form>
       </section>
+      )}
 
-      {/* Filters + list */}
+      {tab === "list" && (
       <section>
         <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
           <h2 className="font-display text-lg font-bold">
@@ -357,6 +393,7 @@ export default async function AdminAssignmentsPage({
             </span>
           </h2>
           <form method="GET" className="flex items-center gap-2 text-sm">
+            <input type="hidden" name="tab" value="list" />
             <select
               name="user"
               defaultValue={filterUser}
@@ -390,8 +427,42 @@ export default async function AdminAssignmentsPage({
           </p>
         )}
 
-        <div className="rounded-xl bg-white border border-border shadow-soft overflow-hidden">
-          {assignments.map((a) => {
+        <div className="space-y-3">
+          {userGroups.map((group) => {
+            const u = group[0].user;
+            const pending = group.filter((a) => a.status === "PENDING").length;
+            return (
+              <details
+                key={group[0].userId}
+                open={filterUser ? true : undefined}
+                className="rounded-2xl bg-white border border-border shadow-soft overflow-hidden group"
+              >
+                <summary className="px-5 py-3.5 flex items-center justify-between gap-3 cursor-pointer list-none select-none bg-muted/40 hover:bg-muted/60 transition [&::-webkit-details-marker]:hidden">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-8 h-8 rounded-full bg-brand-50 text-brand-600 grid place-items-center text-xs font-bold shrink-0">
+                      {(u.name ?? u.email).slice(0, 1).toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-semibold text-sm truncate">{u.name ?? u.email}</p>
+                      <p className="text-[11px] text-ink-faint truncate">{u.email}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2.5 shrink-0 text-xs text-ink-mute">
+                    {pending > 0 ? (
+                      <span className="font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                        {pending} pending
+                      </span>
+                    ) : (
+                      <span className="font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                        All done
+                      </span>
+                    )}
+                    <span>{group.length} total</span>
+                    <ChevronDown className="w-4 h-4 text-ink-faint transition group-open:rotate-180" />
+                  </div>
+                </summary>
+                <div className="border-t border-border">
+          {group.map((a) => {
             const overdue =
               a.status === "PENDING" && a.dueAt && a.dueAt < new Date();
             return (
@@ -457,8 +528,13 @@ export default async function AdminAssignmentsPage({
               </div>
             );
           })}
+                </div>
+              </details>
+            );
+          })}
         </div>
       </section>
+      )}
     </main>
   );
 }

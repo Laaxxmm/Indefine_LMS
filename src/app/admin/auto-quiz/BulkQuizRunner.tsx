@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Play, Square, CheckCircle2, XCircle, MinusCircle, Sparkles } from "lucide-react";
+import { Loader2, Play, Square, CheckCircle2, XCircle, MinusCircle, Sparkles, ChevronDown } from "lucide-react";
 
 type VideoLite = { id: string; title: string; moduleTitle: string; questionCount: number };
 
@@ -164,38 +164,65 @@ export function BulkQuizRunner({ videos }: { videos: VideoLite[] }) {
         )}
       </div>
 
-      <div className="rounded-2xl bg-white border border-border shadow-soft divide-y divide-border overflow-hidden">
-        {items.map((it) => (
-          <div key={it.id} className="px-5 py-3 flex items-center gap-3">
-            <StatusIcon status={it.status} />
-            <div className="min-w-0 flex-1">
-              <p className="font-medium truncate">{it.title}</p>
-              <p className="text-xs text-ink-faint truncate">{it.moduleTitle}</p>
-              {it.message && (
-                <p
-                  className={`text-xs mt-0.5 break-words ${
-                    it.status === "failed"
-                      ? "text-rose-600"
-                      : it.status === "done"
-                      ? "text-emerald-600"
-                      : "text-ink-mute"
-                  }`}
-                >
-                  {it.message}
-                </p>
-              )}
-            </div>
-            {(it.status === "pending" || it.status === "failed") && !running && (
-              <button
-                onClick={() => runSingle(it.id)}
-                className="text-xs px-2.5 py-1.5 rounded-lg border border-border hover:bg-muted shrink-0 inline-flex items-center gap-1"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                Generate
-              </button>
-            )}
-          </div>
-        ))}
+      <div className="space-y-3">
+        {[...items.reduce((m, it) => {
+          const list = m.get(it.moduleTitle) ?? [];
+          list.push(it);
+          m.set(it.moduleTitle, list);
+          return m;
+        }, new Map<string, Item[]>())].map(([moduleTitle, group]) => {
+          const groupDone = group.filter((i) => i.status === "done").length;
+          const groupWorking = group.some((i) => i.status === "working");
+          return (
+            <details
+              key={moduleTitle}
+              className="rounded-2xl bg-white border border-border shadow-soft overflow-hidden group"
+            >
+              <summary className="px-5 py-3.5 flex items-center justify-between gap-3 cursor-pointer list-none select-none bg-muted/40 hover:bg-muted/60 transition [&::-webkit-details-marker]:hidden">
+                <p className="font-display font-bold text-sm truncate">{moduleTitle}</p>
+                <div className="flex items-center gap-3 shrink-0 text-xs text-ink-mute">
+                  {groupWorking && <Loader2 className="w-4 h-4 text-brand-500 animate-spin" />}
+                  <span>
+                    <span className="font-semibold text-ink">{groupDone}</span>/{group.length} quizzes ✓
+                  </span>
+                  <ChevronDown className="w-4 h-4 text-ink-faint transition group-open:rotate-180" />
+                </div>
+              </summary>
+              <div className="divide-y divide-border border-t border-border">
+                {group.map((it) => (
+                  <div key={it.id} className="px-5 py-3 flex items-center gap-3">
+                    <StatusIcon status={it.status} />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium truncate">{it.title}</p>
+                      {it.message && (
+                        <p
+                          className={`text-xs mt-0.5 break-words ${
+                            it.status === "failed"
+                              ? "text-rose-600"
+                              : it.status === "done"
+                              ? "text-emerald-600"
+                              : "text-ink-mute"
+                          }`}
+                        >
+                          {it.message}
+                        </p>
+                      )}
+                    </div>
+                    {(it.status === "pending" || it.status === "failed") && !running && (
+                      <button
+                        onClick={() => runSingle(it.id)}
+                        className="text-xs px-2.5 py-1.5 rounded-lg border border-border hover:bg-muted shrink-0 inline-flex items-center gap-1"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        Generate
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </details>
+          );
+        })}
       </div>
     </div>
   );
