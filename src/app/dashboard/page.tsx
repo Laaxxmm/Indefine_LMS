@@ -14,6 +14,7 @@ import {
   computeCheckinStreak,
   currentWeekStart,
 } from "@/lib/checkins";
+import { formatIst } from "@/lib/live";
 import {
   Flame,
   Sparkles,
@@ -29,6 +30,7 @@ import {
   Clock,
   Fingerprint,
   ExternalLink,
+  Radio,
 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -153,6 +155,19 @@ export default async function Dashboard() {
   const showCheckinBanner = !thisWeekCheckin && urgency !== "off";
 
   const reportCount = await prisma.user.count({ where: { managerId: userId, active: true } });
+
+  // Next in-app Teams session this user is invited to.
+  const liveSessions = await prisma.liveSession.findMany({
+    where: { endAt: { gte: new Date() }, status: { not: "CANCELLED" } },
+    orderBy: { startAt: "asc" },
+    take: 15,
+  });
+  const myNextLive =
+    liveSessions.find(
+      (s) =>
+        Array.isArray(s.attendeeIds) &&
+        (s.attendeeIds as string[]).includes(userId)
+    ) ?? null;
 
   const me = leaderboard.find((r) => r.userId === userId);
   const myRank = me ? leaderboard.findIndex((r) => r.userId === userId) + 1 : null;
@@ -299,6 +314,41 @@ export default async function Dashboard() {
             ))}
           </div>
         </div>
+
+        {/* Upcoming live session (Teams) */}
+        {myNextLive && (
+          <div
+            className="rounded-[22px] p-[22px] sm:px-6 flex flex-col sm:flex-row sm:items-center gap-4 text-white relative overflow-hidden"
+            style={{ background: "linear-gradient(135deg,#5B4BE6,#8B5CF6 55%,#EC4899)" }}
+          >
+            <div className="absolute right-[-20px] top-[-24px] text-[120px] opacity-[0.12] select-none pointer-events-none">
+              📡
+            </div>
+            <div className="relative shrink-0 w-12 h-12 rounded-2xl bg-white/20 grid place-items-center">
+              <Radio className="w-6 h-6" />
+            </div>
+            <div className="relative flex-1 min-w-0">
+              <div className="text-[11px] font-extrabold tracking-[0.1em] text-white/80">
+                LIVE SESSION · TEAMS
+              </div>
+              <h3 className="font-display text-xl font-extrabold leading-tight mt-0.5 truncate">
+                {myNextLive.title}
+              </h3>
+              <p className="text-sm text-white/85 mt-1">{formatIst(myNextLive.startAt)}</p>
+            </div>
+            {myNextLive.joinUrl && (
+              <a
+                href={myNextLive.joinUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="relative shrink-0 inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-white text-brand-600 font-bold shadow-lift hover:bg-white/95 transition"
+              >
+                Join
+                <ExternalLink className="w-4 h-4" />
+              </a>
+            )}
+          </div>
+        )}
 
         {/* Resume card — primary action */}
         {resume && (

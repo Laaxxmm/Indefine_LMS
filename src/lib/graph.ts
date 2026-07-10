@@ -81,7 +81,8 @@ export async function getUserGraphToken(userId: string): Promise<string | null> 
         client_secret: clientSecret,
         grant_type: "refresh_token",
         refresh_token: account.refresh_token,
-        scope: "openid profile email offline_access User.Read Files.Read.All",
+        scope:
+          "openid profile email offline_access User.Read Files.Read.All Files.ReadWrite.All Calendars.ReadWrite",
       }),
     }
   );
@@ -304,4 +305,121 @@ export async function getStreamUrl(
   const location = res.headers.get("location");
   if (location) return location;
   return null;
+}
+
+// -------------------- Live sessions (Teams) --------------------
+
+export interface TeamsEventInput {
+  subject: string;
+  bodyHtml?: string;
+  /** Wall-clock local times "YYYY-MM-DDTHH:mm:ss" interpreted in `timeZone`. */
+  startLocal: string;
+  endLocal: string;
+  /** Time zone name Graph understands, e.g. "India Standard Time". */
+  timeZone: string;
+  attendeeEmails: string[];
+}
+
+export interface TeamsEventResult {
+  eventId: string;
+  joinUrl: string | null;
+}
+
+/**
+ * Create a Teams meeting as a calendar event on the signed-in user's calendar.
+ * Graph emails the Teams invite to every attendee automatically.
+ * Requires a delegated token with Calendars.ReadWrite.
+ */
+export async function createTeamsEvent(
+  token: string,
+  input: TeamsEventInput
+): Promise<TeamsEventResult> {
+  const payload = {
+    subject: input.subject,
+    body: { contentType: "HTML", content: input.bodyHtml ?? "" },
+    start: { dateTime: input.startLocal, timeZone: input.timeZone },
+    end: { dateTime: input.endLocal, timeZone: input.timeZone },
+    isOnlineMeeting: true,
+    onlineMeetingProvider: "teamsForBusiness",
+    allowNewTimeProposals: false,
+    attendees: input.attendeeEmails.map((address) => ({
+      emailAddress: { address },
+      type: "required",
+    })),
+  };
+  const res = await fetch(`${GRAPH}/me/events`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    throw new Error(`Graph create event failed: ${res.status} ${await res.text()}`);
+  }
+  const ev = (await res.json()) as {
+    id: string;
+    onlineMeeting?: { joinUrl?: string } | null;
+  };
+  return { eventId: ev.id, joinUrl: ev.onlineMeeting?.joinUrl ?? null };
+}
+
+/** Cancel (delete) a previously created calendar event. Best-effort. */
+export async function deleteEvent(token: string, eventId: string): Promise<void> {
+  await fetch(`${GRAPH}/me/events/${eventId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+/**
+ * Ensure a subfolder exists under `parentPath` on `driveId`, returning its
+ * driveItem id. Idempotent — returns the existing folder if already present.
+ * Requires a write scope (delegated or app Files.ReadWrite.All).
+ */
+export async function ensureFolder(
+  driveId: string,
+  parentPath: string,
+  folderName: string,
+  token: string
+): Promise<string> {
+  const enc = (p: string) =>
+    p.split("/").filter(Boolean).map(encodeURIComponent).join("/");
+  const cleanParent = parentPath.replace(/^\/+|\/+$/g, "");
+  const fullPath = cleanParent ? `${cleanParent}/${folderName}` : folderName;
+
+  // Already there?
+  const getRes = await fetch(`${GRAPH}/drives/${driveId}/root:/${enc(fullPath)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (getRes.ok) {
+    const item = (await getRes.json()) as { id: string };
+    return item.id;
+  }
+
+  // Create it under the parent (or the drive root if parent is empty).
+  const childrenUrl = cleanParent
+    ? `${GRAPH}/drives/${driveId}/root:/${enc(cleanParent)}:/children`
+    : `${GRAPH}/drives/${driveId}/root/children`;
+  const createRes = await fetch(childrenUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      name: folderName,
+      folder: {},
+      "@microsoft.graph.conflictBehavior": "fail",
+    }),
+  });
+  if (!createRes.ok) {
+    throw new Error(
+      `Graph create folder failed: ${createRes.status} ${await createRes.text()}`
+    );
+  }
+  const created = (await createRes.json()) as { id: string };
+  return created.id;
 }

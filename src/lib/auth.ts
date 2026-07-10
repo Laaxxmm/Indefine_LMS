@@ -18,7 +18,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       issuer: process.env.AUTH_MICROSOFT_ENTRA_ID_ISSUER,
       authorization: {
         params: {
-          scope: "openid profile email offline_access User.Read Files.Read.All",
+          scope:
+            "openid profile email offline_access User.Read Files.Read.All Files.ReadWrite.All Calendars.ReadWrite",
         },
       },
       // Employees are pre-provisioned by the admin-triggered org sync

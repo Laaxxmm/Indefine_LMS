@@ -55,6 +55,7 @@ model User {
   trackSnapshots      TrackSnapshot[]
   tierAssignments     TierAssignment[]
   attendances         AttendanceRecord[]
+  liveSessions        LiveSession[]   @relation("LiveSessionOrganizer")
 }
 
 enum EmployeeLevel {
@@ -582,4 +583,48 @@ model TierAssignment {
   cycle PerformanceCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
 
   @@unique([userId, cycleId, quarter])
+}
+
+// -------------------- Live sessions (Teams) --------------------
+
+// An admin-scheduled Teams meeting. On schedule we create a calendar event
+// (which sends the Teams invite to attendees) and a folder named after
+// `courseTitle` under the L&D SharePoint root. After the call, the cloud
+// recording is copied into that folder and ingested as a Video (Phase 2),
+// which can then auto-generate a quiz via the existing Gemini flow.
+model LiveSession {
+  id              String            @id @default(cuid())
+  title           String
+  description     String?
+  // Folder name (== course/topic) created under the L&D root for the recording.
+  courseTitle     String
+  scheduledById   String            // organizer (admin) — meeting is created as this user
+  startAt         DateTime          // UTC instant
+  endAt           DateTime          // UTC instant
+  attendeeIds     Json              // string[] of User ids invited
+  // Microsoft Graph references
+  graphEventId    String?           // calendar event id on the organizer's calendar
+  onlineMeetingId String?           // Teams onlineMeeting id (resolved for recording lookup)
+  joinUrl         String?           @db.Text
+  targetFolderId  String?           // driveItem id of the L&D/{courseTitle} folder
+  // Recording ingestion (Phase 2)
+  recordingItemId String?           // driveItem id of the copied recording
+  recordedVideoId String?           // Video row created from the recording
+  status          LiveSessionStatus @default(SCHEDULED)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  scheduledBy     User              @relation("LiveSessionOrganizer", fields: [scheduledById], references: [id])
+
+  @@index([startAt])
+  @@index([status])
+}
+
+enum LiveSessionStatus {
+  SCHEDULED
+  LIVE
+  ENDED
+  RECORDING_READY
+  INGESTED
+  CANCELLED
 }
