@@ -35,13 +35,41 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   pages: { signIn: "/" },
   callbacks: {
-    async signIn({ user }) {
+    async signIn({ user, account }) {
       // Promote configured admins on first login
       if (user.email && adminEmails.includes(user.email.toLowerCase())) {
         await prisma.user.update({
           where: { email: user.email },
           data: { role: "ADMIN" },
         }).catch(() => {});
+      }
+      // Keep the freshest Microsoft OAuth tokens on the Account row. Auth.js
+      // only writes tokens when an account is FIRST linked, so without this a
+      // re-login never refreshes the stored access/refresh token — meaning a
+      // newly-granted Graph scope (or an expired token) never takes effect.
+      // updateMany is a harmless no-op on the very first sign-in (the adapter
+      // creates the row right after this callback) and refreshes the tokens on
+      // every subsequent sign-in.
+      if (account?.provider === "microsoft-entra-id") {
+        await prisma.account
+          .updateMany({
+            where: {
+              provider: account.provider,
+              providerAccountId: account.providerAccountId,
+            },
+            data: {
+              access_token: account.access_token,
+              refresh_token: account.refresh_token ?? undefined,
+              expires_at:
+                typeof account.expires_at === "number"
+                  ? account.expires_at
+                  : undefined,
+              scope: account.scope,
+              token_type: account.token_type,
+              id_token: account.id_token,
+            },
+          })
+          .catch(() => {});
       }
       return true;
     },

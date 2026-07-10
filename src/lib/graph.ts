@@ -62,33 +62,39 @@ export async function getUserGraphToken(userId: string): Promise<string | null> 
     return account.access_token;
   }
 
-  // Need to refresh. Without a refresh token we can't, so fall back to whatever
-  // we have (may still work for a few seconds, otherwise caller errors).
-  if (!account.refresh_token) return account.access_token ?? null;
+  // Expired and no refresh token — force a clean re-auth upstream rather than
+  // handing back a dead token (Graph rejects it with a confusing 401).
+  if (!account.refresh_token) return null;
 
-  const tenant = process.env.MS_TENANT_ID;
-  const clientId = process.env.MS_CLIENT_ID;
-  const clientSecret = process.env.MS_CLIENT_SECRET;
-  if (!tenant || !clientId || !clientSecret) return account.access_token ?? null;
+  // Refresh using the SAME Entra app that minted the delegated token (the one
+  // NextAuth signs in with), falling back to the app-only client vars only if
+  // those aren't set. A refresh_token can only be redeemed by its own client,
+  // so using the wrong client_id here silently fails.
+  const clientId =
+    process.env.AUTH_MICROSOFT_ENTRA_ID_ID ?? process.env.MS_CLIENT_ID;
+  const clientSecret =
+    process.env.AUTH_MICROSOFT_ENTRA_ID_SECRET ?? process.env.MS_CLIENT_SECRET;
+  const issuer = process.env.AUTH_MICROSOFT_ENTRA_ID_ISSUER;
+  const tokenUrl = issuer
+    ? issuer.replace(/\/v2\.0\/?$/, "") + "/oauth2/v2.0/token"
+    : `https://login.microsoftonline.com/${process.env.MS_TENANT_ID}/oauth2/v2.0/token`;
+  if (!clientId || !clientSecret) return null;
 
-  const res = await fetch(
-    `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: clientId,
-        client_secret: clientSecret,
-        grant_type: "refresh_token",
-        refresh_token: account.refresh_token,
-        scope:
-          "openid profile email offline_access User.Read Files.Read.All Files.ReadWrite.All Calendars.ReadWrite",
-      }),
-    }
-  );
+  const res = await fetch(tokenUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: "refresh_token",
+      refresh_token: account.refresh_token,
+      scope:
+        "openid profile email offline_access User.Read Files.Read.All Files.ReadWrite.All Calendars.ReadWrite",
+    }),
+  });
   if (!res.ok) {
     console.error("Refresh token failed:", await res.text());
-    return account.access_token ?? null;
+    return null;
   }
   const json = (await res.json()) as {
     access_token: string;
