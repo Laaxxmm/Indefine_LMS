@@ -47,8 +47,12 @@ export async function GET(req: NextRequest) {
   }[] = [];
 
   for (const s of due) {
-    // Flag ended sessions still marked scheduled.
-    if (s.status === "SCHEDULED") {
+    // Mark as ENDED only well past the slot (meetings can run over; the real
+    // end signal is the recording, which ingestRecording handles below).
+    if (
+      s.status === "SCHEDULED" &&
+      now.getTime() > s.endAt.getTime() + 4 * 60 * 60 * 1000
+    ) {
       await prisma.liveSession
         .update({ where: { id: s.id }, data: { status: "ENDED" } })
         .catch(() => {});

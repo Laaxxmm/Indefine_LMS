@@ -1,0 +1,27 @@
+# Every 15 minutes, ask the LMS to ingest any finished live-session
+# recordings (copy from the organizer's OneDrive into L&D/{course},
+# publish as a lesson, generate the quiz from the Teams transcript).
+#
+# One-time setup:
+#   1. In Railway, set env var CRON_SECRET to a long random string.
+#   2. In this repo: Settings → Secrets and variables → Actions →
+#      add a secret named CRON_SECRET with the same value.
+name: Ingest live-session recordings
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call ingest endpoint
+        run: |
+          if [ -z "${{ secrets.CRON_SECRET }}" ]; then
+            echo "CRON_SECRET repo secret not set — skipping."
+            exit 0
+          fi
+          curl -fsS --max-time 290 \
+            "https://lms.indefine.in/api/cron/live/ingest?key=${{ secrets.CRON_SECRET }}"

@@ -96,20 +96,27 @@ async function pullRecording(formData: FormData) {
 const STATUS_META: Record<string, { label: string; cls: string }> = {
   SCHEDULED: { label: "Scheduled", cls: "bg-brand-50 text-brand-700 border-brand-200" },
   LIVE: { label: "● Live now", cls: "bg-rose-50 text-rose-700 border-rose-200" },
+  WRAPPING: { label: "In progress", cls: "bg-amber-50 text-amber-700 border-amber-200" },
   ENDED: { label: "Completed", cls: "bg-sky-50 text-sky-700 border-sky-200" },
   RECORDING_READY: { label: "Recording ready", cls: "bg-amber-50 text-amber-700 border-amber-200" },
   INGESTED: { label: "Published", cls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
   CANCELLED: { label: "Cancelled", cls: "bg-muted text-ink-faint border-border line-through" },
 };
 
-// The DB status only advances when the cron runs, so derive what to SHOW from
-// the clock: in-window ⇒ Live now, past end ⇒ Completed (unless the pipeline
-// has already moved it further along).
+// Meetings often run past their scheduled slot, and Graph has no cheap
+// "is it still running" flag — the real end signal in our pipeline is the
+// recording turning up (RECORDING_READY / INGESTED, set by the ingest).
+// So: within the slot ⇒ Live; past the slot but unconfirmed ⇒ In progress;
+// only call it Completed once the recording is found or after a 4h cap
+// (covers meetings that were never recorded).
+const OVERRUN_GRACE_MS = 4 * 60 * 60 * 1000;
+
 function displayStatus(s: { status: string; startAt: Date; endAt: Date }): string {
   if (s.status !== "SCHEDULED" && s.status !== "LIVE" && s.status !== "ENDED") return s.status;
   const now = Date.now();
   if (now < s.startAt.getTime()) return "SCHEDULED";
   if (now <= s.endAt.getTime()) return "LIVE";
+  if (now <= s.endAt.getTime() + OVERRUN_GRACE_MS) return "WRAPPING";
   return "ENDED";
 }
 
@@ -147,12 +154,10 @@ export default async function AdminLivePage({
       (!fromDate || s.startAt >= fromDate) && (!toDate || s.startAt <= toDate)
   );
 
-  const upcoming = sessions.filter(
-    (s) => s.status !== "CANCELLED" && s.endAt.getTime() >= now
-  );
-  const past = sessions.filter(
-    (s) => s.status === "CANCELLED" || s.endAt.getTime() < now
-  );
+  const isOpen = (s: (typeof sessions)[number]) =>
+    ["SCHEDULED", "LIVE", "WRAPPING"].includes(displayStatus(s));
+  const upcoming = sessions.filter(isOpen);
+  const past = sessions.filter((s) => !isOpen(s));
 
   const defaultStart = istLocalInputValue(new Date(now + 60 * 60 * 1000));
 

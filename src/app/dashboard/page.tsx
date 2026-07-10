@@ -158,8 +158,13 @@ export default async function Dashboard() {
   const reportCount = await prisma.user.count({ where: { managerId: userId, active: true } });
 
   // In-app Teams sessions this user is invited to (live or upcoming).
+  // Keep the Join button up to 45 min past the slot — meetings run over.
+  const LIVE_GRACE_MS = 45 * 60 * 1000;
   const liveSessions = await prisma.liveSession.findMany({
-    where: { endAt: { gte: new Date() }, status: { not: "CANCELLED" } },
+    where: {
+      endAt: { gte: new Date(Date.now() - LIVE_GRACE_MS) },
+      status: { not: "CANCELLED" },
+    },
     orderBy: { startAt: "asc" },
     take: 25,
   });
@@ -171,7 +176,7 @@ export default async function Dashboard() {
   const nextLive = myLive[0] ?? null;
   const nextLiveIsLive = nextLive
     ? nextLive.startAt.getTime() <= Date.now() &&
-      nextLive.endAt.getTime() >= Date.now()
+      nextLive.endAt.getTime() + LIVE_GRACE_MS >= Date.now()
     : false;
 
   const me = leaderboard.find((r) => r.userId === userId);
