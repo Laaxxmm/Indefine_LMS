@@ -89,7 +89,7 @@ export async function getUserGraphToken(userId: string): Promise<string | null> 
       grant_type: "refresh_token",
       refresh_token: account.refresh_token,
       scope:
-        "openid profile email offline_access User.Read Files.Read.All Files.ReadWrite.All Calendars.ReadWrite OnlineMeetings.ReadWrite OnlineMeetingTranscript.Read.All",
+        "openid profile email offline_access User.Read Files.Read.All Files.ReadWrite.All Calendars.ReadWrite OnlineMeetings.ReadWrite OnlineMeetingTranscript.Read.All OnlineMeetingArtifact.Read.All",
     }),
   });
   if (!res.ok) {
@@ -596,6 +596,26 @@ export async function fetchMeetingTranscript(
   if (!contentRes.ok) return null;
   const vtt = await contentRes.text();
   return vttToText(vtt);
+}
+
+/**
+ * True once the meeting has at least one completed session — Teams generates
+ * an attendance report the moment a meeting session ends, so this is the
+ * fastest truthful "it actually ended" signal (recording processing lags by
+ * minutes). Returns null when unknown (permission missing / API error).
+ * Requires OnlineMeetingArtifact.Read.All.
+ */
+export async function meetingHasEnded(
+  token: string,
+  meetingId: string
+): Promise<boolean | null> {
+  const res = await fetch(
+    `${GRAPH}/me/onlineMeetings/${meetingId}/attendanceReports?$top=1`,
+    { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }
+  );
+  if (!res.ok) return null;
+  const json = (await res.json()) as { value?: unknown[] };
+  return (json.value?.length ?? 0) > 0;
 }
 
 /** Strip WebVTT cue timings / numbers / speaker tags down to readable text. */

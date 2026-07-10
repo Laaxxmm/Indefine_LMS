@@ -163,7 +163,7 @@ export default async function Dashboard() {
   const liveSessions = await prisma.liveSession.findMany({
     where: {
       endAt: { gte: new Date(Date.now() - LIVE_GRACE_MS) },
-      status: { not: "CANCELLED" },
+      status: { notIn: ["CANCELLED", "ENDED", "RECORDING_READY", "INGESTED"] },
     },
     orderBy: { startAt: "asc" },
     take: 25,

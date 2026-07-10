@@ -11,7 +11,11 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { ingestRecording, ensureTranscriptQuiz } from "@/lib/live";
+import {
+  ingestRecording,
+  ensureTranscriptQuiz,
+  confirmSessionEnded,
+} from "@/lib/live";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -47,15 +51,18 @@ export async function GET(req: NextRequest) {
   }[] = [];
 
   for (const s of due) {
-    // Mark as ENDED only well past the slot (meetings can run over; the real
-    // end signal is the recording, which ingestRecording handles below).
-    if (
-      s.status === "SCHEDULED" &&
-      now.getTime() > s.endAt.getTime() + 4 * 60 * 60 * 1000
-    ) {
-      await prisma.liveSession
-        .update({ where: { id: s.id }, data: { status: "ENDED" } })
-        .catch(() => {});
+    // Confirm the meeting actually ended (attendance report exists) — with a
+    // 4h cap fallback so unconfirmable sessions don't stay "In progress".
+    if (s.status === "SCHEDULED") {
+      const confirmed = await confirmSessionEnded(s.id).catch(() => false);
+      if (
+        !confirmed &&
+        now.getTime() > s.endAt.getTime() + 4 * 60 * 60 * 1000
+      ) {
+        await prisma.liveSession
+          .update({ where: { id: s.id }, data: { status: "ENDED" } })
+          .catch(() => {});
+      }
     }
     try {
       const r = await ingestRecording(s.id);

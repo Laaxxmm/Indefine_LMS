@@ -15,7 +15,12 @@ import {
   PlayCircle,
   Download,
 } from "lucide-react";
-import { scheduleLiveSession, cancelLiveSession, ingestRecording } from "@/lib/live";
+import {
+  scheduleLiveSession,
+  cancelLiveSession,
+  ingestRecording,
+  confirmSessionEnded,
+} from "@/lib/live";
 import { istLocalInputValue, formatIst } from "@/lib/live-format";
 import { JoinMeetingButton } from "@/components/JoinMeetingButton";
 import ScheduleLiveForm from "./ScheduleLiveForm";
@@ -79,6 +84,26 @@ async function cancelSession(formData: FormData) {
   revalidatePath("/dashboard");
 }
 
+async function markCompleted(formData: FormData) {
+  "use server";
+  await requireAdmin();
+  const id = String(formData.get("id"));
+  // Prefer the real signal (attendance report); fall back to trusting the
+  // admin — they're telling us the meeting is over.
+  const confirmed = await confirmSessionEnded(id).catch(() => false);
+  if (!confirmed) {
+    await prisma.liveSession
+      .update({ where: { id }, data: { status: "ENDED" } })
+      .catch(() => {});
+  }
+  // Kick an ingest attempt right away (no-op "pending" if the recording
+  // hasn't finished processing yet — the cron keeps retrying).
+  await ingestRecording(id).catch(() => {});
+  revalidatePath("/admin/live");
+  revalidatePath("/dashboard");
+  redirect("/admin/live?tab=sessions");
+}
+
 async function pullRecording(formData: FormData) {
   "use server";
   await requireAdmin();
@@ -112,7 +137,9 @@ const STATUS_META: Record<string, { label: string; cls: string }> = {
 const OVERRUN_GRACE_MS = 4 * 60 * 60 * 1000;
 
 function displayStatus(s: { status: string; startAt: Date; endAt: Date }): string {
-  if (s.status !== "SCHEDULED" && s.status !== "LIVE" && s.status !== "ENDED") return s.status;
+  // ENDED is now set deliberately (attendance-report check, admin click, or
+  // the 4h cap) — trust it. Only SCHEDULED/LIVE are derived from the clock.
+  if (s.status !== "SCHEDULED" && s.status !== "LIVE") return s.status;
   const now = Date.now();
   if (now < s.startAt.getTime()) return "SCHEDULED";
   if (now <= s.endAt.getTime()) return "LIVE";
@@ -258,16 +285,15 @@ export default async function AdminLivePage({
         <div className="mt-5 rounded-xl bg-muted/50 border border-border p-3 flex items-start gap-2.5">
           <Info className="w-4 h-4 text-ink-faint shrink-0 mt-0.5" />
           <p className="text-xs text-ink-mute leading-relaxed">
-            One-time setup: your Entra admin must grant{" "}
+            One-time setup: your Entra admin must grant these delegated Graph
+            permissions on the app registration, then you sign out and back in
+            once —{" "}
             <code className="text-[11px] bg-white px-1 py-0.5 rounded border border-border">
-              Calendars.ReadWrite
-            </code>{" "}
-            and{" "}
-            <code className="text-[11px] bg-white px-1 py-0.5 rounded border border-border">
-              Files.ReadWrite.All
-            </code>{" "}
-            on the app registration, then sign out and back in once so your
-            session picks up the new permissions.
+              Calendars.ReadWrite · Files.ReadWrite.All · OnlineMeetings.ReadWrite ·
+              OnlineMeetingTranscript.Read.All · OnlineMeetingArtifact.Read.All
+            </code>
+            . The last three power auto-record, transcript quizzes, and
+            meeting-ended detection.
           </p>
         </div>
       </section>
@@ -331,7 +357,8 @@ export default async function AdminLivePage({
             const attendeeCount = Array.isArray(s.attendeeIds)
               ? (s.attendeeIds as string[]).length
               : 0;
-            const meta = STATUS_META[displayStatus(s)] ?? STATUS_META.SCHEDULED;
+            const eff = displayStatus(s);
+            const meta = STATUS_META[eff] ?? STATUS_META.SCHEDULED;
             return (
               <div
                 key={s.id}
@@ -370,6 +397,18 @@ export default async function AdminLivePage({
                       Join
                       <ExternalLink className="w-3.5 h-3.5" />
                     </JoinMeetingButton>
+                  )}
+                  {eff === "WRAPPING" && (
+                    <form action={markCompleted}>
+                      <input type="hidden" name="id" value={s.id} />
+                      <button
+                        className="text-sm px-3 py-2 rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 font-semibold inline-flex items-center gap-1.5 transition"
+                        title="The meeting is over — mark it completed and start pulling the recording"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        Mark completed
+                      </button>
+                    </form>
                   )}
                   <form action={cancelSession}>
                     <input type="hidden" name="id" value={s.id} />

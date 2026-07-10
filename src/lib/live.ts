@@ -24,6 +24,7 @@ import {
   pollCopyStatus,
   listFolderVideos,
   fetchMeetingTranscript,
+  meetingHasEnded,
 } from "@/lib/graph";
 import { syncOneDriveVideos } from "@/lib/sync";
 import { autoQuizFromVideo } from "@/lib/auto-quiz";
@@ -138,6 +139,44 @@ export async function cancelLiveSession(
     where: { id: sessionId },
     data: { status: "CANCELLED" },
   });
+}
+
+/**
+ * Confirm a session that's past its slot has ACTUALLY ended, using the Teams
+ * attendance report as the signal (generated the moment the meeting session
+ * ends — much faster than waiting for the recording file). Marks the DB
+ * status ENDED so the UI stops showing "In progress". Returns true once the
+ * session is confirmed over. No-ops while the scheduled slot is still open.
+ */
+export async function confirmSessionEnded(sessionId: string): Promise<boolean> {
+  const s = await prisma.liveSession.findUnique({ where: { id: sessionId } });
+  if (!s) return false;
+  if (s.status !== "SCHEDULED") return s.status !== "LIVE";
+  if (Date.now() <= s.endAt.getTime()) return false; // slot still open
+
+  const token = await getUserGraphToken(s.scheduledById);
+  if (!token) return false;
+
+  let meetingId = s.onlineMeetingId;
+  if (!meetingId && s.joinUrl) {
+    meetingId = await resolveOnlineMeetingId(token, s.joinUrl).catch(() => null);
+    if (meetingId) {
+      await prisma.liveSession
+        .update({ where: { id: s.id }, data: { onlineMeetingId: meetingId } })
+        .catch(() => {});
+    }
+  }
+  if (!meetingId) return false;
+
+  const ended = await meetingHasEnded(token, meetingId).catch(() => null);
+  if (ended === true) {
+    await prisma.liveSession.update({
+      where: { id: s.id },
+      data: { status: "ENDED" },
+    });
+    return true;
+  }
+  return false;
 }
 
 // -------------------- Recording ingestion (Phase 2) --------------------
