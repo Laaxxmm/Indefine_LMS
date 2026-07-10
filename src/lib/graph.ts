@@ -449,9 +449,12 @@ export async function resolveOnlineMeetingId(
 }
 
 /**
- * Apply our meeting defaults: automatic cloud recording, and organizer-only
- * presenter — the scheduler is the host; everyone else joins as an attendee
- * (no recording/sharing/setting changes). Best-effort — returns ok.
+ * Apply our meeting defaults: automatic cloud recording, and org-wide
+ * presenting. Auto-record alone guarantees the recording is attributed to the
+ * ORGANIZER (and lands in their OneDrive) no matter who presents; letting any
+ * internal attendee present keeps trainer-led sessions working when the
+ * trainer isn't the scheduler. "End meeting for all" stays organizer-only in
+ * Teams regardless of this setting. Best-effort — returns ok.
  */
 export async function applyMeetingSettings(
   token: string,
@@ -465,7 +468,7 @@ export async function applyMeetingSettings(
     },
     body: JSON.stringify({
       recordAutomatically: true,
-      allowedPresenters: "organizer",
+      allowedPresenters: "organization",
     }),
   });
   return res.ok;
