@@ -89,7 +89,7 @@ export async function getUserGraphToken(userId: string): Promise<string | null> 
       grant_type: "refresh_token",
       refresh_token: account.refresh_token,
       scope:
-        "openid profile email offline_access User.Read Files.Read.All Files.ReadWrite.All Calendars.ReadWrite OnlineMeetings.ReadWrite",
+        "openid profile email offline_access User.Read Files.Read.All Files.ReadWrite.All Calendars.ReadWrite OnlineMeetings.ReadWrite OnlineMeetingTranscript.Read.All",
     }),
   });
   if (!res.ok) {
@@ -554,4 +554,59 @@ export async function pollCopyStatus(
     await new Promise((r) => setTimeout(r, delayMs));
   }
   return null;
+}
+
+/**
+ * Fetch the Teams meeting transcript text (the organizer's /me meeting), if one
+ * exists. Returns plain text parsed from the WebVTT, or null if there's no
+ * transcript yet. Requires OnlineMeetingTranscript.Read.All and that
+ * transcription actually ran during the meeting.
+ */
+export async function fetchMeetingTranscript(
+  token: string,
+  meetingId: string
+): Promise<string | null> {
+  const listRes = await fetch(
+    `${GRAPH}/me/onlineMeetings/${meetingId}/transcripts`,
+    { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }
+  );
+  if (!listRes.ok) return null;
+  const list = (await listRes.json()) as {
+    value?: { id: string; createdDateTime?: string }[];
+  };
+  const transcripts = list.value ?? [];
+  if (transcripts.length === 0) return null;
+
+  // Newest transcript first.
+  transcripts.sort((a, b) =>
+    (b.createdDateTime ?? "").localeCompare(a.createdDateTime ?? "")
+  );
+
+  const contentRes = await fetch(
+    `${GRAPH}/me/onlineMeetings/${meetingId}/transcripts/${transcripts[0].id}/content?$format=text/vtt`,
+    { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }
+  );
+  if (!contentRes.ok) return null;
+  const vtt = await contentRes.text();
+  return vttToText(vtt);
+}
+
+/** Strip WebVTT cue timings / numbers / speaker tags down to readable text. */
+function vttToText(vtt: string): string {
+  const out: string[] = [];
+  let last = "";
+  for (const raw of vtt.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    if (line === "WEBVTT" || line.startsWith("NOTE")) continue;
+    if (line.includes("-->")) continue; // cue timing
+    if (/^\d+$/.test(line)) continue; // cue number
+    if (/^[0-9a-f-]{20,}\/\d+-\d+$/i.test(line)) continue; // cue id
+    const clean = line.replace(/<[^>]+>/g, "").trim(); // drop <v Speaker> etc.
+    if (clean && clean !== last) {
+      out.push(clean);
+      last = clean;
+    }
+  }
+  return out.join(" ");
 }

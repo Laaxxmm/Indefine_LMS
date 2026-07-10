@@ -20,14 +20,14 @@ export type AutoQuizResult = {
   generated?: number;
   dropped?: number;
   transcriptChars?: number;
-  skipped?: "has-quiz" | "no-key";
+  skipped?: "has-quiz" | "no-key" | "no-transcript";
   message?: string;
   error?: string;
 };
 
 export async function autoQuizFromVideo(
   videoId: string,
-  opts: { fallbackUserId?: string } = {}
+  opts: { fallbackUserId?: string; noVideoFallback?: boolean } = {}
 ): Promise<AutoQuizResult> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -61,6 +61,16 @@ export async function autoQuizFromVideo(
   // 1/2. Get a transcript — reuse the saved one, else transcribe the video.
   let transcript = (video.sourceText ?? "").trim();
   if (transcript.length < 200) {
+    // Live-session recordings generate quizzes from the Teams transcript only —
+    // we never re-transcribe the whole video here (that's the costly path).
+    if (opts.noVideoFallback) {
+      return {
+        ok: false,
+        videoId,
+        skipped: "no-transcript",
+        error: "No transcript available yet — skipped video transcription.",
+      };
+    }
     let token = await getAppOnlyToken();
     if (!token && opts.fallbackUserId) token = await getUserGraphToken(opts.fallbackUserId);
     if (!token) return { ok: false, videoId, error: "No Microsoft Graph token available to fetch the video." };

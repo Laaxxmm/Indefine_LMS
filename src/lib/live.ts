@@ -23,6 +23,7 @@ import {
   copyDriveItem,
   pollCopyStatus,
   listFolderVideos,
+  fetchMeetingTranscript,
 } from "@/lib/graph";
 import { syncOneDriveVideos } from "@/lib/sync";
 import { autoQuizFromVideo } from "@/lib/auto-quiz";
@@ -154,7 +155,11 @@ export interface IngestResult {
 export async function ingestRecording(sessionId: string): Promise<IngestResult> {
   const s = await prisma.liveSession.findUnique({ where: { id: sessionId } });
   if (!s) return { status: "error", message: "Session not found." };
-  if (s.recordedVideoId) return { status: "ingested", videoId: s.recordedVideoId };
+  if (s.recordedVideoId) {
+    // Already ingested — nudge the (cheap) transcript quiz in case it's still missing.
+    ensureTranscriptQuiz(s.id).catch(() => {});
+    return { status: "ingested", videoId: s.recordedVideoId };
+  }
 
   const driveId = process.env.GRAPH_DRIVE_ID;
   if (!driveId || !s.targetFolderId) {
@@ -233,10 +238,68 @@ export async function ingestRecording(sessionId: string): Promise<IngestResult> 
     },
   });
 
-  // Auto-generate the quiz from the recording (best-effort; runs in background).
-  autoQuizFromVideo(video.id, { fallbackUserId: s.scheduledById }).catch(() => {});
+  // Generate the quiz from the Teams transcript (cheap) — never from the video.
+  ensureTranscriptQuiz(s.id).catch(() => {});
 
   return { status: "ingested", videoId: video.id };
+}
+
+/**
+ * Generate a session's quiz from its Teams transcript — the cheap path (no video
+ * sent to Gemini). Safe to re-run: no-ops once a quiz exists, and returns quietly
+ * while the transcript isn't ready yet, so the cron can simply retry next tick.
+ */
+export async function ensureTranscriptQuiz(sessionId: string): Promise<void> {
+  const s = await prisma.liveSession.findUnique({ where: { id: sessionId } });
+  if (!s || !s.recordedVideoId) return;
+
+  const video = await prisma.video.findUnique({
+    where: { id: s.recordedVideoId },
+    select: {
+      id: true,
+      sourceText: true,
+      quiz: { select: { _count: { select: { questions: true } } } },
+    },
+  });
+  if (!video) return;
+  if ((video.quiz?._count.questions ?? 0) > 0) return; // already has a quiz
+
+  let sourceText = (video.sourceText ?? "").trim();
+  if (sourceText.length < 200) {
+    const token = await getUserGraphToken(s.scheduledById);
+    if (token) {
+      // Resolve the meeting id if it wasn't captured at schedule time.
+      let meetingId = s.onlineMeetingId;
+      if (!meetingId && s.joinUrl) {
+        meetingId = await resolveOnlineMeetingId(token, s.joinUrl).catch(
+          () => null
+        );
+        if (meetingId) {
+          await prisma.liveSession
+            .update({ where: { id: s.id }, data: { onlineMeetingId: meetingId } })
+            .catch(() => {});
+        }
+      }
+      if (meetingId) {
+        const transcript = await fetchMeetingTranscript(token, meetingId).catch(
+          () => null
+        );
+        if (transcript && transcript.trim().length >= 200) {
+          sourceText = transcript.trim();
+          await prisma.video
+            .update({ where: { id: video.id }, data: { sourceText } })
+            .catch(() => {});
+        }
+      }
+    }
+  }
+
+  if (sourceText.length < 200) return; // transcript not ready yet — retry next tick
+
+  await autoQuizFromVideo(video.id, {
+    fallbackUserId: s.scheduledById,
+    noVideoFallback: true,
+  });
 }
 
 function escapeHtml(s: string): string {

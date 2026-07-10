@@ -11,7 +11,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { ingestRecording } from "@/lib/live";
+import { ingestRecording, ensureTranscriptQuiz } from "@/lib/live";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -66,5 +66,25 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ processed: due.length, results });
+  // Retry transcript-based quiz generation for recently-ingested sessions whose
+  // quiz isn't there yet (the Teams transcript can lag the recording by minutes).
+  const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const recentlyIngested = await prisma.liveSession.findMany({
+    where: {
+      status: "INGESTED",
+      recordedVideoId: { not: null },
+      endAt: { gte: dayAgo },
+    },
+    select: { id: true },
+    take: 20,
+  });
+  for (const s of recentlyIngested) {
+    await ensureTranscriptQuiz(s.id).catch(() => {});
+  }
+
+  return NextResponse.json({
+    processed: due.length,
+    quizRetries: recentlyIngested.length,
+    results,
+  });
 }
