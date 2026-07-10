@@ -240,6 +240,7 @@ export default async function Dashboard() {
           <span className="px-4 py-2 rounded-full bg-brand-50 text-brand-600 font-bold text-[13.5px]">Home</span>
           <Link href="/dashboard#courses" className="px-4 py-2 rounded-full text-ink-mute font-semibold text-[13.5px] hover:text-ink transition">Courses</Link>
           <Link href="/leaderboard" data-tour="leaderboard" className="px-4 py-2 rounded-full text-ink-mute font-semibold text-[13.5px] hover:text-ink transition">Leaderboard</Link>
+          <Link href="/checkin" className="px-4 py-2 rounded-full text-ink-mute font-semibold text-[13.5px] hover:text-ink transition">Check-in</Link>
           <Link href="/recap/year" className="px-4 py-2 rounded-full text-ink-mute font-semibold text-[13.5px] hover:text-ink transition">Recap</Link>
         </nav>
 

@@ -1,6 +1,7 @@
 import { auth, signOut } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { prisma } from "@/lib/prisma";
 import { loadTeam } from "@/lib/coaching";
 import { TIER_META } from "@/lib/trajectory";
 import TrajectoryRings from "../dashboard/TrajectoryRings";
@@ -12,6 +13,7 @@ import {
   MessageCircle,
   Flame,
   ArrowRight,
+  CheckCircle2,
 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +24,17 @@ export default async function TeamPage() {
 
   const team = await loadTeam(session.user.id);
   if (team.length === 0) redirect("/dashboard");
+
+  // Items from my reports waiting on me.
+  const [pendingQuests, pitchedInitiatives] = await Promise.all([
+    prisma.quest.count({
+      where: { status: "PENDING_APPROVAL", user: { managerId: session.user.id } },
+    }),
+    prisma.initiative.count({
+      where: { status: "PITCHED", user: { managerId: session.user.id } },
+    }),
+  ]);
+  const pendingApprovals = pendingQuests + pitchedInitiatives;
 
   const totalPrompts = team.reduce((s, r) => s + r.prompts.length, 0);
   const blockedCount = team.filter(
@@ -46,17 +59,31 @@ export default async function TeamPage() {
             <p className="font-display text-sm font-bold mt-0.5">My team</p>
           </div>
         </div>
-        <form
-          action={async () => {
-            "use server";
-            await signOut({ redirectTo: "/" });
-          }}
-        >
-          <button className="px-3 py-2 rounded-lg bg-white hover:bg-muted border border-border shadow-soft text-sm flex items-center gap-2 transition">
-            <LogOut className="w-4 h-4 text-ink-mute" />
-            <span className="hidden sm:inline">Sign out</span>
-          </button>
-        </form>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/team/approvals"
+            className="px-3 py-2 rounded-lg bg-white hover:bg-muted border border-border shadow-soft text-sm flex items-center gap-2 transition"
+          >
+            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+            Approvals
+            {pendingApprovals > 0 && (
+              <span className="text-[10px] font-bold bg-rose-500 text-white rounded-full px-1.5 py-0.5 tabular-nums">
+                {pendingApprovals}
+              </span>
+            )}
+          </Link>
+          <form
+            action={async () => {
+              "use server";
+              await signOut({ redirectTo: "/" });
+            }}
+          >
+            <button className="px-3 py-2 rounded-lg bg-white hover:bg-muted border border-border shadow-soft text-sm flex items-center gap-2 transition">
+              <LogOut className="w-4 h-4 text-ink-mute" />
+              <span className="hidden sm:inline">Sign out</span>
+            </button>
+          </form>
+        </div>
       </header>
 
       {/* Hero */}

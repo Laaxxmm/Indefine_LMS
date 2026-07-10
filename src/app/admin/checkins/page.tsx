@@ -44,17 +44,23 @@ export default async function AdminCheckinsPage({
   const week = sp.week === "previous" ? previousWeekStart() : currentWeekStart();
   const isCurrent = sp.week !== "previous";
 
-  const [checkins, activeUsers] = await Promise.all([
+  const [checkins, activeUsersList] = await Promise.all([
     prisma.weeklyCheckin.findMany({
       where: { weekStart: week },
       include: { user: true },
       orderBy: { createdAt: "desc" },
     }),
-    prisma.user.count({ where: { active: true } }),
+    prisma.user.findMany({
+      where: { active: true },
+      select: { id: true, name: true, email: true },
+      orderBy: { name: "asc" },
+    }),
   ]);
 
+  const activeUsers = activeUsersList.length;
   const submittedUserIds = new Set(checkins.map((c) => c.userId));
-  const missing = activeUsers - submittedUserIds.size;
+  const pendingUsers = activeUsersList.filter((u) => !submittedUserIds.has(u.id));
+  const missing = pendingUsers.length;
   const blockedCount = checkins.filter(
     (c) => c.whatBlocked && c.whatBlocked.trim().length > 0
   ).length;
@@ -170,6 +176,33 @@ export default async function AdminCheckinsPage({
             </article>
           ))}
         </div>
+      )}
+
+      {/* Who hasn't submitted yet */}
+      {pendingUsers.length > 0 && (
+        <section className="mt-8">
+          <h2 className="font-display text-sm uppercase tracking-wider font-semibold text-ink-faint mb-3">
+            Not submitted yet ({pendingUsers.length})
+          </h2>
+          <div className="rounded-2xl bg-white border border-border shadow-soft p-4 flex flex-wrap gap-2">
+            {pendingUsers.map((u) => (
+              <span
+                key={u.id}
+                className="inline-flex items-center gap-2 rounded-full bg-muted/60 border border-border px-3 py-1.5 text-xs font-semibold text-ink-soft"
+                title={u.email}
+              >
+                <span className="w-5 h-5 rounded-full bg-brand-50 text-brand-600 grid place-items-center text-[10px] font-bold">
+                  {(u.name ?? u.email).slice(0, 1).toUpperCase()}
+                </span>
+                {u.name ?? u.email}
+              </span>
+            ))}
+          </div>
+          <p className="text-xs text-ink-faint mt-2">
+            Employees see the check-in nudge on their dashboard from Wednesday,
+            and can submit anytime from the Check-in tab in their top nav.
+          </p>
+        </section>
       )}
     </main>
   );
