@@ -9,6 +9,7 @@ import { computeTrajectory, ensureDefaultCycle, TIER_META } from "@/lib/trajecto
 import { OnboardingTour, type TourStep } from "@/components/OnboardingTour";
 import { Logo } from "@/components/Logo";
 import { UserMenu } from "@/components/UserMenu";
+import { JoinMeetingButton } from "@/components/JoinMeetingButton";
 import {
   checkinUrgency,
   computeCheckinStreak,
@@ -349,15 +350,13 @@ export default async function Dashboard() {
                 <p className="text-sm text-white/85 mt-1">{formatIst(nextLive.startAt)}</p>
               </div>
               {nextLive.joinUrl && (
-                <a
-                  href={nextLive.joinUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <JoinMeetingButton
+                  joinUrl={nextLive.joinUrl}
                   className="relative shrink-0 inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-white text-brand-600 font-bold shadow-lift hover:bg-white/95 transition"
                 >
                   {nextLiveIsLive ? "Join now" : "Join"}
                   <ExternalLink className="w-4 h-4" />
-                </a>
+                </JoinMeetingButton>
               )}
             </div>
 
@@ -373,15 +372,13 @@ export default async function Dashboard() {
                       <p className="text-xs text-ink-mute">{formatIst(s.startAt)}</p>
                     </div>
                     {s.joinUrl && (
-                      <a
-                        href={s.joinUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <JoinMeetingButton
+                        joinUrl={s.joinUrl}
                         className="shrink-0 text-xs font-bold text-brand-600 hover:text-brand-700 inline-flex items-center gap-1.5"
                       >
                         Join
                         <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
+                      </JoinMeetingButton>
                     )}
                   </div>
                 ))}

@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { scheduleLiveSession, cancelLiveSession, ingestRecording } from "@/lib/live";
 import { istLocalInputValue, formatIst } from "@/lib/live-format";
+import { JoinMeetingButton } from "@/components/JoinMeetingButton";
 import ScheduleLiveForm from "./ScheduleLiveForm";
 
 export const dynamic = "force-dynamic";
@@ -271,15 +272,13 @@ export default async function AdminLivePage({
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   {s.joinUrl && (
-                    <a
-                      href={s.joinUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <JoinMeetingButton
+                      joinUrl={s.joinUrl}
                       className="text-sm px-3.5 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white font-semibold inline-flex items-center gap-1.5 transition"
                     >
                       Join
                       <ExternalLink className="w-3.5 h-3.5" />
-                    </a>
+                    </JoinMeetingButton>
                   )}
                   <form action={cancelSession}>
                     <input type="hidden" name="id" value={s.id} />
