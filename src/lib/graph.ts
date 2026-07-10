@@ -178,6 +178,27 @@ async function listChildrenByPath(
 }
 
 /**
+ * List the names of the immediate subfolders of a drive path (e.g. the course
+ * folders under the L&D root). Used to offer existing folders as choices when
+ * scheduling a live session. Best-effort — returns [] on any failure.
+ */
+export async function listSubfolderNames(
+  driveId: string,
+  parentPath: string,
+  token: string
+): Promise<string[]> {
+  try {
+    const children = await listChildrenByPath(driveId, parentPath, token);
+    return children
+      .filter((c) => c.folder)
+      .map((c) => c.name)
+      .sort((a, b) => a.localeCompare(b));
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Recursively list every video file under `folderId`.
  * Each returned item carries the name of its immediate parent folder
  * (so the sync layer can group videos into Modules) and the full path

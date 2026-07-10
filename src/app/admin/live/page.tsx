@@ -22,6 +22,11 @@ import {
   confirmSessionEnded,
 } from "@/lib/live";
 import { istLocalInputValue, formatIst } from "@/lib/live-format";
+import {
+  getAppOnlyToken,
+  getUserGraphToken,
+  listSubfolderNames,
+} from "@/lib/graph";
 import { JoinMeetingButton } from "@/components/JoinMeetingButton";
 import ScheduleLiveForm from "./ScheduleLiveForm";
 
@@ -194,6 +199,20 @@ export default async function AdminLivePage({
   const organizers = users.filter((u) => canOrganize.has(u.id));
   const currentUserId = session?.user?.id ?? "";
 
+  // Existing course folders under the L&D root, offered as dropdown choices.
+  // Best-effort: an empty list just means the form falls back to free text.
+  let existingFolders: string[] = [];
+  const driveId = process.env.GRAPH_DRIVE_ID;
+  const rootPath = process.env.GRAPH_VIDEOS_FOLDER_PATH;
+  if (driveId && rootPath) {
+    const token =
+      (await getAppOnlyToken().catch(() => null)) ??
+      (currentUserId ? await getUserGraphToken(currentUserId).catch(() => null) : null);
+    if (token) {
+      existingFolders = await listSubfolderNames(driveId, rootPath, token);
+    }
+  }
+
   const nameById = new Map(nameRows.map((u) => [u.id, u.name ?? u.email]));
   const now = Date.now();
 
@@ -304,6 +323,7 @@ export default async function AdminLivePage({
           users={users}
           organizers={organizers}
           currentUserId={currentUserId}
+          existingFolders={existingFolders}
           action={scheduleSession}
           defaultStart={defaultStart}
         />

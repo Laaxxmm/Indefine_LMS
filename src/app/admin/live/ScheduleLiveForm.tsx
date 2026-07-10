@@ -10,10 +10,13 @@ interface UserLite {
   email: string;
 }
 
+const NEW_FOLDER = "__new__";
+
 export default function ScheduleLiveForm({
   users,
   organizers,
   currentUserId,
+  existingFolders,
   action,
   defaultStart,
 }: {
@@ -21,11 +24,18 @@ export default function ScheduleLiveForm({
   /** Users who've signed in to the LMS (have a Microsoft token) — the only valid hosts. */
   organizers: UserLite[];
   currentUserId: string;
+  /** Course folders already present under the L&D root. */
+  existingFolders: string[];
   action: (formData: FormData) => Promise<void>;
   defaultStart: string;
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const allOn = users.length > 0 && selected.size === users.length;
+  // When folders exist, default to picking one; otherwise straight to free text.
+  const [folderChoice, setFolderChoice] = useState<string>(
+    existingFolders.length > 0 ? existingFolders[0] : NEW_FOLDER
+  );
+  const creatingFolder = folderChoice === NEW_FOLDER;
 
   const toggle = (id: string) =>
     setSelected((s) => {
@@ -61,12 +71,33 @@ export default function ScheduleLiveForm({
           <span className="block text-[11px] uppercase tracking-[0.12em] font-extrabold text-ink-mute mb-1.5">
             Course / folder name
           </span>
-          <input
-            name="courseTitle"
-            required
-            placeholder="e.g. GST 2026"
-            className="w-full bg-white border border-border rounded-xl px-3 py-2.5 text-base font-medium focus:outline-none focus:ring-4 focus:ring-brand-500/15 focus:border-brand-500 transition"
-          />
+          {existingFolders.length > 0 && (
+            <select
+              value={folderChoice}
+              onChange={(e) => setFolderChoice(e.target.value)}
+              // The select carries courseTitle when an existing folder is
+              // picked; the text input takes over for a new folder.
+              name={creatingFolder ? undefined : "courseTitle"}
+              className="w-full bg-white border border-border rounded-xl px-3 py-2.5 text-base font-medium focus:outline-none focus:ring-4 focus:ring-brand-500/15 focus:border-brand-500 transition"
+            >
+              {existingFolders.map((f) => (
+                <option key={f} value={f}>
+                  📁 {f}
+                </option>
+              ))}
+              <option value={NEW_FOLDER}>➕ New folder…</option>
+            </select>
+          )}
+          {creatingFolder && (
+            <input
+              name="courseTitle"
+              required
+              placeholder="e.g. GST 2026"
+              className={`w-full bg-white border border-border rounded-xl px-3 py-2.5 text-base font-medium focus:outline-none focus:ring-4 focus:ring-brand-500/15 focus:border-brand-500 transition ${
+                existingFolders.length > 0 ? "mt-2" : ""
+              }`}
+            />
+          )}
           <span className="block text-xs text-ink-faint mt-1">
             The recording is saved to a folder with this name under L&amp;D.
           </span>
