@@ -1,7 +1,8 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { GraduationCap, X } from "lucide-react";
+import { X } from "lucide-react";
+import { LogoMark } from "@/components/Logo";
 
 export const dynamic = "force-dynamic";
 
@@ -22,14 +23,14 @@ export default async function WizardLayout({
       {/* Top bar */}
       <header className="px-6 py-4 flex items-center justify-between border-b border-border bg-white/80 backdrop-blur sticky top-0 z-20">
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-brand-500 to-accent-violet flex items-center justify-center">
-            <GraduationCap className="w-5 h-5 text-white" />
-          </div>
+          <LogoMark size={36} />
           <div>
-            <p className="text-[10px] uppercase tracking-wider text-ink-faint font-bold leading-none">
-              Indefine LMS
+            <p className="font-display text-[15px] font-extrabold leading-tight tracking-[-0.02em]">
+              indefine
             </p>
-            <p className="text-sm font-bold leading-tight mt-0.5">Growth Wizard</p>
+            <p className="text-[10px] text-ink-faint uppercase tracking-[0.16em] font-extrabold leading-none mt-0.5">
+              Growth Wizard
+            </p>
           </div>
         </div>
         <Link
