@@ -19,7 +19,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       authorization: {
         params: {
           scope:
-            "openid profile email offline_access User.Read Files.Read.All Files.ReadWrite.All Calendars.ReadWrite",
+            "openid profile email offline_access User.Read Files.Read.All Files.ReadWrite.All Calendars.ReadWrite OnlineMeetings.ReadWrite",
         },
       },
       // Employees are pre-provisioned by the admin-triggered org sync

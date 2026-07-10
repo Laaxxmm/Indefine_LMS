@@ -1,14 +1,15 @@
 // Live-session orchestration.
 //
-// Scheduling a session does three things as the signed-in admin (organizer):
-//   1. Ensures a folder named after the course/topic exists under the L&D root
-//      (this is where the recording will land and get ingested in Phase 2).
-//   2. Creates a Teams meeting as a calendar event — Graph emails the invite
-//      to every attendee automatically.
-//   3. Persists a LiveSession row linking the two.
+// Scheduling a session, as the signed-in admin (organizer):
+//   1. Ensures a folder named after the course/topic under the L&D root.
+//   2. Creates a Teams meeting as a calendar event — Graph emails the invite.
+//   3. Best-effort switches on automatic cloud recording.
+//   4. Persists a LiveSession row linking it all together.
 //
-// The firm operates in India, so all times are entered/shown in IST. IST is a
-// fixed UTC+05:30 (no DST), so a constant offset is always correct.
+// Ingesting a recording (Phase 2), acting as the organizer via their stored
+// token (works headless in the cron):
+//   find the recording in their OneDrive /Recordings → copy into the course
+//   folder → sync it into the library as a Video → auto-generate its quiz.
 
 import { prisma } from "@/lib/prisma";
 import {
@@ -16,41 +17,16 @@ import {
   createTeamsEvent,
   ensureFolder,
   deleteEvent,
+  resolveOnlineMeetingId,
+  setAutoRecord,
+  listMyRecordings,
+  copyDriveItem,
+  pollCopyStatus,
+  listFolderVideos,
 } from "@/lib/graph";
-
-/** Time-zone name Microsoft Graph recognises for the event payload. */
-export const FIRM_TZ_GRAPH = "India Standard Time";
-const IST_OFFSET_MIN = 5 * 60 + 30;
-
-/** Parse a datetime-local wall-clock string ("YYYY-MM-DDTHH:mm") as IST → UTC Date. */
-export function istLocalToUtc(local: string): Date {
-  return new Date(`${local}:00+05:30`);
-}
-
-/** Format a UTC Date as an IST wall-clock string "YYYY-MM-DDTHH:mm:ss" (Graph payload). */
-export function utcToIstWall(d: Date): string {
-  return new Date(d.getTime() + IST_OFFSET_MIN * 60_000).toISOString().slice(0, 19);
-}
-
-/** datetime-local default value ("YYYY-MM-DDTHH:mm") for a UTC instant, in IST. */
-export function istLocalInputValue(d: Date): string {
-  return utcToIstWall(d).slice(0, 16);
-}
-
-/** Human display, e.g. "Tue, 15 Jul 2026, 3:00 pm IST". */
-export function formatIst(d: Date): string {
-  const s = d.toLocaleString("en-IN", {
-    timeZone: "Asia/Kolkata",
-    weekday: "short",
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-  return `${s} IST`;
-}
+import { syncOneDriveVideos } from "@/lib/sync";
+import { autoQuizFromVideo } from "@/lib/auto-quiz";
+import { FIRM_TZ_GRAPH, istLocalToUtc, utcToIstWall } from "@/lib/live-format";
 
 export interface ScheduleInput {
   title: string;
@@ -109,7 +85,20 @@ export async function scheduleLiveSession(
     attendeeEmails,
   });
 
-  // 3) Persist — roll back the calendar event if the DB write fails.
+  // 3) Best-effort: resolve the Teams meeting and switch on auto-recording so
+  // the session records with no one pressing Record. Needs OnlineMeetings.ReadWrite;
+  // without that scope this quietly no-ops and the presenter can record manually.
+  let onlineMeetingId: string | null = null;
+  if (event.joinUrl) {
+    try {
+      onlineMeetingId = await resolveOnlineMeetingId(token, event.joinUrl);
+      if (onlineMeetingId) await setAutoRecord(token, onlineMeetingId);
+    } catch {
+      onlineMeetingId = null;
+    }
+  }
+
+  // 4) Persist — roll back the calendar event if the DB write fails.
   try {
     return await prisma.liveSession.create({
       data: {
@@ -121,6 +110,7 @@ export async function scheduleLiveSession(
         endAt,
         attendeeIds: input.attendeeUserIds,
         graphEventId: event.eventId,
+        onlineMeetingId,
         joinUrl: event.joinUrl,
         targetFolderId,
         status: "SCHEDULED",
@@ -148,6 +138,115 @@ export async function cancelLiveSession(
   });
 }
 
+// -------------------- Recording ingestion (Phase 2) --------------------
+
+export interface IngestResult {
+  status: "ingested" | "pending" | "error";
+  videoId?: string;
+  message?: string;
+}
+
+/**
+ * Bring a finished session's Teams recording into the library. Idempotent and
+ * safe to re-run: returns "pending" while the recording isn't available yet or
+ * the copy is still in flight, so the cron can simply try again next tick.
+ */
+export async function ingestRecording(sessionId: string): Promise<IngestResult> {
+  const s = await prisma.liveSession.findUnique({ where: { id: sessionId } });
+  if (!s) return { status: "error", message: "Session not found." };
+  if (s.recordedVideoId) return { status: "ingested", videoId: s.recordedVideoId };
+
+  const driveId = process.env.GRAPH_DRIVE_ID;
+  if (!driveId || !s.targetFolderId) {
+    return { status: "error", message: "Drive / target folder not configured." };
+  }
+
+  const token = await getUserGraphToken(s.scheduledById);
+  if (!token) {
+    return {
+      status: "error",
+      message: "Organizer's Microsoft token unavailable — they need to sign in.",
+    };
+  }
+
+  // Has the copied recording already landed in the course folder?
+  let newItemId: string | null = null;
+  const inTarget = await listFolderVideos(driveId, s.targetFolderId, token);
+  if (inTarget.length > 0) {
+    newItemId = inTarget[0].id;
+  } else if (s.recordingItemId) {
+    // Copy was kicked off on a prior run but hasn't landed yet — wait, don't re-copy.
+    return { status: "pending", message: "Recording copy still in progress." };
+  } else {
+    // Find the source recording in the organizer's OneDrive /Recordings.
+    const recs = await listMyRecordings(token);
+    const floor = s.startAt.getTime() - 10 * 60 * 1000; // 10-min grace pre-start
+    const match = recs.find(
+      (r) => new Date(r.createdDateTime).getTime() >= floor
+    );
+    if (!match || !match.driveId) {
+      return { status: "pending", message: "Recording not available yet." };
+    }
+
+    const monitor = await copyDriveItem(
+      token,
+      match.driveId,
+      match.id,
+      driveId,
+      s.targetFolderId,
+      `${sanitizeName(s.title)}.mp4`
+    );
+    // Record that we've started the copy so a retry doesn't duplicate it.
+    await prisma.liveSession.update({
+      where: { id: s.id },
+      data: { recordingItemId: match.id, status: "RECORDING_READY" },
+    });
+    if (monitor) newItemId = await pollCopyStatus(monitor);
+    if (!newItemId) {
+      const landed = await listFolderVideos(driveId, s.targetFolderId, token);
+      if (landed.length > 0) newItemId = landed[0].id;
+    }
+    if (!newItemId) {
+      return { status: "pending", message: "Recording copy in progress." };
+    }
+  }
+
+  // Ingest into the library (idempotent) and find the resulting Video row.
+  await syncOneDriveVideos({ fallbackUserId: s.scheduledById }).catch(() => {});
+  const video = await prisma.video.findFirst({
+    where: { graphItemId: newItemId, graphDriveId: driveId },
+    select: { id: true },
+  });
+  if (!video) return { status: "pending", message: "Waiting for library sync." };
+
+  // Give the lesson a clean title (the file name carries a .mp4 suffix).
+  await prisma.video
+    .update({ where: { id: video.id }, data: { title: s.title } })
+    .catch(() => {});
+
+  await prisma.liveSession.update({
+    where: { id: s.id },
+    data: {
+      recordedVideoId: video.id,
+      recordingItemId: s.recordingItemId ?? newItemId,
+      status: "INGESTED",
+    },
+  });
+
+  // Auto-generate the quiz from the recording (best-effort; runs in background).
+  autoQuizFromVideo(video.id, { fallbackUserId: s.scheduledById }).catch(() => {});
+
+  return { status: "ingested", videoId: video.id };
+}
+
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/** Strip characters SharePoint / OneDrive disallow in file names. */
+function sanitizeName(s: string): string {
+  return (
+    s.replace(/[\\/:*?"<>|]/g, " ").replace(/\s+/g, " ").trim().slice(0, 120) ||
+    "Recording"
+  );
 }

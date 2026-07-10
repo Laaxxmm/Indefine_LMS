@@ -14,7 +14,7 @@ import {
   computeCheckinStreak,
   currentWeekStart,
 } from "@/lib/checkins";
-import { formatIst } from "@/lib/live";
+import { formatIst } from "@/lib/live-format";
 import {
   Flame,
   Sparkles,
@@ -156,18 +156,22 @@ export default async function Dashboard() {
 
   const reportCount = await prisma.user.count({ where: { managerId: userId, active: true } });
 
-  // Next in-app Teams session this user is invited to.
+  // In-app Teams sessions this user is invited to (live or upcoming).
   const liveSessions = await prisma.liveSession.findMany({
     where: { endAt: { gte: new Date() }, status: { not: "CANCELLED" } },
     orderBy: { startAt: "asc" },
-    take: 15,
+    take: 25,
   });
-  const myNextLive =
-    liveSessions.find(
-      (s) =>
-        Array.isArray(s.attendeeIds) &&
-        (s.attendeeIds as string[]).includes(userId)
-    ) ?? null;
+  const myLive = liveSessions.filter(
+    (s) =>
+      Array.isArray(s.attendeeIds) &&
+      (s.attendeeIds as string[]).includes(userId)
+  );
+  const nextLive = myLive[0] ?? null;
+  const nextLiveIsLive = nextLive
+    ? nextLive.startAt.getTime() <= Date.now() &&
+      nextLive.endAt.getTime() >= Date.now()
+    : false;
 
   const me = leaderboard.find((r) => r.userId === userId);
   const myRank = me ? leaderboard.findIndex((r) => r.userId === userId) + 1 : null;
@@ -315,37 +319,73 @@ export default async function Dashboard() {
           </div>
         </div>
 
-        {/* Upcoming live session (Teams) */}
-        {myNextLive && (
-          <div
-            className="rounded-[22px] p-[22px] sm:px-6 flex flex-col sm:flex-row sm:items-center gap-4 text-white relative overflow-hidden"
-            style={{ background: "linear-gradient(135deg,#5B4BE6,#8B5CF6 55%,#EC4899)" }}
-          >
-            <div className="absolute right-[-20px] top-[-24px] text-[120px] opacity-[0.12] select-none pointer-events-none">
-              📡
-            </div>
-            <div className="relative shrink-0 w-12 h-12 rounded-2xl bg-white/20 grid place-items-center">
-              <Radio className="w-6 h-6" />
-            </div>
-            <div className="relative flex-1 min-w-0">
-              <div className="text-[11px] font-extrabold tracking-[0.1em] text-white/80">
-                LIVE SESSION · TEAMS
+        {/* Live & upcoming sessions (Teams) */}
+        {nextLive && (
+          <div className="flex flex-col gap-3">
+            <div
+              className="rounded-[22px] p-[22px] sm:px-6 flex flex-col sm:flex-row sm:items-center gap-4 text-white relative overflow-hidden"
+              style={{ background: "linear-gradient(135deg,#5B4BE6,#8B5CF6 55%,#EC4899)" }}
+            >
+              <div className="absolute right-[-20px] top-[-24px] text-[120px] opacity-[0.12] select-none pointer-events-none">
+                📡
               </div>
-              <h3 className="font-display text-xl font-extrabold leading-tight mt-0.5 truncate">
-                {myNextLive.title}
-              </h3>
-              <p className="text-sm text-white/85 mt-1">{formatIst(myNextLive.startAt)}</p>
+              <div className="relative shrink-0 w-12 h-12 rounded-2xl bg-white/20 grid place-items-center">
+                <Radio className="w-6 h-6" />
+              </div>
+              <div className="relative flex-1 min-w-0">
+                <div className="text-[11px] font-extrabold tracking-[0.1em] text-white/80 flex items-center gap-1.5">
+                  {nextLiveIsLive ? (
+                    <>
+                      <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                      LIVE NOW · TEAMS
+                    </>
+                  ) : (
+                    "LIVE SESSION · TEAMS"
+                  )}
+                </div>
+                <h3 className="font-display text-xl font-extrabold leading-tight mt-0.5 truncate">
+                  {nextLive.title}
+                </h3>
+                <p className="text-sm text-white/85 mt-1">{formatIst(nextLive.startAt)}</p>
+              </div>
+              {nextLive.joinUrl && (
+                <a
+                  href={nextLive.joinUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="relative shrink-0 inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-white text-brand-600 font-bold shadow-lift hover:bg-white/95 transition"
+                >
+                  {nextLiveIsLive ? "Join now" : "Join"}
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+              )}
             </div>
-            {myNextLive.joinUrl && (
-              <a
-                href={myNextLive.joinUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="relative shrink-0 inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-white text-brand-600 font-bold shadow-lift hover:bg-white/95 transition"
-              >
-                Join
-                <ExternalLink className="w-4 h-4" />
-              </a>
+
+            {myLive.length > 1 && (
+              <div className="bg-card border border-border rounded-[18px] divide-y divide-border overflow-hidden">
+                {myLive.slice(1).map((s) => (
+                  <div key={s.id} className="flex items-center gap-3 px-4 py-3">
+                    <div className="w-9 h-9 rounded-xl bg-brand-50 text-brand-600 grid place-items-center shrink-0">
+                      <Radio className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm truncate">{s.title}</p>
+                      <p className="text-xs text-ink-mute">{formatIst(s.startAt)}</p>
+                    </div>
+                    {s.joinUrl && (
+                      <a
+                        href={s.joinUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="shrink-0 text-xs font-bold text-brand-600 hover:text-brand-700 inline-flex items-center gap-1.5"
+                      >
+                        Join
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         )}

@@ -89,7 +89,7 @@ export async function getUserGraphToken(userId: string): Promise<string | null> 
       grant_type: "refresh_token",
       refresh_token: account.refresh_token,
       scope:
-        "openid profile email offline_access User.Read Files.Read.All Files.ReadWrite.All Calendars.ReadWrite",
+        "openid profile email offline_access User.Read Files.Read.All Files.ReadWrite.All Calendars.ReadWrite OnlineMeetings.ReadWrite",
     }),
   });
   if (!res.ok) {
@@ -428,4 +428,130 @@ export async function ensureFolder(
   }
   const created = (await createRes.json()) as { id: string };
   return created.id;
+}
+
+/**
+ * Resolve the Teams onlineMeeting id for a join URL, in the signed-in user's
+ * (/me) context. Requires OnlineMeetings.Read(Write).
+ */
+export async function resolveOnlineMeetingId(
+  token: string,
+  joinWebUrl: string
+): Promise<string | null> {
+  const filter = `JoinWebUrl eq '${joinWebUrl}'`;
+  const res = await fetch(
+    `${GRAPH}/me/onlineMeetings?$filter=${encodeURIComponent(filter)}`,
+    { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }
+  );
+  if (!res.ok) return null;
+  const json = (await res.json()) as { value?: { id: string }[] };
+  return json.value?.[0]?.id ?? null;
+}
+
+/** Turn on automatic cloud recording for a meeting. Best-effort — returns ok. */
+export async function setAutoRecord(
+  token: string,
+  meetingId: string
+): Promise<boolean> {
+  const res = await fetch(`${GRAPH}/me/onlineMeetings/${meetingId}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ recordAutomatically: true }),
+  });
+  return res.ok;
+}
+
+export interface RecordingCandidate {
+  id: string;
+  name: string;
+  driveId: string;
+  createdDateTime: string;
+}
+
+/**
+ * List video files in the signed-in user's OneDrive /Recordings folder — where
+ * Teams saves cloud recordings of non-channel meetings. Newest first.
+ */
+export async function listMyRecordings(
+  token: string
+): Promise<RecordingCandidate[]> {
+  const res = await fetch(
+    `${GRAPH}/me/drive/root:/Recordings:/children?$select=id,name,file,createdDateTime,parentReference&$top=100&$orderby=createdDateTime desc`,
+    { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }
+  );
+  if (!res.ok) return [];
+  const json = (await res.json()) as {
+    value?: {
+      id: string;
+      name: string;
+      createdDateTime: string;
+      file?: { mimeType?: string };
+      parentReference?: { driveId?: string };
+    }[];
+  };
+  return (json.value ?? [])
+    .filter((i) => i.file?.mimeType?.startsWith("video/"))
+    .map((i) => ({
+      id: i.id,
+      name: i.name,
+      driveId: i.parentReference?.driveId ?? "",
+      createdDateTime: i.createdDateTime,
+    }));
+}
+
+/**
+ * Copy a drive item into a folder (possibly on another drive within the tenant).
+ * Graph runs this asynchronously — returns the monitor URL to poll, or null.
+ */
+export async function copyDriveItem(
+  token: string,
+  srcDriveId: string,
+  itemId: string,
+  destDriveId: string,
+  destFolderId: string,
+  newName?: string
+): Promise<string | null> {
+  const res = await fetch(
+    `${GRAPH}/drives/${srcDriveId}/items/${itemId}/copy`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        parentReference: { driveId: destDriveId, id: destFolderId },
+        ...(newName ? { name: newName } : {}),
+      }),
+    }
+  );
+  if (res.status === 202 || res.ok) return res.headers.get("location");
+  return null;
+}
+
+/**
+ * Poll a copy monitor URL until the async copy finishes; returns the new item
+ * id, or null if it fails / doesn't complete within the budget.
+ */
+export async function pollCopyStatus(
+  monitorUrl: string,
+  maxTries = 20,
+  delayMs = 3000
+): Promise<string | null> {
+  for (let i = 0; i < maxTries; i++) {
+    const res = await fetch(monitorUrl, { cache: "no-store" });
+    if (res.ok) {
+      const json = (await res.json()) as {
+        status?: string;
+        resourceId?: string;
+      };
+      if (json.status === "completed" && json.resourceId) return json.resourceId;
+      if (json.status === "failed") return null;
+    }
+    await new Promise((r) => setTimeout(r, delayMs));
+  }
+  return null;
 }

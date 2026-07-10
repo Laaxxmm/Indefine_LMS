@@ -11,13 +11,11 @@ import {
   Users as UsersIcon,
   CalendarClock,
   Info,
+  PlayCircle,
+  Download,
 } from "lucide-react";
-import {
-  scheduleLiveSession,
-  cancelLiveSession,
-  istLocalInputValue,
-  formatIst,
-} from "@/lib/live";
+import { scheduleLiveSession, cancelLiveSession, ingestRecording } from "@/lib/live";
+import { istLocalInputValue, formatIst } from "@/lib/live-format";
 import ScheduleLiveForm from "./ScheduleLiveForm";
 
 export const dynamic = "force-dynamic";
@@ -79,6 +77,20 @@ async function cancelSession(formData: FormData) {
   revalidatePath("/dashboard");
 }
 
+async function pullRecording(formData: FormData) {
+  "use server";
+  await requireAdmin();
+  const id = String(formData.get("id"));
+  const result = await ingestRecording(id);
+  revalidatePath("/admin/live");
+  revalidatePath("/dashboard");
+  const q =
+    result.status === "ingested"
+      ? "pulled=1"
+      : `pullinfo=${encodeURIComponent(result.message ?? result.status)}`;
+  redirect(`/admin/live?${q}`);
+}
+
 const STATUS_META: Record<string, { label: string; cls: string }> = {
   SCHEDULED: { label: "Scheduled", cls: "bg-brand-50 text-brand-700 border-brand-200" },
   LIVE: { label: "Live now", cls: "bg-rose-50 text-rose-700 border-rose-200" },
@@ -97,6 +109,8 @@ export default async function AdminLivePage({
   const sp = await searchParams;
   const scheduled = sp.scheduled === "1";
   const error = sp.error;
+  const pulled = sp.pulled === "1";
+  const pullinfo = sp.pullinfo;
 
   const [users, nameRows, sessions] = await Promise.all([
     prisma.user.findMany({
@@ -153,6 +167,23 @@ export default async function AdminLivePage({
             <p className="font-semibold text-rose-700">Couldn&apos;t schedule the session</p>
             <p className="text-sm text-rose-700/80 mt-0.5 break-words">{error}</p>
           </div>
+        </div>
+      )}
+      {pulled && (
+        <div className="mb-6 rounded-xl bg-emerald-50 border border-emerald-200 p-4 flex items-start gap-3">
+          <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+          <p className="text-sm font-semibold text-emerald-700">
+            Recording pulled in — it&apos;s now a lesson, and its quiz is generating
+            in the background.
+          </p>
+        </div>
+      )}
+      {pullinfo && (
+        <div className="mb-6 rounded-xl bg-amber-50 border border-amber-200 p-4 flex items-start gap-3">
+          <Info className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <p className="text-sm font-semibold text-amber-700 break-words">
+            {pullinfo}
+          </p>
         </div>
       )}
 
@@ -290,6 +321,23 @@ export default async function AdminLivePage({
                       {formatIst(s.startAt)} · by {nameById.get(s.scheduledById) ?? "—"} · 📁 {s.courseTitle}
                     </p>
                   </div>
+                  {s.recordedVideoId ? (
+                    <a
+                      href={`/video/${s.recordedVideoId}`}
+                      className="shrink-0 text-xs px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold inline-flex items-center gap-1.5 hover:bg-emerald-100 transition"
+                    >
+                      <PlayCircle className="w-3.5 h-3.5" />
+                      Recording
+                    </a>
+                  ) : s.status !== "CANCELLED" ? (
+                    <form action={pullRecording} className="shrink-0">
+                      <input type="hidden" name="id" value={s.id} />
+                      <button className="text-xs px-3 py-1.5 rounded-lg bg-white border border-border hover:bg-muted text-ink-soft font-semibold inline-flex items-center gap-1.5 transition">
+                        <Download className="w-3.5 h-3.5" />
+                        Pull recording
+                      </button>
+                    </form>
+                  ) : null}
                 </div>
               );
             })}
