@@ -448,8 +448,12 @@ export async function resolveOnlineMeetingId(
   return json.value?.[0]?.id ?? null;
 }
 
-/** Turn on automatic cloud recording for a meeting. Best-effort — returns ok. */
-export async function setAutoRecord(
+/**
+ * Apply our meeting defaults: automatic cloud recording, and organizer-only
+ * presenter — the scheduler is the host; everyone else joins as an attendee
+ * (no recording/sharing/setting changes). Best-effort — returns ok.
+ */
+export async function applyMeetingSettings(
   token: string,
   meetingId: string
 ): Promise<boolean> {
@@ -459,7 +463,10 @@ export async function setAutoRecord(
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ recordAutomatically: true }),
+    body: JSON.stringify({
+      recordAutomatically: true,
+      allowedPresenters: "organizer",
+    }),
   });
   return res.ok;
 }

@@ -18,7 +18,7 @@ import {
   ensureFolder,
   deleteEvent,
   resolveOnlineMeetingId,
-  setAutoRecord,
+  applyMeetingSettings,
   listMyRecordings,
   copyDriveItem,
   pollCopyStatus,
@@ -86,14 +86,15 @@ export async function scheduleLiveSession(
     attendeeEmails,
   });
 
-  // 3) Best-effort: resolve the Teams meeting and switch on auto-recording so
-  // the session records with no one pressing Record. Needs OnlineMeetings.ReadWrite;
-  // without that scope this quietly no-ops and the presenter can record manually.
+  // 3) Best-effort: resolve the Teams meeting and apply our defaults —
+  // auto-recording + organizer-only presenter (scheduler is the host, everyone
+  // else joins as attendee). Needs OnlineMeetings.ReadWrite; without that
+  // scope this quietly no-ops and Teams defaults apply.
   let onlineMeetingId: string | null = null;
   if (event.joinUrl) {
     try {
       onlineMeetingId = await resolveOnlineMeetingId(token, event.joinUrl);
-      if (onlineMeetingId) await setAutoRecord(token, onlineMeetingId);
+      if (onlineMeetingId) await applyMeetingSettings(token, onlineMeetingId);
     } catch {
       onlineMeetingId = null;
     }
