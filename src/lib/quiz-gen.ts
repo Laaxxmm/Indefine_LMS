@@ -157,7 +157,9 @@ Target: ${args.count} questions. Return JSON only.`;
 
 // Normalise smart punctuation that models love to "tidy up" when copying, so a
 // genuinely-grounded quote isn't dropped over a curly vs straight quote.
-function normalise(s: string): string {
+// Exported for the transcript-distillation pass, which applies the same
+// verbatim-grounding rule to its key points.
+export function normalise(s: string): string {
   return s
     .replace(/[‘’‚‛]/g, "'")
     .replace(/[“”„‟]/g, '"')
@@ -173,6 +175,60 @@ function isQuoteGrounded(quote: string, normalisedSource: string): boolean {
   const n = normalise(quote);
   if (n.length < 8) return false;
   return normalisedSource.includes(n);
+}
+
+// -------- Repetition guardrail (near-duplicates, not just exact matches) ----
+//
+// Exact-text dedup misses "What is X?" vs "X refers to what?". Two checks:
+//   1. Content-word Jaccard similarity between question texts ≥ 0.65
+//   2. Same correct answer AND same source quote — the identical fact asked
+//      twice with different wording.
+
+const STOP_WORDS = new Set([
+  "the", "a", "an", "of", "in", "on", "to", "is", "are", "was", "were",
+  "what", "which", "who", "when", "where", "how", "why", "does", "do", "did",
+  "for", "and", "or", "not", "that", "this", "these", "those", "it", "its",
+  "by", "as", "with", "from", "following", "according", "per", "under",
+  "true", "correct", "regarding", "about", "mentioned", "stated", "session",
+  "source", "text", "video",
+]);
+
+function contentWords(s: string): Set<string> {
+  return new Set(
+    normalise(s)
+      .replace(/[^a-z0-9 ]/g, " ")
+      .split(/\s+/)
+      .filter((w) => w.length > 2 && !STOP_WORDS.has(w))
+  );
+}
+
+function jaccard(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let inter = 0;
+  for (const w of a) if (b.has(w)) inter++;
+  return inter / (a.size + b.size - inter);
+}
+
+const NEAR_DUP_THRESHOLD = 0.65;
+
+interface DupeKey {
+  words: Set<string>;
+  factKey: string; // correct answer + source quote, normalised
+}
+
+function factKeyOf(q: DraftQuestion): string {
+  const correct = q.options.find((o) => o.isCorrect)?.text ?? "";
+  return `${normalise(correct)}|${normalise(q.sourceQuote)}`;
+}
+
+function isRepetitive(candidate: DraftQuestion, seen: DupeKey[]): boolean {
+  const words = contentWords(candidate.text);
+  const factKey = factKeyOf(candidate);
+  for (const s of seen) {
+    if (s.factKey === factKey) return true;
+    if (jaccard(words, s.words) >= NEAR_DUP_THRESHOLD) return true;
+  }
+  return false;
 }
 
 function optionsAreClean(opts: DraftQuestion["options"]): boolean {
@@ -357,6 +413,7 @@ export async function generateQuiz(input: GenerateInput): Promise<GenerateResult
 
   const collected: DraftQuestion[] = [];
   const seen = new Set<string>(); // normalised question text → dedupe across batches
+  const dupeKeys: DupeKey[] = []; // near-duplicate fingerprints of kept questions
   let totalDropped = 0;
   let dryStreak = 0; // consecutive batches that added nothing new
   let lastError: string | null = null;
@@ -390,7 +447,13 @@ export async function generateQuiz(input: GenerateInput): Promise<GenerateResult
     for (const q of res.questions) {
       const key = normalise(q.text);
       if (seen.has(key)) continue;
+      if (isRepetitive(q, dupeKeys)) {
+        // Same fact or near-identical wording as a question we already kept.
+        totalDropped++;
+        continue;
+      }
       seen.add(key);
+      dupeKeys.push({ words: contentWords(q.text), factKey: factKeyOf(q) });
       collected.push(q);
       added++;
       if (collected.length >= target) break;

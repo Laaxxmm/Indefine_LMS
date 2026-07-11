@@ -9,10 +9,14 @@
 import { prisma } from "@/lib/prisma";
 import { getAppOnlyToken, getUserGraphToken, getStreamUrl } from "@/lib/graph";
 import { transcribeVideo } from "@/lib/transcribe";
-import { generateQuiz } from "@/lib/quiz-gen";
+import { generateQuiz, type Difficulty } from "@/lib/quiz-gen";
+import { distillTranscript } from "@/lib/distill";
 import { getQuizDefaults } from "@/lib/settings";
 
 const MAX_TRANSCRIPT_CHARS = 28_000; // stay under generateQuiz's source limit
+// Transcripts longer than this go through the distillation pass first — raw
+// ASR text this size is noisy and would be truncated anyway.
+const DISTILL_THRESHOLD_CHARS = 6_000;
 
 export type AutoQuizResult = {
   ok: boolean;
@@ -27,7 +31,12 @@ export type AutoQuizResult = {
 
 export async function autoQuizFromVideo(
   videoId: string,
-  opts: { fallbackUserId?: string; noVideoFallback?: boolean } = {}
+  opts: {
+    fallbackUserId?: string;
+    noVideoFallback?: boolean;
+    /** Question difficulty — live-session quizzes pass HARD. Default MEDIUM. */
+    difficulty?: Difficulty;
+  } = {}
 ): Promise<AutoQuizResult> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -93,13 +102,30 @@ export async function autoQuizFromVideo(
     return { ok: false, videoId, error: "Transcript too short to generate a grounded quiz." };
   }
 
-  // 3. Generate a grounded quiz from the transcript.
+  // 3. Long/raw transcripts: distill first. The distillation pass reads the
+  // FULL transcript (direct generation truncates at ~28k chars) and produces
+  // clean, transcript-verified key points — deeper questions, less noise,
+  // and one key point per distinct fact keeps repetition down. Falls back to
+  // the raw (truncated) transcript if distillation fails.
+  let sourceText = transcript.slice(0, MAX_TRANSCRIPT_CHARS);
+  if (transcript.length > DISTILL_THRESHOLD_CHARS) {
+    const distilled = await distillTranscript({
+      title: video.title,
+      transcript,
+      apiKey,
+    });
+    if (distilled.ok && distilled.notes.length >= 200) {
+      sourceText = distilled.notes;
+    }
+  }
+
+  // 4. Generate a grounded quiz from the (distilled) source.
   const result = await generateQuiz({
     videoTitle: video.title,
     videoDescription: video.description,
-    sourceText: transcript.slice(0, MAX_TRANSCRIPT_CHARS),
+    sourceText,
     count: 20,
-    difficulty: "MEDIUM",
+    difficulty: opts.difficulty ?? "MEDIUM",
   });
   if (!result.ok) return { ok: false, videoId, error: result.error, transcriptChars: transcript.length };
 
