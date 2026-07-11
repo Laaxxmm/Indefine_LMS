@@ -39,6 +39,20 @@ export default async function VideoPage({
   const userId = session.user.id;
   const { id } = await params;
 
+  // Employees can only open videos allotted to them (the video itself, or its
+  // module, is assigned) — mirrors the dashboard's visibility rule so a
+  // guessed URL doesn't bypass it. Admins are exempt.
+  if (session.user.role !== "ADMIN") {
+    const allotted = await prisma.assignment.findFirst({
+      where: {
+        userId,
+        OR: [{ videoId: id }, { module: { videos: { some: { id } } } }],
+      },
+      select: { id: true },
+    });
+    if (!allotted) redirect("/dashboard");
+  }
+
   const video = await prisma.video.findUnique({
     where: { id },
     include: {

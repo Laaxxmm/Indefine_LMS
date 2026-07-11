@@ -360,6 +360,32 @@ export async function ingestRecording(sessionId: string): Promise<IngestResult> 
     },
   });
 
+  // Allot the lesson to everyone who was invited. Course visibility is
+  // assignment-based, so this is what makes the recording (and its quiz)
+  // appear on the attendees' dashboards. 0 points: watching it already earns
+  // the normal video + quiz KRA points, no double credit.
+  const invitees = Array.isArray(s.attendeeIds) ? (s.attendeeIds as string[]) : [];
+  if (invitees.length > 0) {
+    const already = await prisma.assignment.findMany({
+      where: { videoId: video.id, userId: { in: invitees } },
+      select: { userId: true },
+    });
+    const have = new Set(already.map((a) => a.userId));
+    const data = invitees
+      .filter((uid) => !have.has(uid))
+      .map((uid) => ({
+        userId: uid,
+        assignedById: s.scheduledById,
+        kind: "VIDEO" as const,
+        videoId: video.id,
+        title: s.title,
+        points: 0,
+      }));
+    if (data.length > 0) {
+      await prisma.assignment.createMany({ data }).catch(() => {});
+    }
+  }
+
   // Generate the quiz from the Teams transcript (cheap) — never from the video.
   ensureTranscriptQuiz(s.id).catch(() => {});
 

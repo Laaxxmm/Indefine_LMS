@@ -119,7 +119,20 @@ export default async function Dashboard() {
         orderBy: [{ status: "asc" }, { dueAt: "asc" }, { createdAt: "desc" }],
       }),
       prisma.module.findMany({
-        where: { course: { published: true } },
+        // Employees see only what's been allotted to them: modules assigned
+        // directly, or modules containing a video assigned to them (live-
+        // session recordings are auto-assigned to their attendees on ingest).
+        // Admins see the whole library.
+        where:
+          role === "ADMIN"
+            ? { course: { published: true } }
+            : {
+                course: { published: true },
+                OR: [
+                  { assignments: { some: { userId } } },
+                  { videos: { some: { assignments: { some: { userId } } } } },
+                ],
+              },
         include: {
           course: true,
           videos: {
@@ -189,7 +202,10 @@ export default async function Dashboard() {
   const totalCompleted = allVideos.filter((v) => v.progresses[0]?.completed).length;
   const overallPct = allVideos.length > 0 ? (totalCompleted / allVideos.length) * 100 : 0;
 
+  // Deadlines shown only for courses the user can actually see.
+  const visibleCourseIds = new Set(modulesWithVideos.map((m) => m.courseId));
   const upcoming = statuses
+    .filter((s) => role === "ADMIN" || visibleCourseIds.has(s.courseId))
     .flatMap((s) =>
       s.deadlines.filter((d) => d.state === "pending").map((d) => ({ ...d, courseTitle: s.courseTitle }))
     )
@@ -540,9 +556,13 @@ export default async function Dashboard() {
           {modulesWithVideos.length === 0 ? (
             <div className="rounded-[20px] bg-card border border-dashed border-border p-12 text-center">
               <div className="text-4xl mb-3">🎬</div>
-              <p className="font-semibold mb-1">No courses yet</p>
+              <p className="font-semibold mb-1">
+                {role === "ADMIN" ? "No courses yet" : "No courses allotted yet"}
+              </p>
               <p className="text-ink-mute text-sm">
-                {role === "ADMIN" ? "Sync your SharePoint folder to import videos." : "Check back soon — your admin is setting things up."}
+                {role === "ADMIN"
+                  ? "Sync your SharePoint folder to import videos."
+                  : "Your admin assigns your training — it'll appear here the moment something is allotted to you."}
               </p>
             </div>
           ) : (
