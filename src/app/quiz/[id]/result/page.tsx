@@ -9,6 +9,11 @@ import {
   ArrowLeft,
   Sparkles,
   PartyPopper,
+  CheckCircle2,
+  XCircle,
+  MinusCircle,
+  ListChecks,
+  Lock,
 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +41,25 @@ export default async function QuizResult({
   const score = Number(sp.score ?? 0);
   const max = Number(sp.max ?? 0);
   const auto = sp.auto === "1";
+
+  // Answer review — the user's latest submitted attempt, graded server-side.
+  // Which questions went wrong is always shown so people know what to revisit;
+  // the correct option is revealed only after a PASS, so retakes (best-score-
+  // wins feeds the KRA) stay a test of understanding rather than memory of an
+  // answer key.
+  const attempt = await prisma.quizAttempt.findFirst({
+    where: { quizId: id, userId: session.user.id, submittedAt: { not: null } },
+    orderBy: { submittedAt: "desc" },
+  });
+  const questions = attempt
+    ? await prisma.question.findMany({
+        where: { quizId: id },
+        orderBy: { order: "asc" },
+        include: { options: { orderBy: { order: "asc" } } },
+      })
+    : [];
+  const answers = (attempt?.answers ?? {}) as Record<string, string>;
+  const revealCorrect = attempt?.passed ?? false;
 
   return (
     <main className="min-h-screen px-6 py-12 max-w-2xl mx-auto flex flex-col justify-center">
@@ -109,6 +133,85 @@ export default async function QuizResult({
             )}
           </div>
         </div>
+
+        {attempt && questions.length > 0 && (
+          <section className="mt-10">
+            <div className="flex items-center justify-between mb-1.5">
+              <h2 className="font-display text-lg font-bold inline-flex items-center gap-2">
+                <ListChecks className="w-5 h-5 text-brand-600" />
+                Review your answers
+              </h2>
+              <span className="text-xs text-ink-faint font-semibold">
+                {questions.filter((q) => q.options.find((o) => o.id === answers[q.id])?.isCorrect).length}
+                /{questions.length} correct
+              </span>
+            </div>
+            {!revealCorrect && (
+              <p className="text-xs text-ink-mute mb-4 inline-flex items-center gap-1.5">
+                <Lock className="w-3.5 h-3.5" />
+                Correct answers unlock once you pass — rewatch the video for the
+                questions marked below, then retake.
+              </p>
+            )}
+            <ol className="space-y-3 mt-2">
+              {questions.map((q, i) => {
+                const picked = q.options.find((o) => o.id === answers[q.id]);
+                const correct = q.options.find((o) => o.isCorrect);
+                const isRight = picked?.isCorrect ?? false;
+                const unanswered = !picked;
+                return (
+                  <li
+                    key={q.id}
+                    className={`rounded-2xl border bg-white shadow-soft p-4 ${
+                      isRight
+                        ? "border-emerald-200"
+                        : unanswered
+                          ? "border-border"
+                          : "border-rose-200"
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      {isRight ? (
+                        <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
+                      ) : unanswered ? (
+                        <MinusCircle className="w-5 h-5 text-ink-faint shrink-0 mt-0.5" />
+                      ) : (
+                        <XCircle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold leading-snug">
+                          {i + 1}. {q.text}
+                        </p>
+                        <p className="text-sm mt-1.5">
+                          <span className="text-ink-faint">Your answer: </span>
+                          <span
+                            className={`font-semibold ${
+                              isRight
+                                ? "text-emerald-700"
+                                : unanswered
+                                  ? "text-ink-faint"
+                                  : "text-rose-700"
+                            }`}
+                          >
+                            {picked ? picked.text : "Not answered"}
+                          </span>
+                        </p>
+                        {revealCorrect && !isRight && correct && (
+                          <p className="text-sm mt-1">
+                            <span className="text-ink-faint">Correct answer: </span>
+                            <span className="font-semibold text-emerald-700">
+                              {correct.text}
+                            </span>
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          </section>
+        )}
 
         <div className="mt-8 flex gap-3 justify-center flex-wrap">
           <Link
