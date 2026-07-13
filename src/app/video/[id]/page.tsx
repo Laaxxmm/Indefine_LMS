@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import VideoPlayer from "./VideoPlayer";
 import {
   ArrowLeft,
+  ArrowRight,
   CheckCircle2,
   Clock,
   GraduationCap,
@@ -206,31 +207,54 @@ export default async function VideoPage({
                     Attempt history ({video.quiz.attempts.length})
                   </p>
                   <div className="space-y-1.5">
-                    {video.quiz.attempts.map((a, i) => (
-                      <div
-                        key={a.id}
-                        className="text-xs flex items-center justify-between bg-muted rounded-lg px-3 py-2"
-                      >
-                        <span className="text-ink-mute">
-                          #{video.quiz!.attempts.length - i} ·{" "}
-                          {a.submittedAt
-                            ? a.submittedAt.toLocaleString()
-                            : "in progress"}
-                        </span>
-                        <span
-                          className={
-                            a.passed
-                              ? "text-emerald-600 font-semibold"
-                              : a.submittedAt
-                                ? "text-amber-600 font-semibold"
-                                : "text-ink-faint"
-                          }
+                    {video.quiz.attempts.map((a, i) => {
+                      const row = (
+                        <>
+                          <span className="text-ink-mute">
+                            #{video.quiz!.attempts.length - i} ·{" "}
+                            {a.submittedAt
+                              ? a.submittedAt.toLocaleString()
+                              : "in progress"}
+                          </span>
+                          <span className="flex items-center gap-2">
+                            <span
+                              className={
+                                a.passed
+                                  ? "text-emerald-600 font-semibold"
+                                  : a.submittedAt
+                                    ? "text-amber-600 font-semibold"
+                                    : "text-ink-faint"
+                              }
+                            >
+                              {a.submittedAt ? `${a.percent.toFixed(0)}%` : "—"}
+                              {a.submittedAt && (a.passed ? " · passed" : " · failed")}
+                            </span>
+                            {a.submittedAt && (
+                              <span className="inline-flex items-center gap-0.5 text-brand-600 font-semibold">
+                                Review
+                                <ArrowRight className="w-3 h-3" />
+                              </span>
+                            )}
+                          </span>
+                        </>
+                      );
+                      return a.submittedAt ? (
+                        <Link
+                          key={a.id}
+                          href={`/quiz/${video.quiz!.id}/result?attempt=${a.id}`}
+                          className="text-xs flex items-center justify-between bg-muted hover:bg-border/60 rounded-lg px-3 py-2 transition"
                         >
-                          {a.submittedAt ? `${a.percent.toFixed(0)}%` : "—"}
-                          {a.submittedAt && (a.passed ? " · passed" : " · failed")}
-                        </span>
-                      </div>
-                    ))}
+                          {row}
+                        </Link>
+                      ) : (
+                        <div
+                          key={a.id}
+                          className="text-xs flex items-center justify-between bg-muted rounded-lg px-3 py-2"
+                        >
+                          {row}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}

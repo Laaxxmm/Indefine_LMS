@@ -36,21 +36,37 @@ export default async function QuizResult({
   });
   if (!quiz) redirect("/dashboard");
 
-  const percent = Number(sp.percent ?? 0);
-  const passed = sp.passed === "true";
-  const score = Number(sp.score ?? 0);
-  const max = Number(sp.max ?? 0);
   const auto = sp.auto === "1";
+  // The post-submit redirect always carries `auto`; a revisit from Attempt
+  // history does not. Used to avoid re-firing confetti on every revisit and to
+  // soften the "just submitted" wording.
+  const isFresh = sp.auto !== undefined;
 
-  // Answer review — the user's latest submitted attempt, graded server-side.
-  // Which questions went wrong is always shown so people know what to revisit;
-  // the correct option is revealed only after a PASS, so retakes (best-score-
-  // wins feeds the KRA) stay a test of understanding rather than memory of an
-  // answer key.
+  // The attempt being reviewed: a specific one when ?attempt=<id> is passed
+  // (from Attempt history), otherwise the user's latest submitted attempt.
+  // Scoped to this user + quiz so nobody can read someone else's answers.
   const attempt = await prisma.quizAttempt.findFirst({
-    where: { quizId: id, userId: session.user.id, submittedAt: { not: null } },
+    where: {
+      quizId: id,
+      userId: session.user.id,
+      submittedAt: { not: null },
+      ...(sp.attempt ? { id: sp.attempt } : {}),
+    },
     orderBy: { submittedAt: "desc" },
   });
+
+  // Score card values come from the attempt itself (authoritative), so the page
+  // stands alone when revisited later; fall back to the post-submit query
+  // params only if the attempt somehow isn't found.
+  const percent = attempt?.percent ?? Number(sp.percent ?? 0);
+  const passed = attempt?.passed ?? sp.passed === "true";
+  const score = attempt?.score ?? Number(sp.score ?? 0);
+  const max = attempt?.maxScore ?? Number(sp.max ?? 0);
+
+  // Answer review. Which questions went wrong is always shown so people know
+  // what to revisit; the correct option is revealed only after a PASS, so
+  // retakes (best-score-wins feeds the KRA) stay a test of understanding
+  // rather than memory of an answer key.
   const questions = attempt
     ? await prisma.question.findMany({
         where: { quizId: id },
@@ -63,7 +79,7 @@ export default async function QuizResult({
 
   return (
     <main className="min-h-screen px-6 py-12 max-w-2xl mx-auto flex flex-col justify-center">
-      <Celebration passed={passed} />
+      <Celebration passed={passed && isFresh} />
 
       <div className="animate-slide-up">
         <div
@@ -100,7 +116,13 @@ export default async function QuizResult({
             )}
 
             <p className="text-xs text-ink-faint uppercase tracking-wider font-semibold mb-2">
-              {auto ? "Time expired — auto-submitted" : "Quiz submitted"}
+              {!isFresh
+                ? attempt?.submittedAt
+                  ? `Attempt from ${attempt.submittedAt.toLocaleDateString()}`
+                  : "Your result"
+                : auto
+                  ? "Time expired — auto-submitted"
+                  : "Quiz submitted"}
             </p>
 
             <h1 className="font-display text-7xl font-extrabold tracking-tight mb-3">

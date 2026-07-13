@@ -58,10 +58,7 @@ export default function QuizPlayer({ quizId }: { quizId: string }) {
         const json = await res.json();
         if (!res.ok) throw new Error(json.error ?? "Submit failed");
         const params = new URLSearchParams({
-          score: String(json.score),
-          max: String(json.maxScore),
-          percent: json.percent.toFixed(2),
-          passed: String(json.passed),
+          attempt: String(json.attemptId),
           auto: auto ? "1" : "0",
         });
         router.replace(`/quiz/${quizId}/result?${params.toString()}`);
