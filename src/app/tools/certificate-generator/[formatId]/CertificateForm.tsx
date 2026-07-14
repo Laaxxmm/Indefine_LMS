@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Download, Plus, Trash2, AlertTriangle, CheckCircle2, Loader2, ShieldCheck } from "lucide-react";
 import type { CertificateTemplate, FieldDef } from "@/lib/certificates/types";
 import { compose, isTotalRow, PlaceholderLeakError, type Block } from "@/lib/certificates/render/compose";
 import { resolveValues, CertificateValidationError } from "@/lib/certificates/render/values";
+import { isSuggestible } from "@/lib/certificates/suggestible";
+import { FieldCombobox, type FieldOption } from "./FieldCombobox";
 
 type Payload = Record<string, unknown>;
 
@@ -51,6 +53,41 @@ export function CertificateForm({ template }: { template: CertificateTemplate })
     setPayload((p) => ({ ...p, [key]: value }));
     setDoneId(null);
   };
+
+  // Firm-wide saved values for the reusable signing fields (pick / add / remove).
+  const [options, setOptions] = useState<Record<string, FieldOption[]>>({});
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/tools/certificate-generator/field-options")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (alive && d?.options) setOptions(d.options); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  const addOption = async (fieldKey: string, value: string) => {
+    setPayload((p) => ({ ...p, [fieldKey]: value }));
+    setOptions((prev) => {
+      const list = prev[fieldKey] ?? [];
+      if (list.some((o) => o.value === value)) return prev;
+      return { ...prev, [fieldKey]: [...list, { id: `tmp-${value}`, value }].sort((a, b) => a.value.localeCompare(b.value)) };
+    });
+    try {
+      const r = await fetch("/api/tools/certificate-generator/field-options", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ fieldKey, value }) });
+      if (r.ok) {
+        const d = await r.json();
+        setOptions((prev) => ({ ...prev, [fieldKey]: (prev[fieldKey] ?? []).map((o) => (o.value === value ? d.option : o)) }));
+      }
+    } catch {}
+  };
+  const deleteOption = (fieldKey: string, id: string) => {
+    setOptions((prev) => ({ ...prev, [fieldKey]: (prev[fieldKey] ?? []).filter((o) => o.id !== id) }));
+    if (!id.startsWith("tmp-")) fetch(`/api/tools/certificate-generator/field-options/${id}`, { method: "DELETE" }).catch(() => {});
+  };
+  const suggestFor = (f: FieldDef) =>
+    isSuggestible(f.key) && f.type === "text"
+      ? { options: options[f.key] ?? [], onAdd: (v: string) => addOption(f.key, v), onDelete: (id: string) => deleteOption(f.key, id) }
+      : undefined;
 
   // Live preview — the SAME walk that produces the DOCX, rendered as React elements.
   // Throws until every required field is filled and no placeholder remains (§0.4).
@@ -146,7 +183,7 @@ export function CertificateForm({ template }: { template: CertificateTemplate })
             <div className="grid sm:grid-cols-2 gap-x-4 gap-y-3.5">
               {inlineFields.map((f) => (
                 <div key={f.key} className={f.type === "textarea" ? "sm:col-span-2" : ""}>
-                  <InlineField field={f} value={payload[f.key]} onChange={(v) => set(f.key, v)} />
+                  <InlineField field={f} value={payload[f.key]} onChange={(v) => set(f.key, v)} suggest={suggestFor(f)} />
                 </div>
               ))}
             </div>
@@ -328,7 +365,7 @@ function TextInput({ label, help, value, onChange, required }: { label: string; 
   );
 }
 
-function InlineField({ field, value, onChange }: { field: FieldDef; value: unknown; onChange: (v: unknown) => void }) {
+function InlineField({ field, value, onChange, suggest }: { field: FieldDef; value: unknown; onChange: (v: unknown) => void; suggest?: { options: FieldOption[]; onAdd: (v: string) => void; onDelete: (id: string) => void } }) {
   const v = (value ?? "") as string;
   switch (field.type) {
     case "textarea":
@@ -411,7 +448,11 @@ function InlineField({ field, value, onChange }: { field: FieldDef; value: unkno
         </FieldShell>
       );
     default: // text
-      return <TextInput label={field.label} help={field.help} value={v} onChange={onChange as (s: string) => void} required={field.required} />;
+      return suggest ? (
+        <FieldCombobox label={field.label} help={field.help} required={field.required} value={v} onChange={onChange as (s: string) => void} options={suggest.options} onAdd={suggest.onAdd} onDelete={suggest.onDelete} />
+      ) : (
+        <TextInput label={field.label} help={field.help} value={v} onChange={onChange as (s: string) => void} required={field.required} />
+      );
   }
 }
 
