@@ -19,6 +19,7 @@ import {
   scheduleLiveSession,
   cancelLiveSession,
   ingestRecording,
+  repullRecording,
   confirmSessionEnded,
 } from "@/lib/live";
 import { istLocalInputValue, formatIst } from "@/lib/live-format";
@@ -126,6 +127,22 @@ async function pullRecording(formData: FormData) {
   await requireAdmin();
   const id = String(formData.get("id"));
   const result = await ingestRecording(id);
+  revalidatePath("/admin/live");
+  revalidatePath("/dashboard");
+  const q =
+    result.status === "ingested"
+      ? "pulled=1"
+      : `pullinfo=${encodeURIComponent(result.message ?? result.status)}`;
+  redirect(`/admin/live?${q}`);
+}
+
+// Re-pull: drop the ingested recording and grab the largest one instead — for
+// when a false-start left a short clip as the published video.
+async function repullRecordingAction(formData: FormData) {
+  "use server";
+  await requireAdmin();
+  const id = String(formData.get("id"));
+  const result = await repullRecording(id);
   revalidatePath("/admin/live");
   revalidatePath("/dashboard");
   const q =
@@ -497,13 +514,25 @@ export default async function AdminLivePage({
                     </p>
                   </div>
                   {s.recordedVideoId ? (
-                    <a
-                      href={`/video/${s.recordedVideoId}`}
-                      className="shrink-0 text-xs px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold inline-flex items-center gap-1.5 hover:bg-emerald-100 transition"
-                    >
-                      <PlayCircle className="w-3.5 h-3.5" />
-                      Recording
-                    </a>
+                    <div className="shrink-0 flex items-center gap-2">
+                      <a
+                        href={`/video/${s.recordedVideoId}`}
+                        className="text-xs px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold inline-flex items-center gap-1.5 hover:bg-emerald-100 transition"
+                      >
+                        <PlayCircle className="w-3.5 h-3.5" />
+                        Recording
+                      </a>
+                      <form action={repullRecordingAction}>
+                        <input type="hidden" name="id" value={s.id} />
+                        <button
+                          className="text-xs px-3 py-1.5 rounded-lg bg-white border border-border hover:bg-muted text-ink-soft font-semibold inline-flex items-center gap-1.5 transition"
+                          title="Wrong/short clip? Re-pull the largest recording (fixes false-start re-records)"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          Re-pull
+                        </button>
+                      </form>
+                    </div>
                   ) : s.status !== "CANCELLED" ? (
                     <form action={pullRecording} className="shrink-0">
                       <input type="hidden" name="id" value={s.id} />

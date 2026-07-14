@@ -27,6 +27,7 @@ import {
   listFolderVideos,
   fetchMeetingTranscript,
   meetingHasEnded,
+  deleteDriveItem,
   type RecordingCandidate,
 } from "@/lib/graph";
 import { syncOneDriveVideos } from "@/lib/sync";
@@ -245,11 +246,15 @@ export async function ingestRecording(sessionId: string): Promise<IngestResult> 
     };
   }
 
-  // Has the copied recording already landed in the course folder?
+  // Has the copied recording already landed in the course folder? Pick the
+  // largest if several are present (e.g. after a false-start re-record).
   let newItemId: string | null = null;
   const inTarget = await listFolderVideos(driveId, s.targetFolderId, token);
   if (inTarget.length > 0) {
-    newItemId = inTarget[0].id;
+    newItemId =
+      inTarget.reduce((best, cur) =>
+        (cur.size ?? 0) > (best.size ?? 0) ? cur : best
+      ).id;
   } else if (s.recordingItemId) {
     // Copy was kicked off on a prior run but hasn't landed yet — wait, don't re-copy.
     return { status: "pending", message: "Recording copy still in progress." };
@@ -460,7 +465,10 @@ export async function ensureTranscriptQuiz(sessionId: string): Promise<void> {
 }
 
 /**
- * Pick the session's recording out of a /Recordings listing (newest first).
+ * Pick the session's recording out of a /Recordings listing. Prefers the
+ * LARGEST file — if someone false-starts recording (stop, then re-record), the
+ * short throwaway clip and the full session both sit in /Recordings; the full
+ * one is always bigger.
  * Time filter: created no earlier than 10 min before the scheduled start.
  * Title filter: Teams names recordings "<subject>-YYYYMMDD_HHMMSS-Meeting
  * Recording.mp4", so the meeting title appears in the file name. Optional for
@@ -477,9 +485,55 @@ function matchRecording(
   const timely = recs.filter(
     (r) => new Date(r.createdDateTime).getTime() >= floor
   );
-  const byTitle = timely.find((r) => normaliseTitle(r.name).includes(titleKey));
-  if (byTitle) return byTitle;
-  return opts.requireTitleMatch ? null : timely[0] ?? null;
+  const titled = timely.filter((r) => normaliseTitle(r.name).includes(titleKey));
+  const pool = titled.length > 0 ? titled : opts.requireTitleMatch ? [] : timely;
+  return largestBySize(pool);
+}
+
+function largestBySize<T extends { size: number }>(items: T[]): T | null {
+  return items.reduce<T | null>(
+    (best, cur) => (best === null || cur.size > best.size ? cur : best),
+    null
+  );
+}
+
+/**
+ * Re-ingest a session's recording, dropping whatever was ingested before. Fixes
+ * the false-start case: the wrong (short) clip was already copied in and
+ * published, so we delete that copied file + its Video row, reset the session,
+ * and run ingest again — which now picks the largest recording. Transcript and
+ * quiz regenerate from Teams automatically.
+ */
+export async function repullRecording(sessionId: string): Promise<IngestResult> {
+  const s = await prisma.liveSession.findUnique({ where: { id: sessionId } });
+  if (!s) return { status: "error", message: "Session not found." };
+
+  if (s.recordedVideoId) {
+    const driveId = process.env.GRAPH_DRIVE_ID;
+    const video = await prisma.video.findUnique({
+      where: { id: s.recordedVideoId },
+      select: { graphDriveId: true, graphItemId: true },
+    });
+    // Remove the wrongly-copied file from the course folder so ingest doesn't
+    // just re-grab it from there instead of re-scanning /Recordings.
+    if (video && driveId) {
+      const token = await getUserGraphToken(s.scheduledById);
+      if (token) {
+        await deleteDriveItem(video.graphDriveId, video.graphItemId, token);
+      }
+    }
+    // Drop the wrong Video (and its auto-assignments); quiz + progress cascade.
+    await prisma.assignment
+      .deleteMany({ where: { videoId: s.recordedVideoId } })
+      .catch(() => {});
+    await prisma.video.delete({ where: { id: s.recordedVideoId } }).catch(() => {});
+    await prisma.liveSession.update({
+      where: { id: s.id },
+      data: { recordedVideoId: null, recordingItemId: null, status: "ENDED" },
+    });
+  }
+
+  return ingestRecording(sessionId);
 }
 
 /** Loose key for comparing a meeting title against a recording file name. */

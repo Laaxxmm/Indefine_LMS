@@ -500,6 +500,7 @@ export interface RecordingCandidate {
   name: string;
   driveId: string;
   createdDateTime: string;
+  size: number;
 }
 
 /**
@@ -513,7 +514,7 @@ async function listRecordingsIn(
   drivePrefix: string // "/me/drive" or "/users/{idOrUpn}/drive"
 ): Promise<RecordingCandidate[]> {
   const res = await fetch(
-    `${GRAPH}${drivePrefix}/root:/Recordings:/children?$select=id,name,file,createdDateTime,parentReference&$top=200`,
+    `${GRAPH}${drivePrefix}/root:/Recordings:/children?$select=id,name,size,file,createdDateTime,parentReference&$top=200`,
     { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }
   );
   if (!res.ok) {
@@ -531,6 +532,7 @@ async function listRecordingsIn(
     value?: {
       id: string;
       name: string;
+      size?: number;
       createdDateTime: string;
       file?: { mimeType?: string };
       parentReference?: { driveId?: string };
@@ -543,8 +545,21 @@ async function listRecordingsIn(
       name: i.name,
       driveId: i.parentReference?.driveId ?? "",
       createdDateTime: i.createdDateTime,
+      size: i.size ?? 0,
     }))
     .sort((a, b) => b.createdDateTime.localeCompare(a.createdDateTime));
+}
+
+/** Delete a drive item (best-effort). Used to drop a wrongly-ingested recording. */
+export async function deleteDriveItem(
+  driveId: string,
+  itemId: string,
+  token: string
+): Promise<void> {
+  await fetch(`${GRAPH}/drives/${driveId}/items/${itemId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  }).catch(() => {});
 }
 
 /** The signed-in user's own /Recordings (delegated token). */
