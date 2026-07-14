@@ -77,6 +77,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (session.user) {
         session.user.id = user.id;
         session.user.role = (user.role as "EMPLOYEE" | "ADMIN") ?? "EMPLOYEE";
+        // `user` here is the full DB row (database session strategy); expose `active`
+        // so the Certification generator's access rule can gate on it (certificates/access.ts).
+        session.user.active = (user as { active?: boolean }).active ?? false;
       }
       return session;
     },

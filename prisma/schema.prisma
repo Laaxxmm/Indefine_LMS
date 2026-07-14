@@ -56,6 +56,7 @@ model User {
   tierAssignments     TierAssignment[]
   attendances         AttendanceRecord[]
   liveSessions        LiveSession[]   @relation("LiveSessionOrganizer")
+  certificateIssues   CertificateIssue[] @relation("CertificateCreator")
 }
 
 enum EmployeeLevel {
@@ -627,4 +628,25 @@ enum LiveSessionStatus {
   RECORDING_READY
   INGESTED
   CANCELLED
+}
+
+// ICAI Certification generator (§5). NO rendered file is stored — only the input
+// payload + pinned template version/hash + client + creator + timestamp, so any past
+// certificate is reproducible against the exact wording that made it.
+model CertificateIssue {
+  id              String   @id @default(cuid())
+  formatId        String        // template id, e.g. "i-ufce"
+  formatTitle     String        // denormalized for history display
+  templateVersion String
+  templateHash    String        // sha256 of locked text at issue time
+  clientName      String        // the entity/client the certificate is issued for
+  payload         Json          // field values — the regenerate-on-demand source
+  acknowledged    Boolean  @default(false) // illustrative-format acknowledgment (§0.8)
+  createdById     String
+  createdBy       User     @relation("CertificateCreator", fields: [createdById], references: [id])
+  createdAt       DateTime @default(now())
+
+  @@index([createdById])
+  @@index([formatId])
+  @@index([createdAt])
 }
