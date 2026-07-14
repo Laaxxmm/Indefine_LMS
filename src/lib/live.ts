@@ -445,12 +445,18 @@ export async function ensureTranscriptQuiz(sessionId: string): Promise<void> {
   if (sourceText.length < 200) return; // transcript not ready yet — retry next tick
 
   // Live-session quizzes are HARD: attendees sat through the session, so the
-  // quiz tests real understanding, not recall of throwaway lines.
-  await autoQuizFromVideo(video.id, {
+  // quiz tests real understanding, not recall of throwaway lines. Log the
+  // reason on failure (the cron retries next tick) instead of black-holing it.
+  const res = await autoQuizFromVideo(video.id, {
     fallbackUserId: s.scheduledById,
     noVideoFallback: true,
     difficulty: "HARD",
   });
+  if (!res.ok) {
+    console.error(
+      `ensureTranscriptQuiz: quiz generation failed for session ${s.id} / video ${video.id}: ${res.error ?? res.skipped}`
+    );
+  }
 }
 
 /**

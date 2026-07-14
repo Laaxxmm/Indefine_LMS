@@ -93,14 +93,15 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Retry transcript-based quiz generation for recently-ingested sessions whose
-  // quiz isn't there yet (the Teams transcript can lag the recording by minutes).
-  const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  // Retry transcript-based quiz generation for ingested sessions whose quiz
+  // isn't there yet. Uses the same week window as ingestion (not 24h) so a
+  // saved transcript that failed generation once keeps getting retried instead
+  // of being stranded. ensureTranscriptQuiz no-ops once a quiz exists.
   const recentlyIngested = await prisma.liveSession.findMany({
     where: {
       status: "INGESTED",
       recordedVideoId: { not: null },
-      endAt: { gte: dayAgo },
+      endAt: { gte: weekAgo },
     },
     select: { id: true },
     take: 20,

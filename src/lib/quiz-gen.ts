@@ -49,7 +49,10 @@ const MIN_COUNT = 3;
 const MAX_COUNT = 100;
 const BATCH_SIZE = 25; // questions per Gemini call — stays under the output-token ceiling
 const MAX_CALLS = 8; // hard cap on Gemini calls per generate, bounds cost/latency
-const REQUEST_TIMEOUT_MS = 45_000;
+// Grounded generation over a large (distilled ~28k-char) source is slow on
+// thinking models; 45s was too tight and timed out mid-batch, killing the whole
+// run. 120s stays well inside the routes' 300s budget for the count=20 path.
+const REQUEST_TIMEOUT_MS = 120_000;
 
 // ---------- Gemini response schema (strict) ----------
 
