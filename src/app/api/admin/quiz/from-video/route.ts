@@ -24,6 +24,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "videoId required" }, { status: 400 });
   }
 
-  const result = await autoQuizFromVideo(videoId, { fallbackUserId: session.user.id });
-  return NextResponse.json(result, { status: result.ok ? 200 : 200 });
+  try {
+    const result = await autoQuizFromVideo(videoId, {
+      fallbackUserId: session.user.id,
+    });
+    return NextResponse.json(result);
+  } catch (e) {
+    // Always return JSON — an unhandled throw here would send an empty body and
+    // the client's res.json() fails with "Unexpected end of JSON input".
+    return NextResponse.json(
+      { ok: false, videoId, error: `Generation crashed: ${(e as Error).message}` },
+      { status: 200 }
+    );
+  }
 }

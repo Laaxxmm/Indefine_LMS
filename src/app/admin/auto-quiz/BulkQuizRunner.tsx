@@ -54,7 +54,21 @@ export function BulkQuizRunner({ videos }: { videos: VideoLite[] }) {
         signal: ctrl.signal,
       });
       clearTimeout(timer);
-      const data: ApiResult = await res.json();
+      // Read as text first: a proxy that kills a too-long request leaves an
+      // empty body, and res.json() would throw the cryptic "Unexpected end of
+      // JSON input". Surface a clear message instead.
+      const body = await res.text();
+      let data: ApiResult;
+      try {
+        data = JSON.parse(body);
+      } catch {
+        patch(id, {
+          status: "failed",
+          message:
+            "The server didn't finish in time (large transcript). It keeps retrying in the background — check back shortly, or try again.",
+        });
+        return;
+      }
       if (data.ok && data.generated) {
         patch(id, {
           status: "done",

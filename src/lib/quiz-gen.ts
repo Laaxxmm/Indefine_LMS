@@ -52,7 +52,10 @@ const MAX_CALLS = 8; // hard cap on Gemini calls per generate, bounds cost/laten
 // Grounded generation over a large (distilled ~28k-char) source is slow on
 // thinking models; 45s was too tight and timed out mid-batch, killing the whole
 // run. 120s stays well inside the routes' 300s budget for the count=20 path.
-const REQUEST_TIMEOUT_MS = 120_000;
+const REQUEST_TIMEOUT_MS = 90_000;
+// Cap total time spent looping batches so distillation (≤90s) + generation stay
+// well under the ~300s HTTP request budget. Returns partial results on hit.
+const GENERATE_BUDGET_MS = 150_000;
 
 // ---------- Gemini response schema (strict) ----------
 
@@ -426,7 +429,21 @@ export async function generateQuiz(input: GenerateInput): Promise<GenerateResult
   let dryStreak = 0; // consecutive batches that added nothing new
   let lastError: string | null = null;
 
-  for (let call = 0; call < MAX_CALLS && collected.length < target && dryStreak < 2; call++) {
+  // Overall wall-clock budget: a distilled transcript can need several batches,
+  // and the whole call runs inside one HTTP request whose proxy budget is ~300s
+  // (distillation already spent some of it). Stop starting new batches past this
+  // and return whatever we have, rather than letting the request get killed
+  // mid-response (which reaches the client as "Unexpected end of JSON input").
+  const deadline = Date.now() + GENERATE_BUDGET_MS;
+
+  for (
+    let call = 0;
+    call < MAX_CALLS &&
+    collected.length < target &&
+    dryStreak < 2 &&
+    Date.now() < deadline;
+    call++
+  ) {
     const need = target - collected.length;
     // Ask for a small buffer over what we still need (offsets guardrail drops),
     // capped at the per-batch ceiling.
