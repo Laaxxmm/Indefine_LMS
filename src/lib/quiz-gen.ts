@@ -70,10 +70,6 @@ const geminiQuestionSchema = z.object({
   difficulty: z.enum(["EASY", "MEDIUM", "HARD"]),
 });
 
-const geminiPayloadSchema = z.object({
-  questions: z.array(geminiQuestionSchema).min(1).max(120),
-});
-
 // Structured-output schema handed to Gemini so it can only return this shape.
 // (OpenAPI subset — Gemini ignores minItems/length, so zod still enforces those.)
 const GEMINI_RESPONSE_SCHEMA = {
@@ -375,15 +371,24 @@ async function generateBatch(args: {
     return { ok: false, error: "Could not parse Gemini output as JSON (the batch may have been truncated)." };
   }
 
-  const shape = geminiPayloadSchema.safeParse(parsed);
-  if (!shape.success) {
+  // Grab the questions array loosely, then validate each item on its own. Doing
+  // a strict safeParse on the WHOLE array is all-or-nothing — a single
+  // malformed question (3 options, over-long text) would throw the entire batch
+  // away. Per-item validation drops only the bad ones.
+  const rawQuestions = (parsed as { questions?: unknown })?.questions;
+  if (!Array.isArray(rawQuestions)) {
     return { ok: false, error: "Gemini output did not match the required shape. Try again." };
   }
 
   const validated: DraftQuestion[] = [];
   let dropped = 0;
-  for (const q of shape.data.questions) {
-    const v = validate(q, args.normalisedSource);
+  for (const rq of rawQuestions) {
+    const item = geminiQuestionSchema.safeParse(rq);
+    if (!item.success) {
+      dropped++;
+      continue;
+    }
+    const v = validate(item.data, args.normalisedSource);
     if (v) validated.push(v);
     else dropped++;
   }
