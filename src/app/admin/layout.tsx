@@ -34,6 +34,16 @@ export default async function AdminLayout({
           </div>
         </div>
 
+        <div className="px-3 pt-3">
+          <Link
+            href="/dashboard"
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold bg-brand-50 text-brand-700 hover:bg-brand-100 transition"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            My Dashboard
+          </Link>
+        </div>
+
         <nav className="flex-1 px-3 py-4 space-y-0.5">
           <AdminNav
             items={[

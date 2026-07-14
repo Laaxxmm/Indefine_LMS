@@ -130,8 +130,17 @@ export default async function Leaderboard({
         <p className="text-ink-mute text-sm font-semibold max-w-md mx-auto">
           {view === "branches"
             ? "Average score per branch · who's leading the firm?"
-            : "Score = videos × 10 + best-quiz % + deadline + assignment + attendance"}
+            : "Your score adds up from five things:"}
         </p>
+        {view !== "branches" && (
+          <div className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1.5 text-xs text-ink-mute max-w-xl mx-auto">
+            <span><b className="text-ink">Vid</b> 10 pts per video completed</span>
+            <span><b className="text-ink">Quiz</b> your best score in each quiz</span>
+            <span><b className="text-ink">DDL</b> deadlines hit on time</span>
+            <span><b className="text-ink">Asgn</b> assignments finished</span>
+            <span><b className="text-ink">Att</b> monthly attendance</span>
+          </div>
+        )}
       </div>
 
       {view === "branches" ? (
@@ -272,6 +281,7 @@ export default async function Leaderboard({
                         </p>
                       </div>
                       <div className="hidden sm:flex items-center gap-3 text-xs text-ink-mute">
+                        <Stat label="Vid" value={r.videosCompleted * 10} />
                         <Stat label="Quiz" value={r.bestQuizPoints} />
                         <Stat label="DDL" value={r.deadlinePoints} />
                         <Stat label="Asgn" value={r.assignmentPoints} />
@@ -397,6 +407,10 @@ function PodiumCard({
     totalScore: number;
     videosCompleted: number;
     videosTotal: number;
+    bestQuizPoints: number;
+    deadlinePoints: number;
+    assignmentPoints: number;
+    attendancePoints: number;
     department: Department;
     branch: { code: string } | null;
   };
@@ -471,6 +485,13 @@ function PodiumCard({
       <p className="text-[10px] text-ink-faint uppercase tracking-wider font-semibold">
         pts
       </p>
+      <div className="mt-2 pt-2 border-t border-black/5 grid grid-cols-5 gap-x-1 w-full">
+        <Stat label="Vid" value={row.videosCompleted * 10} />
+        <Stat label="Quiz" value={row.bestQuizPoints} />
+        <Stat label="DDL" value={row.deadlinePoints} />
+        <Stat label="Asgn" value={row.assignmentPoints} />
+        <Stat label="Att" value={row.attendancePoints} />
+      </div>
     </div>
   );
 }
