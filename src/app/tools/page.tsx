@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { FileBadge, ArrowRight } from "lucide-react";
+import { FileBadge, ArrowRight, BookText } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
-// Tools index (§2) — card grid. First and only card for now.
+// Tools index — card grid.
 const TOOLS = [
   {
     href: "/tools/certificate-generator",
@@ -13,6 +13,15 @@ const TOOLS = [
       "Produce ICAI certificates from the 12 official illustrative formats — guided form, live preview, and a Word download with a full audit trail.",
     icon: FileBadge,
     accent: "#5B4BE6",
+  },
+  {
+    href: "/tools/sop-builder",
+    title: "SOP Builder",
+    tag: "AI-assisted · Standard Operating Procedures",
+    blurb:
+      "Turn a plain description into a polished, department-tagged SOP. AI refines your input into a brief you confirm, then generates a Word document saved to the L&D drive.",
+    icon: BookText,
+    accent: "#17b978",
   },
 ];
 

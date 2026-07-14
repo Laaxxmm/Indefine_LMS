@@ -664,3 +664,69 @@ model CertificateFieldOption {
   @@unique([fieldKey, value])
   @@index([fieldKey])
 }
+
+// -------------------- SOP Builder (Tools) --------------------
+// AI-assisted Standard Operating Procedures. Content is stored structured (Json) and
+// rendered deterministically to the on-screen view and a Word (.docx) copy saved under
+// OneDrive L&D/SOP/<Department>/. Viewable firm-wide; created/edited by admins + granted
+// editors. Who-created is on each version; who-viewed-when is logged in SopView.
+model Sop {
+  id               String   @id @default(cuid())
+  title            String
+  department       Department
+  workCategory     String
+  currentVersionId String?
+  createdById      String
+  createdByName    String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  versions SopVersion[]
+  views    SopView[]
+
+  @@index([department])
+  @@index([createdAt])
+}
+
+model SopVersion {
+  id                 String   @id @default(cuid())
+  sopId              String
+  sop                Sop      @relation(fields: [sopId], references: [id], onDelete: Cascade)
+  versionNumber      Int
+  versionString      String
+  purpose            String   @db.Text
+  rawProcedure       String   @db.Text   // the user's layman input, preserved for editing
+  brief              Json?                // the confirmed AI brief used to generate
+  content            Json                 // the structured SOP (sections, tables, flowchart)
+  graphItemId        String?              // OneDrive .docx item id for this version
+  graphWebUrl        String?
+  createdById        String
+  creatorName        String
+  creatorDesignation String
+  createdAt          DateTime @default(now())
+
+  @@index([sopId])
+}
+
+// Global create/edit grant. Admins are implicitly editors; this list adds employees.
+model SopEditor {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  userName    String
+  userEmail   String
+  grantedById String?
+  createdAt   DateTime @default(now())
+}
+
+// Audit: who opened which SOP and when.
+model SopView {
+  id       String   @id @default(cuid())
+  sopId    String
+  sop      Sop      @relation(fields: [sopId], references: [id], onDelete: Cascade)
+  userId   String
+  userName String
+  viewedAt DateTime @default(now())
+
+  @@index([sopId])
+  @@index([viewedAt])
+}
