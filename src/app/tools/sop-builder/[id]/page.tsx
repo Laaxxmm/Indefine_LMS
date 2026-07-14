@@ -22,7 +22,7 @@ export default async function SopPage({ params, searchParams }: { params: Promis
 
   const selected = sop.versions.find((x) => x.id === v) ?? sop.versions.find((x) => x.id === sop.currentVersionId) ?? sop.versions[0];
   const content = selected.content as unknown as SopContent;
-  const [canEdit, admin] = [await canEditSop(session.user), isSopAdmin(session.user)];
+  const [canEdit, admin] = [await canEditSop(session.user, sop.department), isSopAdmin(session.user)];
 
   // Audit — log this view (best-effort).
   await prisma.sopView.create({ data: { sopId: id, userId: session.user.id, userName: session.user.name ?? "Unknown" } }).catch(() => {});

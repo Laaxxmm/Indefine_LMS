@@ -10,11 +10,14 @@ export const maxDuration = 60;
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!(await canEditSop(session.user))) return NextResponse.json({ error: "You don't have permission to edit SOPs" }, { status: 403 });
 
   const { id } = await params;
   const sop = await prisma.sop.findUnique({ where: { id }, include: { versions: { orderBy: { versionNumber: "desc" }, take: 1 } } });
   if (!sop) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Admins edit any SOP; granted editors only SOPs of their own department.
+  if (!(await canEditSop(session.user, sop.department)))
+    return NextResponse.json({ error: "You don't have permission to edit SOPs of this department" }, { status: 403 });
 
   const parsed = createBodyZ.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
