@@ -709,3 +709,25 @@ function vttToText(vtt: string): string {
   }
   return out.join(" ");
 }
+
+/**
+ * Upload (create or replace) a small file's content by path. For files < 4 MB —
+ * fine for generated SOP .docx documents. Returns the new item's id + webUrl.
+ */
+export async function uploadFileContent(
+  driveId: string,
+  fullPath: string,
+  bytes: Uint8Array,
+  contentType: string,
+  token: string
+): Promise<{ id: string; webUrl: string }> {
+  const enc = fullPath.split("/").filter(Boolean).map(encodeURIComponent).join("/");
+  const res = await fetch(`${GRAPH}/drives/${driveId}/root:/${enc}:/content`, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": contentType },
+    body: bytes as BodyInit,
+  });
+  if (!res.ok) throw new Error(`Graph upload failed: ${res.status} ${await res.text()}`);
+  const item = (await res.json()) as { id: string; webUrl: string };
+  return { id: item.id, webUrl: item.webUrl };
+}
