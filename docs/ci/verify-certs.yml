@@ -1,0 +1,54 @@
+# TO ACTIVATE: move this file to .github/workflows/verify-certs.yml — either via the
+# GitHub web editor (Add file → Create new file), or by pushing with a token that has
+# the `workflow` scope. It lives under docs/ci/ so the initial push (with a token lacking
+# that scope) isn't blocked.
+#
+# §6 fidelity gate — assert every ICAI certificate template's locked wording still
+# matches the source guidebook verbatim, and that enabled templates stay human-signed.
+#
+# One-time setup (the guidebook is copyrighted, so it is NOT committed — §3.3):
+#   1. Base64-encode the PDF:  base64 -i "Certifications guidebook ICAI.pdf" | pbcopy
+#   2. In this repo: Settings → Secrets and variables → Actions →
+#      add a secret named ICAI_GUIDEBOOK_PDF_B64 with that value.
+# Without the secret the job skips (so forks/PRs without the file don't hard-fail).
+name: Verify ICAI certificate templates
+
+on:
+  push:
+    paths:
+      - "src/lib/certificates/**"
+      - "scripts/verify-certificate-templates.ts"
+  pull_request:
+    paths:
+      - "src/lib/certificates/**"
+      - "scripts/verify-certificate-templates.ts"
+  workflow_dispatch: {}
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Provision the source guidebook (private artifact)
+        env:
+          PDF_B64: ${{ secrets.ICAI_GUIDEBOOK_PDF_B64 }}
+        run: |
+          if [ -z "$PDF_B64" ]; then
+            echo "::warning::ICAI_GUIDEBOOK_PDF_B64 not set — skipping verbatim verification."
+            echo "SKIP=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          mkdir -p src/lib/certificates/source
+          printf '%s' "$PDF_B64" | base64 -d > src/lib/certificates/source/Certifications_guidebook_ICAI.pdf
+      - name: Install poppler-utils (pdftotext) + deps
+        if: env.SKIP != '1'
+        run: |
+          sudo apt-get update && sudo apt-get install -y poppler-utils
+          npm ci
+      - name: Verify templates are verbatim + signed
+        if: env.SKIP != '1'
+        run: npm run verify:certs

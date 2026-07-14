@@ -13,3 +13,6 @@ dist/
 prisma/migrations/dev.db*
 .claude/
 tsconfig.tsbuildinfo
+
+# ICAI guidebook is copyrighted — provision privately to CI (§3.3)
+src/lib/certificates/source/*.pdf
