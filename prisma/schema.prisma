@@ -650,3 +650,17 @@ model CertificateIssue {
   @@index([formatId])
   @@index([createdAt])
 }
+
+// Firm-wide saved values for reusable certificate fields (firm name, FRN, signing
+// member, designation, membership no., place). Powers the "pick / add / remove" dropdown
+// on the Certification generator form so staff don't re-type the same signing details.
+model CertificateFieldOption {
+  id          String   @id @default(cuid())
+  fieldKey    String        // e.g. "firmName", "placeOfSignature"
+  value       String
+  createdById String?       // who first added it (metadata only; list is shared firm-wide)
+  createdAt   DateTime @default(now())
+
+  @@unique([fieldKey, value])
+  @@index([fieldKey])
+}

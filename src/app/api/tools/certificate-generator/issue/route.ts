@@ -8,6 +8,7 @@ import { renderDocx } from "@/lib/certificates/render/toDocx";
 import { CertificateValidationError } from "@/lib/certificates/render/values";
 import { PlaceholderLeakError } from "@/lib/certificates/render/compose";
 import { DOCX_MIME, certificateFilename } from "@/lib/certificates/download";
+import { SUGGESTIBLE_FIELD_KEYS } from "@/lib/certificates/suggestible";
 
 const Body = z.object({
   formatId: z.string(),
@@ -58,6 +59,12 @@ export async function POST(req: Request) {
     },
     select: { id: true },
   });
+
+  // Remember the reusable signing values firm-wide (best-effort) — feeds the field dropdowns.
+  const remember = SUGGESTIBLE_FIELD_KEYS
+    .map((k) => ({ fieldKey: k as string, value: String((payload as Record<string, unknown>)[k] ?? "").trim(), createdById: session.user.id }))
+    .filter((o) => o.value.length > 0 && o.value.length <= 200);
+  if (remember.length) await prisma.certificateFieldOption.createMany({ data: remember, skipDuplicates: true }).catch(() => {});
 
   const filename = certificateFilename(formatId, clientName, new Date().toISOString());
   return new NextResponse(new Uint8Array(buffer), {
