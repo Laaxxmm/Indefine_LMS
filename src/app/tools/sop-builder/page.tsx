@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
-import { canEditSop, isSopAdmin, canViewSop } from "@/lib/sop/access";
+import { canCreateSop, isSopAdmin, canViewSop } from "@/lib/sop/access";
 import { departmentLabel } from "@/lib/sop/labels";
 import { Plus, ShieldCheck, BookText, ArrowRight } from "lucide-react";
 
@@ -16,7 +16,7 @@ export default async function SopDashboard({ searchParams }: { searchParams: Pro
   if (!session?.user) redirect("/");
   if (!canViewSop(session.user)) redirect("/dashboard");
   const sp = await searchParams;
-  const [canEdit, admin] = [await canEditSop(session.user), isSopAdmin(session.user)];
+  const [canEdit, admin] = [await canCreateSop(session.user), isSopAdmin(session.user)];
 
   const where: Prisma.SopWhereInput = {};
   if (sp.department && DEPARTMENTS.includes(sp.department)) where.department = sp.department as Prisma.SopWhereInput["department"];

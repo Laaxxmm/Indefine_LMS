@@ -77,9 +77,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (session.user) {
         session.user.id = user.id;
         session.user.role = (user.role as "EMPLOYEE" | "ADMIN") ?? "EMPLOYEE";
-        // `user` here is the full DB row (database session strategy); expose `active`
-        // so the Certification generator's access rule can gate on it (certificates/access.ts).
+        // `user` here is the full DB row (database session strategy); expose `active` and
+        // `department` so the Tools access rules can gate on them (certificates/access.ts,
+        // sop/access.ts — SOP editors are scoped to their own department).
         session.user.active = (user as { active?: boolean }).active ?? false;
+        session.user.department = (user as { department?: string }).department ?? "GENERAL";
       }
       return session;
     },

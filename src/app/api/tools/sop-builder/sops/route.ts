@@ -10,11 +10,14 @@ export const maxDuration = 60;
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!(await canEditSop(session.user))) return NextResponse.json({ error: "You don't have permission to create SOPs" }, { status: 403 });
 
   const parsed = createBodyZ.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   const { brief, rawProcedure, purpose } = parsed.data;
+
+  // Non-admin editors may only create SOPs for their own department.
+  if (!(await canEditSop(session.user, normDept(brief.department))))
+    return NextResponse.json({ error: "You can only create SOPs for your own department" }, { status: 403 });
   const creator = await resolveCreator(session.user);
 
   let versionData;

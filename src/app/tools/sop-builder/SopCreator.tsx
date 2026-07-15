@@ -10,7 +10,7 @@ const DEPARTMENTS = ["AUDIT", "TAX", "ACCOUNTS", "ROC", "TECH", "ADMIN", "GENERA
 const input = "w-full rounded-lg border border-border bg-page/60 px-3 py-2 text-[13.5px] text-ink focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400 transition";
 const linesToArr = (s: string) => s.split("\n").map((x) => x.trim()).filter(Boolean);
 
-export function SopCreator({ defaultDepartment, editSopId, initial }: { defaultDepartment: string; editSopId?: string; initial?: { title: string; workCategory: string; purpose: string; rawProcedure: string; department: string } }) {
+export function SopCreator({ defaultDepartment, lockDepartment, editSopId, initial }: { defaultDepartment: string; lockDepartment?: boolean; editSopId?: string; initial?: { title: string; workCategory: string; purpose: string; rawProcedure: string; department: string } }) {
   const router = useRouter();
   const [title, setTitle] = useState(initial?.title ?? "");
   const [department, setDepartment] = useState(initial?.department ?? defaultDepartment);
@@ -38,7 +38,8 @@ export function SopCreator({ defaultDepartment, editSopId, initial }: { defaultD
       const data = (await res.json()) as SopAnalysis & { error?: string };
       if (!res.ok) { setError(data.error || "Analysis failed."); return; }
       if (!data.valid || !data.brief) { setRejected(data.reason || "This doesn't look like a valid SOP request for the firm."); return; }
-      setBrief(data.brief);
+      // Granted editors are locked to their own department — never let the AI reassign it.
+      setBrief(lockDepartment ? { ...data.brief, department: defaultDepartment } : data.brief);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -77,9 +78,10 @@ export function SopCreator({ defaultDepartment, editSopId, initial }: { defaultD
         <div className="grid sm:grid-cols-2 gap-x-4 gap-y-3.5">
           <Field label="Working title"><input className={input} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Monthly bank reconciliation" /></Field>
           <Field label="Department">
-            <select className={input} value={department} onChange={(e) => setDepartment(e.target.value)}>
+            <select className={`${input} disabled:opacity-70 disabled:cursor-not-allowed`} value={department} onChange={(e) => setDepartment(e.target.value)} disabled={lockDepartment}>
               {DEPARTMENTS.map((d) => <option key={d} value={d}>{departmentLabel(d)}</option>)}
             </select>
+            {lockDepartment && <span className="block text-[11px] text-ink-faint mt-1">You can author SOPs for your department only.</span>}
           </Field>
           <Field label="Work category"><input className={input} value={workCategory} onChange={(e) => setWorkCategory(e.target.value)} placeholder="e.g. Statutory audit" /></Field>
           <Field label="Purpose (optional)"><input className={input} value={purpose} onChange={(e) => setPurpose(e.target.value)} placeholder="Why this SOP exists" /></Field>
@@ -115,7 +117,7 @@ export function SopCreator({ defaultDepartment, editSopId, initial }: { defaultD
           <div className="grid sm:grid-cols-2 gap-x-4 gap-y-3.5">
             <Field label="Title"><input className={input} value={brief.title} onChange={(e) => setBrief({ ...brief, title: e.target.value })} /></Field>
             <Field label="Department">
-              <select className={input} value={brief.department} onChange={(e) => setBrief({ ...brief, department: e.target.value })}>
+              <select className={`${input} disabled:opacity-70 disabled:cursor-not-allowed`} value={brief.department} onChange={(e) => setBrief({ ...brief, department: e.target.value })} disabled={lockDepartment}>
                 {DEPARTMENTS.map((d) => <option key={d} value={d}>{departmentLabel(d)}</option>)}
               </select>
             </Field>
