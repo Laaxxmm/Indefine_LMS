@@ -392,6 +392,27 @@ export async function createTeamsEvent(
   return { eventId: ev.id, joinUrl: ev.onlineMeeting?.joinUrl ?? null };
 }
 
+/** Reschedule / rename an existing calendar event (Teams pushes the update to
+ * attendees). Requires the organizer's delegated token. */
+export async function updateTeamsEvent(
+  token: string,
+  eventId: string,
+  input: { subject: string; startLocal: string; endLocal: string; timeZone: string }
+): Promise<void> {
+  const res = await fetch(`${GRAPH}/me/events/${eventId}`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      subject: input.subject,
+      start: { dateTime: input.startLocal, timeZone: input.timeZone },
+      end: { dateTime: input.endLocal, timeZone: input.timeZone },
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`Graph update event failed: ${res.status} ${await res.text()}`);
+  }
+}
+
 /** Cancel (delete) a previously created calendar event. Best-effort. */
 export async function deleteEvent(token: string, eventId: string): Promise<void> {
   await fetch(`${GRAPH}/me/events/${eventId}`, {

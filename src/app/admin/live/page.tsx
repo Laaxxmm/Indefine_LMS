@@ -14,9 +14,11 @@ import {
   Info,
   PlayCircle,
   Download,
+  Pencil,
 } from "lucide-react";
 import {
   scheduleLiveSession,
+  updateLiveSession,
   cancelLiveSession,
   ingestRecording,
   repullRecording,
@@ -91,6 +93,35 @@ async function scheduleSession(formData: FormData) {
   revalidatePath("/admin/live");
   revalidatePath("/dashboard");
   redirect("/admin/live?tab=sessions&scheduled=1");
+}
+
+async function editSession(formData: FormData) {
+  "use server";
+  await requireAdmin();
+  const id = String(formData.get("id"));
+  const title = String(formData.get("title") || "").trim();
+  const courseTitle = String(formData.get("courseTitle") || "").trim();
+  const startLocal = String(formData.get("startLocal") || "");
+  const durationMin = Number(formData.get("durationMin") || 60);
+  if (!id || !title || !courseTitle || !startLocal) return;
+
+  let errMsg: string | null = null;
+  try {
+    await updateLiveSession(id, {
+      title,
+      courseTitle,
+      startLocal,
+      durationMin: Number.isFinite(durationMin) ? durationMin : 60,
+    });
+  } catch (e) {
+    errMsg = (e as Error).message;
+  }
+  if (errMsg) {
+    redirect(`/admin/live?tab=sessions&error=${encodeURIComponent(errMsg)}`);
+  }
+  revalidatePath("/admin/live");
+  revalidatePath("/dashboard");
+  redirect("/admin/live?tab=sessions&edited=1");
 }
 
 async function cancelSession(formData: FormData) {
@@ -189,6 +220,7 @@ export default async function AdminLivePage({
   await requireAdmin();
   const sp = await searchParams;
   const scheduled = sp.scheduled === "1";
+  const edited = sp.edited === "1";
   const error = sp.error;
   const pulled = sp.pulled === "1";
   const pullinfo = sp.pullinfo;
@@ -273,6 +305,14 @@ export default async function AdminLivePage({
               folder is ready under L&amp;D.
             </p>
           </div>
+        </div>
+      )}
+      {edited && (
+        <div className="mb-6 rounded-xl bg-emerald-50 border border-emerald-200 p-4 flex items-start gap-3">
+          <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+          <p className="text-sm font-semibold text-emerald-700">
+            Session updated — the Teams invite has been updated for attendees.
+          </p>
         </div>
       )}
       {error && (
@@ -416,17 +456,27 @@ export default async function AdminLivePage({
         </div>
       ) : (
         <div className="space-y-3 mb-8">
+          <datalist id="ld-folders">
+            {existingFolders.map((f) => (
+              <option key={f} value={f} />
+            ))}
+          </datalist>
           {upcoming.map((s) => {
             const attendeeCount = Array.isArray(s.attendeeIds)
               ? (s.attendeeIds as string[]).length
               : 0;
             const eff = displayStatus(s);
             const meta = STATUS_META[eff] ?? STATUS_META.SCHEDULED;
+            const durationMin = Math.max(
+              1,
+              Math.round((s.endAt.getTime() - s.startAt.getTime()) / 60000)
+            );
             return (
               <div
                 key={s.id}
-                className="rounded-2xl bg-white border border-border shadow-soft p-5 flex flex-col sm:flex-row sm:items-center gap-4"
+                className="rounded-2xl bg-white border border-border shadow-soft p-5"
               >
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                 <div className="w-11 h-11 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
                   <Video className="w-5 h-5" />
                 </div>
@@ -480,6 +530,76 @@ export default async function AdminLivePage({
                     </button>
                   </form>
                 </div>
+                </div>
+
+                {eff === "SCHEDULED" && (
+                  <details className="mt-3 border-t border-border pt-3">
+                    <summary className="cursor-pointer inline-flex items-center gap-1.5 text-xs font-bold text-brand-600 hover:text-brand-700 list-none [&::-webkit-details-marker]:hidden">
+                      <Pencil className="w-3.5 h-3.5" />
+                      Edit time / folder
+                    </summary>
+                    <form
+                      action={editSession}
+                      className="mt-3 grid sm:grid-cols-2 gap-3 text-sm"
+                    >
+                      <input type="hidden" name="id" value={s.id} />
+                      <label className="block">
+                        <span className="block text-xs font-semibold text-ink-mute mb-1">Title</span>
+                        <input
+                          name="title"
+                          required
+                          defaultValue={s.title}
+                          className="w-full bg-white border border-border rounded-lg px-3 py-2"
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="block text-xs font-semibold text-ink-mute mb-1">Course / folder</span>
+                        <input
+                          name="courseTitle"
+                          list="ld-folders"
+                          required
+                          defaultValue={s.courseTitle}
+                          className="w-full bg-white border border-border rounded-lg px-3 py-2"
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="block text-xs font-semibold text-ink-mute mb-1">Starts (IST)</span>
+                        <input
+                          type="datetime-local"
+                          name="startLocal"
+                          required
+                          defaultValue={istLocalInputValue(s.startAt)}
+                          className="w-full bg-white border border-border rounded-lg px-3 py-2"
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="block text-xs font-semibold text-ink-mute mb-1">Duration</span>
+                        <select
+                          name="durationMin"
+                          defaultValue={String(durationMin)}
+                          className="w-full bg-white border border-border rounded-lg px-3 py-2"
+                        >
+                          {[30, 45, 60, 90, 120].map((d) => (
+                            <option key={d} value={d}>
+                              {d} minutes
+                            </option>
+                          ))}
+                          {![30, 45, 60, 90, 120].includes(durationMin) && (
+                            <option value={durationMin}>{durationMin} minutes</option>
+                          )}
+                        </select>
+                      </label>
+                      <div className="sm:col-span-2">
+                        <button className="px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white font-semibold text-sm transition">
+                          Save changes
+                        </button>
+                        <span className="text-xs text-ink-faint ml-3">
+                          Attendees stay the same. Changing the folder only affects the recording location.
+                        </span>
+                      </div>
+                    </form>
+                  </details>
+                )}
               </div>
             );
           })}

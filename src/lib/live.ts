@@ -16,6 +16,7 @@ import {
   getUserGraphToken,
   getAppOnlyToken,
   createTeamsEvent,
+  updateTeamsEvent,
   ensureFolder,
   deleteEvent,
   resolveOnlineMeetingId,
@@ -127,6 +128,63 @@ export async function scheduleLiveSession(
     await deleteEvent(token, event.eventId).catch(() => {});
     throw e;
   }
+}
+
+export interface EditInput {
+  title: string;
+  courseTitle: string;
+  startLocal: string; // IST wall-clock "YYYY-MM-DDTHH:mm"
+  durationMin: number;
+}
+
+/**
+ * Edit an upcoming session: new time, duration, title and/or folder. Reschedules
+ * the Teams event (attendees get the update) and, if the folder changed, ensures
+ * the new L&D/{course} folder so the recording lands there. Attendees aren't
+ * editable here.
+ */
+export async function updateLiveSession(sessionId: string, input: EditInput) {
+  const s = await prisma.liveSession.findUnique({ where: { id: sessionId } });
+  if (!s) throw new Error("Session not found.");
+  if (s.status !== "SCHEDULED") {
+    throw new Error("Only upcoming sessions can be edited.");
+  }
+  const token = await getUserGraphToken(s.scheduledById);
+  if (!token) throw new Error("Organizer's Microsoft token unavailable — they need to sign in.");
+
+  const startAt = istLocalToUtc(input.startLocal);
+  if (Number.isNaN(startAt.getTime())) throw new Error("Invalid start time.");
+  const endAt = new Date(startAt.getTime() + input.durationMin * 60_000);
+
+  const newCourse = input.courseTitle.trim();
+  let targetFolderId = s.targetFolderId;
+  if (newCourse && newCourse !== s.courseTitle) {
+    const driveId = process.env.GRAPH_DRIVE_ID;
+    const rootPath = process.env.GRAPH_VIDEOS_FOLDER_PATH;
+    if (driveId && rootPath) {
+      targetFolderId = await ensureFolder(driveId, rootPath, newCourse, token);
+    }
+  }
+
+  if (s.graphEventId) {
+    await updateTeamsEvent(token, s.graphEventId, {
+      subject: input.title.trim(),
+      startLocal: utcToIstWall(startAt),
+      endLocal: utcToIstWall(endAt),
+      timeZone: FIRM_TZ_GRAPH,
+    });
+  }
+
+  await prisma.liveSession.update({
+    where: { id: s.id },
+    data: {
+      title: input.title.trim(),
+      courseTitle: newCourse || s.courseTitle,
+      startAt,
+      endAt,
+      targetFolderId,
+    },
+  });
 }
 
 export async function cancelLiveSession(sessionId: string) {

@@ -21,7 +21,9 @@ import {
   Sparkles,
   Building2,
   ChevronDown,
+  Trash2,
 } from "lucide-react";
+import { ConfirmButton } from "@/components/ConfirmButton";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +46,41 @@ async function syncAction(): Promise<void> {
       { maxAge: 10, httpOnly: false }
     );
   }
+  revalidatePath("/admin");
+  revalidatePath("/dashboard");
+}
+
+// Remove a single video from the LMS (its quiz + progress cascade; assignments
+// pointing at it are dropped). The SharePoint source file is left untouched —
+// re-running Sync would re-import it unless it's also removed from SharePoint.
+async function deleteVideoAction(formData: FormData): Promise<void> {
+  "use server";
+  const session = await auth();
+  if (session?.user?.role !== "ADMIN") return;
+  const id = String(formData.get("id"));
+  if (!id) return;
+  await prisma.assignment.deleteMany({ where: { videoId: id } });
+  await prisma.video.delete({ where: { id } }).catch(() => {});
+  revalidatePath("/admin");
+  revalidatePath("/dashboard");
+}
+
+// Remove a whole module ("folder") and every video/quiz under it. Same
+// SharePoint caveat as above.
+async function deleteModuleAction(formData: FormData): Promise<void> {
+  "use server";
+  const session = await auth();
+  if (session?.user?.role !== "ADMIN") return;
+  const id = String(formData.get("id"));
+  if (!id) return;
+  const vids = await prisma.video.findMany({
+    where: { moduleId: id },
+    select: { id: true },
+  });
+  await prisma.assignment.deleteMany({
+    where: { OR: [{ moduleId: id }, { videoId: { in: vids.map((v) => v.id) } }] },
+  });
+  await prisma.module.delete({ where: { id } }).catch(() => {});
   revalidatePath("/admin");
   revalidatePath("/dashboard");
 }
@@ -325,6 +362,16 @@ function VideosTab({
                     </span>{" "}
                     with quizzes
                   </div>
+                  <form action={deleteModuleAction}>
+                    <input type="hidden" name="id" value={m.id} />
+                    <ConfirmButton
+                      message={`Delete the folder "${m.title}" and all ${m.videos.length} of its videos + quizzes? This can't be undone.`}
+                      title="Delete this folder and its videos"
+                      className="p-1.5 rounded-lg text-ink-faint hover:text-rose-600 hover:bg-rose-50 transition"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </ConfirmButton>
+                  </form>
                   <ChevronDown className="w-4 h-4 text-ink-faint transition group-open:rotate-180" />
                 </div>
               </summary>
@@ -357,16 +404,28 @@ function VideosTab({
                           </p>
                         </div>
                       </div>
-                      <Link
-                        href={`/admin/video/${v.id}`}
-                        className={`text-xs px-3 py-1.5 rounded-lg shrink-0 font-medium transition ${
-                          hasQuiz
-                            ? "bg-muted hover:bg-border text-ink"
-                            : "bg-brand-500 hover:bg-brand-600 text-white shadow-pop"
-                        }`}
-                      >
-                        {hasQuiz ? "Edit quiz" : "Add quiz"}
-                      </Link>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Link
+                          href={`/admin/video/${v.id}`}
+                          className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${
+                            hasQuiz
+                              ? "bg-muted hover:bg-border text-ink"
+                              : "bg-brand-500 hover:bg-brand-600 text-white shadow-pop"
+                          }`}
+                        >
+                          {hasQuiz ? "Edit quiz" : "Add quiz"}
+                        </Link>
+                        <form action={deleteVideoAction}>
+                          <input type="hidden" name="id" value={v.id} />
+                          <ConfirmButton
+                            message={`Remove the video "${prettifyName(v.title)}"${hasQuiz ? " and its quiz" : ""}? This can't be undone.`}
+                            title="Remove this video"
+                            className="p-1.5 rounded-lg text-ink-faint hover:text-rose-600 hover:bg-rose-50 transition"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </ConfirmButton>
+                        </form>
+                      </div>
                     </div>
                   );
                 })}
