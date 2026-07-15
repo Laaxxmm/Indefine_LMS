@@ -22,6 +22,8 @@ import {
   Building2,
   ChevronDown,
   Trash2,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { ConfirmButton } from "@/components/ConfirmButton";
 
@@ -81,6 +83,36 @@ async function deleteModuleAction(formData: FormData): Promise<void> {
     where: { OR: [{ moduleId: id }, { videoId: { in: vids.map((v) => v.id) } }] },
   });
   await prisma.module.delete({ where: { id } }).catch(() => {});
+  revalidatePath("/admin");
+  revalidatePath("/dashboard");
+}
+
+// Move a video up/down within its module. Normalises all sibling orders to a
+// clean 0..n sequence (they may all be 0 from sync) and swaps with the neighbor.
+async function moveVideoAction(formData: FormData): Promise<void> {
+  "use server";
+  const session = await auth();
+  if (session?.user?.role !== "ADMIN") return;
+  const id = String(formData.get("id"));
+  const dir = String(formData.get("dir"));
+  const v = await prisma.video.findUnique({
+    where: { id },
+    select: { moduleId: true },
+  });
+  if (!v) return;
+  const sibs = await prisma.video.findMany({
+    where: { moduleId: v.moduleId },
+    orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+    select: { id: true },
+  });
+  const ids = sibs.map((s) => s.id);
+  const idx = ids.indexOf(id);
+  const swap = dir === "up" ? idx - 1 : idx + 1;
+  if (idx < 0 || swap < 0 || swap >= ids.length) return;
+  [ids[idx], ids[swap]] = [ids[swap], ids[idx]];
+  await prisma.$transaction(
+    ids.map((vid, i) => prisma.video.update({ where: { id: vid }, data: { order: i } }))
+  );
   revalidatePath("/admin");
   revalidatePath("/dashboard");
 }
@@ -385,6 +417,30 @@ function VideosTab({
                       className="px-5 py-3 flex items-center justify-between gap-4 hover:bg-muted/30 transition"
                     >
                       <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex flex-col">
+                          <form action={moveVideoAction}>
+                            <input type="hidden" name="id" value={v.id} />
+                            <input type="hidden" name="dir" value="up" />
+                            <button
+                              disabled={i === 0}
+                              className="p-0.5 rounded text-ink-faint hover:text-brand-600 hover:bg-muted disabled:opacity-25 disabled:pointer-events-none transition"
+                              title="Move up"
+                            >
+                              <ArrowUp className="w-3.5 h-3.5" />
+                            </button>
+                          </form>
+                          <form action={moveVideoAction}>
+                            <input type="hidden" name="id" value={v.id} />
+                            <input type="hidden" name="dir" value="down" />
+                            <button
+                              disabled={i === m.videos.length - 1}
+                              className="p-0.5 rounded text-ink-faint hover:text-brand-600 hover:bg-muted disabled:opacity-25 disabled:pointer-events-none transition"
+                              title="Move down"
+                            >
+                              <ArrowDown className="w-3.5 h-3.5" />
+                            </button>
+                          </form>
+                        </div>
                         <span className="text-xs text-ink-faint tabular-nums w-6 text-right font-mono">
                           {i + 1}.
                         </span>

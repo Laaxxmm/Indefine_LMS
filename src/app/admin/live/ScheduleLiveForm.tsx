@@ -36,6 +36,7 @@ export default function ScheduleLiveForm({
     existingFolders.length > 0 ? existingFolders[0] : NEW_FOLDER
   );
   const creatingFolder = folderChoice === NEW_FOLDER;
+  const [repeat, setRepeat] = useState<string>("none");
 
   const toggle = (id: string) =>
     setSelected((s) => {
@@ -168,6 +169,63 @@ export default function ScheduleLiveForm({
           The meeting is created on their calendar — they host it, can end it
           for everyone, and the recording is saved (and pulled) via their
           account. Only people who&apos;ve signed in to the LMS can be picked.
+        </span>
+      </label>
+
+      {/* Recurrence */}
+      <div className="grid sm:grid-cols-2 gap-4">
+        <label className="block">
+          <span className="block text-[11px] uppercase tracking-[0.12em] font-extrabold text-ink-mute mb-1.5">
+            Repeat
+          </span>
+          <select
+            name="repeat"
+            defaultValue={repeat}
+            onChange={(e) => setRepeat(e.target.value)}
+            className="w-full bg-white border border-border rounded-xl px-3 py-2.5 text-base font-medium focus:outline-none focus:ring-4 focus:ring-brand-500/15 focus:border-brand-500 transition"
+          >
+            <option value="none">Doesn&apos;t repeat</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+          </select>
+        </label>
+        {repeat !== "none" && (
+          <label className="block">
+            <span className="block text-[11px] uppercase tracking-[0.12em] font-extrabold text-ink-mute mb-1.5">
+              Number of sessions
+            </span>
+            <input
+              type="number"
+              name="occurrences"
+              min={1}
+              max={12}
+              defaultValue={4}
+              className="w-full bg-white border border-border rounded-xl px-3 py-2.5 text-base font-medium focus:outline-none focus:ring-4 focus:ring-brand-500/15 focus:border-brand-500 transition"
+            />
+            <span className="block text-xs text-ink-faint mt-1">
+              Creates this many separate sessions, each {repeat === "weekly" ? "a week" : "a day"} apart.
+            </span>
+          </label>
+        )}
+      </div>
+
+      {/* Materials */}
+      <label className="block">
+        <span className="block text-[11px] uppercase tracking-[0.12em] font-extrabold text-ink-mute mb-1.5">
+          Materials{" "}
+          <span className="text-ink-faint font-semibold normal-case tracking-normal">
+            (optional — PDF / slides / docs)
+          </span>
+        </span>
+        <input
+          type="file"
+          name="materials"
+          multiple
+          accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.png,.jpg,.jpeg"
+          className="w-full text-sm file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-brand-50 file:text-brand-700 file:font-semibold file:cursor-pointer border border-border rounded-xl px-3 py-2 bg-white"
+        />
+        <span className="block text-xs text-ink-faint mt-1">
+          Uploaded into the L&amp;D / {"{"}folder{"}"} folder in OneDrive alongside the recording.
         </span>
       </label>
 

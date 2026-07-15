@@ -18,6 +18,7 @@ import {
   createTeamsEvent,
   updateTeamsEvent,
   ensureFolder,
+  uploadFileToFolder,
   deleteEvent,
   resolveOnlineMeetingId,
   applyMeetingSettings,
@@ -43,6 +44,42 @@ export interface ScheduleInput {
   startLocal: string;
   durationMin: number;
   attendeeUserIds: string[];
+  /** Optional material files uploaded into the L&D/{course} folder. */
+  materials?: { name: string; bytes: ArrayBuffer }[];
+}
+
+/**
+ * Schedule one or more sessions. repeat "daily"/"weekly" creates `occurrences`
+ * separate sessions (own Teams meeting + independent recording/ingest each) —
+ * we deliberately DON'T use a Graph recurring event, since the whole
+ * recording→transcript→quiz pipeline is built around one session = one meeting.
+ * Materials upload once (they share the course folder). Returns the first.
+ */
+export async function scheduleRecurring(
+  input: ScheduleInput,
+  organizerUserId: string,
+  repeat: "none" | "daily" | "weekly",
+  occurrences: number
+) {
+  const intervalDays = repeat === "weekly" ? 7 : repeat === "daily" ? 1 : 0;
+  const count = intervalDays ? Math.min(12, Math.max(1, occurrences)) : 1;
+  const baseUtc = istLocalToUtc(input.startLocal);
+  if (Number.isNaN(baseUtc.getTime())) throw new Error("Invalid start time.");
+
+  let first: Awaited<ReturnType<typeof scheduleLiveSession>> | null = null;
+  for (let k = 0; k < count; k++) {
+    const occUtc = new Date(baseUtc.getTime() + k * intervalDays * 86_400_000);
+    const s = await scheduleLiveSession(
+      {
+        ...input,
+        startLocal: utcToIstWall(occUtc),
+        materials: k === 0 ? input.materials : undefined, // upload once
+      },
+      organizerUserId
+    );
+    if (k === 0) first = s;
+  }
+  return first;
 }
 
 export async function scheduleLiveSession(
@@ -75,12 +112,18 @@ export async function scheduleLiveSession(
   const attendeeEmails = attendees.map((a) => a.email).filter(Boolean);
 
   // 1) Recording folder (named after the course/topic).
-  const targetFolderId = await ensureFolder(
-    driveId,
-    rootPath,
-    input.courseTitle.trim(),
-    token
-  );
+  const courseFolder = input.courseTitle.trim();
+  const targetFolderId = await ensureFolder(driveId, rootPath, courseFolder, token);
+
+  // 1b) Upload any attached materials into that same folder (best-effort).
+  if (input.materials?.length) {
+    const folderPath = `${rootPath.replace(/^\/+|\/+$/g, "")}/${courseFolder}`;
+    for (const m of input.materials) {
+      await uploadFileToFolder(driveId, folderPath, m.name, m.bytes, token).catch(
+        () => false
+      );
+    }
+  }
 
   // 2) Teams meeting — invites auto-send to attendees.
   const event = await createTeamsEvent(token, {

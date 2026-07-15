@@ -17,7 +17,7 @@ import {
   Pencil,
 } from "lucide-react";
 import {
-  scheduleLiveSession,
+  scheduleRecurring,
   updateLiveSession,
   cancelLiveSession,
   ingestRecording,
@@ -54,6 +54,19 @@ async function scheduleSession(formData: FormData) {
     .getAll("attendeeIds")
     .map(String)
     .filter(Boolean);
+  const repeat = String(formData.get("repeat") || "none") as
+    | "none"
+    | "daily"
+    | "weekly";
+  const occurrences = Number(formData.get("occurrences") || 1);
+
+  // Attached material files → { name, bytes } for upload into the course folder.
+  const materials: { name: string; bytes: ArrayBuffer }[] = [];
+  for (const f of formData.getAll("materials")) {
+    if (f instanceof File && f.size > 0) {
+      materials.push({ name: f.name, bytes: await f.arrayBuffer() });
+    }
+  }
 
   if (!title || !courseTitle || !startLocal) return;
 
@@ -72,7 +85,7 @@ async function scheduleSession(formData: FormData) {
   // redirect() throws internally, so keep it OUT of the try/catch.
   let errMsg: string | null = null;
   try {
-    await scheduleLiveSession(
+    await scheduleRecurring(
       {
         title,
         courseTitle,
@@ -80,8 +93,11 @@ async function scheduleSession(formData: FormData) {
         startLocal,
         durationMin: Number.isFinite(durationMin) ? durationMin : 60,
         attendeeUserIds,
+        materials,
       },
-      organizerId
+      organizerId,
+      repeat,
+      Number.isFinite(occurrences) ? occurrences : 1
     );
   } catch (e) {
     errMsg = (e as Error).message;

@@ -571,6 +571,34 @@ async function listRecordingsIn(
     .sort((a, b) => b.createdDateTime.localeCompare(a.createdDateTime));
 }
 
+/**
+ * Upload a small file (materials/PDF) into a drive folder by path, via simple
+ * upload (fine for <250MB). Overwrites a same-named file. Best-effort per file.
+ */
+export async function uploadFileToFolder(
+  driveId: string,
+  folderPath: string,
+  fileName: string,
+  bytes: ArrayBuffer,
+  token: string
+): Promise<boolean> {
+  const enc = (p: string) =>
+    p.split("/").filter(Boolean).map(encodeURIComponent).join("/");
+  const path = `${enc(folderPath)}/${encodeURIComponent(fileName)}`;
+  const res = await fetch(
+    `${GRAPH}/drives/${driveId}/root:/${path}:/content?@microsoft.graph.conflictBehavior=replace`,
+    {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/octet-stream" },
+      body: bytes,
+    }
+  );
+  if (!res.ok) {
+    console.error(`Graph upload ${fileName} failed: ${res.status} ${await res.text().catch(() => "")}`);
+  }
+  return res.ok;
+}
+
 /** Delete a drive item (best-effort). Used to drop a wrongly-ingested recording. */
 export async function deleteDriveItem(
   driveId: string,
