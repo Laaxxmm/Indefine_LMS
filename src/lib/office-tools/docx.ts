@@ -84,11 +84,16 @@ export function boxTable(rows: (string | Paragraph[])[]): Table {
 
 export type Cell = { text: string; bold?: boolean };
 
+const ALIGN = { left: AlignmentType.LEFT, center: AlignmentType.CENTER, right: AlignmentType.RIGHT, justify: AlignmentType.JUSTIFIED } as const;
+type Align = keyof typeof ALIGN;
+
 // Flexible multi-column table. `bordered: false` gives an invisible grid (used for
-// signature / witness blocks, matching the source's nil borders).
-export function gridTable(rows: Cell[][], opts?: { bordered?: boolean; align?: "left" | "center" }): Table {
+// signature / witness blocks, matching the source's nil borders). `fontSize` (pt) sets
+// the cell run size (e.g. the 9pt related-party tables in the Director's Report).
+export function gridTable(rows: Cell[][], opts?: { bordered?: boolean; align?: "left" | "center"; fontSize?: number }): Table {
   const bordered = opts?.bordered ?? true;
   const alignment = opts?.align === "left" ? AlignmentType.LEFT : AlignmentType.CENTER;
+  const size = opts?.fontSize ? opts.fontSize * 2 : undefined;
   const bd = bordered ? CELL_BORDER : { style: BorderStyle.NONE, size: 0, color: "auto" };
   return new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
@@ -102,7 +107,7 @@ export function gridTable(rows: Cell[][], opts?: { bordered?: boolean; align?: "
                 children: [
                   new Paragraph({
                     alignment,
-                    children: cell.text.split("\n").map((ln, i) => new TextRun({ text: ln, bold: cell.bold, break: i > 0 ? 1 : undefined })),
+                    children: cell.text.split("\n").map((ln, i) => new TextRun({ text: ln, bold: cell.bold, size, break: i > 0 ? 1 : undefined })),
                   }),
                 ],
               }),
@@ -110,6 +115,39 @@ export function gridTable(rows: Cell[][], opts?: { bordered?: boolean; align?: "
         }),
     ),
   });
+}
+
+// A paragraph from a possibly multi-line string ('\n' -> line breaks), with optional
+// bold / alignment / point-size / spacing. Mirrors the source's add_paragraph.
+export function paraML(text: string, opts?: { bold?: boolean; align?: Align; sizePt?: number; spaceBeforePt?: number; spaceAfterPt?: number }): Paragraph {
+  const size = opts?.sizePt ? opts.sizePt * 2 : undefined;
+  const lines = text.split("\n");
+  return new Paragraph({
+    alignment: ALIGN[opts?.align ?? "justify"],
+    spacing: { before: (opts?.spaceBeforePt ?? 0) * 20, after: (opts?.spaceAfterPt ?? 6) * 20, line: 240 },
+    children: lines.map((ln, i) => new TextRun({ text: ln, bold: opts?.bold, size, break: i > 0 ? 1 : undefined })),
+  });
+}
+
+// Narrative block wrapped in a borderless single-cell table (source's add_boxed_text):
+// '\n\n' splits paragraphs, single '\n' is a line break. Followed by a spacer paragraph.
+export function boxedText(text: string, opts?: { bold?: boolean; sizePt?: number }): (Table | Paragraph)[] {
+  const bd = { style: BorderStyle.NONE, size: 0, color: "auto" };
+  const size = opts?.sizePt ? opts.sizePt * 2 : undefined;
+  const paras = text.split("\n\n").map(
+    (block) =>
+      new Paragraph({
+        alignment: AlignmentType.JUSTIFIED,
+        spacing: { after: 120, line: 240 },
+        children: block.trim().split("\n").map((ln, i) => new TextRun({ text: ln, bold: opts?.bold, size, break: i > 0 ? 1 : undefined })),
+      }),
+  );
+  const table = new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: { top: bd, bottom: bd, left: bd, right: bd, insideHorizontal: bd, insideVertical: bd },
+    rows: [new TableRow({ children: [new TableCell({ margins: { top: 0, bottom: 0, left: 0, right: 0 }, children: paras })] })],
+  });
+  return [table, new Paragraph({ children: [new TextRun("")] })];
 }
 
 // Page break (starts the next block on a fresh page).

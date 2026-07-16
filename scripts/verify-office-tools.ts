@@ -6,6 +6,7 @@ import { renderPartnershipDocx } from "../src/lib/office-tools/tools/partnership
 import { renderTrustDocx } from "../src/lib/office-tools/tools/trust";
 import { renderLlpDocx } from "../src/lib/office-tools/tools/llp";
 import { buildTdsWorkbook } from "../src/lib/office-tools/tools/tdsChallan";
+import { renderDirectorReportDocx } from "../src/lib/office-tools/tools/directorReport";
 
 let failed = 0;
 const check = (name: string, buf: Buffer, min = 1000) => {
@@ -96,6 +97,36 @@ async function main() {
   ].join(" ");
   const tds = await buildTdsWorkbook([{ name: "challan1.pdf", buffer: Buffer.from("") }], async () => challan);
   check("tds-challan (parse+pivot+xlsx)", tds.bytes, 3000);
+
+  // Director's Report — with related parties (exercises the AOC-2 second section) + committees.
+  check("director-report", await renderDirectorReportDocx({
+    companyName: "FIXDOT FINTECH PRIVATE LIMITED", companyAddress: "Address Line", companyCin: "U12345", companyEmail: "e@x.com",
+    reportNumber: "1st First", financialYear: "2024-2025", previousFinancialYear: "2023-2024", fyEndDate: "2025-03-31", currentDate: "2025-09-02", place: "MUMBAI (INDIA)",
+    includePrevYear: true, totalRevenue: 0, profitBeforeDepTax: 0, depreciation: 0, profitBeforeTax: -441108, currentTax: 0, deferredTax: 0, profitForYear: -441108,
+    prevTotalRevenue: 0, prevProfitBeforeDepTax: 0, prevDepreciation: 0, prevProfitBeforeTax: 0, prevCurrentTax: 0, prevDeferredTax: 0, prevProfitForYear: 0, prevProfit: 100000,
+    directors: [
+      { dinPan: "09248749", name: "SOUMYA KUSHWAHA", beginDate: "2025-06-10", endDate: "-", category: "Additional Director", meetingsHeld: 5, meetingsAttended: 5, agmAttendance: "Present" },
+      { dinPan: "07578907", name: "NISHCHAY SANJAY NATH", beginDate: "2024-05-21", endDate: "-", category: "Director", meetingsHeld: 5, meetingsAttended: 5, agmAttendance: "Present" },
+    ],
+    numBoardMeetings: 5, boardMeetingDates: "19/06/2024, 12/08/2024, 29/10/2024, 22/12/2024, 03/03/2025",
+    industryChange: "Loss", changeNature: false, newBusinessDesc: "", changeImpact: "", changeRegOffice: false, oldAddress: "", newAddress: "", approvalDetails: "", regBenefits: "",
+    dividend: false, interimAmount: 0, interimDeclDate: "", interimPayDate: "", interimRationale: "", finalAmount: 0, finalPayDate: "",
+    changeCapital: false, authCapital: 100000, authShares: 10000, paidCapital: 100000, paidShares: 10000, oldAuth: "", newAuth: "", reasonAuth: "", oldPaid: "", newPaid: "", reasonPaid: "", approvalCap: "",
+    hasHoldingSub: false, holdings: [], transferReserves: false, reserveAmount: 0, reserveReason: "", reservePurpose: "",
+    hasCommittees: true,
+    audit: { meetings: 4, desc: "financial reporting", members: [{ name: "A", desig: "Chairperson", meetingsHeld: 4, meetingsAttended: 4 }] },
+    nomination: { meetings: 2, desc: "appointments", members: [{ name: "B", desig: "Chairperson", meetingsHeld: 2, meetingsAttended: 2 }] },
+    stakeholders: { meetings: 1, desc: "grievances", members: [{ name: "C", desig: "Chairperson", meetingsHeld: 1, meetingsAttended: 1 }] },
+    additionalCommittees: "None",
+    hasMemberMeetings: false, memberMeetings: [], hasLoans: false, loans: [], hasMaterialChanges: false, material: [], hasSigOrders: false, orders: [],
+    hasRelatedParties: true, related: [{ name: "Purple Petal Invest Pvt Ltd", relationship: "Common Director", nature: "Expenses", duration: "NA", terms: "NA", approvalDate: "NA", advance: 303526 }],
+    hasHighRem: false, rem: [], hasSubChanges: false, subs: [], hasDeposits: false, deposits: [], hasAudQual: false, audQuals: [], hasFrauds: false, frauds: [],
+    hasCostAud: false, costAud: { name: "", firm: "", regNo: "", period: "", rem: 0 }, hasCostRecords: false, costRec: { forProduct: "", compliance: "Compliant", typeRec: "" },
+    hasIntAud: false, intAud: { name: "", firm: "", regNo: "", period: "", rem: 0 }, hasPosh: false, posh: { complaintsRec: 0, disposed: 0, pending: 0 },
+    hasPoshPolicy: false, poshComplaints: [], hasMaternity: false, maternityReason: "Fewer than 10 employees",
+    hasInsolvency: false, insol: [], hasOts: false, ots: [], hasVigil: false, vigil: [], hasCsr: false, hasRiskPolicy: false, riskMeetings: 0, riskKeyAreas: "", hasIsin: false,
+    foreignEarnings: 0, foreignOutgo: 0, conservationDetails: "As there are no ongoing operations...", technologyEfforts: "N.A.", technologyBenefits: "N.A.", technologyExpenditure: "N.A.", technologyImported: "N.A.", technologyYear: "N.A.", technologyAbsorbed: "N.A.", technologyNotAbsorbed: "N.A.",
+  }), 8000);
 
   console.log(failed === 0 ? "\nAll office-tools generators OK." : `\n${failed} check(s) FAILED.`);
   process.exit(failed === 0 ? 0 : 1);

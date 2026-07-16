@@ -4,6 +4,7 @@ import { mouZ, renderMouDocx, type MouInput } from "./tools/mou";
 import { partnershipZ, renderPartnershipDocx, type PartnershipInput } from "./tools/partnership";
 import { trustZ, renderTrustDocx, type TrustInput } from "./tools/trust";
 import { llpZ, renderLlpDocx, type LlpInput } from "./tools/llp";
+import { directorReportZ, renderDirectorReportDocx, type DirectorReportInput } from "./tools/directorReport";
 
 // Dispatcher for the JSON-form legal/financial document generators. Each entry
 // validates the posted body, renders a .docx, and supplies a filename + a one-line
@@ -58,5 +59,11 @@ export const DOC_GENERATORS: Record<string, DocGen> = {
     render: renderLlpDocx,
     filename: (i: LlpInput) => `${slug(i.llpName)}_Agreement`,
     summary: (i: LlpInput) => `${i.llpName} — ${i.partners.length} partners (${i.llpType})`,
+  }),
+  "director-report": def({
+    schema: directorReportZ,
+    render: renderDirectorReportDocx,
+    filename: (i: DirectorReportInput) => `${slug(i.companyName)}_Directors_Report`,
+    summary: (i: DirectorReportInput) => `${i.companyName} — FY ${i.financialYear}`,
   }),
 };
