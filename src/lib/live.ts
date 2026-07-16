@@ -34,7 +34,12 @@ import {
 } from "@/lib/graph";
 import { syncOneDriveVideos } from "@/lib/sync";
 import { autoQuizFromVideo } from "@/lib/auto-quiz";
-import { FIRM_TZ_GRAPH, istLocalToUtc, utcToIstWall } from "@/lib/live-format";
+import {
+  FIRM_TZ_GRAPH,
+  istLocalToUtc,
+  utcToIstWall,
+  istLocalInputValue,
+} from "@/lib/live-format";
 
 export interface ScheduleInput {
   title: string;
@@ -72,7 +77,9 @@ export async function scheduleRecurring(
     const s = await scheduleLiveSession(
       {
         ...input,
-        startLocal: utcToIstWall(occUtc),
+        // datetime-local shape ("YYYY-MM-DDTHH:mm") — scheduleLiveSession parses
+        // this with istLocalToUtc, which appends ":00+05:30".
+        startLocal: istLocalInputValue(occUtc),
         materials: k === 0 ? input.materials : undefined, // upload once
       },
       organizerUserId
@@ -310,6 +317,66 @@ export async function ensureMeetingSettings(sessionId: string): Promise<boolean>
       .catch(() => {});
   }
   return applyMeetingSettings(token, meetingId).catch(() => false);
+}
+
+/**
+ * One pass of the hands-off pipeline: keep auto-record settings applied to
+ * upcoming sessions, ingest finished recordings, and (re)generate transcript
+ * quizzes. Shared by the scheduled cron and the admin Live-sessions page so
+ * ingestion happens even if the external cron isn't configured. Idempotent.
+ */
+export async function runIngestSweep(): Promise<{
+  processed: number;
+  quizRetries: number;
+  results: { id: string; title: string; status: string; message?: string }[];
+}> {
+  const now = new Date();
+  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const weekAhead = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+  const upcoming = await prisma.liveSession.findMany({
+    where: { status: "SCHEDULED", startAt: { gt: now, lt: weekAhead } },
+    select: { id: true },
+    take: 20,
+  });
+  for (const s of upcoming) await ensureMeetingSettings(s.id).catch(() => {});
+
+  const due = await prisma.liveSession.findMany({
+    where: {
+      endAt: { lt: now, gte: weekAgo },
+      recordedVideoId: null,
+      NOT: [{ status: "INGESTED" }, { status: "CANCELLED" }],
+    },
+    orderBy: { endAt: "asc" },
+    take: 10,
+  });
+
+  const results: { id: string; title: string; status: string; message?: string }[] = [];
+  for (const s of due) {
+    if (s.status === "SCHEDULED") {
+      const confirmed = await confirmSessionEnded(s.id).catch(() => false);
+      if (!confirmed && now.getTime() > s.endAt.getTime() + 4 * 60 * 60 * 1000) {
+        await prisma.liveSession
+          .update({ where: { id: s.id }, data: { status: "ENDED" } })
+          .catch(() => {});
+      }
+    }
+    try {
+      const r = await ingestRecording(s.id);
+      results.push({ id: s.id, title: s.title, status: r.status, message: r.message });
+    } catch (e) {
+      results.push({ id: s.id, title: s.title, status: "error", message: (e as Error).message });
+    }
+  }
+
+  const recentlyIngested = await prisma.liveSession.findMany({
+    where: { status: "INGESTED", recordedVideoId: { not: null }, endAt: { gte: weekAgo } },
+    select: { id: true },
+    take: 20,
+  });
+  for (const s of recentlyIngested) await ensureTranscriptQuiz(s.id).catch(() => {});
+
+  return { processed: due.length, quizRetries: recentlyIngested.length, results };
 }
 
 // -------------------- Recording ingestion (Phase 2) --------------------

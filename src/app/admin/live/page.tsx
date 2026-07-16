@@ -32,6 +32,7 @@ import {
 } from "@/lib/graph";
 import { JoinMeetingButton } from "@/components/JoinMeetingButton";
 import ScheduleLiveForm from "./ScheduleLiveForm";
+import { AutoIngest } from "./AutoIngest";
 
 export const dynamic = "force-dynamic";
 
@@ -298,6 +299,7 @@ export default async function AdminLivePage({
 
   return (
     <main className="px-6 py-8 max-w-5xl">
+      <AutoIngest />
       <div className="mb-8">
         <p className="text-[11px] uppercase tracking-[0.14em] font-extrabold text-accent-coral mb-1.5">
           Admin · Live sessions
