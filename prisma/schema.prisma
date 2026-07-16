@@ -57,6 +57,7 @@ model User {
   attendances         AttendanceRecord[]
   liveSessions        LiveSession[]   @relation("LiveSessionOrganizer")
   certificateIssues   CertificateIssue[] @relation("CertificateCreator")
+  officeToolRuns      OfficeToolRun[]    @relation("OfficeToolRunner")
 }
 
 enum EmployeeLevel {
@@ -729,4 +730,24 @@ model SopView {
 
   @@index([sopId])
   @@index([viewedAt])
+}
+
+// Audit trail for the Office Tools suite (document generators + tax PDF processors).
+// No generated file is stored — this records who ran which tool, when, and a small
+// summary (e.g. the client/firm name, or how many PDFs were processed). §no-storing.
+model OfficeToolRun {
+  id          String   @id @default(cuid())
+  tool        String        // registry id, e.g. "mou", "gstr3b"
+  toolTitle   String        // denormalized for history display
+  category    String        // "Legal" | "Tax" | "Financial"
+  summary     String        // human-readable one-liner (client name / file count)
+  format      String        // "docx" | "xlsx"
+  createdById String
+  createdBy   User     @relation("OfficeToolRunner", fields: [createdById], references: [id])
+  createdByName String
+  createdAt   DateTime @default(now())
+
+  @@index([createdById])
+  @@index([tool])
+  @@index([createdAt])
 }

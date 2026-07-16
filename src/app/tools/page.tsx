@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FileBadge, ArrowRight, BookText } from "lucide-react";
+import { FileBadge, ArrowRight, BookText, Wrench } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +22,15 @@ const TOOLS = [
       "Turn a plain description into a polished, department-tagged SOP. AI refines your input into a brief you confirm, then generates a Word document saved to the L&D drive.",
     icon: BookText,
     accent: "#17b978",
+  },
+  {
+    href: "/tools/office-tools",
+    title: "Document & Tax Tools",
+    tag: "Legal · Tax · Financial",
+    blurb:
+      "Generate rental agreements, MOUs, partnership, trust and LLP deeds as Word files, and extract GSTR-3B / TDS challan PDFs into Excel. Direct download, full audit trail.",
+    icon: Wrench,
+    accent: "#e84a8a",
   },
 ];
 
