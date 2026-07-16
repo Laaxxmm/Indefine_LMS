@@ -94,7 +94,7 @@ export const OFFICE_TOOLS: ToolMeta[] = [
     icon: "ScrollText",
     accent: "#17b978",
     format: "docx",
-    live: false,
+    live: true,
   },
 ];
 
