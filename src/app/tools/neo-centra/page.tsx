@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { canUseNeoCentra } from "@/lib/neo-centra/access";
 import { fyStartYearFor, TYPE_LABEL } from "@/lib/neo-centra/compliance";
 import { getComplianceForFy, summarize } from "@/lib/neo-centra/service";
-import { ShieldCheck, ArrowRight, AlertTriangle, CalendarClock, Clock, ListChecks, Trophy, CalendarDays, Mail } from "lucide-react";
+import { ShieldCheck, ArrowRight, AlertTriangle, CalendarClock, Trophy } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -28,10 +28,7 @@ export default async function NeoCentraCockpit() {
 
   const modules = [
     { title: "Compliance", blurb: "Statutory tax deadlines with filing status.", href: "/tools/neo-centra/compliance", icon: ShieldCheck, accent: "#5B4BE6", live: true },
-    { title: "Tasks", blurb: "Firm task hub synced from Turia.", icon: ListChecks, accent: "#17b978", live: false },
     { title: "Incentives", blurb: "Four-bucket director incentive breakdown from Turia.", href: "/tools/neo-centra/incentives", icon: Trophy, accent: "#e8a13a", live: true },
-    { title: "Calendar", blurb: "Meetings & time blocks from Microsoft 365.", icon: CalendarDays, accent: "#e84a8a", live: false },
-    { title: "Emails", blurb: "AI triage across firm inboxes.", icon: Mail, accent: "#3aa0e8", live: false },
   ];
 
   return (
@@ -81,23 +78,13 @@ export default async function NeoCentraCockpit() {
 
       {/* Modules */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {modules.map((m) => {
-          const inner = (
-            <>
-              <div className="w-11 h-11 rounded-[13px] grid place-items-center mb-3" style={{ background: `${m.accent}18`, color: m.accent }}><m.icon className="w-5 h-5" /></div>
-              <div className="flex items-center gap-2">
-                <div className="font-display font-bold text-lg leading-tight">{m.title}</div>
-                {!m.live && <span className="inline-flex items-center gap-1 text-[9.5px] font-extrabold tracking-wide uppercase px-1.5 py-0.5 rounded-full bg-muted text-ink-faint"><Clock className="w-3 h-3" /> Soon</span>}
-              </div>
-              <p className="text-[13px] text-ink-mute leading-relaxed mt-1">{m.blurb}</p>
-            </>
-          );
-          return m.live && m.href ? (
-            <Link key={m.title} href={m.href} className="group bg-card border border-border rounded-[18px] p-5 shadow-lift hover:-translate-y-0.5 transition block">{inner}</Link>
-          ) : (
-            <div key={m.title} className="bg-card border border-border rounded-[18px] p-5 shadow-lift opacity-70">{inner}</div>
-          );
-        })}
+        {modules.map((m) => (
+          <Link key={m.title} href={m.href} className="group bg-card border border-border rounded-[18px] p-5 shadow-lift hover:-translate-y-0.5 transition block">
+            <div className="w-11 h-11 rounded-[13px] grid place-items-center mb-3" style={{ background: `${m.accent}18`, color: m.accent }}><m.icon className="w-5 h-5" /></div>
+            <div className="font-display font-bold text-lg leading-tight">{m.title}</div>
+            <p className="text-[13px] text-ink-mute leading-relaxed mt-1">{m.blurb}</p>
+          </Link>
+        ))}
       </div>
     </div>
   );
