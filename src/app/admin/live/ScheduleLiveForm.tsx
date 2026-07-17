@@ -105,6 +105,27 @@ export default function ScheduleLiveForm({
         </label>
       </div>
 
+      <label className="block sm:max-w-sm">
+        <span className="block text-[11px] uppercase tracking-[0.12em] font-extrabold text-ink-mute mb-1.5">
+          Parent folder{" "}
+          <span className="text-ink-faint font-semibold normal-case tracking-normal">(optional)</span>
+        </span>
+        <input
+          name="folderParent"
+          list="ld-parent-folders"
+          placeholder="e.g. Accounting"
+          className="w-full bg-white border border-border rounded-xl px-3 py-2.5 text-base font-medium focus:outline-none focus:ring-4 focus:ring-brand-500/15 focus:border-brand-500 transition"
+        />
+        <datalist id="ld-parent-folders">
+          {existingFolders.map((f) => (
+            <option key={f} value={f} />
+          ))}
+        </datalist>
+        <span className="block text-xs text-ink-faint mt-1">
+          Nest the session folder inside this one: L&amp;D / {"{parent}"} / {"{course}"}. Leave blank for the L&amp;D root.
+        </span>
+      </label>
+
       <label className="block">
         <span className="block text-[11px] uppercase tracking-[0.12em] font-extrabold text-ink-mute mb-1.5">
           Description <span className="text-ink-faint font-semibold normal-case tracking-normal">(optional)</span>

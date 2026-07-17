@@ -599,6 +599,51 @@ export async function uploadFileToFolder(
   return res.ok;
 }
 
+/** Resolve a folder's driveItem id from its path under the drive root. */
+export async function resolveFolderId(
+  driveId: string,
+  path: string,
+  token: string
+): Promise<string | null> {
+  const enc = path.split("/").filter(Boolean).map(encodeURIComponent).join("/");
+  const url = enc
+    ? `${GRAPH}/drives/${driveId}/root:/${enc}`
+    : `${GRAPH}/drives/${driveId}/root`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (!res.ok) return null;
+  const item = (await res.json()) as { id: string };
+  return item.id;
+}
+
+/**
+ * Move a driveItem into another folder (and optionally rename it). Used to
+ * relocate a live-session's folder under a new parent — the item id is
+ * preserved, so recordings inside keep resolving. Requires a write scope.
+ */
+export async function moveDriveItem(
+  driveId: string,
+  itemId: string,
+  destParentId: string,
+  token: string,
+  newName?: string
+): Promise<boolean> {
+  const res = await fetch(`${GRAPH}/drives/${driveId}/items/${itemId}`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      parentReference: { id: destParentId },
+      ...(newName ? { name: newName } : {}),
+    }),
+  });
+  if (!res.ok) {
+    console.error(`Graph move item failed: ${res.status} ${await res.text().catch(() => "")}`);
+  }
+  return res.ok;
+}
+
 /** Delete a drive item (best-effort). Used to drop a wrongly-ingested recording. */
 export async function deleteDriveItem(
   driveId: string,

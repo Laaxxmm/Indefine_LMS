@@ -604,8 +604,10 @@ model LiveSession {
   id              String            @id @default(cuid())
   title           String
   description     String?
-  // Folder name (== course/topic) created under the L&D root for the recording.
+  // Folder name (== course/topic) created for the recording. Nested under
+  // L&D/{folderParent} when set, else directly under the L&D root.
   courseTitle     String
+  folderParent    String?
   scheduledById   String            // organizer (admin) — meeting is created as this user
   startAt         DateTime          // UTC instant
   endAt           DateTime          // UTC instant

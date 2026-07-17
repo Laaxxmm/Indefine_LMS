@@ -18,6 +18,8 @@ import {
   createTeamsEvent,
   updateTeamsEvent,
   ensureFolder,
+  resolveFolderId,
+  moveDriveItem,
   uploadFileToFolder,
   deleteEvent,
   resolveOnlineMeetingId,
@@ -46,12 +48,21 @@ export interface ScheduleInput {
   title: string;
   description?: string | null;
   courseTitle: string;
+  /** Optional grouping folder; the course folder nests under L&D/{folderParent}. */
+  folderParent?: string | null;
   /** IST wall-clock "YYYY-MM-DDTHH:mm" from a datetime-local input. */
   startLocal: string;
   durationMin: number;
   attendeeUserIds: string[];
-  /** Optional material files uploaded into the L&D/{course} folder. */
+  /** Optional material files uploaded into the course folder. */
   materials?: { name: string; bytes: ArrayBuffer }[];
+}
+
+/** The L&D-relative path a session's recording folder lives under (its parent). */
+function sessionParentPath(rootPath: string, folderParent?: string | null): string {
+  const root = rootPath.replace(/^\/+|\/+$/g, "");
+  const parent = folderParent?.trim();
+  return parent ? `${root}/${parent}` : root;
 }
 
 /**
@@ -119,13 +130,18 @@ export async function scheduleLiveSession(
   });
   const attendeeEmails = attendees.map((a) => a.email).filter(Boolean);
 
-  // 1) Recording folder (named after the course/topic).
+  // 1) Recording folder (named after the course/topic), nested under the
+  // optional parent folder: L&D/{folderParent}/{course}.
   const courseFolder = input.courseTitle.trim();
-  const targetFolderId = await ensureFolder(driveId, rootPath, courseFolder, token);
+  const parentPath = sessionParentPath(rootPath, input.folderParent);
+  if (input.folderParent?.trim()) {
+    await ensureFolder(driveId, rootPath, input.folderParent.trim(), token);
+  }
+  const targetFolderId = await ensureFolder(driveId, parentPath, courseFolder, token);
 
   // 1b) Upload any attached materials into that same folder (best-effort).
   if (input.materials?.length) {
-    const folderPath = `${rootPath.replace(/^\/+|\/+$/g, "")}/${courseFolder}`;
+    const folderPath = `${parentPath}/${courseFolder}`;
     for (const m of input.materials) {
       await uploadFileToFolder(driveId, folderPath, m.name, m.bytes, token).catch(
         () => false
@@ -164,6 +180,7 @@ export async function scheduleLiveSession(
         title: input.title.trim(),
         description: input.description?.trim() || null,
         courseTitle: input.courseTitle.trim(),
+        folderParent: input.folderParent?.trim() || null,
         scheduledById: organizerUserId,
         startAt,
         endAt,
@@ -184,8 +201,72 @@ export async function scheduleLiveSession(
 export interface EditInput {
   title: string;
   courseTitle: string;
+  folderParent?: string | null;
   startLocal: string; // IST wall-clock "YYYY-MM-DDTHH:mm"
   durationMin: number;
+}
+
+/**
+ * Ensure a session's recording folder sits at L&D/{folderParent}/{courseTitle},
+ * returning its driveItem id. If the session already has a folder it is MOVED
+ * (and renamed if the course changed) so its recordings come along; otherwise a
+ * fresh folder is created. Requires a write scope.
+ */
+async function applySessionFolder(
+  driveId: string,
+  rootPath: string,
+  token: string,
+  existingFolderId: string | null,
+  existingCourse: string,
+  courseTitle: string,
+  folderParent: string | null | undefined
+): Promise<string> {
+  const parentPath = sessionParentPath(rootPath, folderParent);
+  if (folderParent?.trim()) {
+    await ensureFolder(driveId, rootPath, folderParent.trim(), token);
+  }
+  if (existingFolderId) {
+    const destParentId = await resolveFolderId(driveId, parentPath, token);
+    if (destParentId) {
+      const rename = courseTitle !== existingCourse ? courseTitle : undefined;
+      await moveDriveItem(driveId, existingFolderId, destParentId, token, rename);
+      return existingFolderId; // id is preserved across a move
+    }
+  }
+  return ensureFolder(driveId, parentPath, courseTitle, token);
+}
+
+/**
+ * Move a session's recording folder under a parent (e.g. group Isha Misty KT and
+ * Shellkode KT under "Accounting"). Works for past sessions too — moving the
+ * SharePoint folder keeps the recordings' item ids, so the lessons stay intact.
+ */
+export async function moveSessionFolder(
+  sessionId: string,
+  folderParent: string | null
+) {
+  const s = await prisma.liveSession.findUnique({ where: { id: sessionId } });
+  if (!s) throw new Error("Session not found.");
+  const driveId = process.env.GRAPH_DRIVE_ID;
+  const rootPath = process.env.GRAPH_VIDEOS_FOLDER_PATH;
+  if (!driveId || !rootPath) throw new Error("Drive not configured.");
+  const token = await getUserGraphToken(s.scheduledById);
+  if (!token) throw new Error("Organizer's Microsoft token unavailable — they need to sign in.");
+
+  const parent = folderParent?.trim() || null;
+  const targetFolderId = await applySessionFolder(
+    driveId,
+    rootPath,
+    token,
+    s.targetFolderId,
+    s.courseTitle,
+    s.courseTitle,
+    parent
+  );
+  await prisma.liveSession.update({
+    where: { id: s.id },
+    data: { folderParent: parent, targetFolderId },
+  });
 }
 
 /**
@@ -207,13 +288,23 @@ export async function updateLiveSession(sessionId: string, input: EditInput) {
   if (Number.isNaN(startAt.getTime())) throw new Error("Invalid start time.");
   const endAt = new Date(startAt.getTime() + input.durationMin * 60_000);
 
-  const newCourse = input.courseTitle.trim();
+  const newCourse = input.courseTitle.trim() || s.courseTitle;
+  const newParent = input.folderParent?.trim() || null;
   let targetFolderId = s.targetFolderId;
-  if (newCourse && newCourse !== s.courseTitle) {
+  // Re-home / rename the recording folder if the course name or parent changed.
+  if (newCourse !== s.courseTitle || newParent !== (s.folderParent ?? null)) {
     const driveId = process.env.GRAPH_DRIVE_ID;
     const rootPath = process.env.GRAPH_VIDEOS_FOLDER_PATH;
     if (driveId && rootPath) {
-      targetFolderId = await ensureFolder(driveId, rootPath, newCourse, token);
+      targetFolderId = await applySessionFolder(
+        driveId,
+        rootPath,
+        token,
+        s.targetFolderId,
+        s.courseTitle,
+        newCourse,
+        newParent
+      );
     }
   }
 
@@ -230,7 +321,8 @@ export async function updateLiveSession(sessionId: string, input: EditInput) {
     where: { id: s.id },
     data: {
       title: input.title.trim(),
-      courseTitle: newCourse || s.courseTitle,
+      courseTitle: newCourse,
+      folderParent: newParent,
       startAt,
       endAt,
       targetFolderId,

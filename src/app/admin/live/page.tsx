@@ -15,10 +15,12 @@ import {
   PlayCircle,
   Download,
   Pencil,
+  FolderInput,
 } from "lucide-react";
 import {
   scheduleRecurring,
   updateLiveSession,
+  moveSessionFolder,
   cancelLiveSession,
   ingestRecording,
   repullRecording,
@@ -48,6 +50,7 @@ async function scheduleSession(formData: FormData) {
   const session = await requireAdmin();
   const title = String(formData.get("title") || "").trim();
   const courseTitle = String(formData.get("courseTitle") || "").trim();
+  const folderParent = String(formData.get("folderParent") || "").trim() || null;
   const description = String(formData.get("description") || "").trim() || null;
   const startLocal = String(formData.get("startLocal") || "");
   const durationMin = Number(formData.get("durationMin") || 60);
@@ -90,6 +93,7 @@ async function scheduleSession(formData: FormData) {
       {
         title,
         courseTitle,
+        folderParent,
         description,
         startLocal,
         durationMin: Number.isFinite(durationMin) ? durationMin : 60,
@@ -118,6 +122,7 @@ async function editSession(formData: FormData) {
   const id = String(formData.get("id"));
   const title = String(formData.get("title") || "").trim();
   const courseTitle = String(formData.get("courseTitle") || "").trim();
+  const folderParent = String(formData.get("folderParent") || "").trim() || null;
   const startLocal = String(formData.get("startLocal") || "");
   const durationMin = Number(formData.get("durationMin") || 60);
   if (!id || !title || !courseTitle || !startLocal) return;
@@ -127,6 +132,7 @@ async function editSession(formData: FormData) {
     await updateLiveSession(id, {
       title,
       courseTitle,
+      folderParent,
       startLocal,
       durationMin: Number.isFinite(durationMin) ? durationMin : 60,
     });
@@ -139,6 +145,27 @@ async function editSession(formData: FormData) {
   revalidatePath("/admin/live");
   revalidatePath("/dashboard");
   redirect("/admin/live?tab=sessions&edited=1");
+}
+
+// Move a session's recording folder under a parent (works for past sessions —
+// used to group existing recordings, e.g. under "Accounting").
+async function moveFolderAction(formData: FormData) {
+  "use server";
+  await requireAdmin();
+  const id = String(formData.get("id"));
+  const folderParent = String(formData.get("folderParent") || "").trim() || null;
+  let errMsg: string | null = null;
+  try {
+    await moveSessionFolder(id, folderParent);
+  } catch (e) {
+    errMsg = (e as Error).message;
+  }
+  revalidatePath("/admin/live");
+  redirect(
+    errMsg
+      ? `/admin/live?tab=sessions&error=${encodeURIComponent(errMsg)}`
+      : "/admin/live?tab=sessions&edited=1"
+  );
 }
 
 async function cancelSession(formData: FormData) {
@@ -430,6 +457,11 @@ export default async function AdminLivePage({
 
       {tab === "sessions" && (
       <>
+      <datalist id="ld-folders">
+        {existingFolders.map((f) => (
+          <option key={f} value={f} />
+        ))}
+      </datalist>
       {/* Date filter */}
       <form
         method="GET"
@@ -482,11 +514,6 @@ export default async function AdminLivePage({
         </div>
       ) : (
         <div className="space-y-3 mb-8">
-          <datalist id="ld-folders">
-            {existingFolders.map((f) => (
-              <option key={f} value={f} />
-            ))}
-          </datalist>
           {upcoming.map((s) => {
             const attendeeCount = Array.isArray(s.attendeeIds)
               ? (s.attendeeIds as string[]).length
@@ -524,7 +551,9 @@ export default async function AdminLivePage({
                       <UsersIcon className="w-3.5 h-3.5" />
                       {attendeeCount} invited
                     </span>
-                    <span className="text-ink-faint">📁 L&amp;D / {s.courseTitle}</span>
+                    <span className="text-ink-faint">
+                      📁 L&amp;D {s.folderParent ? `/ ${s.folderParent} ` : ""}/ {s.courseTitle}
+                    </span>
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -585,6 +614,18 @@ export default async function AdminLivePage({
                           list="ld-folders"
                           required
                           defaultValue={s.courseTitle}
+                          className="w-full bg-white border border-border rounded-lg px-3 py-2"
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="block text-xs font-semibold text-ink-mute mb-1">
+                          Parent folder <span className="text-ink-faint font-normal">(optional)</span>
+                        </span>
+                        <input
+                          name="folderParent"
+                          list="ld-folders"
+                          defaultValue={s.folderParent ?? ""}
+                          placeholder="e.g. Accounting"
                           className="w-full bg-white border border-border rounded-lg px-3 py-2"
                         />
                       </label>
@@ -659,7 +700,8 @@ export default async function AdminLivePage({
                       </span>
                     </div>
                     <p className="text-xs text-ink-faint mt-0.5">
-                      {formatIst(s.startAt)} · by {nameById.get(s.scheduledById) ?? "—"} · 📁 {s.courseTitle}
+                      {formatIst(s.startAt)} · by {nameById.get(s.scheduledById) ?? "—"} · 📁{" "}
+                      {s.folderParent ? `${s.folderParent} / ` : ""}{s.courseTitle}
                     </p>
                   </div>
                   {s.recordedVideoId ? (
@@ -722,6 +764,39 @@ export default async function AdminLivePage({
                           </div>
                         ))}
                       </div>
+                    </details>
+                  )}
+
+                  {s.status !== "CANCELLED" && (
+                    <details className="mt-3 border-t border-border pt-3">
+                      <summary className="cursor-pointer inline-flex items-center gap-1.5 text-xs font-bold text-ink-mute hover:text-ink list-none [&::-webkit-details-marker]:hidden">
+                        <FolderInput className="w-3.5 h-3.5" />
+                        Move to folder
+                      </summary>
+                      <form
+                        action={moveFolderAction}
+                        className="mt-2 flex flex-wrap items-end gap-2"
+                      >
+                        <input type="hidden" name="id" value={s.id} />
+                        <label className="block">
+                          <span className="block text-xs font-semibold text-ink-mute mb-1">
+                            Parent folder (blank = L&amp;D root)
+                          </span>
+                          <input
+                            name="folderParent"
+                            list="ld-folders"
+                            defaultValue={s.folderParent ?? ""}
+                            placeholder="e.g. Accounting"
+                            className="bg-white border border-border rounded-lg px-3 py-1.5 text-sm"
+                          />
+                        </label>
+                        <button className="px-3 py-1.5 rounded-lg bg-ink hover:bg-ink-soft text-white text-sm font-semibold transition">
+                          Move
+                        </button>
+                        <span className="text-xs text-ink-faint">
+                          Moves the SharePoint folder (recordings come along).
+                        </span>
+                      </form>
                     </details>
                   )}
                 </div>
