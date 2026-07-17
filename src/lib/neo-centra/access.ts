@@ -6,3 +6,9 @@ import type { Session } from "next-auth";
 export function canUseNeoCentra(user: Session["user"] | null | undefined): boolean {
   return !!user && user.active === true && user.level === "PARTNER";
 }
+
+// A director who is also an admin sees every director's incentive detail; other
+// directors see their own detail + everyone's bucket totals only.
+export function isNeoCentraAdmin(user: Session["user"] | null | undefined): boolean {
+  return canUseNeoCentra(user) && user!.role === "ADMIN";
+}
