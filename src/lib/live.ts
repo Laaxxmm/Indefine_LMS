@@ -515,6 +515,29 @@ export async function runIngestSweep(): Promise<{
   });
   for (const s of upcoming) await ensureMeetingSettings(s.id).catch(() => {});
 
+  // Self-heal shared-folder collisions: a session's recorded video is wrong if
+  // it no longer exists, OR its title isn't this session's (two sessions ended
+  // up pointing at the same recording). Reset those so the ingest below re-pulls
+  // each session's OWN recording and regenerates its quiz. No manual repull.
+  const ingestedWithVideo = await prisma.liveSession.findMany({
+    where: { status: "INGESTED", recordedVideoId: { not: null }, endAt: { gte: weekAgo } },
+    select: { id: true, title: true, recordedVideoId: true },
+  });
+  for (const s of ingestedWithVideo) {
+    const v = await prisma.video.findUnique({
+      where: { id: s.recordedVideoId! },
+      select: { title: true },
+    });
+    if (!v || v.title !== s.title) {
+      await prisma.liveSession
+        .update({
+          where: { id: s.id },
+          data: { recordedVideoId: null, recordingItemId: null, status: "ENDED" },
+        })
+        .catch(() => {});
+    }
+  }
+
   const due = await prisma.liveSession.findMany({
     where: {
       endAt: { lt: now, gte: weekAgo },
