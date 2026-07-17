@@ -131,7 +131,7 @@ export default async function AdminAssignmentsPage({
 
   const [users, videos, modules, assignments] = await Promise.all([
     prisma.user.findMany({
-      where: { active: true },
+      where: { active: true, excludedFromScoring: false },
       orderBy: { name: "asc" },
     }),
     prisma.video.findMany({

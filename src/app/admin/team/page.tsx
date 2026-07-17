@@ -45,6 +45,16 @@ async function saveHierarchy(formData: FormData) {
     updates.set(userId, cur);
   }
 
+  // Exclude-from-scoring is a checkbox (absent when unchecked), so apply it for
+  // every row rendered in the form (each carries a hidden `uid`).
+  for (const uid of formData.getAll("uid")) {
+    const userId = String(uid);
+    const cur = updates.get(userId) ?? {};
+    // Checkbox is "Scored" (checked = counts); excluded is its inverse.
+    cur.excludedFromScoring = !formData.has(`scored_${userId}`);
+    updates.set(userId, cur);
+  }
+
   // Never let an admin change their own role here — prevents self-lockout.
   const self = updates.get(meId);
   if (self && "role" in self) delete self.role;
@@ -172,7 +182,10 @@ export default async function AdminTeamPage({
                 <th className="text-left p-3">Level</th>
                 <th className="text-left p-3">Dept</th>
                 <th className="text-left p-3">Branch</th>
-                <th className="text-left p-3 pr-5">Manager</th>
+                <th className="text-left p-3">Manager</th>
+                <th className="text-left p-3 pr-5" title="Uncheck for shared / non-employee mailboxes to drop them from the leaderboard, grading and assignments">
+                  Scored
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -263,7 +276,7 @@ export default async function AdminTeamPage({
                         ))}
                       </select>
                     </td>
-                    <td className="p-3 pr-5">
+                    <td className="p-3">
                       <select
                         name={`manager_${u.id}`}
                         defaultValue={u.managerId ?? ""}
@@ -276,6 +289,16 @@ export default async function AdminTeamPage({
                           </option>
                         ))}
                       </select>
+                    </td>
+                    <td className="p-3 pr-5">
+                      <input type="hidden" name="uid" value={u.id} />
+                      <input
+                        type="checkbox"
+                        name={`scored_${u.id}`}
+                        defaultChecked={!u.excludedFromScoring}
+                        className="w-4 h-4 accent-brand-500 cursor-pointer"
+                        title="Checked = counts on the leaderboard, grading and assignments. Uncheck for shared / non-employee mailboxes."
+                      />
                     </td>
                   </tr>
                 );

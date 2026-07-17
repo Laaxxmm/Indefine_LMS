@@ -25,6 +25,10 @@ model User {
   managerId     String?
   active        Boolean   @default(true)
   deactivatedAt DateTime?
+  // Shared / functional mailboxes (accounts@, info@, team inboxes) that sync in
+  // from M365 but aren't real people — kept for invites/email, excluded from the
+  // leaderboard, grading and the assignment picker.
+  excludedFromScoring Boolean @default(false)
   // Growth Wizard self-reflection — populated through the multi-step flow
   strengths           Json?     // string[]
   aspiration          String?   // free-text "where do you see yourself in 12mo"

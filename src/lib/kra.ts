@@ -161,8 +161,11 @@ export async function computeKraScores(
 ): Promise<KraSummary[]> {
   const users = await prisma.user.findMany({
     // Only current live users (active = licensed M365 members). Departed /
-    // unlicensed / disabled accounts are excluded unless explicitly requested.
-    where: opts.includeInactive ? undefined : { active: true },
+    // unlicensed / disabled accounts, and shared/functional mailboxes flagged
+    // excludedFromScoring, are excluded unless explicitly requested.
+    where: opts.includeInactive
+      ? undefined
+      : { active: true, excludedFromScoring: false },
     include: {
       attempts: {
         where: {
