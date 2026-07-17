@@ -235,48 +235,56 @@ function EmptyState({ title, sub }: { title: string; sub: string }) {
 }
 
 function ActionStrip({ me, compliance }: { me: DirectorIncentive | null; compliance: Compliance }) {
+  const [dlOpen, setDlOpen] = useState(false);
   const lossMaking = (me?.tasks ?? []).filter((t) => t.flags.includes("over-budget"));
   const fastAction = (me?.tasks ?? []).filter((t) => t.flags.includes("overdue") || t.flags.includes("long-pending"));
 
   return (
     <div className="grid md:grid-cols-3 gap-3 mb-4">
-      {/* Deadlines */}
+      {/* Deadlines — list hidden until the card is clicked */}
       <div className="rounded-2xl bg-card border border-border shadow-lift p-4">
-        <div className="flex items-center gap-1.5 text-[10.5px] font-extrabold tracking-[0.12em] text-ink-faint uppercase mb-2.5"><CalendarClock className="w-3.5 h-3.5" /> Deadlines</div>
-        <div className="flex items-center gap-4 mb-2.5">
-          <Mini value={compliance.overdue} label="Overdue" tone={compliance.overdue > 0 ? "text-rose-600" : "text-ink"} />
-          <Mini value={compliance.dueThisMonth} label="This month" tone="text-amber-600" />
-          <Mini value={`${compliance.filed}/${compliance.total}`} label="Filed" tone="text-emerald-600" />
-        </div>
-        <ul className="flex flex-col gap-1">
-          {compliance.overdueList.map((d) => (
-            <li key={d.label} className="flex items-center gap-1.5 text-[11.5px]"><AlertTriangle className="w-3 h-3 text-rose-500 shrink-0" /><span className="text-rose-700 truncate flex-1">{d.label}</span><span className="text-ink-faint">{fmtDate(d.dueDate)}</span></li>
-          ))}
-          {compliance.overdueList.length === 0 && compliance.dueSoonList.slice(0, 3).map((d) => (
-            <li key={d.label} className="flex items-center gap-1.5 text-[11.5px]"><CalendarClock className="w-3 h-3 text-ink-faint shrink-0" /><span className="text-ink-soft truncate flex-1">{d.label}</span><span className="text-ink-faint">{fmtDate(d.dueDate)}</span></li>
-          ))}
-        </ul>
+        <button onClick={() => setDlOpen((v) => !v)} className="w-full text-left">
+          <div className="flex items-center justify-between mb-2.5">
+            <span className="flex items-center gap-1.5 text-[10.5px] font-extrabold tracking-[0.12em] text-ink-faint uppercase"><CalendarClock className="w-3.5 h-3.5" /> Deadlines</span>
+            {dlOpen ? <ChevronDown className="w-4 h-4 text-ink-faint" /> : <ChevronRight className="w-4 h-4 text-ink-faint" />}
+          </div>
+          <div className="flex items-center gap-4">
+            <Mini value={compliance.overdue} label="Overdue" tone={compliance.overdue > 0 ? "text-rose-600" : "text-ink"} />
+            <Mini value={compliance.dueThisMonth} label="This month" tone="text-amber-600" />
+            <Mini value={`${compliance.filed}/${compliance.total}`} label="Filed" tone="text-emerald-600" />
+          </div>
+        </button>
+        {dlOpen && (
+          <ul className="flex flex-col gap-1 mt-3 border-t border-border pt-3">
+            {compliance.overdueList.map((d) => (
+              <li key={d.label} className="flex items-center gap-1.5 text-[11.5px]"><AlertTriangle className="w-3 h-3 text-rose-500 shrink-0" /><span className="text-rose-700 truncate flex-1">{d.label}</span><span className="text-ink-faint">{fmtDate(d.dueDate)}</span></li>
+            ))}
+            {compliance.dueSoonList.slice(0, compliance.overdueList.length ? 3 : 6).map((d) => (
+              <li key={d.label} className="flex items-center gap-1.5 text-[11.5px]"><CalendarClock className="w-3 h-3 text-ink-faint shrink-0" /><span className="text-ink-soft truncate flex-1">{d.label}</span><span className="text-ink-faint">{fmtDate(d.dueDate)}</span></li>
+            ))}
+          </ul>
+        )}
       </div>
 
-      {/* Loss-making */}
+      {/* Loss-making — show task name, not id */}
       <div className="rounded-2xl bg-card border border-border shadow-lift p-4">
         <div className="flex items-center gap-1.5 text-[10.5px] font-extrabold tracking-[0.12em] text-ink-faint uppercase mb-2.5"><PiggyBank className="w-3.5 h-3.5" /> Loss-making tasks</div>
         <div className="text-2xl font-display font-extrabold text-rose-600 leading-none mb-2">{lossMaking.length}</div>
         <ul className="flex flex-col gap-1">
           {lossMaking.slice(0, 4).map((t) => (
-            <li key={t.taskId} className="flex items-center gap-1.5 text-[11.5px]"><span className="text-ink-soft truncate flex-1">{t.identity || t.name}</span><span className="text-rose-600 font-semibold whitespace-nowrap">{inr(t.profit)}</span></li>
+            <li key={t.taskId} className="flex items-center gap-1.5 text-[11.5px]"><span className="text-ink-soft truncate flex-1">{t.name || t.identity}</span><span className="text-rose-600 font-semibold whitespace-nowrap">{inr(t.profit)}</span></li>
           ))}
           {lossMaking.length === 0 && <li className="text-[11.5px] text-ink-faint">None — every task is in the black. 🎉</li>}
         </ul>
       </div>
 
-      {/* Fast action */}
+      {/* Fast action — show task name, not id */}
       <div className="rounded-2xl bg-card border border-border shadow-lift p-4">
         <div className="flex items-center gap-1.5 text-[10.5px] font-extrabold tracking-[0.12em] text-ink-faint uppercase mb-2.5"><Flag className="w-3.5 h-3.5" /> Fast action needed</div>
         <div className="text-2xl font-display font-extrabold text-amber-600 leading-none mb-2">{fastAction.length}</div>
         <ul className="flex flex-col gap-1">
           {fastAction.slice(0, 4).map((t) => (
-            <li key={t.taskId} className="flex items-center gap-1.5 text-[11.5px]"><span className="text-ink-soft truncate flex-1">{t.identity || t.name}</span>{t.flags.map((f) => <span key={f} className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-amber-50 text-amber-700">{f === "long-pending" ? "stale" : f}</span>)}</li>
+            <li key={t.taskId} className="flex items-center gap-1.5 text-[11.5px]"><span className="text-ink-soft truncate flex-1">{t.name || t.identity}</span>{t.flags.map((f) => <span key={f} className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-amber-50 text-amber-700">{f === "long-pending" ? "stale" : f}</span>)}</li>
           ))}
           {fastAction.length === 0 && <li className="text-[11.5px] text-ink-faint">Nothing overdue or stale. 👏</li>}
         </ul>
