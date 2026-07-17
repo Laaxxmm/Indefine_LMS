@@ -7,9 +7,9 @@ export const dynamic = "force-dynamic";
 
 // Directors-only cockpit — appended to the grid only for directors.
 const NEO_CENTRA = {
-  href: "/tools/neo-centra",
+  href: "/tools/neo-centra/incentives",
   title: "Neo Centra",
-  tag: "Directors · Cockpit",
+  tag: "Directors · Incentive race",
   blurb:
     "The directors' cockpit — statutory compliance deadlines with filing status, and more modules on the way.",
   icon: LayoutDashboard,
