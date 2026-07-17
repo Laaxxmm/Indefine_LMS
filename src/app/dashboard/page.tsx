@@ -10,6 +10,7 @@ import { OnboardingTour, type TourStep } from "@/components/OnboardingTour";
 import { Logo } from "@/components/Logo";
 import { UserMenu } from "@/components/UserMenu";
 import { JoinMeetingButton } from "@/components/JoinMeetingButton";
+import { NeoTrackChip } from "@/components/NeoTrackChip";
 import {
   checkinUrgency,
   computeCheckinStreak,
@@ -303,6 +304,8 @@ export default async function Dashboard() {
       </header>
 
       <div className="max-w-[1240px] mx-auto px-5 sm:px-10 pt-2 pb-16 flex flex-col gap-[22px]">
+        {/* Directors: incentive-track status (hidden for everyone else) */}
+        <NeoTrackChip />
         {/* Hero + stat chips */}
         <div className="grid lg:grid-cols-[1.6fr_1fr] gap-5">
           <div

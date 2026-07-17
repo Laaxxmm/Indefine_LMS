@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { currentQuarter } from "./period";
 import {
   fetchOrgUsers, fetchTuriaTaskList, fetchTimesheets, fetchLeads, fetchTaskDetail, fetchAllInvoices,
   type TuriaLead, type TuriaTaskDetail,
@@ -258,6 +259,22 @@ export async function saveSnapshot(fromMs: number, toMs: number): Promise<Incent
 export async function getSnapshotForPeriod(fromMs: number, toMs: number): Promise<IncentiveSummary | null> {
   const row = await prisma.neoIncentiveSnapshot.findFirst({ where: { periodStart: { gte: new Date(fromMs), lte: new Date(toMs) } }, orderBy: { generatedAt: "desc" } });
   return row ? (row.data as unknown as IncentiveSummary) : null;
+}
+
+// At-a-glance "on incentive track?" for the main dashboard, from the current
+// quarter's latest snapshot. `none` = not synced yet; `review` = synced but no
+// qualifying activity for this director; `on` = has activity in any bucket.
+// (Rule is intentionally simple until real per-bucket targets are configured.)
+export type TrackStatus = { state: "on" | "review" | "none"; label: string; quarter: string };
+export async function incentiveTrackStatus(userId: string): Promise<TrackStatus> {
+  const q = currentQuarter(Date.now());
+  const snap = await getSnapshotForPeriod(q.fromMs, q.toMs);
+  if (!snap) return { state: "none", label: "Not synced", quarter: q.label };
+  const d = snap.directors.find((x) => x.directorId === userId);
+  if (!d) return { state: "none", label: "No data", quarter: q.label };
+  const b = d.buckets;
+  const active = b.leadConversion.convertedValue > 0 || b.billing.billedInPeriod > 0 || b.profitability.profitInPeriod > 0 || b.internalImprovement.qualifyingTasks > 0;
+  return active ? { state: "on", label: "On incentive track", quarter: q.label } : { state: "review", label: "Needs attention", quarter: q.label };
 }
 
 // ── Viewer filtering ──────────────────────────────────────────────────────────

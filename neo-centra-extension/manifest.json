@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Neo Centra — Turia Cookie Sync",
+  "version": "1.0.0",
+  "description": "Pushes the practice.turia.in session cookie to the Indefine LMS so Neo Centra's incentive sync stays authenticated.",
+  "permissions": ["cookies", "alarms", "storage"],
+  "host_permissions": ["*://practice.turia.in/*", "https://*/*"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "popup.html", "default_title": "Neo Centra Turia Sync" }
+}

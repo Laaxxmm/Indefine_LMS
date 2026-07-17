@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; width: 300px; margin: 0; padding: 14px; background: #f5f5fb; color: #1c1c28; }
+    h2 { margin: 0 0 10px; font-size: 13px; letter-spacing: 0.02em; }
+    .status { padding: 9px 10px; border-radius: 8px; margin-bottom: 12px; font-size: 12px; line-height: 1.4; }
+    .ok { background: #e7f8f0; color: #0a7a4e; border: 1px solid #b6ead3; }
+    .bad { background: #fdecec; color: #c0362c; border: 1px solid #f4c4c0; }
+    .warn { background: #fef6e6; color: #9a6a10; border: 1px solid #f6e0ad; }
+    .neutral { background: #fff; color: #55556a; border: 1px solid #e4e4ee; }
+    label { display: block; font-size: 10px; color: #8a8aa0; margin: 8px 0 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+    input { width: 100%; box-sizing: border-box; background: #fff; border: 1px solid #e4e4ee; color: #1c1c28; padding: 7px 9px; border-radius: 6px; font-size: 12px; font-family: "SF Mono", Menlo, monospace; }
+    input:focus { outline: none; border-color: #5b4be6; }
+    .row { display: flex; gap: 6px; margin-top: 10px; }
+    button { flex: 1; background: #5b4be6; color: white; border: 0; padding: 8px 10px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 12px; }
+    button.secondary { background: #fff; color: #1c1c28; border: 1px solid #e4e4ee; }
+    button:hover:not(:disabled) { filter: brightness(1.05); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .muted { color: #8a8aa0; font-size: 10px; margin-top: 10px; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <h2>Neo Centra · Turia Cookie Sync</h2>
+  <div id="status" class="status neutral">Loading…</div>
+
+  <label for="lmsUrl">LMS URL</label>
+  <input id="lmsUrl" type="text" placeholder="https://lms.indefine.in" autocomplete="off" />
+
+  <label for="relayToken">Relay token</label>
+  <input id="relayToken" type="password" placeholder="NEO_TURIA_RELAY_TOKEN value" autocomplete="off" />
+
+  <div class="row">
+    <button id="save" class="secondary">Save</button>
+    <button id="sync">Sync now</button>
+  </div>
+
+  <p class="muted">Keep a logged-in practice.turia.in tab open. This pushes Turia's session cookie to the LMS every 5 min and whenever the token rotates.</p>
+  <script src="popup.js"></script>
+</body>
+</html>
