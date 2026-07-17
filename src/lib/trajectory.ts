@@ -155,6 +155,25 @@ export const TRACK_META: Record<
   },
 };
 
+// Directors (PARTNER level) are graded on leadership, not watching: low Mastery,
+// high Initiative + Vision. Must sum to 100. Other levels use TRACK_META
+// defaultWeight (which also sums to 100).
+export const PARTNER_WEIGHTS: Record<TrackKind, number> = {
+  MASTERY: 10,
+  DELIVERY: 15,
+  INITIATIVE: 30,
+  COLLABORATION: 15,
+  VISION: 20,
+  CRAFT: 10,
+};
+
+/** Weight for a track at a level: PARTNER override, else the track default. */
+export function weightFor(trackKind: TrackKind, level: EmployeeLevel): number {
+  return level === "PARTNER"
+    ? PARTNER_WEIGHTS[trackKind]
+    : TRACK_META[trackKind].defaultWeight;
+}
+
 export const TIER_META: Record<
   TierKind,
   {
@@ -240,12 +259,37 @@ export function tierForScore(totalScore: number): TierKind {
 
 // -------------------- Setup helpers --------------------
 
+/**
+ * Migrate PARTNER track weights on a cycle to the director (lead-heavy) profile.
+ * Only touches rows still at the old uniform default, so it's idempotent AND
+ * preserves any weight an admin customized. Safe to call on every load.
+ */
+async function syncPartnerWeights(cycleId: string): Promise<void> {
+  const trackKinds: TrackKind[] = [
+    "MASTERY", "DELIVERY", "INITIATIVE", "COLLABORATION", "VISION", "CRAFT",
+  ];
+  for (const trackKind of trackKinds) {
+    const oldDefault = TRACK_META[trackKind].defaultWeight;
+    const newWeight = PARTNER_WEIGHTS[trackKind];
+    if (oldDefault === newWeight) continue;
+    await prisma.trackTarget
+      .updateMany({
+        where: { cycleId, level: "PARTNER", trackKind, weight: oldDefault },
+        data: { weight: newWeight },
+      })
+      .catch(() => {});
+  }
+}
+
 /** Create a default cycle + targets if none exist. Idempotent. */
 export async function ensureDefaultCycle(): Promise<PerformanceCycle> {
   const existing = await prisma.performanceCycle.findFirst({
     where: { isActive: true },
   });
-  if (existing) return existing;
+  if (existing) {
+    await syncPartnerWeights(existing.id);
+    return existing;
+  }
 
   const now = new Date();
   // Indian financial year — Apr 1 to Mar 31
@@ -292,7 +336,7 @@ export async function ensureDefaultCycle(): Promise<PerformanceCycle> {
         trackKind,
         level,
         target: meta.defaultTarget[level],
-        weight: meta.defaultWeight,
+        weight: weightFor(trackKind, level),
       });
     }
   }
@@ -421,12 +465,45 @@ async function scoreInitiative(ctx: ScoringContext): Promise<{ actual: number; n
       createdAt: { gte: ctx.cycle.startDate, lte: ctx.cycle.endDate },
     },
   });
-  const actual = initiatives + endorsements;
+
+  // Training conducted: live sessions this user led (that actually ran).
+  const sessionsConducted = await prisma.liveSession.count({
+    where: {
+      scheduledById: ctx.userId,
+      status: { in: ["ENDED", "RECORDING_READY", "INGESTED"] },
+      startAt: { gte: ctx.cycle.startDate, lte: ctx.cycle.endDate },
+    },
+  });
+
+  // Content added: videos this user created that are NOT live-session recordings
+  // (those are already credited via sessionsConducted, so we don't double-count).
+  const recRows = await prisma.liveSession.findMany({
+    where: { recordedVideoId: { not: null } },
+    select: { recordedVideoId: true },
+  });
+  const recSet = new Set(recRows.map((r) => r.recordedVideoId));
+  const created = await prisma.video.findMany({
+    where: {
+      createdById: ctx.userId,
+      createdAt: { gte: ctx.cycle.startDate, lte: ctx.cycle.endDate },
+    },
+    select: { id: true },
+  });
+  const contentAdded = created.filter((v) => !recSet.has(v.id)).length;
+
+  const actual = initiatives + endorsements + sessionsConducted + contentAdded;
+  const led = sessionsConducted + contentAdded;
 
   let nextMove = "Pitch a new initiative on the board";
-  if (actual === 0) nextMove = "Pitch your first initiative — bold ideas welcome";
-  else if (actual < 3) nextMove = "Keep the ideas flowing — pitch another";
-  else nextMove = "You're an initiative machine 🌱";
+  if (led > 0) {
+    nextMove = "Great — keep leading sessions and shipping content";
+  } else if (actual === 0) {
+    nextMove = "Pitch your first initiative — bold ideas welcome";
+  } else if (actual < 3) {
+    nextMove = "Keep the ideas flowing — pitch another";
+  } else {
+    nextMove = "You're an initiative machine 🌱";
+  }
 
   return { actual, nextMove };
 }
@@ -511,6 +588,15 @@ async function scoreCraft(ctx: ScoringContext): Promise<{ actual: number; nextMo
 }
 
 // -------------------- Compose --------------------
+
+/** The weighted grade (0-100) + tier for one user — the fair, level-aware score
+ * the leaderboard/dashboard rank on. Thin wrapper over computeTrajectory. */
+export async function computeGrade(
+  userId: string
+): Promise<{ score: number; tier: TierKind }> {
+  const t = await computeTrajectory(userId);
+  return { score: Math.round(t.totalScore), tier: t.tier };
+}
 
 export async function computeTrajectory(userId: string): Promise<TrajectorySummary> {
   const user = await prisma.user.findUnique({

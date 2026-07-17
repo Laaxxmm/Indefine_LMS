@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { computeKraScores } from "@/lib/kra";
 import { computeLevel } from "@/lib/gamification";
+import { computeGrade, TIER_META } from "@/lib/trajectory";
+import type { TierKind } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   ACTIVE_LEVELS,
@@ -47,18 +49,29 @@ export default async function Leaderboard({
 
   const meta = new Map(users.map((u) => [u.id, u]));
 
+  // The fair, level-weighted grade (0-100 + tier) each person is ranked on.
+  const gradeList = await Promise.all(
+    allRows.map(async (r) => ({ userId: r.userId, ...(await computeGrade(r.userId)) }))
+  );
+  const gradeByUser = new Map(gradeList.map((g) => [g.userId, g]));
+
   let rows = allRows.map((r) => {
     const m = meta.get(r.userId);
+    const g = gradeByUser.get(r.userId);
     return {
       ...r,
       branchId: m?.branchId ?? null,
       branch: m?.branch ?? null,
       department: (m?.department ?? "GENERAL") as Department,
       employeeLevel: (m?.level ?? "EXECUTIVE") as EmployeeLevel,
+      gradeScore: g?.score ?? 0,
+      gradeTier: (g?.tier ?? "RECALIBRATING") as TierKind,
     };
   });
   if (filterBranch) rows = rows.filter((r) => r.branchId === filterBranch);
   if (filterDept) rows = rows.filter((r) => r.department === filterDept);
+  // Rank by the weighted grade, not raw activity points.
+  rows.sort((a, b) => b.gradeScore - a.gradeScore);
 
   // Branch summary view
   const branchSummary = (() => {
@@ -75,7 +88,7 @@ export default async function Leaderboard({
         total: 0,
         n: 0,
       };
-      cur.total += r.totalScore;
+      cur.total += gradeByUser.get(r.userId)?.score ?? 0;
       cur.n += 1;
       map.set(key, cur);
     }
@@ -127,10 +140,10 @@ export default async function Leaderboard({
         <h1 className="font-display text-4xl sm:text-[48px] font-extrabold tracking-[-0.03em] mb-2">
           {view === "branches" ? "Branch race" : "Top performers"}
         </h1>
-        <p className="text-ink-mute text-sm font-semibold max-w-md mx-auto">
+        <p className="text-ink-mute text-sm font-semibold max-w-lg mx-auto">
           {view === "branches"
-            ? "Average score per branch · who's leading the firm?"
-            : "Your score adds up from five things:"}
+            ? "Average grade per branch · who's leading the firm?"
+            : "Ranked by your Trajectory grade (0–100), weighted for your level so everyone is measured fairly. The tiles below show the raw activity that feeds it."}
         </p>
         {view !== "branches" && (
           <div className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1.5 text-xs text-ink-mute max-w-xl mx-auto">
@@ -291,10 +304,13 @@ export default async function Leaderboard({
                       </div>
                       <div className="text-right shrink-0">
                         <p className="font-display text-lg font-bold tabular-nums">
-                          {r.totalScore}
+                          {r.gradeScore}
                         </p>
-                        <p className="text-[10px] text-ink-faint uppercase font-semibold">
-                          pts
+                        <p className={`text-[10px] uppercase font-bold ${TIER_META[r.gradeTier].fg}`}>
+                          {TIER_META[r.gradeTier].label}
+                        </p>
+                        <p className="text-[10px] text-ink-faint tabular-nums">
+                          {r.totalScore} pts
                         </p>
                       </div>
                     </div>
@@ -376,7 +392,7 @@ function BranchView({
                 {Math.round(b.avg)}
               </p>
               <p className="text-[10px] text-ink-faint uppercase tracking-wider font-bold">
-                Avg score
+                Avg grade
               </p>
             </div>
           </div>
@@ -414,6 +430,8 @@ function PodiumCard({
     assignmentPoints: number;
     attendancePoints: number;
     liveAttendancePoints: number;
+    gradeScore: number;
+    gradeTier: TierKind;
     department: Department;
     branch: { code: string } | null;
   };
@@ -483,11 +501,12 @@ function PodiumCard({
       </div>
       <p className="text-[10px] text-ink-mute mt-1">Lv {level.level}</p>
       <p className="font-display text-2xl sm:text-3xl font-extrabold mt-2 tabular-nums">
-        {row.totalScore}
+        {row.gradeScore}
       </p>
-      <p className="text-[10px] text-ink-faint uppercase tracking-wider font-semibold">
-        pts
+      <p className={`text-[10px] uppercase tracking-wider font-bold ${TIER_META[row.gradeTier].fg}`}>
+        {TIER_META[row.gradeTier].label}
       </p>
+      <p className="text-[9px] text-ink-faint tabular-nums">{row.totalScore} activity pts</p>
       <div className="mt-2 pt-2 border-t border-black/5 grid grid-cols-6 gap-x-1 w-full">
         <Stat label="Vid" value={row.videosCompleted * 10} />
         <Stat label="Quiz" value={row.bestQuizPoints} />

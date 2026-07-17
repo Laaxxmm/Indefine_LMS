@@ -57,6 +57,7 @@ model User {
   attendances         AttendanceRecord[]
   liveSessions        LiveSession[]   @relation("LiveSessionOrganizer")
   liveAttendances     LiveAttendance[]
+  videosCreated       Video[]         @relation("VideoCreator")
   certificateIssues   CertificateIssue[] @relation("CertificateCreator")
   officeToolRuns      OfficeToolRun[]    @relation("OfficeToolRunner")
 }
@@ -181,9 +182,13 @@ model Video {
   graphItemId     String
   durationSeconds Int?
   order           Int      @default(0)
+  // Who added this content (credits the Initiative track). Set to the organizer
+  // on a live-session recording; null for SharePoint-synced library videos.
+  createdById     String?
   createdAt       DateTime @default(now())
 
   module          Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  createdBy       User?    @relation("VideoCreator", fields: [createdById], references: [id], onDelete: SetNull)
   quiz            Quiz?
   progresses      VideoProgress[]
   assignments     Assignment[]

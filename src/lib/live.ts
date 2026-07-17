@@ -597,9 +597,10 @@ export async function ingestRecording(sessionId: string): Promise<IngestResult> 
   });
   if (!video) return { status: "pending", message: "Waiting for library sync." };
 
-  // Give the lesson a clean title (the file name carries a .mp4 suffix).
+  // Give the lesson a clean title (the file name carries a .mp4 suffix) and
+  // credit the organizer as the content creator (feeds the Initiative track).
   await prisma.video
-    .update({ where: { id: video.id }, data: { title: s.title } })
+    .update({ where: { id: video.id }, data: { title: s.title, createdById: s.scheduledById } })
     .catch(() => {});
 
   await prisma.liveSession.update({
