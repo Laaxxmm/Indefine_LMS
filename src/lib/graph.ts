@@ -599,6 +599,22 @@ export async function uploadFileToFolder(
   return res.ok;
 }
 
+/** The parent folder id of a drive item (used to find the folder holding a
+ *  session recording, regardless of where it currently sits). */
+export async function getItemParentId(
+  driveId: string,
+  itemId: string,
+  token: string
+): Promise<string | null> {
+  const res = await fetch(
+    `${GRAPH}/drives/${driveId}/items/${itemId}?$select=id,parentReference`,
+    { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }
+  );
+  if (!res.ok) return null;
+  const item = (await res.json()) as { parentReference?: { id?: string } };
+  return item.parentReference?.id ?? null;
+}
+
 /** Resolve a folder's driveItem id from its path under the drive root. */
 export async function resolveFolderId(
   driveId: string,

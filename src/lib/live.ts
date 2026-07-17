@@ -19,6 +19,7 @@ import {
   updateTeamsEvent,
   ensureFolder,
   resolveFolderId,
+  getItemParentId,
   moveDriveItem,
   uploadFileToFolder,
   deleteEvent,
@@ -215,36 +216,42 @@ export interface EditInput {
 async function applySessionFolder(
   driveId: string,
   rootPath: string,
-  token: string,
+  tokens: string[],
   existingFolderId: string | null,
   existingCourse: string,
   courseTitle: string,
   folderParent: string | null | undefined
 ): Promise<string> {
-  // Resolve the destination PARENT folder id. ensureFolder creates-or-gets and
-  // returns the id directly, so we don't do a separate lookup that could race
-  // (and used to fall through to creating a stray empty folder).
-  const parent = folderParent?.trim();
-  const destParentId = parent
-    ? await ensureFolder(driveId, rootPath, parent, token) // L&D/{parent}
-    : await resolveFolderId(driveId, rootPath, token); // back to the L&D root
-  if (!destParentId) {
-    throw new Error("Couldn't resolve the destination folder in SharePoint.");
-  }
-
-  if (existingFolderId) {
-    const rename = courseTitle !== existingCourse ? courseTitle : undefined;
-    const ok = await moveDriveItem(driveId, existingFolderId, destParentId, token, rename);
-    if (!ok) {
-      throw new Error(
-        "Couldn't move the SharePoint folder — the app needs Files.ReadWrite.All (Application) admin consent in Entra."
-      );
+  // Try each available token (app-only + organizer's delegated) — whichever has
+  // write scope wins. The folder create/move needs Files.ReadWrite.All, which
+  // may sit on one token and not the other.
+  let lastErr = "unknown error";
+  for (const token of tokens) {
+    try {
+      const parent = folderParent?.trim();
+      const destParentId = parent
+        ? await ensureFolder(driveId, rootPath, parent, token) // L&D/{parent}
+        : await resolveFolderId(driveId, rootPath, token); // back to the L&D root
+      if (!destParentId) {
+        lastErr = "couldn't resolve the destination folder";
+        continue;
+      }
+      if (existingFolderId) {
+        const rename = courseTitle !== existingCourse ? courseTitle : undefined;
+        const ok = await moveDriveItem(driveId, existingFolderId, destParentId, token, rename);
+        if (ok) return existingFolderId; // id preserved across a move
+        lastErr = "the move was rejected (write permission)";
+        continue;
+      }
+      const parentPath = sessionParentPath(rootPath, folderParent);
+      return await ensureFolder(driveId, parentPath, courseTitle, token);
+    } catch (e) {
+      lastErr = (e as Error).message;
     }
-    return existingFolderId; // id is preserved across a move
   }
-  // No existing folder yet — create the course folder under the parent.
-  const parentPath = sessionParentPath(rootPath, folderParent);
-  return ensureFolder(driveId, parentPath, courseTitle, token);
+  throw new Error(
+    `Couldn't move the SharePoint folder (${lastErr}). Grant the app Files.ReadWrite.All (Application) admin consent in Entra, or have the organizer sign out and back in.`
+  );
 }
 
 /**
@@ -261,25 +268,37 @@ export async function moveSessionFolder(
   const driveId = process.env.GRAPH_DRIVE_ID;
   const rootPath = process.env.GRAPH_VIDEOS_FOLDER_PATH;
   if (!driveId || !rootPath) throw new Error("Drive not configured.");
-  // Prefer the app-only token — it has the tenant Files.ReadWrite.All and isn't
-  // subject to whether the organizer's delegated grant includes write scope.
-  const token =
-    (await getAppOnlyToken()) ?? (await getUserGraphToken(s.scheduledById));
-  if (!token) throw new Error("No Microsoft Graph token available for the move.");
 
-  // Resolve the folder's current id from its path if it wasn't stored, so we
-  // move the real folder (with its recordings) rather than making a new one.
-  let currentFolderId = s.targetFolderId;
+  const tokens = (
+    await Promise.all([getAppOnlyToken(), getUserGraphToken(s.scheduledById)])
+  ).filter((t): t is string => !!t);
+  if (tokens.length === 0) throw new Error("No Microsoft Graph token available for the move.");
+  const readToken = tokens[0];
+
+  // The folder to move = the one actually holding this session's recording. Use
+  // the recording video's real parent (bulletproof against a stale stored id),
+  // falling back to the stored targetFolderId or the known path.
+  let currentFolderId: string | null = null;
+  if (s.recordedVideoId) {
+    const video = await prisma.video.findUnique({
+      where: { id: s.recordedVideoId },
+      select: { graphDriveId: true, graphItemId: true },
+    });
+    if (video) {
+      currentFolderId = await getItemParentId(video.graphDriveId, video.graphItemId, readToken);
+    }
+  }
+  if (!currentFolderId) currentFolderId = s.targetFolderId;
   if (!currentFolderId) {
     const currentPath = `${sessionParentPath(rootPath, s.folderParent)}/${s.courseTitle}`;
-    currentFolderId = await resolveFolderId(driveId, currentPath, token);
+    currentFolderId = await resolveFolderId(driveId, currentPath, readToken);
   }
 
   const parent = folderParent?.trim() || null;
   const targetFolderId = await applySessionFolder(
     driveId,
     rootPath,
-    token,
+    tokens,
     currentFolderId,
     s.courseTitle,
     s.courseTitle,
@@ -318,10 +337,12 @@ export async function updateLiveSession(sessionId: string, input: EditInput) {
     const driveId = process.env.GRAPH_DRIVE_ID;
     const rootPath = process.env.GRAPH_VIDEOS_FOLDER_PATH;
     if (driveId && rootPath) {
+      const appToken = await getAppOnlyToken();
+      const tokens = [appToken, token].filter((t): t is string => !!t);
       targetFolderId = await applySessionFolder(
         driveId,
         rootPath,
-        token,
+        tokens,
         s.targetFolderId,
         s.courseTitle,
         newCourse,
