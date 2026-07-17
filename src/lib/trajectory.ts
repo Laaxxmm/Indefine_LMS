@@ -31,7 +31,12 @@ export interface TrackResult {
   weight: number;
   weighted: number;
   nextMove: string;
+  /** False when the track has no real activity/data yet (a default, not earned)
+   *  — those are left out of the overall grade so they neither drag nor inflate. */
+  hasData: boolean;
 }
+
+type TrackScore = { actual: number; nextMove: string; hasData: boolean };
 
 export interface TrajectorySummary {
   cycle: PerformanceCycle | null;
@@ -223,22 +228,22 @@ export const TIER_META: Record<
     blurb: "Building momentum — you're on track.",
   },
   FOCUSED: {
-    label: "Focused",
-    minPct: 50,
+    label: "Rising",
+    minPct: 40,
     color: "amber",
     bg: "bg-card",
     fg: "text-amber-700",
     glow: "shadow-soft",
-    blurb: "A few areas need attention. You've got this.",
+    blurb: "You're on your way — keep the momentum going.",
   },
   RECALIBRATING: {
-    label: "Recalibrating",
+    label: "Getting started",
     minPct: 0,
-    color: "rose",
+    color: "sky",
     bg: "bg-card",
-    fg: "text-rose-700",
+    fg: "text-sky-700",
     glow: "shadow-soft",
-    blurb: "Reset and rebuild — support is on the way.",
+    blurb: "Just getting started — every video and session counts.",
   },
 };
 
@@ -363,7 +368,7 @@ interface ScoringContext {
   level: EmployeeLevel;
 }
 
-async function scoreMastery(ctx: ScoringContext): Promise<{ actual: number; nextMove: string }> {
+async function scoreMastery(ctx: ScoringContext): Promise<TrackScore> {
   const userId = ctx.userId;
 
   // % of assigned MODULE/VIDEO assignments completed. Auto-generated catch-up
@@ -417,10 +422,13 @@ async function scoreMastery(ctx: ScoringContext): Promise<{ actual: number; next
     nextMove = "You're crushing Mastery — share a tip with a teammate";
   }
 
-  return { actual, nextMove };
+  // Real data only if there's assigned training or at least one quiz attempt —
+  // otherwise the 100% "compliance" is just the empty-state default.
+  const hasData = assigned.length > 0 || attempts.length > 0;
+  return { actual, nextMove, hasData };
 }
 
-async function scoreDelivery(ctx: ScoringContext): Promise<{ actual: number; nextMove: string }> {
+async function scoreDelivery(ctx: ScoringContext): Promise<TrackScore> {
   const userId = ctx.userId;
 
   // % of assigned TASK + VIDEO + MODULE done before dueAt (or done at all if no
@@ -433,7 +441,8 @@ async function scoreDelivery(ctx: ScoringContext): Promise<{ actual: number; nex
     },
     select: { status: true, dueAt: true, completedAt: true },
   });
-  if (assigned.length === 0) return { actual: 100, nextMove: "No tasks yet — Delivery is fresh" };
+  if (assigned.length === 0)
+    return { actual: 100, nextMove: "No tasks yet — Delivery is fresh", hasData: false };
 
   const onTime = assigned.filter((a) => {
     if (a.status !== "COMPLETED") return false;
@@ -452,10 +461,10 @@ async function scoreDelivery(ctx: ScoringContext): Promise<{ actual: number; nex
     nextMove = "Delivery is rock solid";
   }
 
-  return { actual, nextMove };
+  return { actual, nextMove, hasData: true };
 }
 
-async function scoreInitiative(ctx: ScoringContext): Promise<{ actual: number; nextMove: string }> {
+async function scoreInitiative(ctx: ScoringContext): Promise<TrackScore> {
   const initiatives = await prisma.initiative.count({
     where: {
       userId: ctx.userId,
@@ -510,10 +519,10 @@ async function scoreInitiative(ctx: ScoringContext): Promise<{ actual: number; n
     nextMove = "You're an initiative machine 🌱";
   }
 
-  return { actual, nextMove };
+  return { actual, nextMove, hasData: actual > 0 };
 }
 
-async function scoreCollaboration(ctx: ScoringContext): Promise<{ actual: number; nextMove: string }> {
+async function scoreCollaboration(ctx: ScoringContext): Promise<TrackScore> {
   const count = await prisma.endorsement.count({
     where: {
       toId: ctx.userId,
@@ -527,16 +536,16 @@ async function scoreCollaboration(ctx: ScoringContext): Promise<{ actual: number
   else if (count < 3) nextMove = "Keep helping — endorsements add up";
   else nextMove = "You're the team's connector 🤝";
 
-  return { actual: count, nextMove };
+  return { actual: count, nextMove, hasData: count > 0 };
 }
 
-async function scoreVision(ctx: ScoringContext): Promise<{ actual: number; nextMove: string }> {
+async function scoreVision(ctx: ScoringContext): Promise<TrackScore> {
   const quests = await prisma.quest.findMany({
     where: { userId: ctx.userId, cycleId: ctx.cycle.id, status: { in: ["APPROVED", "ACTIVE", "COMPLETED"] } },
     include: { milestones: true },
   });
   if (quests.length === 0) {
-    return { actual: 0, nextMove: "Set your quarterly quests in the Growth Wizard" };
+    return { actual: 0, nextMove: "Set your quarterly quests in the Growth Wizard", hasData: false };
   }
 
   let totalMilestones = 0;
@@ -559,10 +568,10 @@ async function scoreVision(ctx: ScoringContext): Promise<{ actual: number; nextM
   if (actual >= 80) nextMove = "Vision on point — you're shipping your goals";
   else if (actual < 30) nextMove = "Pick a milestone you can finish this week";
 
-  return { actual, nextMove };
+  return { actual, nextMove, hasData: true };
 }
 
-async function scoreCraft(ctx: ScoringContext): Promise<{ actual: number; nextMove: string }> {
+async function scoreCraft(ctx: ScoringContext): Promise<TrackScore> {
   const ratings = await prisma.endorsement.findMany({
     where: {
       toId: ctx.userId,
@@ -575,6 +584,7 @@ async function scoreCraft(ctx: ScoringContext): Promise<{ actual: number; nextMo
     return {
       actual: 3.0,
       nextMove: "Ask your manager for craft feedback in your next 1:1",
+      hasData: false,
     };
   }
   const valid = ratings.filter((r): r is { score: number } => typeof r.score === "number");
@@ -582,6 +592,7 @@ async function scoreCraft(ctx: ScoringContext): Promise<{ actual: number; nextMo
     return {
       actual: 3.0,
       nextMove: "Manager hasn't rated craft yet this cycle",
+      hasData: false,
     };
   }
   const avg = valid.reduce((s, r) => s + r.score, 0) / valid.length;
@@ -589,7 +600,7 @@ async function scoreCraft(ctx: ScoringContext): Promise<{ actual: number; nextMo
   if (avg < 3) nextMove = "Pair with a senior on a piece of work this week";
   else if (avg < 4) nextMove = "You're consistent — push for one stretch piece";
   else nextMove = "Stellar craft 🌟 — share what works in a team session";
-  return { actual: avg, nextMove };
+  return { actual: avg, nextMove, hasData: true };
 }
 
 // -------------------- Compose --------------------
@@ -641,7 +652,7 @@ export async function computeTrajectory(userId: string): Promise<TrajectorySumma
       scoreCraft(ctx),
     ]);
 
-  const raw: { kind: TrackKind; result: { actual: number; nextMove: string } }[] = [
+  const raw: { kind: TrackKind; result: TrackScore }[] = [
     { kind: "MASTERY", result: mastery },
     { kind: "DELIVERY", result: delivery },
     { kind: "INITIATIVE", result: initiative },
@@ -680,10 +691,23 @@ export async function computeTrajectory(userId: string): Promise<TrajectorySumma
       weight,
       weighted,
       nextMove: result.nextMove,
+      hasData: result.hasData,
     };
   });
 
-  const totalScore = tracks.reduce((s, t) => s + t.weighted, 0);
+  // Grade on the tracks you have REAL data in. Averaging over all six punishes
+  // everyone for tracks the firm hasn't started using (Vision has no quests,
+  // Collaboration no endorsements) — pinning even very active people in low
+  // tiers. And the empty-state defaults (Mastery/Delivery = 100 with no
+  // assignments, Craft = 3.0 with no ratings) would otherwise hand inactive
+  // people a free high grade. So: weighted average over hasData tracks only,
+  // weights renormalized. Each track starts counting the moment it has data.
+  const active = tracks.filter((t) => t.hasData);
+  const activeWeight = active.reduce((s, t) => s + t.weight, 0);
+  const totalScore =
+    activeWeight > 0
+      ? active.reduce((s, t) => s + t.scorePct * t.weight, 0) / activeWeight
+      : 0;
   const tier = tierForScore(totalScore);
 
   // Rings — daily/weekly closure metric, not raw track scores.

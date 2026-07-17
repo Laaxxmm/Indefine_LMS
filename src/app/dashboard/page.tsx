@@ -512,10 +512,19 @@ export default async function Dashboard() {
                       </div>
                       <span className="text-[11px] font-bold text-ink-faint">{t.weight}% wt</span>
                     </div>
-                    <div className="font-display font-extrabold text-2xl my-2">{Math.round(t.scorePct)}</div>
-                    <div className="h-[7px] rounded-full overflow-hidden" style={{ background: "#EEEDF4" }}>
-                      <div className="h-full rounded-full" style={{ width: `${t.scorePct}%`, background: c }} />
-                    </div>
+                    {t.hasData ? (
+                      <>
+                        <div className="font-display font-extrabold text-2xl my-2">{Math.round(t.scorePct)}</div>
+                        <div className="h-[7px] rounded-full overflow-hidden" style={{ background: "#EEEDF4" }}>
+                          <div className="h-full rounded-full" style={{ width: `${t.scorePct}%`, background: c }} />
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="font-display font-extrabold text-2xl my-2 text-ink-faint">—</div>
+                        <p className="text-[11px] text-ink-faint">Not counted yet — no activity here</p>
+                      </>
+                    )}
                   </div>
                 );
               })}
