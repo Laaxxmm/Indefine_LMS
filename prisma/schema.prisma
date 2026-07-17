@@ -796,3 +796,51 @@ model NeoComplianceStatus {
   @@unique([fyStartYear, key])
   @@index([fyStartYear])
 }
+
+// -------------------- Neo Centra · Incentives (Turia-fed) --------------------
+
+// The firm's single Turia session cookie (captured from a logged-in Turia tab and
+// relayed by a director). Used server-side to call Turia's internal API.
+model NeoTuriaSession {
+  id        Int      @id @default(1)
+  cookie    String   @db.Text
+  updatedById String?
+  updatedByName String?
+  updatedAt DateTime @updatedAt
+}
+
+// Per-director Turia mapping (director = a Partner user). Resolved by fuzzy
+// name-match against Turia org users; turiaUsername is what timesheet rows match on.
+model NeoDirectorMapping {
+  userId        String   @id
+  turiaUserId   String?
+  turiaUsername String?
+  updatedAt     DateTime @updatedAt
+}
+
+// Bucket 4 config: board-approved hour budgets for internal / company-dev tasks.
+model NeoInternalBudget {
+  id            String   @id @default(cuid())
+  turiaTaskId   String?
+  taskIdentity  String?  // Turia uniqueidentity, e.g. TSK03519
+  taskName      String
+  approvedHours Float
+  approvedBy    String?
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([turiaTaskId])
+  @@index([taskIdentity])
+}
+
+// Cached per-period incentive computations (Turia is slow/fragile; UI reads snapshots).
+model NeoIncentiveSnapshot {
+  id          String   @id @default(cuid())
+  periodStart DateTime
+  periodEnd   DateTime
+  generatedAt DateTime @default(now())
+  data        Json     // full per-director 4-bucket breakdown
+
+  @@index([periodStart])
+}

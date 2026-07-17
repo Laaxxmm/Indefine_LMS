@@ -29,7 +29,7 @@ export default async function NeoCentraCockpit() {
   const modules = [
     { title: "Compliance", blurb: "Statutory tax deadlines with filing status.", href: "/tools/neo-centra/compliance", icon: ShieldCheck, accent: "#5B4BE6", live: true },
     { title: "Tasks", blurb: "Firm task hub synced from Turia.", icon: ListChecks, accent: "#17b978", live: false },
-    { title: "Incentives", blurb: "Director incentive scheme & bucket breakdown.", icon: Trophy, accent: "#e8a13a", live: false },
+    { title: "Incentives", blurb: "Four-bucket director incentive breakdown from Turia.", href: "/tools/neo-centra/incentives", icon: Trophy, accent: "#e8a13a", live: true },
     { title: "Calendar", blurb: "Meetings & time blocks from Microsoft 365.", icon: CalendarDays, accent: "#e84a8a", live: false },
     { title: "Emails", blurb: "AI triage across firm inboxes.", icon: Mail, accent: "#3aa0e8", live: false },
   ];
