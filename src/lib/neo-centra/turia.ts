@@ -214,3 +214,12 @@ export async function fetchTimesheets(dateFrom: number, dateTo: number, userId?:
   const json = await turiaPost("timesheet", "list", { fromDate: dateFrom, toDate: dateTo, userId: userId || "", departmentId: "" });
   return (json.tasktimesheets as Array<Record<string, unknown>>) || [];
 }
+
+// Per-task timesheet rows. `amount` = hours × hourlyrate = the manpower cost Turia
+// uses for its Revenue − Manpower − OP profit. The bulk timesheet feed doesn't carry
+// a task id, so cost/hours must be pulled per task.
+export async function fetchTaskTimesheets(taskId: string): Promise<Array<{ username: string; hours: number; amount: number }>> {
+  const json = await turiaPost("timesheet", "list", { taskId, taskid: taskId });
+  const rows = (json.tasktimesheets as Array<Record<string, unknown>>) || [];
+  return rows.map((r) => ({ username: String(r.username ?? ""), hours: numf(r.totalhours), amount: numf(r.amount) }));
+}
