@@ -600,15 +600,19 @@ export async function ingestRecording(sessionId: string): Promise<IngestResult> 
     };
   }
 
-  // Has the copied recording already landed in the course folder? Pick the
-  // largest if several are present (e.g. after a false-start re-record).
+  // Has THIS session's recording already landed in the course folder? Match by
+  // the file we copy it as ("<session title>.mp4") — several sessions can share
+  // one folder (e.g. two ITR sessions both under "Tax Training 2026"), so we
+  // must never grab another session's recording here.
+  const wantBase = sanitizeName(s.title).toLowerCase();
+  const pickMine = (files: { id: string; name: string }[]) =>
+    files.find((v) => v.name.toLowerCase().startsWith(wantBase)) ?? null;
+
   let newItemId: string | null = null;
   const inTarget = await listFolderVideos(driveId, s.targetFolderId, token);
-  if (inTarget.length > 0) {
-    newItemId =
-      inTarget.reduce((best, cur) =>
-        (cur.size ?? 0) > (best.size ?? 0) ? cur : best
-      ).id;
+  const mine = pickMine(inTarget);
+  if (mine) {
+    newItemId = mine.id;
   } else if (s.recordingItemId) {
     // Copy was kicked off on a prior run but hasn't landed yet — wait, don't re-copy.
     return { status: "pending", message: "Recording copy still in progress." };
@@ -690,7 +694,7 @@ export async function ingestRecording(sessionId: string): Promise<IngestResult> 
     newItemId = await pollCopyStatus(monitor);
     if (!newItemId) {
       const landed = await listFolderVideos(driveId, s.targetFolderId, token);
-      if (landed.length > 0) newItemId = landed[0].id;
+      newItemId = pickMine(landed)?.id ?? null;
     }
     if (!newItemId) {
       return { status: "pending", message: "Recording copy in progress." };
