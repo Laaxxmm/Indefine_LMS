@@ -30,6 +30,13 @@ const QUOTES = [
 
 const score = (d: DirectorIncentive) => d.buckets.leadConversion.convertedValue + d.buckets.billing.billedInPeriod + d.buckets.profitability.profitInPeriod;
 
+const BUCKETS = [
+  { color: "#5B4BE6", tint: "#efeafe", icon: TrendingUp, n: "Bucket 1", label: "Leads converted" },
+  { color: "#17b978", tint: "#e6f8f0", icon: Receipt, n: "Bucket 2", label: "Billing" },
+  { color: "#3aa0e8", tint: "#e8f4fd", icon: PiggyBank, n: "Bucket 3", label: "Profit" },
+  { color: "#e8a13a", tint: "#fdf3e3", icon: Wrench, n: "Bucket 4", label: "Internal" },
+] as const;
+
 export function IncentivesView({
   period, snapshot: initial, turia, isAdmin, viewerId, viewerName, compliance,
 }: {
@@ -81,6 +88,16 @@ export function IncentivesView({
   const maxScore = Math.max(1, ...ranked.map(score));
   const me = snapshot?.directors.find((d) => d.directorId === viewerId) ?? null;
   const others = ranked.filter((d) => d.directorId !== viewerId);
+  const myRank = ranked.findIndex((d) => d.directorId === viewerId) + 1;
+  const maxes = useMemo(() => {
+    const ds = snapshot?.directors ?? [];
+    return {
+      b1: Math.max(1, ...ds.map((d) => d.buckets.leadConversion.convertedValue)),
+      b2: Math.max(1, ...ds.map((d) => d.buckets.billing.billedInPeriod)),
+      b3: Math.max(1, ...ds.map((d) => d.buckets.profitability.profitInPeriod)),
+      b4: Math.max(1, ...ds.map((d) => d.buckets.internalImprovement.internalHours)),
+    };
+  }, [snapshot]);
 
   return (
     <div>
@@ -154,20 +171,29 @@ export function IncentivesView({
           </section>
 
           {/* Your scorecard */}
-          {me && (
-            <section className="mb-4">
-              <div className="flex items-baseline gap-2 mb-2.5">
-                <h2 className="font-display font-extrabold text-xl">{me.name}</h2>
-                <span className="text-[10px] font-extrabold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-brand-50 text-brand-700">You</span>
-              </div>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                <Kpi icon={TrendingUp} tone="text-brand-600" bg="bg-brand-50" n="Bucket 1" label="Leads converted" value={inr(me.buckets.leadConversion.convertedValue)} sub={`${me.buckets.leadConversion.convertedLeads}/${me.buckets.leadConversion.originatedLeads} won · ${Math.round(me.buckets.leadConversion.conversionRate * 100)}%`} />
-                <Kpi icon={Receipt} tone="text-emerald-600" bg="bg-emerald-50" n="Bucket 2" label="Billing" value={inr(me.buckets.billing.billedInPeriod)} sub={`${me.buckets.billing.taskCount} task${me.buckets.billing.taskCount === 1 ? "" : "s"}`} />
-                <Kpi icon={PiggyBank} tone="text-sky-600" bg="bg-sky-50" n="Bucket 3" label="Profit" value={inr(me.buckets.profitability.profitInPeriod)} sub={`${me.buckets.profitability.taskCount} task${me.buckets.profitability.taskCount === 1 ? "" : "s"}`} />
-                <Kpi icon={Wrench} tone="text-amber-600" bg="bg-amber-50" n="Bucket 4" label="Internal" value={`${me.buckets.internalImprovement.qualifyingTasks}/${me.buckets.internalImprovement.totalContributedTasks}`} sub={`${me.buckets.internalImprovement.internalHours}h within budget`} />
-              </div>
-            </section>
-          )}
+          {me && (() => {
+            const b = me.buckets;
+            const cards = [
+              { ...BUCKETS[0], value: inr(b.leadConversion.convertedValue), sub: `${b.leadConversion.convertedLeads}/${b.leadConversion.originatedLeads} won · ${Math.round(b.leadConversion.conversionRate * 100)}%`, val: b.leadConversion.convertedValue, max: maxes.b1, negative: false },
+              { ...BUCKETS[1], value: inr(b.billing.billedInPeriod), sub: `${b.billing.taskCount} task${b.billing.taskCount === 1 ? "" : "s"}`, val: b.billing.billedInPeriod, max: maxes.b2, negative: false },
+              { ...BUCKETS[2], value: inr(b.profitability.profitInPeriod), sub: `${b.profitability.taskCount} task${b.profitability.taskCount === 1 ? "" : "s"}`, val: b.profitability.profitInPeriod, max: maxes.b3, negative: b.profitability.profitInPeriod < 0 },
+              { ...BUCKETS[3], value: `${b.internalImprovement.qualifyingTasks}/${b.internalImprovement.totalContributedTasks}`, sub: `${b.internalImprovement.internalHours}h within budget`, val: b.internalImprovement.internalHours, max: maxes.b4, negative: false },
+            ];
+            return (
+              <section className="mb-4">
+                <div className="flex items-center gap-2.5 mb-3 flex-wrap">
+                  <h2 className="font-display font-extrabold text-xl">{me.name}</h2>
+                  <span className="text-[10px] font-extrabold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-brand-50 text-brand-700">You</span>
+                  <span className="ml-auto inline-flex items-center gap-1.5 text-[12px] font-extrabold px-3 py-1.5 rounded-full bg-ink text-white">
+                    {myRank === 1 ? "🥇 Leading the race" : `${myRank === 2 ? "🥈" : myRank === 3 ? "🥉" : "🏁"} Rank #${myRank} of ${ranked.length}`}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                  {cards.map((c) => <Kpi key={c.n} {...c} />)}
+                </div>
+              </section>
+            );
+          })()}
 
           {/* Action needed */}
           <ActionStrip me={me} compliance={compliance} />
@@ -210,16 +236,25 @@ export function IncentivesView({
   );
 }
 
-function Kpi({ icon: Icon, tone, bg, n, label, value, sub }: { icon: typeof TrendingUp; tone: string; bg: string; n: string; label: string; value: string; sub: string }) {
+function Kpi({ icon: Icon, color, tint, n, label, value, sub, val, max, negative }: { icon: typeof TrendingUp; color: string; tint: string; n: string; label: string; value: string; sub: string; val: number; max: number; negative: boolean }) {
+  const pct = Math.max(0, Math.min(100, Math.round((val / (max || 1)) * 100)));
+  const leader = val >= (max || 1) && val > 0;
   return (
-    <div className="rounded-2xl bg-card border border-border shadow-lift p-4">
-      <div className="flex items-center justify-between mb-2">
-        <span className={`w-9 h-9 rounded-[11px] grid place-items-center ${bg} ${tone}`}><Icon className="w-5 h-5" /></span>
-        <span className="text-[9.5px] font-extrabold tracking-wide uppercase text-ink-faint">{n}</span>
+    <div className="relative overflow-hidden rounded-2xl border border-border shadow-lift p-4" style={{ background: `linear-gradient(155deg, ${tint} 0%, #ffffff 60%)` }}>
+      <div className="absolute top-0 left-0 right-0 h-1" style={{ background: color }} />
+      <div className="flex items-center justify-between mb-3 mt-1">
+        <span className="w-10 h-10 rounded-[13px] grid place-items-center text-white" style={{ background: color, boxShadow: `0 6px 16px -6px ${color}` }}><Icon className="w-5 h-5" /></span>
+        <span className="text-[10px] font-extrabold tracking-wider uppercase" style={{ color }}>{n}</span>
       </div>
-      <div className="text-[22px] font-display font-extrabold tracking-tight leading-none">{value}</div>
-      <div className="text-[11.5px] font-bold text-ink-soft mt-1">{label}</div>
+      <div className="text-[26px] font-display font-extrabold tracking-tight leading-none" style={{ color: negative ? "#e11d48" : "#1c1c28" }}>{value}</div>
+      <div className="text-[12px] font-bold text-ink-soft mt-1">{label}</div>
       <div className="text-[11px] text-ink-mute mt-0.5">{sub}</div>
+      <div className="mt-3">
+        <div className="h-1.5 rounded-full overflow-hidden" style={{ background: `${color}22` }}>
+          <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: color }} />
+        </div>
+        <div className="text-[10px] font-bold mt-1" style={{ color }}>{leader ? "Leading 👑" : `${pct}% of leader`}</div>
+      </div>
     </div>
   );
 }
