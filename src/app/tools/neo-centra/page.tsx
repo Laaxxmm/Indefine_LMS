@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { canUseNeoCentra, currentDirector } from "@/lib/neo-centra/access";
+import { canUseNeoCentra } from "@/lib/neo-centra/access";
 import { fyStartYearFor, TYPE_LABEL } from "@/lib/neo-centra/compliance";
 import { getComplianceForFy, summarize } from "@/lib/neo-centra/service";
 import { ShieldCheck, ArrowRight, AlertTriangle, CalendarClock, Clock, ListChecks, Trophy, CalendarDays, Mail } from "lucide-react";
@@ -22,7 +22,7 @@ export default async function NeoCentraCockpit() {
   const today = todayIso.slice(0, 10);
   const nextUp = list.filter((d) => d.status === "PENDING" && d.dueDate >= today).slice(0, 4);
 
-  const name = (currentDirector(session.user)?.name ?? session.user.name ?? "Director").split(" ")[0];
+  const name = (session.user.name ?? "Director").split(" ")[0];
   const hour = new Date().getHours();
   const greet = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
