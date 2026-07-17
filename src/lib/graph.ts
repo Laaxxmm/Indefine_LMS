@@ -739,6 +739,54 @@ export async function meetingHasEnded(
   return (json.value?.length ?? 0) > 0;
 }
 
+export interface AttendanceEntry {
+  email: string;
+  seconds: number;
+}
+
+/**
+ * Fetch per-attendee attendance for the organizer's (/me) meeting from the Teams
+ * attendance report: each attendee's email + total seconds present (summed
+ * across rejoins). Empty until Teams has generated the report (minutes after the
+ * meeting ends). Requires OnlineMeetingArtifact.Read.All.
+ */
+export async function listAttendanceRecords(
+  token: string,
+  meetingId: string
+): Promise<AttendanceEntry[]> {
+  const listRes = await fetch(
+    `${GRAPH}/me/onlineMeetings/${meetingId}/attendanceReports?$top=5`,
+    { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }
+  );
+  if (!listRes.ok) return [];
+  const list = (await listRes.json()) as {
+    value?: { id: string; meetingEndDateTime?: string }[];
+  };
+  const reports = (list.value ?? []).slice();
+  if (reports.length === 0) return [];
+  // Newest report (most recent meeting occurrence) first.
+  reports.sort((a, b) =>
+    (b.meetingEndDateTime ?? "").localeCompare(a.meetingEndDateTime ?? "")
+  );
+
+  const recRes = await fetch(
+    `${GRAPH}/me/onlineMeetings/${meetingId}/attendanceReports/${reports[0].id}/attendanceRecords?$top=200`,
+    { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }
+  );
+  if (!recRes.ok) return [];
+  const recs = (await recRes.json()) as {
+    value?: { emailAddress?: string | null; totalAttendanceInSeconds?: number }[];
+  };
+  // A person who rejoined has multiple records — sum their seconds by email.
+  const byEmail = new Map<string, number>();
+  for (const r of recs.value ?? []) {
+    const email = (r.emailAddress ?? "").trim().toLowerCase();
+    if (!email) continue;
+    byEmail.set(email, (byEmail.get(email) ?? 0) + (r.totalAttendanceInSeconds ?? 0));
+  }
+  return [...byEmail].map(([email, seconds]) => ({ email, seconds }));
+}
+
 /** Strip WebVTT cue timings / numbers / speaker tags down to readable text. */
 function vttToText(vtt: string): string {
   const out: string[] = [];

@@ -56,6 +56,7 @@ model User {
   tierAssignments     TierAssignment[]
   attendances         AttendanceRecord[]
   liveSessions        LiveSession[]   @relation("LiveSessionOrganizer")
+  liveAttendances     LiveAttendance[]
   certificateIssues   CertificateIssue[] @relation("CertificateCreator")
   officeToolRuns      OfficeToolRun[]    @relation("OfficeToolRunner")
 }
@@ -617,9 +618,30 @@ model LiveSession {
   updatedAt       DateTime          @updatedAt
 
   scheduledBy     User              @relation("LiveSessionOrganizer", fields: [scheduledById], references: [id])
+  attendances     LiveAttendance[]
 
   @@index([startAt])
   @@index([status])
+}
+
+// Per-attendee attendance for a live session, pulled from the Teams attendance
+// report after the meeting ends. Points are tiered on % of the session attended
+// (>=75% full, >=40% half, else 0) and feed the KRA / weighted grade.
+model LiveAttendance {
+  id              String   @id @default(cuid())
+  liveSessionId   String
+  userId          String
+  secondsAttended Int      @default(0)
+  attendedPct     Float    @default(0)
+  points          Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  liveSession     LiveSession @relation(fields: [liveSessionId], references: [id], onDelete: Cascade)
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([liveSessionId, userId])
+  @@index([userId])
 }
 
 enum LiveSessionStatus {

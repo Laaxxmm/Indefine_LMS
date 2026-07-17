@@ -139,6 +139,7 @@ export default async function Leaderboard({
             <span><b className="text-ink">DDL</b> deadlines hit on time</span>
             <span><b className="text-ink">Asgn</b> assignments finished</span>
             <span><b className="text-ink">Att</b> monthly attendance</span>
+            <span><b className="text-ink">Live</b> live-session attendance</span>
           </div>
         )}
       </div>
@@ -286,6 +287,7 @@ export default async function Leaderboard({
                         <Stat label="DDL" value={r.deadlinePoints} />
                         <Stat label="Asgn" value={r.assignmentPoints} />
                         <Stat label="Att" value={r.attendancePoints} />
+                        <Stat label="Live" value={r.liveAttendancePoints} />
                       </div>
                       <div className="text-right shrink-0">
                         <p className="font-display text-lg font-bold tabular-nums">
@@ -411,6 +413,7 @@ function PodiumCard({
     deadlinePoints: number;
     assignmentPoints: number;
     attendancePoints: number;
+    liveAttendancePoints: number;
     department: Department;
     branch: { code: string } | null;
   };
@@ -485,12 +488,13 @@ function PodiumCard({
       <p className="text-[10px] text-ink-faint uppercase tracking-wider font-semibold">
         pts
       </p>
-      <div className="mt-2 pt-2 border-t border-black/5 grid grid-cols-5 gap-x-1 w-full">
+      <div className="mt-2 pt-2 border-t border-black/5 grid grid-cols-6 gap-x-1 w-full">
         <Stat label="Vid" value={row.videosCompleted * 10} />
         <Stat label="Quiz" value={row.bestQuizPoints} />
         <Stat label="DDL" value={row.deadlinePoints} />
         <Stat label="Asgn" value={row.assignmentPoints} />
         <Stat label="Att" value={row.attendancePoints} />
+        <Stat label="Live" value={row.liveAttendancePoints} />
       </div>
     </div>
   );

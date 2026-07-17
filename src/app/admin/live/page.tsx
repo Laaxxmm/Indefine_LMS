@@ -251,7 +251,15 @@ export default async function AdminLivePage({
         select: { id: true, name: true, email: true },
       }),
       prisma.user.findMany({ select: { id: true, name: true, email: true } }),
-      prisma.liveSession.findMany({ orderBy: { startAt: "desc" } }),
+      prisma.liveSession.findMany({
+        orderBy: { startAt: "desc" },
+        include: {
+          attendances: {
+            orderBy: { secondsAttended: "desc" },
+            include: { user: { select: { name: true, email: true } } },
+          },
+        },
+      }),
       // Only people who've signed in to the LMS have a Microsoft token we can
       // act as — they're the only valid meeting organizers.
       prisma.account.findMany({
@@ -633,11 +641,14 @@ export default async function AdminLivePage({
           <div className="space-y-2">
             {past.map((s) => {
               const meta = STATUS_META[displayStatus(s)] ?? STATUS_META.ENDED;
+              const attSorted = s.attendances ?? [];
+              const attPts = attSorted.reduce((sum, a) => sum + a.points, 0);
               return (
                 <div
                   key={s.id}
-                  className="rounded-xl bg-white border border-border p-4 flex items-center gap-3 shadow-soft"
+                  className="rounded-xl bg-white border border-border p-4 shadow-soft"
                 >
+                  <div className="flex items-center gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-semibold text-sm truncate">{s.title}</p>
@@ -680,6 +691,39 @@ export default async function AdminLivePage({
                       </button>
                     </form>
                   ) : null}
+                  </div>
+
+                  {attSorted.length > 0 && (
+                    <details className="mt-3 border-t border-border pt-3">
+                      <summary className="cursor-pointer inline-flex items-center gap-1.5 text-xs font-bold text-ink-mute hover:text-ink list-none [&::-webkit-details-marker]:hidden">
+                        <UsersIcon className="w-3.5 h-3.5" />
+                        Attendance ({attSorted.length}) · {attPts} pts
+                      </summary>
+                      <div className="mt-2 divide-y divide-border">
+                        {attSorted.map((a) => (
+                          <div
+                            key={a.id}
+                            className="flex items-center justify-between py-1.5 text-xs"
+                          >
+                            <span className="text-ink truncate">
+                              {a.user.name ?? a.user.email}
+                            </span>
+                            <span className="text-ink-mute shrink-0 tabular-nums">
+                              {Math.round(a.secondsAttended / 60)} min ·{" "}
+                              {a.attendedPct.toFixed(0)}% ·{" "}
+                              <span
+                                className={
+                                  a.points > 0 ? "text-emerald-600 font-semibold" : "text-ink-faint"
+                                }
+                              >
+                                {a.points} pts
+                              </span>
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
                 </div>
               );
             })}

@@ -29,6 +29,7 @@ import {
   listFolderVideos,
   fetchMeetingTranscript,
   meetingHasEnded,
+  listAttendanceRecords,
   deleteDriveItem,
   type RecordingCandidate,
 } from "@/lib/graph";
@@ -320,10 +321,75 @@ export async function ensureMeetingSettings(sessionId: string): Promise<boolean>
 }
 
 /**
+ * Points for attending a live session, tiered on the % of the (scheduled)
+ * session attended: >=75% full, >=40% half, else 0.
+ */
+const LIVE_FULL_POINTS = 10;
+export function liveAttendancePoints(attendedPct: number): number {
+  if (attendedPct >= 75) return LIVE_FULL_POINTS;
+  if (attendedPct >= 40) return Math.round(LIVE_FULL_POINTS / 2);
+  return 0;
+}
+
+/**
+ * Pull the Teams attendance report for a finished session and record per-attendee
+ * points. Idempotent: skips once attendance rows exist; returns quietly while the
+ * report isn't ready yet (Teams generates it minutes after the meeting), so the
+ * sweep can retry. Only invited/known users (matched by email) are scored.
+ */
+export async function captureAttendance(sessionId: string): Promise<void> {
+  const s = await prisma.liveSession.findUnique({
+    where: { id: sessionId },
+    include: { _count: { select: { attendances: true } } },
+  });
+  if (!s || s.status === "CANCELLED") return;
+  if (Date.now() <= s.endAt.getTime()) return; // not over yet
+  if (s._count.attendances > 0) return; // already captured
+
+  const token = await getUserGraphToken(s.scheduledById);
+  if (!token) return;
+
+  let meetingId = s.onlineMeetingId;
+  if (!meetingId && s.joinUrl) {
+    meetingId = await resolveOnlineMeetingId(token, s.joinUrl).catch(() => null);
+    if (meetingId) {
+      await prisma.liveSession
+        .update({ where: { id: s.id }, data: { onlineMeetingId: meetingId } })
+        .catch(() => {});
+    }
+  }
+  if (!meetingId) return;
+
+  const records = await listAttendanceRecords(token, meetingId).catch(() => []);
+  if (records.length === 0) return; // report not ready — retry next sweep
+
+  const durSec = Math.max(1, Math.round((s.endAt.getTime() - s.startAt.getTime()) / 1000));
+  const users = await prisma.user.findMany({
+    where: { email: { in: records.map((r) => r.email) } },
+    select: { id: true, email: true },
+  });
+  const idByEmail = new Map(users.map((u) => [u.email.toLowerCase(), u.id]));
+
+  for (const rec of records) {
+    const userId = idByEmail.get(rec.email);
+    if (!userId) continue; // external / non-LMS attendee
+    const pct = Math.min(100, (rec.seconds / durSec) * 100);
+    const points = liveAttendancePoints(pct);
+    await prisma.liveAttendance
+      .upsert({
+        where: { liveSessionId_userId: { liveSessionId: s.id, userId } },
+        create: { liveSessionId: s.id, userId, secondsAttended: rec.seconds, attendedPct: pct, points },
+        update: { secondsAttended: rec.seconds, attendedPct: pct, points },
+      })
+      .catch(() => {});
+  }
+}
+
+/**
  * One pass of the hands-off pipeline: keep auto-record settings applied to
- * upcoming sessions, ingest finished recordings, and (re)generate transcript
- * quizzes. Shared by the scheduled cron and the admin Live-sessions page so
- * ingestion happens even if the external cron isn't configured. Idempotent.
+ * upcoming sessions, ingest finished recordings, capture attendance, and
+ * (re)generate transcript quizzes. Shared by the scheduled cron and the admin
+ * Live-sessions page so it happens even without the external cron. Idempotent.
  */
 export async function runIngestSweep(): Promise<{
   processed: number;
@@ -375,6 +441,18 @@ export async function runIngestSweep(): Promise<{
     take: 20,
   });
   for (const s of recentlyIngested) await ensureTranscriptQuiz(s.id).catch(() => {});
+
+  // Capture attendance for any ended session that doesn't have it yet.
+  const needAttendance = await prisma.liveSession.findMany({
+    where: {
+      endAt: { lt: now, gte: weekAgo },
+      status: { not: "CANCELLED" },
+      attendances: { none: {} },
+    },
+    select: { id: true },
+    take: 20,
+  });
+  for (const s of needAttendance) await captureAttendance(s.id).catch(() => {});
 
   return { processed: due.length, quizRetries: recentlyIngested.length, results };
 }
