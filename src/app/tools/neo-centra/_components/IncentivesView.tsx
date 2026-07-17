@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Loader2, RefreshCw, AlertTriangle, Link2, ChevronDown, ChevronRight, TrendingUp, Receipt, PiggyBank, Wrench, CheckCircle2 } from "lucide-react";
-import type { DirectorIncentive, IncentiveSummary } from "@/lib/neo-centra/incentive";
+import type { DirectorIncentive, IncentiveSummary, InternalTaskResult } from "@/lib/neo-centra/incentive";
 
 type Snapshot = (IncentiveSummary & { viewer?: { directorId: string | null; isAdmin: boolean } }) | null;
 
@@ -101,7 +101,15 @@ export function IncentivesView({
       ) : (
         <div className="flex flex-col gap-3">
           {snapshot.directors.map((d) => (
-            <DirectorCard key={d.directorId} d={d} isSelf={d.directorId === viewerId} canDrill={isAdmin || d.directorId === viewerId} expanded={expanded === d.directorId} onToggle={() => setExpanded((x) => (x === d.directorId ? null : d.directorId))} />
+            <DirectorCard
+              key={d.directorId}
+              d={d}
+              internalTasks={snapshot.internalTasks.filter((t) => t.contributors.some((c) => c.director === d.name))}
+              isSelf={d.directorId === viewerId}
+              canDrill={isAdmin || d.directorId === viewerId}
+              expanded={expanded === d.directorId}
+              onToggle={() => setExpanded((x) => (x === d.directorId ? null : d.directorId))}
+            />
           ))}
         </div>
       )}
@@ -119,9 +127,9 @@ function Bucket({ icon: Icon, label, value, sub, tone }: { icon: typeof Trending
   );
 }
 
-function DirectorCard({ d, isSelf, canDrill, expanded, onToggle }: { d: DirectorIncentive; isSelf: boolean; canDrill: boolean; expanded: boolean; onToggle: () => void }) {
+function DirectorCard({ d, internalTasks, isSelf, canDrill, expanded, onToggle }: { d: DirectorIncentive; internalTasks: InternalTaskResult[]; isSelf: boolean; canDrill: boolean; expanded: boolean; onToggle: () => void }) {
   const b = d.buckets;
-  const hasDrill = canDrill && (d.leads.length > 0 || d.tasks.length > 0);
+  const hasDrill = canDrill && (d.leads.length > 0 || d.tasks.length > 0 || internalTasks.length > 0);
   return (
     <div className="rounded-2xl bg-card border border-border shadow-lift overflow-hidden">
       <div className="p-4 sm:p-5">
@@ -139,19 +147,19 @@ function DirectorCard({ d, isSelf, canDrill, expanded, onToggle }: { d: Director
       </div>
       {hasDrill && (
         <button onClick={onToggle} className="w-full flex items-center justify-center gap-1.5 border-t border-border py-2 text-[12px] font-bold text-ink-mute hover:bg-muted transition">
-          {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />} {expanded ? "Hide" : "Show"} detail ({d.leads.length} leads · {d.tasks.length} tasks)
+          {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />} {expanded ? "Hide" : "Show"} tasks by bucket ({d.leads.length} leads · {d.tasks.length} client · {internalTasks.length} internal)
         </button>
       )}
       {expanded && hasDrill && (
         <div className="border-t border-border bg-page/40 p-4 flex flex-col gap-4">
           {d.leads.length > 0 && (
             <div>
-              <div className="text-[10.5px] font-extrabold tracking-[0.12em] text-ink-faint uppercase mb-2">Leads</div>
+              <div className="text-[10.5px] font-extrabold tracking-[0.12em] text-brand-600 uppercase mb-2">Bucket 1 · Leads</div>
               <div className="flex flex-col gap-1">
                 {d.leads.map((l) => (
                   <div key={l.id} className="flex items-center gap-2 text-[12.5px]">
                     <span className={`w-1.5 h-1.5 rounded-full ${l.converted ? "bg-emerald-500" : "bg-ink-faint"}`} />
-                    <span className="text-ink-soft truncate flex-1">{l.name} <span className="text-ink-faint">· {l.stage}</span></span>
+                    <span className="text-ink-soft truncate flex-1">{l.name} <span className="text-ink-faint">· {l.stage}{l.converted ? " · won" : ""}</span></span>
                     <span className="text-ink-mute whitespace-nowrap">{inr(l.dealValue)}</span>
                   </div>
                 ))}
@@ -160,16 +168,39 @@ function DirectorCard({ d, isSelf, canDrill, expanded, onToggle }: { d: Director
           )}
           {d.tasks.length > 0 && (
             <div>
-              <div className="text-[10.5px] font-extrabold tracking-[0.12em] text-ink-faint uppercase mb-2">Tasks</div>
+              <div className="text-[10.5px] font-extrabold tracking-[0.12em] text-emerald-600 uppercase mb-2">Buckets 2 &amp; 3 · Client tasks (billing / profit)</div>
               <div className="flex flex-col gap-1.5">
                 {d.tasks.map((t) => (
                   <div key={t.taskId} className="flex items-center gap-2 text-[12.5px]">
                     <span className="text-ink-soft truncate flex-1">{t.identity ? `${t.identity} · ` : ""}{t.name}{t.sharedWith > 1 ? <span className="text-ink-faint"> · shared ×{t.sharedWith}</span> : null}</span>
                     {t.flags.map((f) => <span key={f} className="text-[9.5px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-600">{f}</span>)}
-                    <span className="text-emerald-700 font-semibold whitespace-nowrap">{inr(t.billedPeriod)}</span>
-                    <span className="text-sky-700 whitespace-nowrap">· {inr(t.profit)}</span>
+                    <span className="text-emerald-700 font-semibold whitespace-nowrap" title="Billed this period">{inr(t.billedPeriod)}</span>
+                    <span className="text-sky-700 whitespace-nowrap" title="Profit">· {inr(t.profit)}</span>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+          {internalTasks.length > 0 && (
+            <div>
+              <div className="text-[10.5px] font-extrabold tracking-[0.12em] text-amber-600 uppercase mb-2">Bucket 4 · Internal tasks (approved hours)</div>
+              <div className="flex flex-col gap-1.5">
+                {internalTasks.map((t) => {
+                  const mine = t.contributors.find((c) => c.director === d.name)?.hours ?? 0;
+                  return (
+                    <div key={t.taskId} className="flex items-center gap-2 text-[12.5px]">
+                      <span className="text-ink-soft truncate flex-1">{t.identity ? `${t.identity} · ` : ""}{t.name}</span>
+                      <span className="text-ink-mute whitespace-nowrap">{mine}h{t.approvedHours != null ? ` / ${t.approvedHours}h` : ""}</span>
+                      {t.withinApproved === true ? (
+                        <span className="text-[9.5px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700">within</span>
+                      ) : t.withinApproved === false ? (
+                        <span className="text-[9.5px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-600">over</span>
+                      ) : (
+                        <span className="text-[9.5px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-muted text-ink-faint">no budget</span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
