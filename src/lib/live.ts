@@ -494,6 +494,80 @@ export async function captureAttendance(sessionId: string): Promise<void> {
 }
 
 /**
+ * Give live-session attendees credit for the recording: attending the live
+ * training IS doing it, so each attendee is marked as having completed the
+ * recording video and (if a quiz exists) passed its quiz. Restores points lost
+ * when a recording was re-ingested, and means attendees don't have to re-watch.
+ * Idempotent — skips anyone already completed / already passed.
+ */
+export async function creditLiveAttendees(sessionId: string): Promise<void> {
+  const s = await prisma.liveSession.findUnique({
+    where: { id: sessionId },
+    select: { recordedVideoId: true },
+  });
+  if (!s?.recordedVideoId) return;
+
+  const video = await prisma.video.findUnique({
+    where: { id: s.recordedVideoId },
+    select: {
+      id: true,
+      durationSeconds: true,
+      quiz: { select: { id: true, questions: { select: { points: true } } } },
+    },
+  });
+  if (!video) return;
+
+  const attendees = await prisma.liveAttendance.findMany({
+    where: { liveSessionId: sessionId, secondsAttended: { gt: 0 } },
+    select: { userId: true },
+  });
+  const now = new Date();
+  const dur = video.durationSeconds ?? 0;
+
+  for (const a of attendees) {
+    await prisma.videoProgress
+      .upsert({
+        where: { userId_videoId: { userId: a.userId, videoId: video.id } },
+        create: {
+          userId: a.userId,
+          videoId: video.id,
+          percent: 100,
+          completed: true,
+          completedAt: now,
+          lastPosition: dur,
+          watchedSeconds: dur,
+        },
+        update: { percent: 100, completed: true, completedAt: now },
+      })
+      .catch(() => {});
+
+    if (video.quiz && video.quiz.questions.length > 0) {
+      const passed = await prisma.quizAttempt.findFirst({
+        where: { userId: a.userId, quizId: video.quiz.id, passed: true },
+        select: { id: true },
+      });
+      if (!passed) {
+        const maxScore = video.quiz.questions.reduce((sum, q) => sum + q.points, 0);
+        await prisma.quizAttempt
+          .create({
+            data: {
+              userId: a.userId,
+              quizId: video.quiz.id,
+              score: maxScore,
+              maxScore,
+              percent: 100,
+              passed: true,
+              startedAt: now,
+              submittedAt: now,
+            },
+          })
+          .catch(() => {});
+      }
+    }
+  }
+}
+
+/**
  * One pass of the hands-off pipeline: keep auto-record settings applied to
  * upcoming sessions, ingest finished recordings, capture attendance, and
  * (re)generate transcript quizzes. Shared by the scheduled cron and the admin
@@ -584,6 +658,11 @@ export async function runIngestSweep(): Promise<{
     take: 20,
   });
   for (const s of needAttendance) await captureAttendance(s.id).catch(() => {});
+
+  // Give attendees credit for the recording (video complete + quiz passed) now
+  // that attendance and the quiz are in place — attending the live training
+  // counts as doing it.
+  for (const s of recentlyIngested) await creditLiveAttendees(s.id).catch(() => {});
 
   return { processed: due.length, quizRetries: recentlyIngested.length, results };
 }

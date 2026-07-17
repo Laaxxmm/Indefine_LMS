@@ -70,8 +70,10 @@ export default async function Leaderboard({
   });
   if (filterBranch) rows = rows.filter((r) => r.branchId === filterBranch);
   if (filterDept) rows = rows.filter((r) => r.department === filterDept);
-  // Rank by the weighted grade, not raw activity points.
-  rows.sort((a, b) => b.gradeScore - a.gradeScore);
+  // Rank by ACTIVITY points (effort) — videos, quizzes, assignments, attendance
+  // and live sessions — so the people who put in the most work lead. The
+  // weighted grade/tier is shown alongside as context, not the ranking key.
+  rows.sort((a, b) => b.totalScore - a.totalScore);
 
   // Branch summary view
   const branchSummary = (() => {
@@ -88,7 +90,7 @@ export default async function Leaderboard({
         total: 0,
         n: 0,
       };
-      cur.total += gradeByUser.get(r.userId)?.score ?? 0;
+      cur.total += r.totalScore;
       cur.n += 1;
       map.set(key, cur);
     }
@@ -142,8 +144,8 @@ export default async function Leaderboard({
         </h1>
         <p className="text-ink-mute text-sm font-semibold max-w-lg mx-auto">
           {view === "branches"
-            ? "Average grade per branch · who's leading the firm?"
-            : "Ranked by your Trajectory grade (0–100), weighted for your level so everyone is measured fairly. The tiles below show the raw activity that feeds it."}
+            ? "Average activity points per branch · who's leading the firm?"
+            : "Ranked by activity points — videos, quizzes, deadlines, assignments, attendance and live sessions. Put in the work, climb the board."}
         </p>
         {view !== "branches" && (
           <div className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1.5 text-xs text-ink-mute max-w-xl mx-auto">
@@ -304,13 +306,11 @@ export default async function Leaderboard({
                       </div>
                       <div className="text-right shrink-0">
                         <p className="font-display text-lg font-bold tabular-nums">
-                          {r.gradeScore}
+                          {r.totalScore}
                         </p>
+                        <p className="text-[10px] text-ink-faint uppercase font-semibold">pts</p>
                         <p className={`text-[10px] uppercase font-bold ${TIER_META[r.gradeTier].fg}`}>
                           {TIER_META[r.gradeTier].label}
-                        </p>
-                        <p className="text-[10px] text-ink-faint tabular-nums">
-                          {r.totalScore} pts
                         </p>
                       </div>
                     </div>
@@ -392,7 +392,7 @@ function BranchView({
                 {Math.round(b.avg)}
               </p>
               <p className="text-[10px] text-ink-faint uppercase tracking-wider font-bold">
-                Avg grade
+                Avg pts
               </p>
             </div>
           </div>
@@ -501,12 +501,12 @@ function PodiumCard({
       </div>
       <p className="text-[10px] text-ink-mute mt-1">Lv {level.level}</p>
       <p className="font-display text-2xl sm:text-3xl font-extrabold mt-2 tabular-nums">
-        {row.gradeScore}
+        {row.totalScore}
       </p>
+      <p className="text-[10px] text-ink-faint uppercase tracking-wider font-semibold">pts</p>
       <p className={`text-[10px] uppercase tracking-wider font-bold ${TIER_META[row.gradeTier].fg}`}>
         {TIER_META[row.gradeTier].label}
       </p>
-      <p className="text-[9px] text-ink-faint tabular-nums">{row.totalScore} activity pts</p>
       <div className="mt-2 pt-2 border-t border-black/5 grid grid-cols-6 gap-x-1 w-full">
         <Stat label="Vid" value={row.videosCompleted * 10} />
         <Stat label="Quiz" value={row.bestQuizPoints} />

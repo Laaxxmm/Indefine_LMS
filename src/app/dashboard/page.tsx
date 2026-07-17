@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { computeKraScores, getCourseStatusForUser } from "@/lib/kra";
 import { computeLevel, computeStreak } from "@/lib/gamification";
 import { computeAchievements } from "@/lib/gamification";
-import { computeTrajectory, computeGrade, ensureDefaultCycle, TIER_META } from "@/lib/trajectory";
+import { computeTrajectory, ensureDefaultCycle, TIER_META } from "@/lib/trajectory";
 import { OnboardingTour, type TourStep } from "@/components/OnboardingTour";
 import { Logo } from "@/components/Logo";
 import { UserMenu } from "@/components/UserMenu";
@@ -197,18 +197,10 @@ export default async function Dashboard() {
   const myPoints = me?.totalScore ?? 0;
   const level = computeLevel(myPoints);
 
-  // Rank by the fair weighted grade (same basis as the leaderboard), not raw
-  // activity points, so directors / small-allotment departments rank fairly.
-  const gradePairs = await Promise.all(
-    leaderboard.map(async (r) => ({
-      userId: r.userId,
-      score: (await computeGrade(r.userId)).score,
-    }))
-  );
-  gradePairs.sort((a, b) => b.score - a.score);
-  const myRankIdx = gradePairs.findIndex((g) => g.userId === userId);
+  // Rank by activity points (effort) — same basis as the leaderboard.
+  const ranked = [...leaderboard].sort((a, b) => b.totalScore - a.totalScore);
+  const myRankIdx = ranked.findIndex((r) => r.userId === userId);
   const myRank = myRankIdx >= 0 ? myRankIdx + 1 : null;
-  const myGrade = Math.round(trajectory.totalScore);
 
   const modulesWithVideos = modules.filter((m) => m.videos.length > 0);
   const allVideos = modulesWithVideos.flatMap((m) => m.videos);
@@ -259,7 +251,7 @@ export default async function Dashboard() {
 
   const statChips: { emoji: string; value: React.ReactNode; label: string }[] = [
     { emoji: "🔥", value: <>{streak.current}<span className="text-base text-ink-faint">d</span></>, label: `Streak · best ${streak.best}d` },
-    { emoji: "⚡", value: myGrade, label: myRank ? `Grade · rank #${myRank}` : "Grade" },
+    { emoji: "⚡", value: myPoints, label: myRank ? `Points · rank #${myRank}` : "Points" },
     { emoji: "🎬", value: <>{totalCompleted}<span className="text-base text-ink-faint">/{allVideos.length}</span></>, label: "Videos watched" },
     { emoji: "🏅", value: <>{unlockedCount}<span className="text-base text-ink-faint">/{achievements.length}</span></>, label: "Badges earned" },
   ];
