@@ -65,6 +65,7 @@ export interface TuriaTaskDetail {
   id: string; identity: string; name: string; status: string | null;
   createdOn: number | null; completedOn: number | null; dueDate: number | null;
   budgetAmount: number; invoiceAmount: number; opAmount: number; profit: number;
+  cost: number; // manpower + OP expense (Turia UI's cost side); used to derive profit
   tatHours: string | null; billable: boolean; users: TuriaTaskUser[];
 }
 export interface TuriaInvoice {
@@ -72,8 +73,18 @@ export interface TuriaInvoice {
   subtotal: number; total: number; status: number; paymentStatus: string; invoiceDate: number | null; createdOn: number | null;
 }
 
-const numf = (v: unknown) => parseFloat(String(v ?? "0")) || 0;
+// Tolerant number parse — strips currency symbols / thousands commas that Turia
+// occasionally formats into its numeric strings (e.g. "₹3,262.29").
+const numf = (v: unknown) => {
+  const n = parseFloat(String(v ?? "").replace(/[^0-9.\-]/g, ""));
+  return Number.isFinite(n) ? n : 0;
+};
 const numi = (v: unknown) => (v ? parseInt(String(v), 10) : null);
+// First present-and-nonzero value across candidate keys (Turia field names vary).
+const pick = (t: Record<string, unknown>, keys: string[]) => {
+  for (const k of keys) { const n = numf(t[k]); if (n) return n; }
+  return 0;
+};
 
 // ── Fetchers (the four-bucket engine's live sources) ──────────────────────────
 export async function fetchOrgUsers(): Promise<Array<{ id: string; name: string; email: string; designation: string; department: string }>> {
@@ -136,6 +147,11 @@ export async function fetchTaskDetail(taskId: string): Promise<TuriaTaskDetail |
     const json = await turiaPost("task", "get", { taskId, id: taskId });
     const t = json.task as Record<string, unknown>;
     if (!t) return null;
+    // Turia's task view profit = Revenue − Manpower − OP expense. The `profit`
+    // field in task/get isn't always populated, so we also capture the cost side
+    // (across likely field names) to derive it in the engine when profit is 0.
+    const manpower = pick(t, ["manpowercost", "manpowerCost", "manpower", "opAmount", "opamount"]);
+    const opExpense = pick(t, ["opexpense", "opExpense", "opexp", "otherexpense"]);
     return {
       id: String(t.id),
       identity: String(t.uniqueidentity ?? "").replace("#", ""),
@@ -145,9 +161,10 @@ export async function fetchTaskDetail(taskId: string): Promise<TuriaTaskDetail |
       completedOn: numi(t.completedon),
       dueDate: numi(t.targetduedate),
       budgetAmount: numf(t.budgetamount),
-      invoiceAmount: numf(t.invoiceamount),
+      invoiceAmount: pick(t, ["invoiceamount", "invoiceAmount", "revenue", "revenueamount"]),
       opAmount: numf(t.opAmount),
-      profit: numf(t.profit),
+      profit: pick(t, ["profit", "profitamount", "netprofit", "taskprofit", "margin"]),
+      cost: manpower + opExpense,
       tatHours: (t.tathours as string) || null,
       billable: !!t.billable,
       users: Array.isArray(t.userlists) ? (t.userlists as Array<Record<string, unknown>>).map((u) => ({ id: String(u.id), name: String(u.name ?? ""), type: parseInt(String(u.type ?? "0"), 10), role: String(u.role ?? "") })) : [],
@@ -155,6 +172,13 @@ export async function fetchTaskDetail(taskId: string): Promise<TuriaTaskDetail |
   } catch {
     return null;
   }
+}
+
+// Raw task/get payload — for the debug endpoint so we can see Turia's exact field
+// names/values when a bucket looks wrong.
+export async function rawTaskGet(taskId: string): Promise<unknown> {
+  const json = await turiaPost("task", "get", { taskId, id: taskId });
+  return (json.task as unknown) ?? json;
 }
 
 export async function fetchAllInvoices(perPage = 200, maxPages = 20): Promise<TuriaInvoice[]> {

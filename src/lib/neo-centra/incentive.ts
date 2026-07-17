@@ -216,10 +216,14 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
     const taskDirectors: DirectorRow[] = [];
     for (const u of detail.users) { const dir = directorForName(u.name, directors); if (dir && !taskDirectors.some((td) => td.id === dir.id)) taskDirectors.push(dir); }
     if (taskDirectors.length === 0) continue;
-    const profitRatio = detail.invoiceAmount > 0 ? detail.profit / detail.invoiceAmount : 0;
+    // Revenue base: task/get invoiceAmount, else the billing we summed for the period.
+    const revenueBase = detail.invoiceAmount > 0 ? detail.invoiceAmount : periodBilling;
+    // Profit: task/get's profit if present, else Revenue − cost (Turia's own formula).
+    const taskProfit = detail.profit || (detail.cost > 0 && revenueBase > 0 ? revenueBase - detail.cost : 0);
+    const profitRatio = revenueBase > 0 ? taskProfit / revenueBase : 0;
     const periodProfit = periodBilling * profitRatio;
     const split = taskDirectors.length;
-    const drill: DirectorTaskDrill = { taskId, identity: detail.identity, name: detail.name, budget: Math.round(detail.budgetAmount), billedPeriod: Math.round(periodBilling), invoiceTotal: Math.round(detail.invoiceAmount), profit: Math.round(detail.profit), hours: parseTatHours(detail.tatHours), sharedWith: split, dueDate: detail.dueDate, flags: taskFlags(detail) };
+    const drill: DirectorTaskDrill = { taskId, identity: detail.identity, name: detail.name, budget: Math.round(detail.budgetAmount), billedPeriod: Math.round(periodBilling), invoiceTotal: Math.round(revenueBase), profit: Math.round(taskProfit), hours: parseTatHours(detail.tatHours), sharedWith: split, dueDate: detail.dueDate, flags: taskFlags({ ...detail, profit: taskProfit }) };
     for (const td of taskDirectors) {
       const stats = moneyByDirector.get(td.id) || { billed: 0, profit: 0, taskIds: new Set<string>() };
       stats.billed += periodBilling / split; stats.profit += periodProfit / split; stats.taskIds.add(taskId);
