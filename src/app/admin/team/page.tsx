@@ -24,7 +24,7 @@ async function saveHierarchy(formData: FormData) {
   // Group by user — collect all fields from this submission then apply once.
   const updates = new Map<string, Record<string, unknown>>();
   for (const [key, value] of formData.entries()) {
-    const m = key.match(/^(manager|level|department|branch|role|director)_(.+)$/);
+    const m = key.match(/^(manager|level|department|branch|role)_(.+)$/);
     if (!m) continue;
     const field = m[1];
     const userId = m[2];
@@ -41,7 +41,6 @@ async function saveHierarchy(formData: FormData) {
       cur.department = v;
     else if (field === "branch") cur.branchId = v || null;
     else if (field === "role" && (v === "ADMIN" || v === "EMPLOYEE")) cur.role = v;
-    else if (field === "director") cur.isDirector = v === "yes";
 
     updates.set(userId, cur);
   }
@@ -170,7 +169,6 @@ export default async function AdminTeamPage({
               <tr>
                 <th className="text-left p-3 pl-5">Employee</th>
                 <th className="text-left p-3">Admin access</th>
-                <th className="text-left p-3">Director</th>
                 <th className="text-left p-3">Level</th>
                 <th className="text-left p-3">Dept</th>
                 <th className="text-left p-3">Branch</th>
@@ -220,21 +218,6 @@ export default async function AdminTeamPage({
                           <option value="ADMIN">Admin</option>
                         </select>
                       )}
-                    </td>
-                    <td className="p-3">
-                      <select
-                        name={`director_${u.id}`}
-                        defaultValue={u.isDirector ? "yes" : "no"}
-                        className={`border rounded-lg px-2 py-1.5 text-xs font-semibold ${
-                          u.isDirector
-                            ? "bg-brand-50 border-brand-300 text-brand-700"
-                            : "bg-white border-border text-ink-soft"
-                        }`}
-                        title="Directors get access to the Neo Centra cockpit"
-                      >
-                        <option value="no">—</option>
-                        <option value="yes">Director</option>
-                      </select>
                     </td>
                     <td className="p-3">
                       <select
