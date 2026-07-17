@@ -221,23 +221,29 @@ async function applySessionFolder(
   courseTitle: string,
   folderParent: string | null | undefined
 ): Promise<string> {
-  const parentPath = sessionParentPath(rootPath, folderParent);
-  if (folderParent?.trim()) {
-    await ensureFolder(driveId, rootPath, folderParent.trim(), token);
+  // Resolve the destination PARENT folder id. ensureFolder creates-or-gets and
+  // returns the id directly, so we don't do a separate lookup that could race
+  // (and used to fall through to creating a stray empty folder).
+  const parent = folderParent?.trim();
+  const destParentId = parent
+    ? await ensureFolder(driveId, rootPath, parent, token) // L&D/{parent}
+    : await resolveFolderId(driveId, rootPath, token); // back to the L&D root
+  if (!destParentId) {
+    throw new Error("Couldn't resolve the destination folder in SharePoint.");
   }
+
   if (existingFolderId) {
-    const destParentId = await resolveFolderId(driveId, parentPath, token);
-    if (destParentId) {
-      const rename = courseTitle !== existingCourse ? courseTitle : undefined;
-      const ok = await moveDriveItem(driveId, existingFolderId, destParentId, token, rename);
-      if (!ok) {
-        throw new Error(
-          "Couldn't move the SharePoint folder — the app needs Files.ReadWrite.All (Application) admin consent in Entra."
-        );
-      }
-      return existingFolderId; // id is preserved across a move
+    const rename = courseTitle !== existingCourse ? courseTitle : undefined;
+    const ok = await moveDriveItem(driveId, existingFolderId, destParentId, token, rename);
+    if (!ok) {
+      throw new Error(
+        "Couldn't move the SharePoint folder — the app needs Files.ReadWrite.All (Application) admin consent in Entra."
+      );
     }
+    return existingFolderId; // id is preserved across a move
   }
+  // No existing folder yet — create the course folder under the parent.
+  const parentPath = sessionParentPath(rootPath, folderParent);
   return ensureFolder(driveId, parentPath, courseTitle, token);
 }
 
