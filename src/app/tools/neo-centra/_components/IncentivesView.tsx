@@ -1,27 +1,45 @@
 "use client";
 
-import { useState } from "react";
-import { Loader2, RefreshCw, AlertTriangle, Link2, ChevronDown, ChevronRight, TrendingUp, Receipt, PiggyBank, Wrench, CheckCircle2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Loader2, RefreshCw, AlertTriangle, Link2, ChevronDown, ChevronRight, TrendingUp, Receipt, PiggyBank, Wrench, CheckCircle2, Flag, CalendarClock, Flame, Trophy } from "lucide-react";
 import type { DirectorIncentive, IncentiveSummary, InternalTaskResult } from "@/lib/neo-centra/incentive";
 
 type Snapshot = (IncentiveSummary & { viewer?: { directorId: string | null; isAdmin: boolean } }) | null;
+type Compliance = { overdue: number; dueThisMonth: number; filed: number; total: number; overdueList: { label: string; dueDate: string }[]; dueSoonList: { label: string; dueDate: string }[] };
 
 const inr = (n: number) => {
   const a = Math.abs(n);
-  if (a >= 1e7) return `₹${(n / 1e7).toFixed(2)}Cr`;
-  if (a >= 1e5) return `₹${(n / 1e5).toFixed(2)}L`;
-  return `₹${Math.round(n).toLocaleString("en-IN")}`;
+  const s = a >= 1e7 ? `₹${(n / 1e7).toFixed(2)}Cr` : a >= 1e5 ? `₹${(n / 1e5).toFixed(2)}L` : `₹${Math.round(n).toLocaleString("en-IN")}`;
+  return s;
 };
 const fmtWhen = (iso: string | null) => (iso ? new Date(iso).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "");
+const fmtDate = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-IN", { day: "2-digit", month: "short", timeZone: "UTC" });
+
+// Angry-Birds-style runners; stable per director by their order in the snapshot.
+const BIRDS = ["🔴", "🟡", "🐦", "⚫", "🥚", "🐷", "🟢", "🦅"];
+const QUOTES = [
+  "Take care of the effort and the score takes care of itself.",
+  "Hard work beats talent when talent doesn't work hard.",
+  "The bird that gets the worm is the one that shows up early.",
+  "Winners focus on winning. The rest focus on the winners.",
+  "Small daily wins compound into a runaway lead.",
+  "Pressure is a privilege — it only comes to those who earn it.",
+  "You miss 100% of the leads you don't chase.",
+  "Don't watch the leaderboard. Be the reason others do.",
+];
+
+const score = (d: DirectorIncentive) => d.buckets.leadConversion.convertedValue + d.buckets.billing.billedInPeriod + d.buckets.profitability.profitInPeriod;
 
 export function IncentivesView({
-  period, snapshot: initial, turia, isAdmin, viewerId,
+  period, snapshot: initial, turia, isAdmin, viewerId, viewerName, compliance,
 }: {
   period: { fromMs: number; toMs: number; label: string };
   snapshot: Snapshot;
   turia: { present: boolean; updatedAt: string | null; updatedByName: string | null };
   isAdmin: boolean;
   viewerId: string;
+  viewerName: string;
+  compliance: Compliance;
 }) {
   const [snapshot, setSnapshot] = useState<Snapshot>(initial);
   const [syncing, setSyncing] = useState(false);
@@ -31,20 +49,24 @@ export function IncentivesView({
   const [cookie, setCookie] = useState("");
   const [savingCookie, setSavingCookie] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [quote] = useState(() => QUOTES[Math.floor(Math.random() * QUOTES.length)]);
+
+  const birdFor = useMemo(() => {
+    const m = new Map<string, string>();
+    (snapshot?.directors ?? []).forEach((d, i) => m.set(d.directorId, BIRDS[i % BIRDS.length]));
+    return m;
+  }, [snapshot]);
+  const internalFor = (name: string) => (snapshot?.internalTasks ?? []).filter((t) => t.contributors.some((c) => c.director === name));
 
   async function sync() {
     setSyncing(true); setError(null);
     try {
       const res = await fetch(`/api/tools/neo-centra/incentives?from=${period.fromMs}&to=${period.toMs}`, { method: "POST" });
       const data = await res.json();
-      if (!res.ok) {
-        if (data.turiaExpired) { setConnected(false); setCookieOpen(true); }
-        throw new Error(data.error || "Sync failed");
-      }
+      if (!res.ok) { if (data.turiaExpired) { setConnected(false); setCookieOpen(true); } throw new Error(data.error || "Sync failed"); }
       setSnapshot(data.snapshot);
     } catch (e) { setError((e as Error).message); } finally { setSyncing(false); }
   }
-
   async function saveCookie() {
     if (cookie.trim().length < 10) { setError("Paste the full Turia cookie."); return; }
     setSavingCookie(true); setError(null);
@@ -55,6 +77,11 @@ export function IncentivesView({
     } catch (e) { setError((e as Error).message); } finally { setSavingCookie(false); }
   }
 
+  const ranked = useMemo(() => [...(snapshot?.directors ?? [])].sort((a, b) => score(b) - score(a)), [snapshot]);
+  const maxScore = Math.max(1, ...ranked.map(score));
+  const me = snapshot?.directors.find((d) => d.directorId === viewerId) ?? null;
+  const others = ranked.filter((d) => d.directorId !== viewerId);
+
   return (
     <div>
       {/* Turia connection */}
@@ -62,11 +89,7 @@ export function IncentivesView({
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2 text-[13px]">
             <Link2 className={`w-4 h-4 ${connected ? "text-emerald-600" : "text-ink-faint"}`} />
-            {connected ? (
-              <span className="text-ink-soft font-semibold">Turia connected{turia.updatedByName ? ` · cookie by ${turia.updatedByName}` : ""}{turia.updatedAt ? ` · ${fmtWhen(turia.updatedAt)}` : ""}</span>
-            ) : (
-              <span className="text-ink-mute">Turia not connected — paste a session cookie to pull live data.</span>
-            )}
+            {connected ? <span className="text-ink-soft font-semibold">Turia connected{turia.updatedByName ? ` · ${turia.updatedByName}` : ""}{turia.updatedAt ? ` · ${fmtWhen(turia.updatedAt)}` : ""}</span> : <span className="text-ink-mute">Turia not connected — paste a session cookie.</span>}
           </div>
           <div className="flex items-center gap-2">
             <button onClick={() => setCookieOpen((v) => !v)} className="text-[12px] font-bold text-brand-600 hover:text-brand-700">{cookieOpen ? "Cancel" : connected ? "Refresh cookie" : "Connect Turia"}</button>
@@ -77,8 +100,8 @@ export function IncentivesView({
         </div>
         {cookieOpen && (
           <div className="mt-3 border-t border-border pt-3">
-            <p className="text-[12px] text-ink-mute mb-2">Open Turia in a browser tab (logged in), copy the <code className="text-ink-soft">Cookie</code> request header, and paste it here. It&apos;s stored once and used to pull data until it expires.</p>
-            <textarea value={cookie} onChange={(e) => setCookie(e.target.value)} rows={3} placeholder="userData=…; session=…" className="w-full rounded-lg border border-border bg-page/60 px-3 py-2 text-[12px] font-mono" />
+            <p className="text-[12px] text-ink-mute mb-2">Paste your Turia <code className="text-ink-soft">Cookie</code> header (or use the extension). Stored once, used until it expires.</p>
+            <textarea value={cookie} onChange={(e) => setCookie(e.target.value)} rows={3} placeholder="userData=…; accessToken=…" className="w-full rounded-lg border border-border bg-page/60 px-3 py-2 text-[12px] font-mono" />
             <button onClick={saveCookie} disabled={savingCookie} className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-ink-faint text-white text-[12px] font-bold transition">
               {savingCookie ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />} Save cookie
             </button>
@@ -87,125 +110,227 @@ export function IncentivesView({
         {error && <p className="mt-2 text-[12px] text-rose-600 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> {error}</p>}
       </div>
 
+      {/* Motivating quote */}
+      <div className="rounded-2xl bg-gradient-to-r from-brand-500 to-accent-violet text-white shadow-pop px-5 py-3.5 mb-4 flex items-center gap-3">
+        <Flame className="w-5 h-5 shrink-0" />
+        <p className="font-display font-bold text-[15px] leading-snug">&ldquo;{quote}&rdquo;</p>
+      </div>
+
       {!snapshot ? (
-        <div className="rounded-[20px] bg-card border border-dashed border-border p-12 text-center">
-          <TrendingUp className="w-8 h-8 mx-auto text-ink-faint mb-2" />
-          <p className="font-semibold">No snapshot for {period.label} yet</p>
-          <p className="text-ink-mute text-sm mt-0.5">Connect Turia and hit Sync to compute the four buckets for this quarter.</p>
-        </div>
+        <EmptyState title={`No snapshot for ${period.label} yet`} sub="Connect Turia and hit Sync to run the race for this quarter." />
       ) : snapshot.directors.length === 0 ? (
-        <div className="rounded-[20px] bg-card border border-dashed border-border p-12 text-center">
-          <p className="font-semibold">No directors found</p>
-          <p className="text-ink-mute text-sm mt-0.5">Directors are Partner-level users. Set the firm&apos;s directors to Partner in Admin → Team.</p>
-        </div>
+        <EmptyState title="No partners found" sub="Directors are Partner-level users. Set the firm's partners in Admin → Team." />
       ) : (
-        <div className="flex flex-col gap-3">
-          {snapshot.directors.map((d) => (
-            <DirectorCard
-              key={d.directorId}
-              d={d}
-              internalTasks={snapshot.internalTasks.filter((t) => t.contributors.some((c) => c.director === d.name))}
-              isSelf={d.directorId === viewerId}
-              canDrill={isAdmin || d.directorId === viewerId}
-              expanded={expanded === d.directorId}
-              onToggle={() => setExpanded((x) => (x === d.directorId ? null : d.directorId))}
-            />
-          ))}
-        </div>
+        <>
+          {/* The race */}
+          <section className="rounded-[22px] bg-card border border-border shadow-lift p-5 mb-4">
+            <div className="flex items-center gap-2 mb-4">
+              <Trophy className="w-5 h-5 text-amber-500" />
+              <h2 className="font-display font-extrabold text-lg">The Race</h2>
+              <span className="text-[11px] text-ink-faint font-semibold">· lead value + billing + profit</span>
+            </div>
+            <div className="flex flex-col gap-2.5">
+              {ranked.map((d, i) => {
+                const pct = Math.max(3, Math.min(100, (score(d) / maxScore) * 100));
+                const leader = i === 0 && score(d) > 0;
+                return (
+                  <div key={d.directorId} className="flex items-center gap-3">
+                    <div className="w-6 text-center text-[13px] font-extrabold text-ink-faint">{i + 1}</div>
+                    <div className="w-40 sm:w-52 shrink-0 truncate">
+                      <span className={`font-bold text-[13.5px] ${d.directorId === viewerId ? "text-brand-700" : "text-ink"}`}>{d.name}</span>
+                      {d.directorId === viewerId && <span className="ml-1 text-[9px] font-extrabold uppercase text-brand-500">you</span>}
+                    </div>
+                    <div className="relative flex-1 h-7 rounded-full bg-page border border-border overflow-visible">
+                      <div className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-brand-100 to-brand-300 transition-all" style={{ width: `${pct}%` }} />
+                      <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 text-[18px] leading-none transition-all" style={{ left: `${pct}%` }}>{birdFor.get(d.directorId)}</div>
+                      <div className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[12px]">🏁</div>
+                    </div>
+                    <div className="w-20 text-right text-[13px] font-extrabold tabular-nums">{inr(score(d))}</div>
+                    {leader && <span className="text-[15px]" title="Leading">👑</span>}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          {/* Your scorecard */}
+          {me && (
+            <section className="mb-4">
+              <div className="flex items-baseline gap-2 mb-2.5">
+                <h2 className="font-display font-extrabold text-xl">{me.name}</h2>
+                <span className="text-[10px] font-extrabold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-brand-50 text-brand-700">You</span>
+              </div>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <Kpi icon={TrendingUp} tone="text-brand-600" bg="bg-brand-50" n="Bucket 1" label="Leads converted" value={inr(me.buckets.leadConversion.convertedValue)} sub={`${me.buckets.leadConversion.convertedLeads}/${me.buckets.leadConversion.originatedLeads} won · ${Math.round(me.buckets.leadConversion.conversionRate * 100)}%`} />
+                <Kpi icon={Receipt} tone="text-emerald-600" bg="bg-emerald-50" n="Bucket 2" label="Billing" value={inr(me.buckets.billing.billedInPeriod)} sub={`${me.buckets.billing.taskCount} task${me.buckets.billing.taskCount === 1 ? "" : "s"}`} />
+                <Kpi icon={PiggyBank} tone="text-sky-600" bg="bg-sky-50" n="Bucket 3" label="Profit" value={inr(me.buckets.profitability.profitInPeriod)} sub={`${me.buckets.profitability.taskCount} task${me.buckets.profitability.taskCount === 1 ? "" : "s"}`} />
+                <Kpi icon={Wrench} tone="text-amber-600" bg="bg-amber-50" n="Bucket 4" label="Internal" value={`${me.buckets.internalImprovement.qualifyingTasks}/${me.buckets.internalImprovement.totalContributedTasks}`} sub={`${me.buckets.internalImprovement.internalHours}h within budget`} />
+              </div>
+            </section>
+          )}
+
+          {/* Action needed */}
+          <ActionStrip me={me} compliance={compliance} />
+
+          {/* Other partners table */}
+          {others.length > 0 && (
+            <section className="rounded-2xl bg-card border border-border shadow-lift overflow-hidden">
+              <div className="px-5 py-3.5 border-b border-border bg-muted/40">
+                <h2 className="font-display font-bold text-sm">Other partners</h2>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-[13px]">
+                  <thead>
+                    <tr className="text-left text-ink-faint border-b border-border">
+                      <th className="font-bold px-4 py-3">Partner</th>
+                      <th className="font-bold px-3 py-3 text-right">Bucket 1 · Leads</th>
+                      <th className="font-bold px-3 py-3 text-right">Bucket 2 · Billing</th>
+                      <th className="font-bold px-3 py-3 text-right">Bucket 3 · Profit</th>
+                      <th className="font-bold px-3 py-3 text-right">Bucket 4 · Internal</th>
+                      <th className="px-2 py-3"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {others.map((d) => {
+                      const it = internalFor(d.name);
+                      const canDrill = isAdmin && (d.leads.length > 0 || d.tasks.length > 0 || it.length > 0);
+                      const open = expanded === d.directorId;
+                      return (
+                        <FragmentRow key={d.directorId} d={d} it={it} canDrill={canDrill} open={open} onToggle={() => setExpanded((x) => (x === d.directorId ? null : d.directorId))} />
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+        </>
       )}
     </div>
   );
 }
 
-function Bucket({ icon: Icon, label, value, sub, tone }: { icon: typeof TrendingUp; label: string; value: string; sub: string; tone: string }) {
+function Kpi({ icon: Icon, tone, bg, n, label, value, sub }: { icon: typeof TrendingUp; tone: string; bg: string; n: string; label: string; value: string; sub: string }) {
   return (
-    <div className="flex-1 min-w-[130px]">
-      <div className="flex items-center gap-1.5 text-[10px] font-extrabold tracking-wide uppercase text-ink-faint mb-1"><Icon className={`w-3.5 h-3.5 ${tone}`} /> {label}</div>
-      <div className="text-lg font-display font-extrabold tracking-tight leading-none">{value}</div>
+    <div className="rounded-2xl bg-card border border-border shadow-lift p-4">
+      <div className="flex items-center justify-between mb-2">
+        <span className={`w-9 h-9 rounded-[11px] grid place-items-center ${bg} ${tone}`}><Icon className="w-5 h-5" /></span>
+        <span className="text-[9.5px] font-extrabold tracking-wide uppercase text-ink-faint">{n}</span>
+      </div>
+      <div className="text-[22px] font-display font-extrabold tracking-tight leading-none">{value}</div>
+      <div className="text-[11.5px] font-bold text-ink-soft mt-1">{label}</div>
       <div className="text-[11px] text-ink-mute mt-0.5">{sub}</div>
     </div>
   );
 }
 
-function DirectorCard({ d, internalTasks, isSelf, canDrill, expanded, onToggle }: { d: DirectorIncentive; internalTasks: InternalTaskResult[]; isSelf: boolean; canDrill: boolean; expanded: boolean; onToggle: () => void }) {
-  const b = d.buckets;
-  const hasDrill = canDrill && (d.leads.length > 0 || d.tasks.length > 0 || internalTasks.length > 0);
+function EmptyState({ title, sub }: { title: string; sub: string }) {
   return (
-    <div className="rounded-2xl bg-card border border-border shadow-lift overflow-hidden">
-      <div className="p-4 sm:p-5">
-        <div className="flex items-center gap-2 mb-3">
-          <span className="font-display font-bold text-[15px]">{d.name}</span>
-          {isSelf && <span className="text-[9.5px] font-extrabold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-brand-50 text-brand-700">You</span>}
-          {!d.resolved && <span className="text-[9.5px] font-extrabold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700" title="Not matched to a Turia user yet — Sync to resolve">Unresolved</span>}
-        </div>
-        <div className="flex flex-wrap gap-4">
-          <Bucket icon={TrendingUp} tone="text-brand-600" label="1 · Leads" value={inr(b.leadConversion.convertedValue)} sub={`${b.leadConversion.convertedLeads}/${b.leadConversion.originatedLeads} won · ${Math.round(b.leadConversion.conversionRate * 100)}%`} />
-          <Bucket icon={Receipt} tone="text-emerald-600" label="2 · Billing" value={inr(b.billing.billedInPeriod)} sub={`${b.billing.taskCount} task${b.billing.taskCount === 1 ? "" : "s"}`} />
-          <Bucket icon={PiggyBank} tone="text-sky-600" label="3 · Profit" value={inr(b.profitability.profitInPeriod)} sub={`${b.profitability.taskCount} task${b.profitability.taskCount === 1 ? "" : "s"}`} />
-          <Bucket icon={Wrench} tone="text-amber-600" label="4 · Internal" value={`${b.internalImprovement.qualifyingTasks}/${b.internalImprovement.totalContributedTasks}`} sub={`${b.internalImprovement.internalHours}h within budget`} />
-        </div>
-      </div>
-      {hasDrill && (
-        <button onClick={onToggle} className="w-full flex items-center justify-center gap-1.5 border-t border-border py-2 text-[12px] font-bold text-ink-mute hover:bg-muted transition">
-          {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />} {expanded ? "Hide" : "Show"} tasks by bucket ({d.leads.length} leads · {d.tasks.length} client · {internalTasks.length} internal)
-        </button>
-      )}
-      {expanded && hasDrill && (
-        <div className="border-t border-border bg-page/40 p-4 flex flex-col gap-4">
-          {d.leads.length > 0 && (
-            <div>
-              <div className="text-[10.5px] font-extrabold tracking-[0.12em] text-brand-600 uppercase mb-2">Bucket 1 · Leads</div>
-              <div className="flex flex-col gap-1">
-                {d.leads.map((l) => (
-                  <div key={l.id} className="flex items-center gap-2 text-[12.5px]">
-                    <span className={`w-1.5 h-1.5 rounded-full ${l.converted ? "bg-emerald-500" : "bg-ink-faint"}`} />
-                    <span className="text-ink-soft truncate flex-1">{l.name} <span className="text-ink-faint">· {l.stage}{l.converted ? " · won" : ""}</span></span>
-                    <span className="text-ink-mute whitespace-nowrap">{inr(l.dealValue)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          {d.tasks.length > 0 && (
-            <div>
-              <div className="text-[10.5px] font-extrabold tracking-[0.12em] text-emerald-600 uppercase mb-2">Buckets 2 &amp; 3 · Client tasks (billing / profit)</div>
-              <div className="flex flex-col gap-1.5">
-                {d.tasks.map((t) => (
-                  <div key={t.taskId} className="flex items-center gap-2 text-[12.5px]">
-                    <span className="text-ink-soft truncate flex-1">{t.identity ? `${t.identity} · ` : ""}{t.name}{t.sharedWith > 1 ? <span className="text-ink-faint"> · shared ×{t.sharedWith}</span> : null}</span>
-                    {t.flags.map((f) => <span key={f} className="text-[9.5px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-600">{f}</span>)}
-                    <span className="text-emerald-700 font-semibold whitespace-nowrap" title="Billed this period">{inr(t.billedPeriod)}</span>
-                    <span className="text-sky-700 whitespace-nowrap" title="Profit">· {inr(t.profit)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          {internalTasks.length > 0 && (
-            <div>
-              <div className="text-[10.5px] font-extrabold tracking-[0.12em] text-amber-600 uppercase mb-2">Bucket 4 · Internal tasks (approved hours)</div>
-              <div className="flex flex-col gap-1.5">
-                {internalTasks.map((t) => {
-                  const mine = t.contributors.find((c) => c.director === d.name)?.hours ?? 0;
-                  return (
-                    <div key={t.taskId} className="flex items-center gap-2 text-[12.5px]">
-                      <span className="text-ink-soft truncate flex-1">{t.identity ? `${t.identity} · ` : ""}{t.name}</span>
-                      <span className="text-ink-mute whitespace-nowrap">{mine}h{t.approvedHours != null ? ` / ${t.approvedHours}h` : ""}</span>
-                      {t.withinApproved === true ? (
-                        <span className="text-[9.5px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700">within</span>
-                      ) : t.withinApproved === false ? (
-                        <span className="text-[9.5px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-600">over</span>
-                      ) : (
-                        <span className="text-[9.5px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-muted text-ink-faint">no budget</span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+    <div className="rounded-[20px] bg-card border border-dashed border-border p-12 text-center">
+      <Trophy className="w-8 h-8 mx-auto text-ink-faint mb-2" />
+      <p className="font-semibold">{title}</p>
+      <p className="text-ink-mute text-sm mt-0.5">{sub}</p>
     </div>
+  );
+}
+
+function ActionStrip({ me, compliance }: { me: DirectorIncentive | null; compliance: Compliance }) {
+  const lossMaking = (me?.tasks ?? []).filter((t) => t.flags.includes("over-budget"));
+  const fastAction = (me?.tasks ?? []).filter((t) => t.flags.includes("overdue") || t.flags.includes("long-pending"));
+
+  return (
+    <div className="grid md:grid-cols-3 gap-3 mb-4">
+      {/* Deadlines */}
+      <div className="rounded-2xl bg-card border border-border shadow-lift p-4">
+        <div className="flex items-center gap-1.5 text-[10.5px] font-extrabold tracking-[0.12em] text-ink-faint uppercase mb-2.5"><CalendarClock className="w-3.5 h-3.5" /> Deadlines</div>
+        <div className="flex items-center gap-4 mb-2.5">
+          <Mini value={compliance.overdue} label="Overdue" tone={compliance.overdue > 0 ? "text-rose-600" : "text-ink"} />
+          <Mini value={compliance.dueThisMonth} label="This month" tone="text-amber-600" />
+          <Mini value={`${compliance.filed}/${compliance.total}`} label="Filed" tone="text-emerald-600" />
+        </div>
+        <ul className="flex flex-col gap-1">
+          {compliance.overdueList.map((d) => (
+            <li key={d.label} className="flex items-center gap-1.5 text-[11.5px]"><AlertTriangle className="w-3 h-3 text-rose-500 shrink-0" /><span className="text-rose-700 truncate flex-1">{d.label}</span><span className="text-ink-faint">{fmtDate(d.dueDate)}</span></li>
+          ))}
+          {compliance.overdueList.length === 0 && compliance.dueSoonList.slice(0, 3).map((d) => (
+            <li key={d.label} className="flex items-center gap-1.5 text-[11.5px]"><CalendarClock className="w-3 h-3 text-ink-faint shrink-0" /><span className="text-ink-soft truncate flex-1">{d.label}</span><span className="text-ink-faint">{fmtDate(d.dueDate)}</span></li>
+          ))}
+        </ul>
+      </div>
+
+      {/* Loss-making */}
+      <div className="rounded-2xl bg-card border border-border shadow-lift p-4">
+        <div className="flex items-center gap-1.5 text-[10.5px] font-extrabold tracking-[0.12em] text-ink-faint uppercase mb-2.5"><PiggyBank className="w-3.5 h-3.5" /> Loss-making tasks</div>
+        <div className="text-2xl font-display font-extrabold text-rose-600 leading-none mb-2">{lossMaking.length}</div>
+        <ul className="flex flex-col gap-1">
+          {lossMaking.slice(0, 4).map((t) => (
+            <li key={t.taskId} className="flex items-center gap-1.5 text-[11.5px]"><span className="text-ink-soft truncate flex-1">{t.identity || t.name}</span><span className="text-rose-600 font-semibold whitespace-nowrap">{inr(t.profit)}</span></li>
+          ))}
+          {lossMaking.length === 0 && <li className="text-[11.5px] text-ink-faint">None — every task is in the black. 🎉</li>}
+        </ul>
+      </div>
+
+      {/* Fast action */}
+      <div className="rounded-2xl bg-card border border-border shadow-lift p-4">
+        <div className="flex items-center gap-1.5 text-[10.5px] font-extrabold tracking-[0.12em] text-ink-faint uppercase mb-2.5"><Flag className="w-3.5 h-3.5" /> Fast action needed</div>
+        <div className="text-2xl font-display font-extrabold text-amber-600 leading-none mb-2">{fastAction.length}</div>
+        <ul className="flex flex-col gap-1">
+          {fastAction.slice(0, 4).map((t) => (
+            <li key={t.taskId} className="flex items-center gap-1.5 text-[11.5px]"><span className="text-ink-soft truncate flex-1">{t.identity || t.name}</span>{t.flags.map((f) => <span key={f} className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-amber-50 text-amber-700">{f === "long-pending" ? "stale" : f}</span>)}</li>
+          ))}
+          {fastAction.length === 0 && <li className="text-[11.5px] text-ink-faint">Nothing overdue or stale. 👏</li>}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+function Mini({ value, label, tone }: { value: number | string; label: string; tone: string }) {
+  return <div><div className={`text-lg font-display font-extrabold leading-none ${tone}`}>{value}</div><div className="text-[9.5px] font-semibold uppercase tracking-wide text-ink-mute mt-0.5">{label}</div></div>;
+}
+
+function FragmentRow({ d, it, canDrill, open, onToggle }: { d: DirectorIncentive; it: InternalTaskResult[]; canDrill: boolean; open: boolean; onToggle: () => void }) {
+  const b = d.buckets;
+  return (
+    <>
+      <tr className={`border-b border-border/60 ${canDrill ? "cursor-pointer hover:bg-muted/40" : ""} transition`} onClick={canDrill ? onToggle : undefined}>
+        <td className="px-4 py-3 font-bold text-ink">{d.name}</td>
+        <td className="px-3 py-3 text-right"><div className="font-semibold">{inr(b.leadConversion.convertedValue)}</div><div className="text-[10.5px] text-ink-faint">{b.leadConversion.convertedLeads}/{b.leadConversion.originatedLeads} · {Math.round(b.leadConversion.conversionRate * 100)}%</div></td>
+        <td className="px-3 py-3 text-right"><div className="font-semibold">{inr(b.billing.billedInPeriod)}</div><div className="text-[10.5px] text-ink-faint">{b.billing.taskCount} tasks</div></td>
+        <td className="px-3 py-3 text-right"><div className="font-semibold">{inr(b.profitability.profitInPeriod)}</div><div className="text-[10.5px] text-ink-faint">{b.profitability.taskCount} tasks</div></td>
+        <td className="px-3 py-3 text-right"><div className="font-semibold">{b.internalImprovement.qualifyingTasks}/{b.internalImprovement.totalContributedTasks}</div><div className="text-[10.5px] text-ink-faint">{b.internalImprovement.internalHours}h</div></td>
+        <td className="px-2 py-3 text-ink-faint">{canDrill ? (open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />) : null}</td>
+      </tr>
+      {open && canDrill && (
+        <tr><td colSpan={6} className="bg-page/40 px-4 py-3">
+          <div className="flex flex-col gap-3">
+            {d.tasks.length > 0 && (
+              <div>
+                <div className="text-[10px] font-extrabold tracking-[0.12em] text-emerald-600 uppercase mb-1.5">Buckets 2 &amp; 3 · Client tasks</div>
+                {d.tasks.map((t) => (
+                  <div key={t.taskId} className="flex items-center gap-2 text-[12px] py-0.5"><span className="text-ink-soft truncate flex-1">{t.identity ? `${t.identity} · ` : ""}{t.name}{t.sharedWith > 1 ? ` · ×${t.sharedWith}` : ""}</span>{t.flags.map((f) => <span key={f} className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-rose-50 text-rose-600">{f}</span>)}<span className="text-emerald-700 font-semibold whitespace-nowrap">{inr(t.billedPeriod)}</span><span className="text-sky-700 whitespace-nowrap">· {inr(t.profit)}</span></div>
+                ))}
+              </div>
+            )}
+            {it.length > 0 && (
+              <div>
+                <div className="text-[10px] font-extrabold tracking-[0.12em] text-amber-600 uppercase mb-1.5">Bucket 4 · Internal tasks</div>
+                {it.map((t) => { const mine = t.contributors.find((c) => c.director === d.name)?.hours ?? 0; return (
+                  <div key={t.taskId} className="flex items-center gap-2 text-[12px] py-0.5"><span className="text-ink-soft truncate flex-1">{t.identity ? `${t.identity} · ` : ""}{t.name}</span><span className="text-ink-mute">{mine}h{t.approvedHours != null ? ` / ${t.approvedHours}h` : ""}</span>{t.withinApproved === true ? <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-emerald-50 text-emerald-700">within</span> : t.withinApproved === false ? <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-rose-50 text-rose-600">over</span> : null}</div>
+                ); })}
+              </div>
+            )}
+            {d.leads.length > 0 && (
+              <div>
+                <div className="text-[10px] font-extrabold tracking-[0.12em] text-brand-600 uppercase mb-1.5">Bucket 1 · Leads</div>
+                {d.leads.map((l) => (
+                  <div key={l.id} className="flex items-center gap-2 text-[12px] py-0.5"><span className={`w-1.5 h-1.5 rounded-full ${l.converted ? "bg-emerald-500" : "bg-ink-faint"}`} /><span className="text-ink-soft truncate flex-1">{l.name} · {l.stage}</span><span className="text-ink-mute">{inr(l.dealValue)}</span></div>
+                ))}
+              </div>
+            )}
+          </div>
+        </td></tr>
+      )}
+    </>
   );
 }
