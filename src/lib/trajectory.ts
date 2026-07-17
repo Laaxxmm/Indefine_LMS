@@ -645,10 +645,23 @@ export async function computeTrajectory(userId: string): Promise<TrajectorySumma
     { kind: "CRAFT", result: craft },
   ];
 
+  // Auto-calibrate to how far into the cycle we are: the count-based targets
+  // (Initiative, Collaboration) are annual, so early in the year nobody could
+  // have hit them and everyone looks low. Scale those targets by the elapsed
+  // quarter (Q1→0.25 … Q4→1) so the grade reflects who's leading *now*. The
+  // %-based tracks (Mastery, Delivery, Vision) and the Craft rating already
+  // measure progress, so they aren't prorated.
+  const quarter = currentQuarter(cycle);
+  const cycleFraction = quarter / 4;
+  const PRORATED: Set<TrackKind> = new Set(["INITIATIVE", "COLLABORATION"]);
+
   const tracks: TrackResult[] = raw.map(({ kind, result }) => {
     const meta = TRACK_META[kind];
     const tgt = targetByKind.get(kind);
-    const target = tgt?.target ?? meta.defaultTarget[level];
+    const baseTarget = tgt?.target ?? meta.defaultTarget[level];
+    const target = PRORATED.has(kind)
+      ? Math.max(0.01, baseTarget * cycleFraction)
+      : baseTarget;
     const weight = tgt?.weight ?? meta.defaultWeight;
     const scorePct = target > 0 ? Math.min(100, (result.actual / target) * 100) : 0;
     const weighted = (scorePct * weight) / 100;
@@ -680,7 +693,7 @@ export async function computeTrajectory(userId: string): Promise<TrajectorySumma
 
   return {
     cycle,
-    quarter: currentQuarter(cycle),
+    quarter,
     level,
     tracks,
     totalScore,
