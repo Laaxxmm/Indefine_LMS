@@ -82,6 +82,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // sop/access.ts — SOP editors are scoped to their own department).
         session.user.active = (user as { active?: boolean }).active ?? false;
         session.user.department = (user as { department?: string }).department ?? "GENERAL";
+        // `level` drives the Neo Centra cockpit gate (directors = Partner level).
+        session.user.level = (user as { level?: string }).level ?? "EXECUTIVE";
       }
       return session;
     },

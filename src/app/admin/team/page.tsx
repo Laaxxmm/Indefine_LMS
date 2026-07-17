@@ -58,6 +58,7 @@ async function saveHierarchy(formData: FormData) {
   revalidatePath("/admin/team");
   revalidatePath("/team");
   revalidatePath("/leaderboard");
+  revalidatePath("/tools");
 }
 
 export default async function AdminTeamPage({

@@ -1,7 +1,20 @@
 import Link from "next/link";
-import { FileBadge, ArrowRight, BookText, Wrench } from "lucide-react";
+import { FileBadge, ArrowRight, BookText, Wrench, LayoutDashboard } from "lucide-react";
+import { auth } from "@/lib/auth";
+import { canUseNeoCentra } from "@/lib/neo-centra/access";
 
 export const dynamic = "force-dynamic";
+
+// Directors-only cockpit — appended to the grid only for directors.
+const NEO_CENTRA = {
+  href: "/tools/neo-centra",
+  title: "Neo Centra",
+  tag: "Directors · Cockpit",
+  blurb:
+    "The directors' cockpit — statutory compliance deadlines with filing status, and more modules on the way.",
+  icon: LayoutDashboard,
+  accent: "#6d4be6",
+};
 
 // Tools index — card grid.
 const TOOLS = [
@@ -34,7 +47,9 @@ const TOOLS = [
   },
 ];
 
-export default function ToolsIndex() {
+export default async function ToolsIndex() {
+  const session = await auth();
+  const tools = canUseNeoCentra(session?.user) ? [...TOOLS, NEO_CENTRA] : TOOLS;
   return (
     <div>
       <div className="mb-7">
@@ -46,7 +61,7 @@ export default function ToolsIndex() {
       </div>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {TOOLS.map((tool) => (
+        {tools.map((tool) => (
           <Link
             key={tool.href}
             href={tool.href}
