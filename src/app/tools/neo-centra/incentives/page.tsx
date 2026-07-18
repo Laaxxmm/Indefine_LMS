@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { ArrowLeft, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ShieldCheck, HelpCircle } from "lucide-react";
 import { canUseNeoCentra, isNeoCentraAdmin } from "@/lib/neo-centra/access";
 import { getSnapshotForPeriod, filterSummaryForViewer } from "@/lib/neo-centra/incentive";
 import { turiaStatus } from "@/lib/neo-centra/turia";
@@ -46,9 +46,14 @@ export default async function NeoIncentivesPage({ searchParams }: { searchParams
         <Link href="/dashboard" className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-mute hover:text-ink transition">
           <ArrowLeft className="w-4 h-4" /> Dashboard
         </Link>
-        <Link href="/tools/neo-centra/compliance" className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-mute hover:text-ink transition">
-          <ShieldCheck className="w-4 h-4" /> Compliance
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link href="/tools/neo-centra/how-it-works" className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-mute hover:text-ink transition">
+            <HelpCircle className="w-4 h-4" /> How it works
+          </Link>
+          <Link href="/tools/neo-centra/compliance" className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-mute hover:text-ink transition">
+            <ShieldCheck className="w-4 h-4" /> Compliance
+          </Link>
+        </div>
       </div>
 
       <div className="flex items-start justify-between gap-4 flex-wrap mb-5">
