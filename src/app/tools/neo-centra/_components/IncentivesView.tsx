@@ -14,6 +14,8 @@ const inr = (n: number) => {
 };
 const fmtWhen = (iso: string | null) => (iso ? new Date(iso).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "");
 const fmtDate = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-IN", { day: "2-digit", month: "short", timeZone: "UTC" });
+// Turia sends the literal string "NULL" for unnamed tasks; treat that (and blanks) as no name.
+const cleanName = (s: string) => { const n = (s || "").trim(); return n && n.toUpperCase() !== "NULL" ? n : ""; };
 
 // Angry-Birds-style runners; stable per director by their order in the snapshot.
 const BIRDS = ["🔴", "🟡", "🐦", "⚫", "🥚", "🐷", "🟢", "🦅"];
@@ -402,21 +404,38 @@ function Drill({ d, it, isAdmin }: { d: DirectorIncentive; it: InternalTaskResul
     <div className="flex flex-col gap-3">
       {d.tasks.length > 0 && (
         <div>
-          <div className="text-[10px] font-extrabold tracking-[0.12em] text-emerald-600 uppercase mb-1.5">Buckets 2 &amp; 3 · Client tasks (billed · profit)</div>
-          {d.tasks.map((t) => (
-            <div key={t.taskId} className="py-0.5">
-              <div className="flex items-center gap-2 text-[12px]"><span className="text-ink-soft truncate flex-1">{t.name || t.identity}{t.sharedWith > 1 ? ` · ×${t.sharedWith}` : ""}</span>{t.flags.map((f) => <span key={f} className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-rose-50 text-rose-600">{f}</span>)}<span className="text-emerald-700 font-semibold whitespace-nowrap">{inr(t.billedPeriod)}</span><span className={`whitespace-nowrap ${t.profit < 0 ? "text-rose-600" : "text-sky-700"}`}>· {inr(t.profit)}</span></div>
-              {t.profitPartners && t.profitPartners.length > 1 && <ProfitSplitEditor task={t} isAdmin={isAdmin} />}
-            </div>
-          ))}
+          <div className="flex items-baseline justify-between mb-1.5">
+            <span className="text-[10px] font-extrabold tracking-[0.12em] text-emerald-600 uppercase">Buckets 2 &amp; 3 · Client tasks</span>
+            <span className="text-[9px] font-bold uppercase tracking-wide text-ink-faint">Billed · Profit</span>
+          </div>
+          <div className="flex flex-col">
+            {d.tasks.map((t) => (
+              <div key={t.taskId} className="py-1.5 border-b border-border/40 last:border-0">
+                <div className="flex items-start gap-2.5 text-[12px]">
+                  <span className="font-mono text-[10px] text-ink-faint pt-[3px] shrink-0 w-[76px] truncate" title={t.identity}>{t.identity || "—"}</span>
+                  <div className="flex-1 min-w-0 flex items-center gap-1.5 flex-wrap pt-[1px]">
+                    <span className="text-ink-soft font-medium truncate">{cleanName(t.name) || "Untitled task"}</span>
+                    {t.sharedWith > 1 && <span className="text-[9px] font-bold text-ink-faint">×{t.sharedWith}</span>}
+                    {t.flags.map((f) => <span key={f} className="text-[8.5px] font-bold uppercase px-1 py-0.5 rounded bg-rose-50 text-rose-600">{f}</span>)}
+                  </div>
+                  <div className="shrink-0 text-right tabular-nums leading-tight">
+                    <div className="text-emerald-700 font-semibold">{inr(t.billedPeriod)}</div>
+                    <div className={`text-[11px] ${t.profit < 0 ? "text-rose-600" : "text-sky-700"}`}>{inr(t.profit)}</div>
+                  </div>
+                </div>
+                {t.profitPartners && t.profitPartners.length > 1 && <ProfitSplitEditor task={t} isAdmin={isAdmin} />}
+              </div>
+            ))}
+          </div>
         </div>
       )}
       {it.length > 0 && (
         <div>
           <div className="text-[10px] font-extrabold tracking-[0.12em] text-amber-600 uppercase mb-1.5">Bucket 4 · Internal tasks</div>
           {it.map((t) => { const mine = t.contributors.find((c) => c.director === d.name)?.hours ?? 0; const over = t.withinApproved === false; return (
-            <div key={t.taskId} className="flex items-center gap-2 text-[12px] py-0.5">
-              <span className="text-ink-soft truncate flex-1">{t.name || t.identity}</span>
+            <div key={t.taskId} className="flex items-center gap-2 text-[12px] py-1 border-b border-border/40 last:border-0">
+              <span className="font-mono text-[10px] text-ink-faint shrink-0 w-[76px] truncate" title={t.identity}>{t.identity || "—"}</span>
+              <span className="text-ink-soft truncate flex-1">{cleanName(t.name) || "Untitled task"}</span>
               <span className={`text-[9px] font-bold uppercase px-1 py-0.5 rounded ${t.completed ? "bg-emerald-50 text-emerald-700" : "bg-muted text-ink-faint"}`}>{t.completed ? "done" : "wip"}</span>
               <span className={over ? "text-rose-600 font-semibold" : "text-ink-mute"}>{Number(t.actualHours) || 0}h{t.approvedHours != null ? ` / ${t.approvedHours}h` : ""}</span>
               {over ? <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-rose-50 text-rose-600">over</span> : null}
@@ -447,7 +466,12 @@ function ProfitSplitEditor({ task, isAdmin }: { task: DirectorTaskDrill; isAdmin
   const balanced = sum >= 99 && sum <= 101;
 
   if (!isAdmin) {
-    return <div className="text-[10.5px] text-ink-faint pl-1 mt-0.5">Profit split · {partners.map((p) => `${p.name.split(" ")[0]} ${p.percent}%`).join(" · ")}</div>;
+    return (
+      <div className="ml-[86px] mt-1 inline-flex items-center gap-1.5 text-[10.5px] rounded-md bg-amber-50/70 border border-amber-100 px-2 py-1">
+        <span className="text-[8.5px] font-extrabold uppercase tracking-wide text-amber-600">Profit split</span>
+        {partners.map((p) => <span key={p.directorId} className="text-ink-soft">{p.name.split(" ")[0]} <b className="tabular-nums">{p.percent}%</b></span>)}
+      </div>
+    );
   }
   async function save() {
     setSaving(true); setMsg(null);
@@ -461,19 +485,22 @@ function ProfitSplitEditor({ task, isAdmin }: { task: DirectorTaskDrill; isAdmin
     } catch (e) { setMsg((e as Error).message); } finally { setSaving(false); }
   }
   return (
-    <div className="flex items-center flex-wrap gap-2 mt-1 pl-1 text-[11px]">
-      <span className="text-[9px] font-extrabold uppercase tracking-wide text-amber-600">Profit split</span>
+    <div className="ml-[86px] mt-1.5 rounded-lg bg-amber-50/60 border border-amber-100 px-2.5 py-2 flex items-center flex-wrap gap-x-3 gap-y-1.5 text-[11px]">
+      <span className="text-[8.5px] font-extrabold uppercase tracking-wide text-amber-600">Profit split</span>
       {partners.map((p) => (
-        <label key={p.directorId} className="inline-flex items-center gap-1 text-ink-soft">
-          {p.name.split(" ")[0]}
-          <input type="number" min={0} max={100} value={pct[p.directorId] ?? 0}
-            onChange={(e) => setPct((s) => ({ ...s, [p.directorId]: Math.max(0, Math.min(100, Number(e.target.value))) }))}
-            className="w-14 rounded border border-border bg-page/60 px-1.5 py-0.5 text-[11px] tabular-nums" />%
+        <label key={p.directorId} className="inline-flex items-center gap-1.5 text-ink-soft">
+          <span className="truncate max-w-[90px]">{p.name.split(" ")[0]}</span>
+          <span className="inline-flex items-center rounded border border-amber-200 bg-card overflow-hidden">
+            <input type="number" min={0} max={100} value={pct[p.directorId] ?? 0}
+              onChange={(e) => setPct((s) => ({ ...s, [p.directorId]: Math.max(0, Math.min(100, Number(e.target.value))) }))}
+              className="w-11 bg-transparent px-1.5 py-0.5 text-[11px] tabular-nums text-right focus:outline-none" />
+            <span className="px-1 text-ink-faint bg-amber-50/80 border-l border-amber-200">%</span>
+          </span>
         </label>
       ))}
-      <span className={`tabular-nums font-semibold ${balanced ? "text-emerald-600" : "text-rose-600"}`}>= {Math.round(sum)}%</span>
-      <button onClick={save} disabled={saving || !balanced} className="px-2.5 py-0.5 rounded bg-amber-500 hover:bg-amber-600 disabled:bg-ink-faint text-white text-[11px] font-bold transition">{saving ? "Saving…" : "Save"}</button>
-      {msg && <span className="text-[10.5px] text-ink-mute">{msg}</span>}
+      <span className={`tabular-nums font-bold ${balanced ? "text-emerald-600" : "text-rose-600"}`}>= {Math.round(sum)}%</span>
+      <button onClick={save} disabled={saving || !balanced} className="px-3 py-1 rounded-md bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-white text-[11px] font-bold transition">{saving ? "Saving…" : "Save"}</button>
+      {msg && <span className={`text-[10.5px] ${msg.startsWith("Saved") ? "text-emerald-600" : "text-rose-600"}`}>{msg}</span>}
     </div>
   );
 }
