@@ -171,12 +171,20 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
     fetchAllInvoices(),
   ]);
 
-  // Bucket 4: internal / company-dev tasks — per-task timesheets give hours + who logged.
-  const internalTasks: InternalTaskResult[] = await mapPool(tasks.filter(isInternalTask), 6, async (t) => {
+  // Bucket 4: internal / company-dev tasks, scoped to the quarter. A task counts as
+  // "done" only if it was completed *within* the period (Turia completedOn), and only
+  // hours logged *within* the period count (per-task timesheets fetched for the range).
+  // Tasks with no in-quarter hours and no in-quarter completion drop out of the quarter.
+  const internalTasks: InternalTaskResult[] = (await mapPool(tasks.filter(isInternalTask), 6, async (t) => {
     const identity = String(t.uniqueidentity ?? "").replace("#", "");
     const budget = budgets.find((b) => (b.turiaTaskId && b.turiaTaskId === String(t.id)) || (b.taskIdentity && b.taskIdentity === identity));
     const approvedHours = budget ? budget.approvedHours : null;
-    const rows = await fetchTaskTimesheets(String(t.id));
+    const [detail, rows] = await Promise.all([
+      fetchTaskDetail(String(t.id)),
+      fetchTaskTimesheets(String(t.id), { fromMs, toMs }),
+    ]);
+    const completedOn = detail?.completedOn ?? null;
+    const completedInPeriod = String(t.taskstatus ?? "") === TASK_COMPLETED && completedOn != null && completedOn >= fromMs && completedOn <= toMs;
     const byDirector = new Map<string, number>();
     let actualHours = 0;
     for (const r of rows) {
@@ -187,12 +195,12 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
     }
     return {
       taskId: String(t.id), identity, name: String(t.taskname ?? t.clientname ?? "Untitled"),
-      completed: String(t.taskstatus ?? "") === TASK_COMPLETED,
+      completed: completedInPeriod,
       approvedHours, actualHours: round1(actualHours),
       withinApproved: approvedHours === null ? null : actualHours <= approvedHours,
       contributors: [...byDirector.entries()].map(([director, hours]) => ({ director, hours: round1(hours) })).sort((a, b) => b.hours - a.hours),
     };
-  });
+  })).filter((it) => it.contributors.length > 0 || it.completed);
 
   // Bucket 1: lead origination + conversion
   type LeadStats = { orig: number; origVal: number; conv: number; convVal: number };
