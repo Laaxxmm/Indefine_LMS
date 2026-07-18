@@ -5,7 +5,7 @@ import { canUseNeoCentra, isNeoCentraAdmin } from "@/lib/neo-centra/access";
 import { getSnapshotForPeriod, saveSnapshot, resolveDirectors, filterSummaryForViewer, type IncentiveSummary } from "@/lib/neo-centra/incentive";
 import { TuriaSessionError } from "@/lib/neo-centra/turia";
 
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 function periodFrom(url: string): { from: number; to: number } | null {
   const p = new URL(url).searchParams;
