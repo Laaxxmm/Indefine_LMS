@@ -404,28 +404,19 @@ function Drill({ d, it, isAdmin }: { d: DirectorIncentive; it: InternalTaskResul
     <div className="flex flex-col gap-3">
       {d.tasks.length > 0 && (
         <div>
-          <div className="flex items-baseline justify-between mb-1.5">
+          <div className="flex items-center justify-between mb-1">
             <span className="text-[10px] font-extrabold tracking-[0.12em] text-emerald-600 uppercase">Buckets 2 &amp; 3 · Client tasks</span>
-            <span className="text-[9px] font-bold uppercase tracking-wide text-ink-faint">Billed · Profit</span>
+            <div className="flex items-center gap-2.5 text-[9px] font-bold uppercase tracking-wide text-ink-faint">
+              <div className="flex items-center">
+                <span className="w-[74px] text-right">Billed</span>
+                <span className="w-px h-3 bg-border mx-2.5" />
+                <span className="w-[74px] text-right">Profit</span>
+              </div>
+              <span className="w-[60px]" />
+            </div>
           </div>
           <div className="flex flex-col">
-            {d.tasks.map((t) => (
-              <div key={t.taskId} className="py-1.5 border-b border-border/40 last:border-0">
-                <div className="flex items-start gap-2.5 text-[12px]">
-                  <span className="font-mono text-[10px] text-ink-faint pt-[3px] shrink-0 w-[76px] truncate" title={t.identity}>{t.identity || "—"}</span>
-                  <div className="flex-1 min-w-0 flex items-center gap-1.5 flex-wrap pt-[1px]">
-                    <span className="text-ink-soft font-medium truncate">{cleanName(t.name) || "Untitled task"}</span>
-                    {t.sharedWith > 1 && <span className="text-[9px] font-bold text-ink-faint">×{t.sharedWith}</span>}
-                    {t.flags.map((f) => <span key={f} className="text-[8.5px] font-bold uppercase px-1 py-0.5 rounded bg-rose-50 text-rose-600">{f}</span>)}
-                  </div>
-                  <div className="shrink-0 text-right tabular-nums leading-tight">
-                    <div className="text-emerald-700 font-semibold">{inr(t.billedPeriod)}</div>
-                    <div className={`text-[11px] ${t.profit < 0 ? "text-rose-600" : "text-sky-700"}`}>{inr(t.profit)}</div>
-                  </div>
-                </div>
-                {t.profitPartners && t.profitPartners.length > 1 && <ProfitSplitEditor task={t} isAdmin={isAdmin} />}
-              </div>
-            ))}
+            {d.tasks.map((t) => <ClientTaskRow key={t.taskId} t={t} isAdmin={isAdmin} />)}
           </div>
         </div>
       )}
@@ -451,6 +442,38 @@ function Drill({ d, it, isAdmin }: { d: DirectorIncentive; it: InternalTaskResul
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// One Buckets 2 & 3 client-task row: id · name · billed | profit, plus an opt-in
+// "Split" toggle (only for tasks shared by 2+ partners) that reveals the editor.
+function ClientTaskRow({ t, isAdmin }: { t: DirectorTaskDrill; isAdmin: boolean }) {
+  const [open, setOpen] = useState(false);
+  const splittable = !!t.profitPartners && t.profitPartners.length > 1;
+  return (
+    <div className="py-1.5 border-b border-border/40 last:border-0">
+      <div className="flex items-center gap-2.5 text-[12px]">
+        <span className="font-mono text-[10px] text-ink-faint shrink-0 w-[76px] truncate" title={t.identity}>{t.identity || "—"}</span>
+        <div className="flex-1 min-w-0 flex items-center gap-1.5 flex-wrap">
+          <span className="text-ink-soft font-medium truncate">{cleanName(t.name) || "Untitled task"}</span>
+          {t.sharedWith > 1 && <span className="text-[9px] font-bold text-ink-faint">×{t.sharedWith}</span>}
+          {t.flags.map((f) => <span key={f} className="text-[8.5px] font-bold uppercase px-1 py-0.5 rounded bg-rose-50 text-rose-600">{f}</span>)}
+        </div>
+        <div className="shrink-0 flex items-center tabular-nums">
+          <span className="w-[74px] text-right text-emerald-700 font-semibold">{inr(t.billedPeriod)}</span>
+          <span className="w-px h-4 bg-border mx-2.5" />
+          <span className={`w-[74px] text-right ${t.profit < 0 ? "text-rose-600" : "text-sky-700"}`}>{inr(t.profit)}</span>
+        </div>
+        <div className="shrink-0 w-[60px] flex justify-end">
+          {splittable && (
+            <button onClick={() => setOpen((o) => !o)} className={`inline-flex items-center gap-0.5 text-[10.5px] font-bold rounded px-1.5 py-0.5 transition ${open ? "bg-amber-100 text-amber-700" : "text-amber-600 hover:bg-amber-50"}`}>
+              Split {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+            </button>
+          )}
+        </div>
+      </div>
+      {open && splittable && <ProfitSplitEditor task={t} isAdmin={isAdmin} />}
     </div>
   );
 }
