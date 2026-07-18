@@ -222,13 +222,19 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
     leadItemsByDirector.set(dir.id, [...(leadItemsByDirector.get(dir.id) || []), { id: lead.id, identity: lead.identity, name: lead.name, dealValue: Math.round(lead.dealValue), stage: lead.stageName, referredBy: lead.referredBy, converted }]);
   }
 
-  // Buckets 2 + 3: period billing + prorated profit per director (equal-split per task)
-  // Period = the *invoice date* (when billing was realized), NOT createdOn (when the
-  // record was keyed into Turia). A May invoice entered in July has createdOn in Q2 but
-  // belongs to Q1 — keying off createdOn leaks old billing/profit into the wrong quarter.
-  const periodInvoices = invoices.filter((inv) => { const t = inv.invoiceDate ?? inv.createdOn; return t !== null && t >= fromMs && t <= toMs; });
-  const periodBillingByTask = new Map<string, number>();
-  for (const inv of periodInvoices) { if (!inv.taskId) continue; periodBillingByTask.set(inv.taskId, (periodBillingByTask.get(inv.taskId) || 0) + inv.subtotal); }
+  // Buckets 2 + 3: a task's full billing + profit land in the quarter the *task was
+  // completed* (Turia completedOn), NOT when it was invoiced — a May task invoiced in
+  // July belongs to Q1. Sum every invoice per task; the earliest invoice date is only a
+  // fallback for tasks Turia has no completion date for (e.g. still in progress).
+  const billingByTask = new Map<string, { subtotal: number; invoiceDate: number | null }>();
+  for (const inv of invoices) {
+    if (!inv.taskId) continue;
+    const cur = billingByTask.get(inv.taskId) ?? { subtotal: 0, invoiceDate: null };
+    cur.subtotal += inv.subtotal;
+    const d = inv.invoiceDate ?? inv.createdOn;
+    if (d != null && (cur.invoiceDate == null || d < cur.invoiceDate)) cur.invoiceDate = d;
+    billingByTask.set(inv.taskId, cur);
+  }
 
   // Per billed task: task/get for the director userlists, and the task's timesheets
   // for the manpower cost. Profit = period billing − manpower (Turia's formula, OP≈0).
@@ -242,13 +248,20 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
     return s;
   };
   const tasksByDirector = new Map<string, DirectorTaskDrill[]>();
-  const perTask = await mapPool([...periodBillingByTask.keys()], 6, async (taskId) => {
+  // ponytail: fetches detail for every billed task, then gates by completion date. Fine
+  // for this firm's history; if it grows huge, pre-filter by a task-list completion date.
+  const perTask = await mapPool([...billingByTask.keys()], 6, async (taskId) => {
     const [detail, tsRows] = await Promise.all([fetchTaskDetail(taskId), fetchTaskTimesheets(taskId)]);
     return { taskId, detail, tsRows };
   });
   for (const { taskId, detail, tsRows } of perTask) {
-    const periodBilling = periodBillingByTask.get(taskId) ?? 0;
     if (!detail) continue;
+    const bill = billingByTask.get(taskId)!;
+    // Quarter = task completion date; fall back to invoice date only when Turia has no
+    // completion date (task not finished). Outside the quarter → skip entirely.
+    const effectiveDate = detail.completedOn ?? bill.invoiceDate;
+    if (effectiveDate == null || effectiveDate < fromMs || effectiveDate > toMs) continue;
+    const periodBilling = bill.subtotal;
 
     // Bucket 2 — billing follows the timesheet: each partner earns billing in
     // proportion to their *own* logged hours on the task. No logged time → no billing.
