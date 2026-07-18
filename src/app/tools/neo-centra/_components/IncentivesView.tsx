@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, RefreshCw, AlertTriangle, Link2, ChevronDown, ChevronRight, TrendingUp, Receipt, PiggyBank, Wrench, CheckCircle2, Flag, CalendarClock, Flame, Trophy } from "lucide-react";
-import type { DirectorIncentive, IncentiveSummary, InternalTaskResult } from "@/lib/neo-centra/incentive";
+import type { DirectorIncentive, IncentiveSummary, InternalTaskResult, DirectorTaskDrill } from "@/lib/neo-centra/incentive";
 
 type Snapshot = (IncentiveSummary & { viewer?: { directorId: string | null; isAdmin: boolean } }) | null;
 type Compliance = { overdue: number; dueThisMonth: number; filed: number; total: number; overdueList: { label: string; dueDate: string }[]; dueSoonList: { label: string; dueDate: string }[] };
@@ -231,7 +231,7 @@ export function IncentivesView({
                     </button>
                     {expanded === "me" && (
                       <div className="mt-2 rounded-2xl bg-card border border-border shadow-lift p-4">
-                        <Drill d={me} it={internalFor(me.name)} />
+                        <Drill d={me} it={internalFor(me.name)} isAdmin={isAdmin} />
                       </div>
                     )}
                   </div>
@@ -267,7 +267,7 @@ export function IncentivesView({
                       const canDrill = isAdmin && (d.leads.length > 0 || d.tasks.length > 0 || it.length > 0);
                       const open = expanded === d.directorId;
                       return (
-                        <FragmentRow key={d.directorId} d={d} it={it} totalConverted={totalConverted} canDrill={canDrill} open={open} onToggle={() => setExpanded((x) => (x === d.directorId ? null : d.directorId))} />
+                        <FragmentRow key={d.directorId} d={d} it={it} totalConverted={totalConverted} canDrill={canDrill} isAdmin={isAdmin} open={open} onToggle={() => setExpanded((x) => (x === d.directorId ? null : d.directorId))} />
                       );
                     })}
                   </tbody>
@@ -376,7 +376,7 @@ function Mini({ value, label, tone }: { value: number | string; label: string; t
   return <div><div className={`text-lg font-display font-extrabold leading-none ${tone}`}>{value}</div><div className="text-[9.5px] font-semibold uppercase tracking-wide text-ink-mute mt-0.5">{label}</div></div>;
 }
 
-function FragmentRow({ d, it, totalConverted, canDrill, open, onToggle }: { d: DirectorIncentive; it: InternalTaskResult[]; totalConverted: number; canDrill: boolean; open: boolean; onToggle: () => void }) {
+function FragmentRow({ d, it, totalConverted, canDrill, isAdmin, open, onToggle }: { d: DirectorIncentive; it: InternalTaskResult[]; totalConverted: number; canDrill: boolean; isAdmin: boolean; open: boolean; onToggle: () => void }) {
   const b = d.buckets;
   const im4 = b4of(b.internalImprovement);
   const b1pct = Math.round((b.leadConversion.convertedValue / totalConverted) * 100);
@@ -391,20 +391,23 @@ function FragmentRow({ d, it, totalConverted, canDrill, open, onToggle }: { d: D
         <td className="px-2 py-3 text-ink-faint">{canDrill ? (open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />) : null}</td>
       </tr>
       {open && canDrill && (
-        <tr><td colSpan={6} className="bg-page/40 px-4 py-3"><Drill d={d} it={it} /></td></tr>
+        <tr><td colSpan={6} className="bg-page/40 px-4 py-3"><Drill d={d} it={it} isAdmin={isAdmin} /></td></tr>
       )}
     </>
   );
 }
 
-function Drill({ d, it }: { d: DirectorIncentive; it: InternalTaskResult[] }) {
+function Drill({ d, it, isAdmin }: { d: DirectorIncentive; it: InternalTaskResult[]; isAdmin: boolean }) {
   return (
     <div className="flex flex-col gap-3">
       {d.tasks.length > 0 && (
         <div>
           <div className="text-[10px] font-extrabold tracking-[0.12em] text-emerald-600 uppercase mb-1.5">Buckets 2 &amp; 3 · Client tasks (billed · profit)</div>
           {d.tasks.map((t) => (
-            <div key={t.taskId} className="flex items-center gap-2 text-[12px] py-0.5"><span className="text-ink-soft truncate flex-1">{t.name || t.identity}{t.sharedWith > 1 ? ` · ×${t.sharedWith}` : ""}</span>{t.flags.map((f) => <span key={f} className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-rose-50 text-rose-600">{f}</span>)}<span className="text-emerald-700 font-semibold whitespace-nowrap">{inr(t.billedPeriod)}</span><span className={`whitespace-nowrap ${t.profit < 0 ? "text-rose-600" : "text-sky-700"}`}>· {inr(t.profit)}</span></div>
+            <div key={t.taskId} className="py-0.5">
+              <div className="flex items-center gap-2 text-[12px]"><span className="text-ink-soft truncate flex-1">{t.name || t.identity}{t.sharedWith > 1 ? ` · ×${t.sharedWith}` : ""}</span>{t.flags.map((f) => <span key={f} className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-rose-50 text-rose-600">{f}</span>)}<span className="text-emerald-700 font-semibold whitespace-nowrap">{inr(t.billedPeriod)}</span><span className={`whitespace-nowrap ${t.profit < 0 ? "text-rose-600" : "text-sky-700"}`}>· {inr(t.profit)}</span></div>
+              {t.profitPartners && t.profitPartners.length > 1 && <ProfitSplitEditor task={t} isAdmin={isAdmin} />}
+            </div>
           ))}
         </div>
       )}
@@ -429,6 +432,48 @@ function Drill({ d, it }: { d: DirectorIncentive; it: InternalTaskResult[] }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// Bucket 3 profit split for a task shared by 2+ partners. Admins edit the %; everyone
+// else sees it read-only. Saved splits apply on the next Sync.
+function ProfitSplitEditor({ task, isAdmin }: { task: DirectorTaskDrill; isAdmin: boolean }) {
+  const partners = task.profitPartners ?? [];
+  const [pct, setPct] = useState<Record<string, number>>(() => Object.fromEntries(partners.map((p) => [p.directorId, p.percent])));
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const sum = partners.reduce((s, p) => s + (Number(pct[p.directorId]) || 0), 0);
+  const balanced = sum >= 99 && sum <= 101;
+
+  if (!isAdmin) {
+    return <div className="text-[10.5px] text-ink-faint pl-1 mt-0.5">Profit split · {partners.map((p) => `${p.name.split(" ")[0]} ${p.percent}%`).join(" · ")}</div>;
+  }
+  async function save() {
+    setSaving(true); setMsg(null);
+    try {
+      const res = await fetch("/api/tools/neo-centra/profit-splits", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ taskName: task.name, taskIdentity: task.identity, turiaTaskId: task.taskId, splits: pct }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Save failed");
+      setMsg("Saved · hit Sync to apply");
+    } catch (e) { setMsg((e as Error).message); } finally { setSaving(false); }
+  }
+  return (
+    <div className="flex items-center flex-wrap gap-2 mt-1 pl-1 text-[11px]">
+      <span className="text-[9px] font-extrabold uppercase tracking-wide text-amber-600">Profit split</span>
+      {partners.map((p) => (
+        <label key={p.directorId} className="inline-flex items-center gap-1 text-ink-soft">
+          {p.name.split(" ")[0]}
+          <input type="number" min={0} max={100} value={pct[p.directorId] ?? 0}
+            onChange={(e) => setPct((s) => ({ ...s, [p.directorId]: Math.max(0, Math.min(100, Number(e.target.value))) }))}
+            className="w-14 rounded border border-border bg-page/60 px-1.5 py-0.5 text-[11px] tabular-nums" />%
+        </label>
+      ))}
+      <span className={`tabular-nums font-semibold ${balanced ? "text-emerald-600" : "text-rose-600"}`}>= {Math.round(sum)}%</span>
+      <button onClick={save} disabled={saving || !balanced} className="px-2.5 py-0.5 rounded bg-amber-500 hover:bg-amber-600 disabled:bg-ink-faint text-white text-[11px] font-bold transition">{saving ? "Saving…" : "Save"}</button>
+      {msg && <span className="text-[10.5px] text-ink-mute">{msg}</span>}
     </div>
   );
 }
