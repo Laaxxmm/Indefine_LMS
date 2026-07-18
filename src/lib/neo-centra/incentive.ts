@@ -215,7 +215,10 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
   }
 
   // Buckets 2 + 3: period billing + prorated profit per director (equal-split per task)
-  const periodInvoices = invoices.filter((inv) => { const t = inv.createdOn ?? inv.invoiceDate; return t !== null && t >= fromMs && t <= toMs; });
+  // Period = the *invoice date* (when billing was realized), NOT createdOn (when the
+  // record was keyed into Turia). A May invoice entered in July has createdOn in Q2 but
+  // belongs to Q1 — keying off createdOn leaks old billing/profit into the wrong quarter.
+  const periodInvoices = invoices.filter((inv) => { const t = inv.invoiceDate ?? inv.createdOn; return t !== null && t >= fromMs && t <= toMs; });
   const periodBillingByTask = new Map<string, number>();
   for (const inv of periodInvoices) { if (!inv.taskId) continue; periodBillingByTask.set(inv.taskId, (periodBillingByTask.get(inv.taskId) || 0) + inv.subtotal); }
 
