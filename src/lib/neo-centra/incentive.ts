@@ -35,7 +35,7 @@ async function mapPool<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R>
 
 // ── Types (identical to the source) ──────────────────────────────────────────
 export interface DirectorRow { id: string; name: string; turiaUserId: string | null; turiaUsername: string | null; isActive: boolean; isAdmin: boolean }
-export interface InternalTaskResult { taskId: string; identity: string; name: string; approvedHours: number | null; actualHours: number; withinApproved: boolean | null; contributors: Array<{ director: string; hours: number }> }
+export interface InternalTaskResult { taskId: string; identity: string; name: string; completed: boolean; approvedHours: number | null; actualHours: number; withinApproved: boolean | null; contributors: Array<{ director: string; hours: number }> }
 export interface DirectorLeadItem { id: string; identity: string; name: string; dealValue: number; stage: string; referredBy: string | null; converted: boolean }
 export interface DirectorTaskDrill { taskId: string; identity: string; name: string; budget: number; billedPeriod: number; invoiceTotal: number; profit: number; hours: number | null; sharedWith: number; dueDate: number | null; flags: string[] }
 export interface DirectorIncentive {
@@ -44,7 +44,7 @@ export interface DirectorIncentive {
     leadConversion: { available: boolean; originatedLeads: number; originatedValue: number; convertedLeads: number; convertedValue: number; conversionRate: number };
     billing: { available: boolean; billedInPeriod: number; taskCount: number };
     profitability: { available: boolean; profitInPeriod: number; taskCount: number };
-    internalImprovement: { available: boolean; qualifyingTasks: number; totalContributedTasks: number; internalHours: number };
+    internalImprovement: { available: boolean; completedTasks: number; totalTasks: number; completionRate: number; hoursSpent: number; targetHours: number; overBudget: boolean };
   };
   leads: DirectorLeadItem[];
   tasks: DirectorTaskDrill[];
@@ -123,10 +123,16 @@ function taskFlags(detail: TuriaTaskDetail): string[] {
   return flags;
 }
 type Task = Record<string, unknown>;
+// Bucket 4 = tasks whose Turia service Category is "Bucket 4". Fall back to the
+// service/task name convention (…Internal B4 / Firm Building) if the list row
+// doesn't carry the category.
 function isInternalTask(t: Task): boolean {
-  const hay = `${t.taskname ?? ""} ${t.servicename ?? ""} ${t.categoryname ?? ""} ${t.clientname ?? ""}`.toLowerCase();
-  return hay.includes("internal") || hay.includes("company development");
+  const cat = String(t.categoryname ?? t.category ?? "").toLowerCase();
+  if (cat.includes("bucket 4") || cat.includes("bucket4")) return true;
+  const hay = `${t.servicename ?? ""} ${t.taskname ?? ""}`.toLowerCase();
+  return hay.includes("bucket 4") || hay.includes("internal b4") || hay.includes("firm building");
 }
+const TASK_COMPLETED = "3"; // Turia taskstatus for a completed task
 function directorForUsername(username: string, directors: DirectorRow[]): DirectorRow | null {
   const u = (username || "").trim().toLowerCase();
   if (!u) return null;
@@ -170,6 +176,7 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
     }
     return {
       taskId: String(t.id), identity, name: String(t.taskname ?? t.clientname ?? "Untitled"),
+      completed: String(t.taskstatus ?? "") === TASK_COMPLETED,
       approvedHours, actualHours: round1(actualHours),
       withinApproved: approvedHours === null ? null : actualHours <= approvedHours,
       contributors: [...byDirector.entries()].map(([director, hours]) => ({ director, hours: round1(hours) })).sort((a, b) => b.hours - a.hours),
@@ -232,8 +239,9 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
 
   const directorResults: DirectorIncentive[] = directors.map((d) => {
     const contributed = internalTasks.filter((it) => it.contributors.some((c) => c.director === d.name));
-    const qualifying = contributed.filter((it) => it.withinApproved === true);
-    const internalHours = contributed.reduce((sum, it) => sum + (it.contributors.find((c) => c.director === d.name)?.hours || 0), 0);
+    const completedTasks = contributed.filter((it) => it.completed).length;
+    const hoursSpent = contributed.reduce((sum, it) => sum + (it.contributors.find((c) => c.director === d.name)?.hours || 0), 0);
+    const targetHours = contributed.reduce((sum, it) => sum + (it.approvedHours ?? 0), 0);
     const lead = leadStatsByDirector.get(d.id) || { orig: 0, origVal: 0, conv: 0, convVal: 0 };
     const money = moneyByDirector.get(d.id) || { billed: 0, profit: 0, taskIds: new Set<string>() };
     return {
@@ -242,7 +250,13 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
         leadConversion: { available: true, originatedLeads: lead.orig, originatedValue: Math.round(lead.origVal), convertedLeads: lead.conv, convertedValue: Math.round(lead.convVal), conversionRate: lead.orig > 0 ? Math.round((lead.conv / lead.orig) * 1000) / 1000 : 0 },
         billing: { available: true, billedInPeriod: Math.round(money.billed), taskCount: money.taskIds.size },
         profitability: { available: true, profitInPeriod: Math.round(money.profit), taskCount: money.taskIds.size },
-        internalImprovement: { available: true, qualifyingTasks: qualifying.length, totalContributedTasks: contributed.length, internalHours: round1(internalHours) },
+        internalImprovement: {
+          available: true,
+          completedTasks, totalTasks: contributed.length,
+          completionRate: contributed.length > 0 ? Math.round((completedTasks / contributed.length) * 1000) / 1000 : 0,
+          hoursSpent: round1(hoursSpent), targetHours: round1(targetHours),
+          overBudget: targetHours > 0 && hoursSpent > targetHours,
+        },
       },
       leads: (leadItemsByDirector.get(d.id) || []).sort((a, b) => b.dealValue - a.dealValue),
       tasks: (tasksByDirector.get(d.id) || []).sort((a, b) => b.billedPeriod - a.billedPeriod),
@@ -275,7 +289,7 @@ export async function incentiveTrackStatus(userId: string): Promise<TrackStatus>
   const d = snap.directors.find((x) => x.directorId === userId);
   if (!d) return { state: "none", label: "No data", quarter: q.label };
   const b = d.buckets;
-  const active = b.leadConversion.convertedValue > 0 || b.billing.billedInPeriod > 0 || b.profitability.profitInPeriod > 0 || b.internalImprovement.qualifyingTasks > 0;
+  const active = b.leadConversion.convertedValue > 0 || b.billing.billedInPeriod > 0 || b.profitability.profitInPeriod > 0 || b.internalImprovement.completedTasks > 0;
   return active ? { state: "on", label: "On incentive track", quarter: q.label } : { state: "review", label: "Needs attention", quarter: q.label };
 }
 

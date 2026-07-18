@@ -108,7 +108,6 @@ export function IncentivesView({
     return {
       b2: Math.max(1, ...ds.map((d) => d.buckets.billing.billedInPeriod)),
       b3: Math.max(1, ...ds.map((d) => d.buckets.profitability.profitInPeriod)),
-      b4: Math.max(1, ...ds.map((d) => d.buckets.internalImprovement.internalHours)),
     };
   }, [snapshot]);
   // New business = business actually WON (converted leads), not pipeline. Bucket 1
@@ -197,7 +196,7 @@ export function IncentivesView({
               { ...BUCKETS[0], value: inr(b.leadConversion.convertedValue), label: "New business won", sub: `${b.leadConversion.convertedLeads}/${b.leadConversion.originatedLeads} converted · ${Math.round(b.leadConversion.conversionRate * 100)}%`, negative: false, standingPct: b1pct, standingLabel: `${b1pct}% of firm's new business` },
               { ...BUCKETS[1], value: inr(b.billing.billedInPeriod), sub: `${b.billing.taskCount} task${b.billing.taskCount === 1 ? "" : "s"}`, negative: false, ...leaderPct(b.billing.billedInPeriod, maxes.b2) },
               { ...BUCKETS[2], value: inr(b.profitability.profitInPeriod), sub: `${b.profitability.taskCount} task${b.profitability.taskCount === 1 ? "" : "s"}`, negative: b.profitability.profitInPeriod < 0, ...leaderPct(b.profitability.profitInPeriod, maxes.b3) },
-              { ...BUCKETS[3], value: `${b.internalImprovement.qualifyingTasks}/${b.internalImprovement.totalContributedTasks}`, sub: `${b.internalImprovement.internalHours}h within budget`, negative: false, ...leaderPct(b.internalImprovement.internalHours, maxes.b4) },
+              { ...BUCKETS[3], value: `${Math.round(b.internalImprovement.completionRate * 100)}%`, label: "Bucket 4 complete", sub: `${b.internalImprovement.completedTasks}/${b.internalImprovement.totalTasks} tasks done`, negative: false, standingPct: Math.round(b.internalImprovement.completionRate * 100), standingLabel: `${b.internalImprovement.hoursSpent}h${b.internalImprovement.targetHours ? ` / ${b.internalImprovement.targetHours}h target` : " logged"}`, standingRed: b.internalImprovement.overBudget },
             ];
             return (
               <section className="mb-4">
@@ -244,7 +243,7 @@ export function IncentivesView({
                       <th className="font-bold px-3 py-3 text-right">Bucket 1 · New business</th>
                       <th className="font-bold px-3 py-3 text-right">Bucket 2 · Billing</th>
                       <th className="font-bold px-3 py-3 text-right">Bucket 3 · Profit</th>
-                      <th className="font-bold px-3 py-3 text-right">Bucket 4 · Internal</th>
+                      <th className="font-bold px-3 py-3 text-right">Bucket 4 · Complete</th>
                       <th className="px-2 py-3"></th>
                     </tr>
                   </thead>
@@ -268,7 +267,7 @@ export function IncentivesView({
   );
 }
 
-function Kpi({ icon: Icon, color, tint, n, label, value, sub, negative, standingPct, standingLabel }: { icon: typeof TrendingUp; color: string; tint: string; n: string; label: string; value: string; sub: string; negative: boolean; standingPct: number; standingLabel: string }) {
+function Kpi({ icon: Icon, color, tint, n, label, value, sub, negative, standingPct, standingLabel, standingRed }: { icon: typeof TrendingUp; color: string; tint: string; n: string; label: string; value: string; sub: string; negative: boolean; standingPct: number; standingLabel: string; standingRed?: boolean }) {
   const pct = Math.max(0, Math.min(100, standingPct));
   return (
     <div className="relative overflow-hidden rounded-2xl border border-border shadow-lift p-4" style={{ background: `linear-gradient(155deg, ${tint} 0%, #ffffff 60%)` }}>
@@ -284,7 +283,7 @@ function Kpi({ icon: Icon, color, tint, n, label, value, sub, negative, standing
         <div className="h-1.5 rounded-full overflow-hidden" style={{ background: `${color}22` }}>
           <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: color }} />
         </div>
-        <div className="text-[10px] font-bold mt-1" style={{ color }}>{standingLabel}</div>
+        <div className="text-[10px] font-bold mt-1" style={{ color: standingRed ? "#e11d48" : color }}>{standingRed ? `⚠ ${standingLabel} — over target` : standingLabel}</div>
       </div>
     </div>
   );
@@ -373,7 +372,7 @@ function FragmentRow({ d, it, totalConverted, canDrill, open, onToggle }: { d: D
         <td className="px-3 py-3 text-right"><div className="font-semibold">{inr(b.leadConversion.convertedValue)}</div><div className="text-[10.5px] text-ink-faint">{b1pct}% of business · {b.leadConversion.convertedLeads} won</div></td>
         <td className="px-3 py-3 text-right"><div className="font-semibold">{inr(b.billing.billedInPeriod)}</div><div className="text-[10.5px] text-ink-faint">{b.billing.taskCount} tasks</div></td>
         <td className="px-3 py-3 text-right"><div className={`font-semibold ${b.profitability.profitInPeriod < 0 ? "text-rose-600" : ""}`}>{inr(b.profitability.profitInPeriod)}</div><div className="text-[10.5px] text-ink-faint">{b.profitability.taskCount} tasks</div></td>
-        <td className="px-3 py-3 text-right"><div className="font-semibold">{b.internalImprovement.qualifyingTasks}/{b.internalImprovement.totalContributedTasks}</div><div className="text-[10.5px] text-ink-faint">{b.internalImprovement.internalHours}h</div></td>
+        <td className="px-3 py-3 text-right"><div className="font-semibold">{Math.round(b.internalImprovement.completionRate * 100)}%</div><div className={`text-[10.5px] ${b.internalImprovement.overBudget ? "text-rose-600 font-semibold" : "text-ink-faint"}`}>{b.internalImprovement.completedTasks}/{b.internalImprovement.totalTasks} · {b.internalImprovement.hoursSpent}h{b.internalImprovement.targetHours ? `/${b.internalImprovement.targetHours}h` : ""}</div></td>
         <td className="px-2 py-3 text-ink-faint">{canDrill ? (open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />) : null}</td>
       </tr>
       {open && canDrill && (
@@ -397,8 +396,13 @@ function Drill({ d, it }: { d: DirectorIncentive; it: InternalTaskResult[] }) {
       {it.length > 0 && (
         <div>
           <div className="text-[10px] font-extrabold tracking-[0.12em] text-amber-600 uppercase mb-1.5">Bucket 4 · Internal tasks</div>
-          {it.map((t) => { const mine = t.contributors.find((c) => c.director === d.name)?.hours ?? 0; return (
-            <div key={t.taskId} className="flex items-center gap-2 text-[12px] py-0.5"><span className="text-ink-soft truncate flex-1">{t.name || t.identity}</span><span className="text-ink-mute">{mine}h{t.approvedHours != null ? ` / ${t.approvedHours}h` : ""}</span>{t.withinApproved === true ? <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-emerald-50 text-emerald-700">within</span> : t.withinApproved === false ? <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-rose-50 text-rose-600">over</span> : null}</div>
+          {it.map((t) => { const mine = t.contributors.find((c) => c.director === d.name)?.hours ?? 0; const over = t.withinApproved === false; return (
+            <div key={t.taskId} className="flex items-center gap-2 text-[12px] py-0.5">
+              <span className="text-ink-soft truncate flex-1">{t.name || t.identity}</span>
+              <span className={`text-[9px] font-bold uppercase px-1 py-0.5 rounded ${t.completed ? "bg-emerald-50 text-emerald-700" : "bg-muted text-ink-faint"}`}>{t.completed ? "done" : "wip"}</span>
+              <span className={over ? "text-rose-600 font-semibold" : "text-ink-mute"}>{t.actualHours}h{t.approvedHours != null ? ` / ${t.approvedHours}h` : ""}</span>
+              {over ? <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-rose-50 text-rose-600">over</span> : null}
+            </div>
           ); })}
         </div>
       )}
