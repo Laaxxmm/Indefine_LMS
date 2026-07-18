@@ -111,9 +111,9 @@ export function IncentivesView({
       b4: Math.max(1, ...ds.map((d) => d.buckets.internalImprovement.internalHours)),
     };
   }, [snapshot]);
-  // Total new business generated (Σ originated lead value) — Bucket 1 is each
-  // partner's share of it.
-  const totalOriginated = useMemo(() => Math.max(1, (snapshot?.directors ?? []).reduce((s, d) => s + d.buckets.leadConversion.originatedValue, 0)), [snapshot]);
+  // New business = business actually WON (converted leads), not pipeline. Bucket 1
+  // is each partner's share of the firm's total converted deal value.
+  const totalConverted = useMemo(() => Math.max(1, (snapshot?.directors ?? []).reduce((s, d) => s + d.buckets.leadConversion.convertedValue, 0)), [snapshot]);
   const pctOf = (v: number, total: number) => Math.round((v / total) * 100);
 
   return (
@@ -191,10 +191,10 @@ export function IncentivesView({
           {/* Your scorecard */}
           {me && (() => {
             const b = me.buckets;
-            const b1pct = pctOf(b.leadConversion.originatedValue, totalOriginated);
+            const b1pct = pctOf(b.leadConversion.convertedValue, totalConverted);
             const leaderPct = (v: number, max: number) => (v >= max && v > 0 ? { standingPct: 100, standingLabel: "Leading 👑" } : { standingPct: Math.max(0, Math.min(100, Math.round((v / max) * 100))), standingLabel: `${Math.max(0, Math.round((v / max) * 100))}% of leader` });
             const cards = [
-              { ...BUCKETS[0], value: inr(b.leadConversion.originatedValue), label: "New business", sub: `${b.leadConversion.originatedLeads} leads · ${b.leadConversion.convertedLeads} won`, negative: false, standingPct: b1pct, standingLabel: `${b1pct}% of firm's new business` },
+              { ...BUCKETS[0], value: inr(b.leadConversion.convertedValue), label: "New business won", sub: `${b.leadConversion.convertedLeads}/${b.leadConversion.originatedLeads} converted · ${Math.round(b.leadConversion.conversionRate * 100)}%`, negative: false, standingPct: b1pct, standingLabel: `${b1pct}% of firm's new business` },
               { ...BUCKETS[1], value: inr(b.billing.billedInPeriod), sub: `${b.billing.taskCount} task${b.billing.taskCount === 1 ? "" : "s"}`, negative: false, ...leaderPct(b.billing.billedInPeriod, maxes.b2) },
               { ...BUCKETS[2], value: inr(b.profitability.profitInPeriod), sub: `${b.profitability.taskCount} task${b.profitability.taskCount === 1 ? "" : "s"}`, negative: b.profitability.profitInPeriod < 0, ...leaderPct(b.profitability.profitInPeriod, maxes.b3) },
               { ...BUCKETS[3], value: `${b.internalImprovement.qualifyingTasks}/${b.internalImprovement.totalContributedTasks}`, sub: `${b.internalImprovement.internalHours}h within budget`, negative: false, ...leaderPct(b.internalImprovement.internalHours, maxes.b4) },
@@ -254,7 +254,7 @@ export function IncentivesView({
                       const canDrill = isAdmin && (d.leads.length > 0 || d.tasks.length > 0 || it.length > 0);
                       const open = expanded === d.directorId;
                       return (
-                        <FragmentRow key={d.directorId} d={d} it={it} totalOriginated={totalOriginated} canDrill={canDrill} open={open} onToggle={() => setExpanded((x) => (x === d.directorId ? null : d.directorId))} />
+                        <FragmentRow key={d.directorId} d={d} it={it} totalConverted={totalConverted} canDrill={canDrill} open={open} onToggle={() => setExpanded((x) => (x === d.directorId ? null : d.directorId))} />
                       );
                     })}
                   </tbody>
@@ -363,14 +363,14 @@ function Mini({ value, label, tone }: { value: number | string; label: string; t
   return <div><div className={`text-lg font-display font-extrabold leading-none ${tone}`}>{value}</div><div className="text-[9.5px] font-semibold uppercase tracking-wide text-ink-mute mt-0.5">{label}</div></div>;
 }
 
-function FragmentRow({ d, it, totalOriginated, canDrill, open, onToggle }: { d: DirectorIncentive; it: InternalTaskResult[]; totalOriginated: number; canDrill: boolean; open: boolean; onToggle: () => void }) {
+function FragmentRow({ d, it, totalConverted, canDrill, open, onToggle }: { d: DirectorIncentive; it: InternalTaskResult[]; totalConverted: number; canDrill: boolean; open: boolean; onToggle: () => void }) {
   const b = d.buckets;
-  const b1pct = Math.round((b.leadConversion.originatedValue / totalOriginated) * 100);
+  const b1pct = Math.round((b.leadConversion.convertedValue / totalConverted) * 100);
   return (
     <>
       <tr className={`border-b border-border/60 ${canDrill ? "cursor-pointer hover:bg-muted/40" : ""} transition`} onClick={canDrill ? onToggle : undefined}>
         <td className="px-4 py-3 font-bold text-ink">{d.name}</td>
-        <td className="px-3 py-3 text-right"><div className="font-semibold">{inr(b.leadConversion.originatedValue)}</div><div className="text-[10.5px] text-ink-faint">{b1pct}% of business · {b.leadConversion.originatedLeads} leads</div></td>
+        <td className="px-3 py-3 text-right"><div className="font-semibold">{inr(b.leadConversion.convertedValue)}</div><div className="text-[10.5px] text-ink-faint">{b1pct}% of business · {b.leadConversion.convertedLeads} won</div></td>
         <td className="px-3 py-3 text-right"><div className="font-semibold">{inr(b.billing.billedInPeriod)}</div><div className="text-[10.5px] text-ink-faint">{b.billing.taskCount} tasks</div></td>
         <td className="px-3 py-3 text-right"><div className={`font-semibold ${b.profitability.profitInPeriod < 0 ? "text-rose-600" : ""}`}>{inr(b.profitability.profitInPeriod)}</div><div className="text-[10.5px] text-ink-faint">{b.profitability.taskCount} tasks</div></td>
         <td className="px-3 py-3 text-right"><div className="font-semibold">{b.internalImprovement.qualifyingTasks}/{b.internalImprovement.totalContributedTasks}</div><div className="text-[10.5px] text-ink-faint">{b.internalImprovement.internalHours}h</div></td>
