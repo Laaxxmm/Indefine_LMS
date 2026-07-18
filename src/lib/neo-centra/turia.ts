@@ -218,8 +218,13 @@ export async function fetchTimesheets(dateFrom: number, dateTo: number, userId?:
 // Per-task timesheet rows. `amount` = hours × hourlyrate = the manpower cost Turia
 // uses for its Revenue − Manpower − OP profit. The bulk timesheet feed doesn't carry
 // a task id, so cost/hours must be pulled per task.
-export async function fetchTaskTimesheets(taskId: string): Promise<Array<{ username: string; hours: number; amount: number }>> {
-  const json = await turiaPost("timesheet", "list", { taskId, taskid: taskId });
+export async function fetchTaskTimesheets(taskId: string, range?: { fromMs: number; toMs: number }): Promise<Array<{ username: string; hours: number; amount: number }>> {
+  // Passing fromDate/toDate scopes the rows to a period server-side — Bucket 4 wants only
+  // hours logged *in the quarter*. Omit it for Buckets 2 & 3, whose profit subtracts the
+  // task's full manpower regardless of when it was logged.
+  const data: Record<string, unknown> = { taskId, taskid: taskId };
+  if (range) { data.fromDate = range.fromMs; data.toDate = range.toMs; }
+  const json = await turiaPost("timesheet", "list", data);
   const rows = (json.tasktimesheets as Array<Record<string, unknown>>) || [];
   return rows.map((r) => ({ username: String(r.username ?? ""), hours: numf(r.totalhours), amount: numf(r.amount) }));
 }
