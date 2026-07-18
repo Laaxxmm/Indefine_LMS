@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Loader2, RefreshCw, AlertTriangle, Link2, ChevronDown, ChevronRight, TrendingUp, Receipt, PiggyBank, Wrench, CheckCircle2, Flag, CalendarClock, Flame, Trophy } from "lucide-react";
 import type { DirectorIncentive, IncentiveSummary, InternalTaskResult } from "@/lib/neo-centra/incentive";
 
@@ -28,7 +28,9 @@ const QUOTES = [
   "Don't watch the leaderboard. Be the reason others do.",
 ];
 
-const score = (d: DirectorIncentive) => d.buckets.leadConversion.convertedValue + d.buckets.billing.billedInPeriod + d.buckets.profitability.profitInPeriod;
+// The race ranks on realized profit — the firm's bottom line, not a mix of
+// pipeline (lead value) + revenue + margin, which double-counts.
+const score = (d: DirectorIncentive) => d.buckets.profitability.profitInPeriod;
 
 const BUCKETS = [
   { color: "#5B4BE6", tint: "#efeafe", icon: TrendingUp, n: "Bucket 1", label: "Leads converted" },
@@ -84,6 +86,18 @@ export function IncentivesView({
     } catch (e) { setError((e as Error).message); } finally { setSavingCookie(false); }
   }
 
+  // Auto-sync every 5 minutes while the tab is visible (skips if a fresh snapshot
+  // already exists, so it doesn't re-run right after a manual/other sync).
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      const age = snapshot?.generatedAt ? Date.now() - Date.parse(snapshot.generatedAt) : Infinity;
+      if (age > 4.5 * 60 * 1000 && !syncing) void sync();
+    }, 5 * 60 * 1000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snapshot, syncing]);
+
   const ranked = useMemo(() => [...(snapshot?.directors ?? [])].sort((a, b) => score(b) - score(a)), [snapshot]);
   const maxScore = Math.max(1, ...ranked.map(score));
   const me = snapshot?.directors.find((d) => d.directorId === viewerId) ?? null;
@@ -92,12 +106,15 @@ export function IncentivesView({
   const maxes = useMemo(() => {
     const ds = snapshot?.directors ?? [];
     return {
-      b1: Math.max(1, ...ds.map((d) => d.buckets.leadConversion.convertedValue)),
       b2: Math.max(1, ...ds.map((d) => d.buckets.billing.billedInPeriod)),
       b3: Math.max(1, ...ds.map((d) => d.buckets.profitability.profitInPeriod)),
       b4: Math.max(1, ...ds.map((d) => d.buckets.internalImprovement.internalHours)),
     };
   }, [snapshot]);
+  // Total new business generated (Σ originated lead value) — Bucket 1 is each
+  // partner's share of it.
+  const totalOriginated = useMemo(() => Math.max(1, (snapshot?.directors ?? []).reduce((s, d) => s + d.buckets.leadConversion.originatedValue, 0)), [snapshot]);
+  const pctOf = (v: number, total: number) => Math.round((v / total) * 100);
 
   return (
     <div>
@@ -125,6 +142,7 @@ export function IncentivesView({
           </div>
         )}
         {error && <p className="mt-2 text-[12px] text-rose-600 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> {error}</p>}
+        <p className="mt-2 text-[11px] text-ink-faint">Auto-syncs every 5 minutes while this tab is open · keep a logged-in Turia tab (or the extension) running so the cookie stays fresh.</p>
       </div>
 
       {/* Motivating quote */}
@@ -144,7 +162,7 @@ export function IncentivesView({
             <div className="flex items-center gap-2 mb-4">
               <Trophy className="w-5 h-5 text-amber-500" />
               <h2 className="font-display font-extrabold text-lg">The Race</h2>
-              <span className="text-[11px] text-ink-faint font-semibold">· lead value + billing + profit</span>
+              <span className="text-[11px] text-ink-faint font-semibold">· by profit</span>
             </div>
             <div className="flex flex-col gap-2.5">
               {ranked.map((d, i) => {
@@ -173,11 +191,13 @@ export function IncentivesView({
           {/* Your scorecard */}
           {me && (() => {
             const b = me.buckets;
+            const b1pct = pctOf(b.leadConversion.originatedValue, totalOriginated);
+            const leaderPct = (v: number, max: number) => (v >= max && v > 0 ? { standingPct: 100, standingLabel: "Leading 👑" } : { standingPct: Math.max(0, Math.min(100, Math.round((v / max) * 100))), standingLabel: `${Math.max(0, Math.round((v / max) * 100))}% of leader` });
             const cards = [
-              { ...BUCKETS[0], value: inr(b.leadConversion.convertedValue), sub: `${b.leadConversion.convertedLeads}/${b.leadConversion.originatedLeads} won · ${Math.round(b.leadConversion.conversionRate * 100)}%`, val: b.leadConversion.convertedValue, max: maxes.b1, negative: false },
-              { ...BUCKETS[1], value: inr(b.billing.billedInPeriod), sub: `${b.billing.taskCount} task${b.billing.taskCount === 1 ? "" : "s"}`, val: b.billing.billedInPeriod, max: maxes.b2, negative: false },
-              { ...BUCKETS[2], value: inr(b.profitability.profitInPeriod), sub: `${b.profitability.taskCount} task${b.profitability.taskCount === 1 ? "" : "s"}`, val: b.profitability.profitInPeriod, max: maxes.b3, negative: b.profitability.profitInPeriod < 0 },
-              { ...BUCKETS[3], value: `${b.internalImprovement.qualifyingTasks}/${b.internalImprovement.totalContributedTasks}`, sub: `${b.internalImprovement.internalHours}h within budget`, val: b.internalImprovement.internalHours, max: maxes.b4, negative: false },
+              { ...BUCKETS[0], value: inr(b.leadConversion.originatedValue), label: "New business", sub: `${b.leadConversion.originatedLeads} leads · ${b.leadConversion.convertedLeads} won`, negative: false, standingPct: b1pct, standingLabel: `${b1pct}% of firm's new business` },
+              { ...BUCKETS[1], value: inr(b.billing.billedInPeriod), sub: `${b.billing.taskCount} task${b.billing.taskCount === 1 ? "" : "s"}`, negative: false, ...leaderPct(b.billing.billedInPeriod, maxes.b2) },
+              { ...BUCKETS[2], value: inr(b.profitability.profitInPeriod), sub: `${b.profitability.taskCount} task${b.profitability.taskCount === 1 ? "" : "s"}`, negative: b.profitability.profitInPeriod < 0, ...leaderPct(b.profitability.profitInPeriod, maxes.b3) },
+              { ...BUCKETS[3], value: `${b.internalImprovement.qualifyingTasks}/${b.internalImprovement.totalContributedTasks}`, sub: `${b.internalImprovement.internalHours}h within budget`, negative: false, ...leaderPct(b.internalImprovement.internalHours, maxes.b4) },
             ];
             return (
               <section className="mb-4">
@@ -191,6 +211,18 @@ export function IncentivesView({
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                   {cards.map((c) => <Kpi key={c.n} {...c} />)}
                 </div>
+                {(me.tasks.length > 0 || me.leads.length > 0 || internalFor(me.name).length > 0) && (
+                  <div className="mt-3">
+                    <button onClick={() => setExpanded((x) => (x === "me" ? null : "me"))} className="inline-flex items-center gap-1.5 text-[12.5px] font-bold text-brand-600 hover:text-brand-700">
+                      {expanded === "me" ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />} {expanded === "me" ? "Hide" : "See"} my tasks &amp; leads
+                    </button>
+                    {expanded === "me" && (
+                      <div className="mt-2 rounded-2xl bg-card border border-border shadow-lift p-4">
+                        <Drill d={me} it={internalFor(me.name)} />
+                      </div>
+                    )}
+                  </div>
+                )}
               </section>
             );
           })()}
@@ -209,7 +241,7 @@ export function IncentivesView({
                   <thead>
                     <tr className="text-left text-ink-faint border-b border-border">
                       <th className="font-bold px-4 py-3">Partner</th>
-                      <th className="font-bold px-3 py-3 text-right">Bucket 1 · Leads</th>
+                      <th className="font-bold px-3 py-3 text-right">Bucket 1 · New business</th>
                       <th className="font-bold px-3 py-3 text-right">Bucket 2 · Billing</th>
                       <th className="font-bold px-3 py-3 text-right">Bucket 3 · Profit</th>
                       <th className="font-bold px-3 py-3 text-right">Bucket 4 · Internal</th>
@@ -222,7 +254,7 @@ export function IncentivesView({
                       const canDrill = isAdmin && (d.leads.length > 0 || d.tasks.length > 0 || it.length > 0);
                       const open = expanded === d.directorId;
                       return (
-                        <FragmentRow key={d.directorId} d={d} it={it} canDrill={canDrill} open={open} onToggle={() => setExpanded((x) => (x === d.directorId ? null : d.directorId))} />
+                        <FragmentRow key={d.directorId} d={d} it={it} totalOriginated={totalOriginated} canDrill={canDrill} open={open} onToggle={() => setExpanded((x) => (x === d.directorId ? null : d.directorId))} />
                       );
                     })}
                   </tbody>
@@ -236,9 +268,8 @@ export function IncentivesView({
   );
 }
 
-function Kpi({ icon: Icon, color, tint, n, label, value, sub, val, max, negative }: { icon: typeof TrendingUp; color: string; tint: string; n: string; label: string; value: string; sub: string; val: number; max: number; negative: boolean }) {
-  const pct = Math.max(0, Math.min(100, Math.round((val / (max || 1)) * 100)));
-  const leader = val >= (max || 1) && val > 0;
+function Kpi({ icon: Icon, color, tint, n, label, value, sub, negative, standingPct, standingLabel }: { icon: typeof TrendingUp; color: string; tint: string; n: string; label: string; value: string; sub: string; negative: boolean; standingPct: number; standingLabel: string }) {
+  const pct = Math.max(0, Math.min(100, standingPct));
   return (
     <div className="relative overflow-hidden rounded-2xl border border-border shadow-lift p-4" style={{ background: `linear-gradient(155deg, ${tint} 0%, #ffffff 60%)` }}>
       <div className="absolute top-0 left-0 right-0 h-1" style={{ background: color }} />
@@ -253,7 +284,7 @@ function Kpi({ icon: Icon, color, tint, n, label, value, sub, val, max, negative
         <div className="h-1.5 rounded-full overflow-hidden" style={{ background: `${color}22` }}>
           <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: color }} />
         </div>
-        <div className="text-[10px] font-bold mt-1" style={{ color }}>{leader ? "Leading 👑" : `${pct}% of leader`}</div>
+        <div className="text-[10px] font-bold mt-1" style={{ color }}>{standingLabel}</div>
       </div>
     </div>
   );
@@ -332,48 +363,53 @@ function Mini({ value, label, tone }: { value: number | string; label: string; t
   return <div><div className={`text-lg font-display font-extrabold leading-none ${tone}`}>{value}</div><div className="text-[9.5px] font-semibold uppercase tracking-wide text-ink-mute mt-0.5">{label}</div></div>;
 }
 
-function FragmentRow({ d, it, canDrill, open, onToggle }: { d: DirectorIncentive; it: InternalTaskResult[]; canDrill: boolean; open: boolean; onToggle: () => void }) {
+function FragmentRow({ d, it, totalOriginated, canDrill, open, onToggle }: { d: DirectorIncentive; it: InternalTaskResult[]; totalOriginated: number; canDrill: boolean; open: boolean; onToggle: () => void }) {
   const b = d.buckets;
+  const b1pct = Math.round((b.leadConversion.originatedValue / totalOriginated) * 100);
   return (
     <>
       <tr className={`border-b border-border/60 ${canDrill ? "cursor-pointer hover:bg-muted/40" : ""} transition`} onClick={canDrill ? onToggle : undefined}>
         <td className="px-4 py-3 font-bold text-ink">{d.name}</td>
-        <td className="px-3 py-3 text-right"><div className="font-semibold">{inr(b.leadConversion.convertedValue)}</div><div className="text-[10.5px] text-ink-faint">{b.leadConversion.convertedLeads}/{b.leadConversion.originatedLeads} · {Math.round(b.leadConversion.conversionRate * 100)}%</div></td>
+        <td className="px-3 py-3 text-right"><div className="font-semibold">{inr(b.leadConversion.originatedValue)}</div><div className="text-[10.5px] text-ink-faint">{b1pct}% of business · {b.leadConversion.originatedLeads} leads</div></td>
         <td className="px-3 py-3 text-right"><div className="font-semibold">{inr(b.billing.billedInPeriod)}</div><div className="text-[10.5px] text-ink-faint">{b.billing.taskCount} tasks</div></td>
-        <td className="px-3 py-3 text-right"><div className="font-semibold">{inr(b.profitability.profitInPeriod)}</div><div className="text-[10.5px] text-ink-faint">{b.profitability.taskCount} tasks</div></td>
+        <td className="px-3 py-3 text-right"><div className={`font-semibold ${b.profitability.profitInPeriod < 0 ? "text-rose-600" : ""}`}>{inr(b.profitability.profitInPeriod)}</div><div className="text-[10.5px] text-ink-faint">{b.profitability.taskCount} tasks</div></td>
         <td className="px-3 py-3 text-right"><div className="font-semibold">{b.internalImprovement.qualifyingTasks}/{b.internalImprovement.totalContributedTasks}</div><div className="text-[10.5px] text-ink-faint">{b.internalImprovement.internalHours}h</div></td>
         <td className="px-2 py-3 text-ink-faint">{canDrill ? (open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />) : null}</td>
       </tr>
       {open && canDrill && (
-        <tr><td colSpan={6} className="bg-page/40 px-4 py-3">
-          <div className="flex flex-col gap-3">
-            {d.tasks.length > 0 && (
-              <div>
-                <div className="text-[10px] font-extrabold tracking-[0.12em] text-emerald-600 uppercase mb-1.5">Buckets 2 &amp; 3 · Client tasks</div>
-                {d.tasks.map((t) => (
-                  <div key={t.taskId} className="flex items-center gap-2 text-[12px] py-0.5"><span className="text-ink-soft truncate flex-1">{t.identity ? `${t.identity} · ` : ""}{t.name}{t.sharedWith > 1 ? ` · ×${t.sharedWith}` : ""}</span>{t.flags.map((f) => <span key={f} className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-rose-50 text-rose-600">{f}</span>)}<span className="text-emerald-700 font-semibold whitespace-nowrap">{inr(t.billedPeriod)}</span><span className="text-sky-700 whitespace-nowrap">· {inr(t.profit)}</span></div>
-                ))}
-              </div>
-            )}
-            {it.length > 0 && (
-              <div>
-                <div className="text-[10px] font-extrabold tracking-[0.12em] text-amber-600 uppercase mb-1.5">Bucket 4 · Internal tasks</div>
-                {it.map((t) => { const mine = t.contributors.find((c) => c.director === d.name)?.hours ?? 0; return (
-                  <div key={t.taskId} className="flex items-center gap-2 text-[12px] py-0.5"><span className="text-ink-soft truncate flex-1">{t.identity ? `${t.identity} · ` : ""}{t.name}</span><span className="text-ink-mute">{mine}h{t.approvedHours != null ? ` / ${t.approvedHours}h` : ""}</span>{t.withinApproved === true ? <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-emerald-50 text-emerald-700">within</span> : t.withinApproved === false ? <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-rose-50 text-rose-600">over</span> : null}</div>
-                ); })}
-              </div>
-            )}
-            {d.leads.length > 0 && (
-              <div>
-                <div className="text-[10px] font-extrabold tracking-[0.12em] text-brand-600 uppercase mb-1.5">Bucket 1 · Leads</div>
-                {d.leads.map((l) => (
-                  <div key={l.id} className="flex items-center gap-2 text-[12px] py-0.5"><span className={`w-1.5 h-1.5 rounded-full ${l.converted ? "bg-emerald-500" : "bg-ink-faint"}`} /><span className="text-ink-soft truncate flex-1">{l.name} · {l.stage}</span><span className="text-ink-mute">{inr(l.dealValue)}</span></div>
-                ))}
-              </div>
-            )}
-          </div>
-        </td></tr>
+        <tr><td colSpan={6} className="bg-page/40 px-4 py-3"><Drill d={d} it={it} /></td></tr>
       )}
     </>
+  );
+}
+
+function Drill({ d, it }: { d: DirectorIncentive; it: InternalTaskResult[] }) {
+  return (
+    <div className="flex flex-col gap-3">
+      {d.tasks.length > 0 && (
+        <div>
+          <div className="text-[10px] font-extrabold tracking-[0.12em] text-emerald-600 uppercase mb-1.5">Buckets 2 &amp; 3 · Client tasks (billed · profit)</div>
+          {d.tasks.map((t) => (
+            <div key={t.taskId} className="flex items-center gap-2 text-[12px] py-0.5"><span className="text-ink-soft truncate flex-1">{t.name || t.identity}{t.sharedWith > 1 ? ` · ×${t.sharedWith}` : ""}</span>{t.flags.map((f) => <span key={f} className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-rose-50 text-rose-600">{f}</span>)}<span className="text-emerald-700 font-semibold whitespace-nowrap">{inr(t.billedPeriod)}</span><span className={`whitespace-nowrap ${t.profit < 0 ? "text-rose-600" : "text-sky-700"}`}>· {inr(t.profit)}</span></div>
+          ))}
+        </div>
+      )}
+      {it.length > 0 && (
+        <div>
+          <div className="text-[10px] font-extrabold tracking-[0.12em] text-amber-600 uppercase mb-1.5">Bucket 4 · Internal tasks</div>
+          {it.map((t) => { const mine = t.contributors.find((c) => c.director === d.name)?.hours ?? 0; return (
+            <div key={t.taskId} className="flex items-center gap-2 text-[12px] py-0.5"><span className="text-ink-soft truncate flex-1">{t.name || t.identity}</span><span className="text-ink-mute">{mine}h{t.approvedHours != null ? ` / ${t.approvedHours}h` : ""}</span>{t.withinApproved === true ? <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-emerald-50 text-emerald-700">within</span> : t.withinApproved === false ? <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-rose-50 text-rose-600">over</span> : null}</div>
+          ); })}
+        </div>
+      )}
+      {d.leads.length > 0 && (
+        <div>
+          <div className="text-[10px] font-extrabold tracking-[0.12em] text-brand-600 uppercase mb-1.5">Bucket 1 · Leads (new business)</div>
+          {d.leads.map((l) => (
+            <div key={l.id} className="flex items-center gap-2 text-[12px] py-0.5"><span className={`w-1.5 h-1.5 rounded-full ${l.converted ? "bg-emerald-500" : "bg-ink-faint"}`} /><span className="text-ink-soft truncate flex-1">{l.name} · {l.stage}{l.converted ? " · won" : ""}</span><span className="text-ink-mute">{inr(l.dealValue)}</span></div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
