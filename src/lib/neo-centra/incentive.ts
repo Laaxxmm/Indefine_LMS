@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { currentQuarter } from "./period";
+import { profitPercents } from "./split";
 import {
   fetchOrgUsers, fetchTuriaTaskList, fetchTaskTimesheets, fetchLeads, fetchTaskDetail, fetchAllInvoices,
   type TuriaLead, type TuriaTaskDetail,
@@ -37,7 +38,7 @@ async function mapPool<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R>
 export interface DirectorRow { id: string; name: string; turiaUserId: string | null; turiaUsername: string | null; isActive: boolean; isAdmin: boolean }
 export interface InternalTaskResult { taskId: string; identity: string; name: string; completed: boolean; approvedHours: number | null; actualHours: number; withinApproved: boolean | null; contributors: Array<{ director: string; hours: number }> }
 export interface DirectorLeadItem { id: string; identity: string; name: string; dealValue: number; stage: string; referredBy: string | null; converted: boolean }
-export interface DirectorTaskDrill { taskId: string; identity: string; name: string; budget: number; billedPeriod: number; invoiceTotal: number; profit: number; hours: number | null; sharedWith: number; dueDate: number | null; flags: string[] }
+export interface DirectorTaskDrill { taskId: string; identity: string; name: string; budget: number; billedPeriod: number; invoiceTotal: number; profit: number; hours: number | null; sharedWith: number; dueDate: number | null; flags: string[]; profitPartners?: Array<{ directorId: string; name: string; percent: number }> }
 export interface DirectorIncentive {
   directorId: string; name: string; turiaUserId: string | null; turiaUsername: string | null; resolved: boolean;
   buckets: {
@@ -106,6 +107,13 @@ export async function getInternalBudgets(): Promise<InternalBudgetRow[]> {
   return rows.map((r) => ({ id: r.id, turiaTaskId: r.turiaTaskId, taskIdentity: r.taskIdentity, taskName: r.taskName, approvedHours: r.approvedHours, approvedBy: r.approvedBy, notes: r.notes }));
 }
 
+// Bucket 3 manual profit splits, keyed by Turia task. `splits` = { directorId: percent }.
+export interface ProfitSplitRow { turiaTaskId: string | null; taskIdentity: string | null; splits: Record<string, number> }
+export async function getProfitSplits(): Promise<ProfitSplitRow[]> {
+  const rows = await prisma.neoProfitSplit.findMany();
+  return rows.map((r) => ({ turiaTaskId: r.turiaTaskId, taskIdentity: r.taskIdentity, splits: (r.splits as Record<string, number>) ?? {} }));
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function parseTatHours(s: string | null): number | null {
   if (!s) return null;
@@ -153,6 +161,9 @@ const directorForName = directorForUsername;
 export async function computeIncentiveSummary(fromMs: number, toMs: number): Promise<IncentiveSummary> {
   const directors = (await getDirectors()).filter((d) => d.isActive);
   const budgets = await getInternalBudgets();
+  const profitSplits = await getProfitSplits();
+  const splitFor = (taskId: string, identity: string): Record<string, number> | null =>
+    profitSplits.find((s) => (s.turiaTaskId && s.turiaTaskId === taskId) || (s.taskIdentity && s.taskIdentity === identity))?.splits ?? null;
 
   const [tasks, leads, invoices] = await Promise.all([
     fetchTuriaTaskList(1, 2000),
@@ -210,8 +221,15 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
 
   // Per billed task: task/get for the director userlists, and the task's timesheets
   // for the manpower cost. Profit = period billing − manpower (Turia's formula, OP≈0).
-  type MoneyStats = { billed: number; profit: number; taskIds: Set<string> };
+  // Billing (B2) and profit (B3) are attributed on *different* bases, so each keeps
+  // its own task set: B2 credits whoever logged time; B3 credits assigned partners.
+  type MoneyStats = { billed: number; profit: number; billedTaskIds: Set<string>; profitTaskIds: Set<string> };
   const moneyByDirector = new Map<string, MoneyStats>();
+  const statsFor = (id: string) => {
+    let s = moneyByDirector.get(id);
+    if (!s) { s = { billed: 0, profit: 0, billedTaskIds: new Set<string>(), profitTaskIds: new Set<string>() }; moneyByDirector.set(id, s); }
+    return s;
+  };
   const tasksByDirector = new Map<string, DirectorTaskDrill[]>();
   const perTask = await mapPool([...periodBillingByTask.keys()], 6, async (taskId) => {
     const [detail, tsRows] = await Promise.all([fetchTaskDetail(taskId), fetchTaskTimesheets(taskId)]);
@@ -220,20 +238,40 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
   for (const { taskId, detail, tsRows } of perTask) {
     const periodBilling = periodBillingByTask.get(taskId) ?? 0;
     if (!detail) continue;
-    const taskDirectors: DirectorRow[] = [];
-    for (const u of detail.users) { const dir = directorForName(u.name, directors); if (dir && !taskDirectors.some((td) => td.id === dir.id)) taskDirectors.push(dir); }
-    if (taskDirectors.length === 0) continue;
+
+    // Bucket 2 — billing follows the timesheet: each partner earns billing in
+    // proportion to their *own* logged hours on the task. No logged time → no billing.
+    const hoursByDir = new Map<string, number>();
+    for (const r of tsRows) {
+      if (!(r.hours > 0)) continue;
+      const dir = directorForUsername(r.username, directors);
+      if (dir) hoursByDir.set(dir.id, (hoursByDir.get(dir.id) || 0) + r.hours);
+    }
+    const totalDirHours = [...hoursByDir.values()].reduce((s, h) => s + h, 0);
+
+    // Bucket 3 — profit is split among the partners *assigned* to the task, regardless
+    // of who logged time. A saved manual split (40/60 etc.) wins when it covers every
+    // assigned partner; otherwise the profit is divided equally (the default).
+    const assignedDirs: DirectorRow[] = [];
+    for (const u of detail.users) { const dir = directorForName(u.name, directors); if (dir && !assignedDirs.some((td) => td.id === dir.id)) assignedDirs.push(dir); }
+    const pcts = profitPercents(assignedDirs.map((d) => d.id), splitFor(taskId, detail.identity));
+    const pctFor = (id: string) => pcts[id] ?? 0;
+    const profitPartners = assignedDirs.length > 1 ? assignedDirs.map((d) => ({ directorId: d.id, name: d.name, percent: Math.round(pctFor(d.id)) })) : undefined;
 
     const manpower = tsRows.reduce((s, r) => s + r.amount, 0);
     const periodProfit = periodBilling - manpower; // OP expense treated as 0 (rarely set)
-    const split = taskDirectors.length;
     const flags = periodProfit < 0 ? ["over-budget", ...taskFlags(detail).filter((f) => f !== "over-budget")] : taskFlags(detail).filter((f) => f !== "over-budget");
-    const drill: DirectorTaskDrill = { taskId, identity: detail.identity, name: detail.name, budget: Math.round(detail.budgetAmount), billedPeriod: Math.round(periodBilling), invoiceTotal: Math.round(periodBilling), profit: Math.round(periodProfit), hours: parseTatHours(detail.tatHours), sharedWith: split, dueDate: detail.dueDate, flags };
-    for (const td of taskDirectors) {
-      const stats = moneyByDirector.get(td.id) || { billed: 0, profit: 0, taskIds: new Set<string>() };
-      stats.billed += periodBilling / split; stats.profit += periodProfit / split; stats.taskIds.add(taskId);
-      moneyByDirector.set(td.id, stats);
-      tasksByDirector.set(td.id, [...(tasksByDirector.get(td.id) || []), drill]);
+
+    const participantIds = new Set<string>([...hoursByDir.keys(), ...assignedDirs.map((d) => d.id)]);
+    for (const id of participantIds) {
+      const billShare = totalDirHours > 0 ? periodBilling * ((hoursByDir.get(id) || 0) / totalDirHours) : 0;
+      const isAssigned = assignedDirs.some((d) => d.id === id);
+      const profitShare = isAssigned ? periodProfit * (pctFor(id) / 100) : 0;
+      const stats = statsFor(id);
+      if (hoursByDir.has(id)) { stats.billed += billShare; stats.billedTaskIds.add(taskId); }
+      if (isAssigned) { stats.profit += profitShare; stats.profitTaskIds.add(taskId); }
+      const drill: DirectorTaskDrill = { taskId, identity: detail.identity, name: detail.name, budget: Math.round(detail.budgetAmount), billedPeriod: Math.round(billShare), invoiceTotal: Math.round(periodBilling), profit: Math.round(profitShare), hours: parseTatHours(detail.tatHours), sharedWith: participantIds.size, dueDate: detail.dueDate, flags, profitPartners };
+      tasksByDirector.set(id, [...(tasksByDirector.get(id) || []), drill]);
     }
   }
 
@@ -243,13 +281,13 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
     const hoursSpent = contributed.reduce((sum, it) => sum + (it.contributors.find((c) => c.director === d.name)?.hours || 0), 0);
     const targetHours = contributed.reduce((sum, it) => sum + (it.approvedHours ?? 0), 0);
     const lead = leadStatsByDirector.get(d.id) || { orig: 0, origVal: 0, conv: 0, convVal: 0 };
-    const money = moneyByDirector.get(d.id) || { billed: 0, profit: 0, taskIds: new Set<string>() };
+    const money = moneyByDirector.get(d.id) || { billed: 0, profit: 0, billedTaskIds: new Set<string>(), profitTaskIds: new Set<string>() };
     return {
       directorId: d.id, name: d.name, turiaUserId: d.turiaUserId, turiaUsername: d.turiaUsername, resolved: !!d.turiaUserId,
       buckets: {
         leadConversion: { available: true, originatedLeads: lead.orig, originatedValue: Math.round(lead.origVal), convertedLeads: lead.conv, convertedValue: Math.round(lead.convVal), conversionRate: lead.orig > 0 ? Math.round((lead.conv / lead.orig) * 1000) / 1000 : 0 },
-        billing: { available: true, billedInPeriod: Math.round(money.billed), taskCount: money.taskIds.size },
-        profitability: { available: true, profitInPeriod: Math.round(money.profit), taskCount: money.taskIds.size },
+        billing: { available: true, billedInPeriod: Math.round(money.billed), taskCount: money.billedTaskIds.size },
+        profitability: { available: true, profitInPeriod: Math.round(money.profit), taskCount: money.profitTaskIds.size },
         internalImprovement: {
           available: true,
           completedTasks, totalTasks: contributed.length,

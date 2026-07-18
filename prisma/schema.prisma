@@ -844,6 +844,22 @@ model NeoInternalBudget {
   @@index([taskIdentity])
 }
 
+// Bucket 3 manual profit splits — for a task worked by 2+ partners, admins set how
+// its profit divides between them (e.g. 40/60). No row → equal split (the default).
+model NeoProfitSplit {
+  id           String   @id @default(cuid())
+  turiaTaskId  String?
+  taskIdentity String?  // Turia uniqueidentity, e.g. TSK03732
+  taskName     String
+  splits       Json     // { [directorId]: percent } — must sum to 100
+  updatedBy    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([turiaTaskId])
+  @@index([taskIdentity])
+}
+
 // Cached per-period incentive computations (Turia is slow/fragile; UI reads snapshots).
 model NeoIncentiveSnapshot {
   id          String   @id @default(cuid())
