@@ -166,7 +166,6 @@ src/
     auth.ts prisma.ts graph.ts sync.ts users-sync.ts
     quiz.ts quiz-gen.ts gemini.ts transcribe.ts auto-quiz.ts
     kra.ts attendance.ts trajectory.ts gamification.ts checkins.ts …
-  middleware.ts              redirects unauthenticated users to /
 prisma/schema.prisma         full data model
 docs/                        architecture, employee guide, test report
 ```

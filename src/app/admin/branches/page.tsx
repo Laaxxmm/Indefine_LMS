@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { computeKraScores } from "@/lib/kra";
 import { Building2, Plus, Save, Trash2, Users, Trophy } from "lucide-react";
+import { ConfirmButton } from "@/components/ConfirmButton";
 
 export const dynamic = "force-dynamic";
 
@@ -167,13 +168,13 @@ export default async function BranchesPage() {
               const score = branchScore.get(b.id);
               const avg = score && score.n > 0 ? Math.round(score.sum / score.n) : 0;
               return (
-                <form
+                <div
                   key={b.id}
-                  action={updateBranch}
                   className={`rounded-2xl bg-white border shadow-soft p-5 ${
                     !b.isActive ? "border-dashed opacity-70" : "border-border"
                   }`}
                 >
+                  <form id={`branch-${b.id}`} action={updateBranch}>
                   <input type="hidden" name="id" value={b.id} />
                   <div className="flex items-start justify-between gap-4 mb-4 flex-wrap">
                     <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -222,12 +223,14 @@ export default async function BranchesPage() {
                       />
                     </div>
                   </div>
+                  </form>
 
                   <div className="flex items-center justify-between border-t border-border pt-4 flex-wrap gap-3">
                     <label className="flex items-center gap-2 text-sm">
                       <input
                         type="checkbox"
                         name="isActive"
+                        form={`branch-${b.id}`}
                         defaultChecked={b.isActive}
                         className="accent-brand-500"
                       />
@@ -236,21 +239,25 @@ export default async function BranchesPage() {
                     <div className="flex items-center gap-2">
                       <button
                         type="submit"
+                        form={`branch-${b.id}`}
                         className="text-xs px-3 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-600 text-white font-semibold inline-flex items-center gap-1.5 transition"
                       >
                         <Save className="w-3.5 h-3.5" />
                         Save
                       </button>
-                      <button
-                        formAction={removeBranch}
-                        className="text-xs px-3 py-1.5 rounded-lg text-rose-600 hover:bg-rose-50 inline-flex items-center gap-1.5 transition"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        Delete
-                      </button>
+                      <form action={removeBranch} className="contents">
+                        <input type="hidden" name="id" value={b.id} />
+                        <ConfirmButton
+                          message={`Delete branch "${b.name}"? Its members will be unassigned from this branch (their branch set to none). This cannot be undone.`}
+                          className="text-xs px-3 py-1.5 rounded-lg text-rose-600 hover:bg-rose-50 inline-flex items-center gap-1.5 transition"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          Delete
+                        </ConfirmButton>
+                      </form>
                     </div>
                   </div>
-                </form>
+                </div>
               );
             })}
           </div>

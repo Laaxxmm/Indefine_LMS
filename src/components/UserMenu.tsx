@@ -24,8 +24,15 @@ export function UserMenu({
     function onDoc(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
     document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
   }, []);
 
   return (
@@ -34,6 +41,8 @@ export function UserMenu({
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-label="Account menu"
+        aria-expanded={open}
+        aria-haspopup="menu"
         className="flex items-center gap-1.5"
       >
         <span

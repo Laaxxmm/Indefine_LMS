@@ -83,7 +83,7 @@ export default function TrustPage() {
             <div key={idx} className="rounded-xl border border-border p-4 bg-page/40">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-[11px] font-extrabold tracking-wide uppercase text-ink-soft">Party {idx + 1}</span>
-                {parties.length > 2 && <button type="button" onClick={() => removeParty(idx)} className="text-rose-500 hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>}
+                {parties.length > 2 && <button type="button" onClick={() => removeParty(idx)} aria-label={`Remove party ${idx + 1}`} className="text-rose-500 hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>}
               </div>
               <div className="grid sm:grid-cols-2 gap-x-4 gap-y-3">
                 <Field label="Name" required><Text value={p.name} onChange={(v) => patch(idx, "name", v)} /></Field>

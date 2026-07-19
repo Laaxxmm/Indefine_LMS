@@ -70,7 +70,7 @@ take effect immediately, and the user's Graph token can be read server-side.
 ```mermaid
 sequenceDiagram
     actor U as Employee
-    participant App as Next.js (middleware)
+    participant App as Next.js (per-route auth())
     participant Auth as NextAuth v5
     participant Entra as Microsoft Entra ID
     participant DB as Postgres

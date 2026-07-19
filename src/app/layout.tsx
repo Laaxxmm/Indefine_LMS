@@ -4,6 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Indefine LMS",
   description: "Internal learning portal",
+  robots: { index: false, follow: false },
 };
 
 export default function RootLayout({

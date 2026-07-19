@@ -168,10 +168,10 @@ export default function QuizPlayer({ quizId }: { quizId: string }) {
                       value={o.id}
                       checked={checked}
                       onChange={() => setAnswers((a) => ({ ...a, [q.id]: o.id }))}
-                      className="sr-only"
+                      className="sr-only peer"
                     />
                     <span
-                      className={`w-5 h-5 rounded-full border-[1.5px] grid place-items-center shrink-0 transition ${
+                      className={`w-5 h-5 rounded-full border-[1.5px] grid place-items-center shrink-0 transition peer-focus-visible:ring-2 peer-focus-visible:ring-brand-400 ${
                         checked ? "border-brand-500" : "border-ink-faint"
                       }`}
                     >

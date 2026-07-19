@@ -18,8 +18,3 @@ export function numToWords(num: number): string {
   const p3 = rem !== 0 ? numToWords(rem) : "";
   return `${numToWords(quot)} ${above100[pivot]}${p3 ? " " + p3 : ""}`;
 }
-
-// "Rupees One Lakh Only" style, for legal amount-in-words.
-export function rupeesInWords(amount: number): string {
-  return `Rupees ${numToWords(amount)} Only`;
-}

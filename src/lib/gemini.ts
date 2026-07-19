@@ -16,10 +16,6 @@ export function isThinkingModel(model: string): boolean {
   return /2\.5|gemini-[3-9]/i.test(model);
 }
 
-export function resetGeminiModelCache() {
-  cached = null;
-}
-
 export async function resolveGeminiModel(apiKey: string): Promise<string> {
   if (cached) return cached;
 

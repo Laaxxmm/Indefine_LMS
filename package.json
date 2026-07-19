@@ -10,17 +10,14 @@
     "postinstall": "prisma generate",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
-    "verify:certs": "tsx scripts/verify-certificate-templates.ts",
-    "test:certs": "tsx scripts/verify-certificate-templates.ts"
+    "verify:certs": "tsx scripts/verify-certificate-templates.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.4",
-    "@microsoft/microsoft-graph-client": "^3.0.7",
     "@prisma/client": "^6.1.0",
     "canvas-confetti": "^1.9.3",
     "docx": "^9.0.0",
     "exceljs": "^4.4.0",
-    "isomorphic-fetch": "^3.0.0",
     "lucide-react": "^0.469.0",
     "next": "^15.5.4",
     "next-auth": "5.0.0-beta.25",

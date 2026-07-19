@@ -123,7 +123,8 @@ export interface Achievement {
 }
 
 export async function computeAchievements(
-  userId: string
+  userId: string,
+  precomputedStreak?: StreakInfo
 ): Promise<Achievement[]> {
   const [
     completedVideos,
@@ -139,7 +140,7 @@ export async function computeAchievements(
       where: { userId, percent: { gte: 100 } },
       select: { id: true },
     }),
-    computeStreak(userId),
+    precomputedStreak ?? computeStreak(userId),
     prisma.videoProgress.count({
       where: {
         userId,

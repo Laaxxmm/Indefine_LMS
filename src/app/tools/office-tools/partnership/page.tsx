@@ -117,7 +117,7 @@ export default function PartnershipPage() {
               <div className="flex items-center justify-between mb-3">
                 <span className="text-[11px] font-extrabold tracking-wide uppercase text-ink-soft">{ORD[idx]} Partner</span>
                 {partners.length > 2 && (
-                  <button type="button" onClick={() => removePartner(idx)} className="text-rose-500 hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
+                  <button type="button" onClick={() => removePartner(idx)} aria-label={`Remove partner ${idx + 1}`} className="text-rose-500 hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
                 )}
               </div>
               <div className="grid sm:grid-cols-2 gap-x-4 gap-y-3">

@@ -99,7 +99,8 @@ export default async function Dashboard() {
 
   await ensureDefaultCycle();
 
-  const [myAssignments, modules, statuses, streak, achievements, leaderboard, trajectory] =
+  const streak = await computeStreak(userId);
+  const [myAssignments, modules, statuses, achievements, leaderboard, trajectory] =
     await Promise.all([
       prisma.assignment.findMany({
         where: { userId },
@@ -147,8 +148,7 @@ export default async function Dashboard() {
         orderBy: [{ courseId: "asc" }, { order: "asc" }],
       }),
       getCourseStatusForUser(userId),
-      computeStreak(userId),
-      computeAchievements(userId),
+      computeAchievements(userId, streak),
       computeKraScores(),
       computeTrajectory(userId),
     ]);

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { canAccessVideo } from "@/lib/assignments";
 import { getAppOnlyToken, getStreamUrl, getUserGraphToken } from "@/lib/graph";
 
 export async function GET(
@@ -12,15 +13,12 @@ export async function GET(
   const userId = session.user.id;
 
   const { id } = await params;
-  const video = await prisma.video.findUnique({
-    where: { id },
-    include: { module: { include: { course: { select: { published: true } } } } },
-  });
-  // Employees may only stream videos in a published course (the same content
-  // the dashboard shows). Admins can preview anything.
+  const video = await prisma.video.findUnique({ where: { id } });
+  // Assignment is the boundary (same rule the page enforces) — a guessed URL
+  // must not stream a video the employee was never assigned. Admins: anything.
   if (
     !video ||
-    (session.user.role !== "ADMIN" && !video.module?.course?.published)
+    !(await canAccessVideo(userId, id, session.user.role === "ADMIN"))
   ) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }

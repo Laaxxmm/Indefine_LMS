@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { History, FileText, ShieldCheck } from "lucide-react";
-import { registry, isEnabled } from "@/lib/certificates/registry";
+import { pickerTemplates } from "@/lib/certificates/registry";
 
 export const dynamic = "force-dynamic";
 
 export default function FormatPicker() {
   const isProd = process.env.NODE_ENV === "production";
   // In production show only enabled (verifier-passed + human-signed) templates (§3.2).
-  const templates = isProd ? registry.filter(isEnabled) : registry;
+  const templates = pickerTemplates(isProd);
 
   return (
     <div>

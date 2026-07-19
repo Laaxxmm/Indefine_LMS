@@ -80,16 +80,18 @@ export async function GET(req: Request) {
   lines.push("=== Summary ===");
   lines.push(
     toCsv([
-      ["Name", "Email", "Videos completed", "Videos total", "Quiz pts", "Deadline pts", "Assignment pts", "Attendance pts", "Total"],
+      ["Name", "Email", "Videos completed", "Videos total", "Video pts", "Quiz pts", "Deadline pts", "Assignment pts", "Attendance pts", "Live attendance pts", "Total"],
       ...summary.map((r) => [
         r.name,
         r.email,
         r.videosCompleted,
         r.videosTotal,
+        r.videosCompleted * 10,
         r.bestQuizPoints,
         r.deadlinePoints,
         r.assignmentPoints,
         r.attendancePoints,
+        r.liveAttendancePoints,
         r.totalScore,
       ]),
     ])

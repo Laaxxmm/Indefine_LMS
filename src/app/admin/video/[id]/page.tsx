@@ -7,6 +7,7 @@ import { QuizAI } from "./QuizAI";
 import { generateQuiz } from "@/lib/quiz-gen";
 import { getQuizDefaults } from "@/lib/settings";
 import { SubmitButton } from "@/components/SubmitButton";
+import { ConfirmButton } from "@/components/ConfirmButton";
 
 export const dynamic = "force-dynamic";
 
@@ -316,9 +317,12 @@ export default async function AdminVideoPage({
                   <form action={deleteQuestion}>
                     <input type="hidden" name="id" value={q.id} />
                     <input type="hidden" name="videoId" value={video.id} />
-                    <button className="text-xs text-rose-600 hover:text-rose-500">
+                    <ConfirmButton
+                      message="Delete this quiz question and its options? This cannot be undone."
+                      className="text-xs text-rose-600 hover:text-rose-500"
+                    >
                       Delete
-                    </button>
+                    </ConfirmButton>
                   </form>
                 </div>
                 <ul className="mt-2 space-y-1 text-sm">

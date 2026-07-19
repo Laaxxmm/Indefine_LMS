@@ -51,14 +51,6 @@ export function bulletsFrom(multiline: string): Paragraph[] {
   return multiline.split("\n").map((s) => s.trim()).filter(Boolean).map((s) => bullet(s));
 }
 
-// Top-of-page space reserved for the e-stamp, then a page break (source convention).
-export function eStampSpace(): Paragraph[] {
-  return [
-    new Paragraph({ spacing: { after: 2880 }, children: [new TextRun({ text: "Space for E-Stamp", italics: true })] }),
-    new Paragraph({ children: [new TextRun("")], pageBreakBefore: false }),
-  ];
-}
-
 const CELL_BORDER = { style: BorderStyle.SINGLE, size: 4, color: "000000" };
 
 // Single-column bordered table (signature blocks). Each string is one row.

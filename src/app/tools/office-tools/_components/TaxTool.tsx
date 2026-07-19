@@ -87,7 +87,7 @@ export function TaxTool({ tool, title, subtitle }: { tool: string; title: string
                 <FileText className="w-4 h-4 text-ink-faint shrink-0" />
                 <span className="truncate flex-1">{f.name}</span>
                 <span className="text-[11px] text-ink-faint whitespace-nowrap">{(f.size / 1024).toFixed(0)} KB</span>
-                <button onClick={() => removeAt(idx)} className="text-ink-faint hover:text-rose-500"><X className="w-3.5 h-3.5" /></button>
+                <button onClick={() => removeAt(idx)} aria-label={`Remove ${f.name}`} className="text-ink-faint hover:text-rose-500"><X className="w-3.5 h-3.5" /></button>
               </li>
             ))}
           </ul>

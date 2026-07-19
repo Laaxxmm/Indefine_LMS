@@ -17,7 +17,8 @@ export interface CourseStatus {
   courseId: string;
   courseTitle: string;
   totalVideos: number;
-  videosCompleted: number;
+  videosCompleted: number; // all-time (drives course completion / deadlines)
+  videosCompletedInWindow: number; // completed within from/to (drives video points)
   totalQuizzes: number;
   quizzesPassed: number;
   completed: boolean;
@@ -72,6 +73,14 @@ export async function getCourseStatusForUser(
     const totalQuizzes = videos.filter((v) => v.quiz).length;
 
     const videosCompleted = videos.filter((v) => v.progresses[0]?.completed).length;
+    // Completed WITHIN the report window (video points must not credit all-time
+    // completions in a quarter report). No window → same as all-time.
+    const inWindow = (d: Date | null | undefined) =>
+      !!d && (!opts.from || d >= opts.from) && (!opts.to || d <= opts.to);
+    const videosCompletedInWindow =
+      !opts.from && !opts.to
+        ? videosCompleted
+        : videos.filter((v) => v.progresses[0]?.completed && inWindow(v.progresses[0]?.completedAt)).length;
     const quizzesPassed = videos.filter((v) => v.quiz && v.quiz.attempts.length > 0).length;
 
     const allDone =
@@ -133,6 +142,7 @@ export async function getCourseStatusForUser(
       courseTitle: course.title,
       totalVideos,
       videosCompleted,
+      videosCompletedInWindow,
       totalQuizzes,
       quizzesPassed,
       completed: allDone,
@@ -207,15 +217,17 @@ export async function computeKraScores(
     liveByUser.set(r.userId, (liveByUser.get(r.userId) ?? 0) + r.points);
   }
 
-  const out: KraSummary[] = [];
-  for (const u of users) {
+  // Compute every user concurrently (was a sequential N+1 over ~16 users).
+  const out: KraSummary[] = await Promise.all(users.map(async (u) => {
     const courseStatuses = await getCourseStatusForUser(u.id, {
       from: opts.from,
       to: opts.to,
     });
 
+    // Video points count completions WITHIN the report window (bug #1: was
+    // all-time even for a quarter report).
     let videosCompleted = 0;
-    for (const c of courseStatuses) videosCompleted += c.videosCompleted;
+    for (const c of courseStatuses) videosCompleted += c.videosCompletedInWindow;
 
     const bestByQuiz = new Map<string, number>();
     for (const a of u.attempts) {
@@ -260,7 +272,7 @@ export async function computeKraScores(
         liveAttendancePoints
     );
 
-    out.push({
+    return {
       userId: u.id,
       name: u.name ?? u.email,
       email: u.email,
@@ -272,7 +284,7 @@ export async function computeKraScores(
       attendancePoints,
       liveAttendancePoints,
       totalScore,
-    });
-  }
+    };
+  }));
   return out.sort((a, b) => b.totalScore - a.totalScore);
 }

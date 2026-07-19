@@ -121,6 +121,7 @@ async function graphFetch<T>(path: string, token: string): Promise<T> {
   const res = await fetch(`${GRAPH}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
     cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) {
     throw new Error(`Graph ${path} failed: ${res.status} ${await res.text()}`);
@@ -327,6 +328,7 @@ export async function getStreamUrl(
       method: "GET",
       headers: { Authorization: `Bearer ${token}` },
       redirect: "manual",
+      signal: AbortSignal.timeout(10_000),
     }
   );
   const location = res.headers.get("location");

@@ -12,6 +12,28 @@
 
 import { prisma } from "@/lib/prisma";
 
+/**
+ * Whether a user may access a video. Assignment is the boundary (the video, or
+ * its module, is assigned to them); admins can access anything. The single
+ * source of truth for the video page, the stream API and the progress API, so
+ * a guessed URL can't bypass the page's gate.
+ */
+export async function canAccessVideo(
+  userId: string,
+  videoId: string,
+  isAdmin: boolean
+): Promise<boolean> {
+  if (isAdmin) return true;
+  const allotted = await prisma.assignment.findFirst({
+    where: {
+      userId,
+      OR: [{ videoId }, { module: { videos: { some: { id: videoId } } } }],
+    },
+    select: { id: true },
+  });
+  return !!allotted;
+}
+
 export async function refreshVideoAssignments(userId: string, videoId: string) {
   const pending = await prisma.assignment.findMany({
     where: { userId, videoId, kind: "VIDEO", status: "PENDING" },

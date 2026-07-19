@@ -539,13 +539,15 @@ export async function creditLiveAttendees(sessionId: string): Promise<void> {
     select: {
       id: true,
       durationSeconds: true,
-      quiz: { select: { id: true, questions: { select: { points: true } } } },
+      quiz: { select: { id: true, passPercent: true, questions: { select: { points: true } } } },
     },
   });
   if (!video) return;
 
+  // Only meaningful attendance earns credit — same tier as the attendance
+  // points (>=40% of the session), not anyone who showed up for a second.
   const attendees = await prisma.liveAttendance.findMany({
-    where: { liveSessionId: sessionId, secondsAttended: { gt: 0 } },
+    where: { liveSessionId: sessionId, points: { gt: 0 } },
     select: { userId: true },
   });
   const now = new Date();
@@ -574,15 +576,19 @@ export async function creditLiveAttendees(sessionId: string): Promise<void> {
         select: { id: true },
       });
       if (!passed) {
+        // Record a PASS at the quiz's pass mark — not a fabricated 100% (which
+        // would inflate best-quiz points and trip the "Perfectionist" badge for
+        // a quiz nobody answered). Attending earns the pass, not a perfect score.
         const maxScore = video.quiz.questions.reduce((sum, q) => sum + q.points, 0);
+        const pct = video.quiz.passPercent;
         await prisma.quizAttempt
           .create({
             data: {
               userId: a.userId,
               quizId: video.quiz.id,
-              score: maxScore,
+              score: Math.round((maxScore * pct) / 100),
               maxScore,
-              percent: 100,
+              percent: pct,
               passed: true,
               startedAt: now,
               submittedAt: now,

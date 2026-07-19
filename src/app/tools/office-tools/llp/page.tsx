@@ -54,7 +54,7 @@ export default function LlpPage() {
             <div key={idx} className="rounded-xl border border-border p-4 bg-page/40">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-[11px] font-extrabold tracking-wide uppercase text-ink-soft">Partner {idx + 1}</span>
-                {partners.length > 2 && <button type="button" onClick={() => removePartner(idx)} className="text-rose-500 hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>}
+                {partners.length > 2 && <button type="button" onClick={() => removePartner(idx)} aria-label={`Remove partner ${idx + 1}`} className="text-rose-500 hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>}
               </div>
               <div className="grid sm:grid-cols-2 gap-x-4 gap-y-3">
                 <Field label="Full name" required hint="e.g. Mr. John Doe"><Text value={p.name} onChange={(v) => patch(idx, "name", v)} /></Field>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { SubmitButton } from "@/components/SubmitButton";
+import { ConfirmButton } from "@/components/ConfirmButton";
 import { ChevronDown } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -520,9 +521,12 @@ export default async function AdminAssignmentsPage({
                   )}
                   <form action={deleteAssignment}>
                     <input type="hidden" name="id" value={a.id} />
-                    <button className="text-xs px-2 py-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 font-semibold transition">
+                    <ConfirmButton
+                      message={`Delete the assignment "${a.title}" for ${a.user.name ?? a.user.email}? This cannot be undone.`}
+                      className="text-xs px-2 py-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 font-semibold transition"
+                    >
                       Delete
-                    </button>
+                    </ConfirmButton>
                   </form>
                 </div>
               </div>

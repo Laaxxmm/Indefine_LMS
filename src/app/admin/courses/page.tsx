@@ -4,6 +4,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { SubmitButton } from "@/components/SubmitButton";
+import { ConfirmButton } from "@/components/ConfirmButton";
 import { ChevronDown } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -218,9 +219,12 @@ export default async function AdminCoursesPage() {
                     </div>
                     <form action={deleteDeadline}>
                       <input type="hidden" name="id" value={d.id} />
-                      <button className="text-xs text-rose-600 hover:text-rose-500">
+                      <ConfirmButton
+                        message="Delete this deadline? This cannot be undone."
+                        className="text-xs text-rose-600 hover:text-rose-500"
+                      >
                         Delete
-                      </button>
+                      </ConfirmButton>
                     </form>
                   </div>
                 ))}

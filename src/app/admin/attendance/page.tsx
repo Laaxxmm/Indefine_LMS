@@ -10,6 +10,7 @@ import {
   formatPeriodMonth,
 } from "@/lib/attendance";
 import { AttendanceImporter } from "./AttendanceImporter";
+import { ConfirmButton } from "@/components/ConfirmButton";
 
 export const dynamic = "force-dynamic";
 
@@ -189,7 +190,12 @@ export default async function AdminAttendancePage() {
                           <td className="px-5 py-2 text-right">
                             <form action={deleteAttendanceRecord}>
                               <input type="hidden" name="id" value={r.id} />
-                              <button className="text-xs text-rose-600 hover:text-rose-500">Delete</button>
+                              <ConfirmButton
+                                message={`Delete the attendance record for ${r.user.name ?? r.user.email}? This cannot be undone.`}
+                                className="text-xs text-rose-600 hover:text-rose-500"
+                              >
+                                Delete
+                              </ConfirmButton>
                             </form>
                           </td>
                         </tr>

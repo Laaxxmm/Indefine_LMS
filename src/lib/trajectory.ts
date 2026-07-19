@@ -366,6 +366,9 @@ interface ScoringContext {
   userId: string;
   cycle: PerformanceCycle;
   level: EmployeeLevel;
+  /** Ids of videos that are live-session recordings — user-independent, so it's
+   *  looked up once per computeTrajectory call instead of per scoreInitiative. */
+  recordedVideoIds: Set<string | null>;
 }
 
 async function scoreMastery(ctx: ScoringContext): Promise<TrackScore> {
@@ -410,7 +413,14 @@ async function scoreMastery(ctx: ScoringContext): Promise<TrackScore> {
       ? null
       : Array.from(bestPerQuiz.values()).reduce((s, p) => s + p, 0) / bestPerQuiz.size;
 
-  const actual = avgQuiz === null ? compliance : (compliance + avgQuiz) / 2;
+  // Don't let the empty-state compliance=100 (no assignments) inflate the score
+  // when the only real signal is quizzes — average it in only if assignments exist.
+  const actual =
+    avgQuiz === null
+      ? compliance
+      : assigned.length === 0
+        ? avgQuiz
+        : (compliance + avgQuiz) / 2;
 
   let nextMove = "Watch a video to start your Mastery streak";
   if (assigned.length > 0 && compliance < 100) {
@@ -491,11 +501,8 @@ async function scoreInitiative(ctx: ScoringContext): Promise<TrackScore> {
 
   // Content added: videos this user created that are NOT live-session recordings
   // (those are already credited via sessionsConducted, so we don't double-count).
-  const recRows = await prisma.liveSession.findMany({
-    where: { recordedVideoId: { not: null } },
-    select: { recordedVideoId: true },
-  });
-  const recSet = new Set(recRows.map((r) => r.recordedVideoId));
+  // The recording-id set is user-independent, so computeTrajectory hoists it.
+  const recSet = ctx.recordedVideoIds;
   const created = await prisma.video.findMany({
     where: {
       createdById: ctx.userId,
@@ -641,7 +648,15 @@ export async function computeTrajectory(userId: string): Promise<TrajectorySumma
   });
   const targetByKind = new Map(targets.map((t) => [t.trackKind, t]));
 
-  const ctx: ScoringContext = { userId, cycle, level };
+  // Live-session recording ids are the same for everyone, so resolve them once
+  // here rather than re-scanning inside scoreInitiative on every call.
+  const recRows = await prisma.liveSession.findMany({
+    where: { recordedVideoId: { not: null } },
+    select: { recordedVideoId: true },
+  });
+  const recordedVideoIds = new Set(recRows.map((r) => r.recordedVideoId));
+
+  const ctx: ScoringContext = { userId, cycle, level, recordedVideoIds };
   const [mastery, delivery, initiative, collaboration, vision, craft] =
     await Promise.all([
       scoreMastery(ctx),

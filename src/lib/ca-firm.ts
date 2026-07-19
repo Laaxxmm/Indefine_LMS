@@ -93,14 +93,3 @@ export function departmentColor(d: Department): {
       return { bg: "bg-muted", fg: "text-ink-mute" };
   }
 }
-
-/** Compose a human title — "Tax Manager · BLR" style. */
-export function fullTitle(
-  level: EmployeeLevel,
-  department: Department,
-  branchCode?: string | null
-): string {
-  const dept = department === "GENERAL" ? "" : `${departmentLabel(department)} `;
-  const main = `${dept}${levelLabel(level)}`.trim();
-  return branchCode ? `${main} · ${branchCode}` : main;
-}

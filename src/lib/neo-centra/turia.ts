@@ -5,7 +5,14 @@ import { prisma } from "@/lib/prisma";
 // Faithful port of Neo Centra's turia.service.ts (only the incentive-engine calls).
 
 const TURIA_BASE = "https://practice.turia.in/api";
-const ORG_ID = process.env.NEO_TURIA_ORG_ID ?? "515db10e-0549-4e5a-92ba-9434553c23cf";
+
+// Read strictly from env (no hardcoded fallback), but LAZILY — throwing at
+// module load breaks the build, since the var isn't present then.
+function orgId(): string {
+  const id = process.env.NEO_TURIA_ORG_ID;
+  if (!id) throw new Error("NEO_TURIA_ORG_ID is not set — configure it in the environment.");
+  return id;
+}
 
 export class TuriaSessionError extends Error {}
 
@@ -34,7 +41,7 @@ async function turiaPost(endpoint: string, action: string, data: Record<string, 
   const res = await fetch(`${TURIA_BASE}/${endpoint}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Cookie: cookie },
-    body: JSON.stringify({ action, data: { ...data, organizationId: ORG_ID }, organizationId: ORG_ID }),
+    body: JSON.stringify({ action, data: { ...data, organizationId: orgId() }, organizationId: orgId() }),
   });
 
   const STALE = new Set([401, 403, 451]);
@@ -208,11 +215,6 @@ export async function fetchAllInvoices(perPage = 200, maxPages = 20): Promise<Tu
     page++;
   }
   return out;
-}
-
-export async function fetchTimesheets(dateFrom: number, dateTo: number, userId?: string): Promise<Array<Record<string, unknown>>> {
-  const json = await turiaPost("timesheet", "list", { fromDate: dateFrom, toDate: dateTo, userId: userId || "", departmentId: "" });
-  return (json.tasktimesheets as Array<Record<string, unknown>>) || [];
 }
 
 // Per-task timesheet rows. `amount` = hours × hourlyrate = the manpower cost Turia

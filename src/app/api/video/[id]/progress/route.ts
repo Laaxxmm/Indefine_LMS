@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { refreshVideoAssignments } from "@/lib/assignments";
+import { refreshVideoAssignments, canAccessVideo } from "@/lib/assignments";
 import { z } from "zod";
 
 const Body = z.object({
@@ -19,19 +19,20 @@ export async function POST(
   const userId = session.user.id;
   const { id: videoId } = await params;
 
-  // Only record progress for videos in a published course (admins exempt).
-  const accessible = await prisma.video.findUnique({
+  // Only record progress for videos assigned to the user (admins exempt) — the
+  // same boundary as the page and stream API.
+  const exists = await prisma.video.findUnique({
     where: { id: videoId },
-    select: { module: { select: { course: { select: { published: true } } } } },
+    select: { id: true },
   });
-  if (!accessible || (session.user.role !== "ADMIN" && !accessible.module?.course?.published)) {
+  if (!exists || !(await canAccessVideo(userId, videoId, session.user.role === "ADMIN"))) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
   const json = await req.json().catch(() => null);
   const parsed = Body.safeParse(json);
   if (!parsed.success) return NextResponse.json({ error: "Bad body" }, { status: 400 });
-  const { lastPosition, percent, completed } = parsed.data;
+  const { lastPosition, percent } = parsed.data;
 
   const existing = await prisma.videoProgress.findUnique({
     where: { userId_videoId: { userId, videoId } },
@@ -39,7 +40,7 @@ export async function POST(
 
   // Never let percent go down (skipping back shouldn't reset progress)
   const nextPercent = Math.max(existing?.percent ?? 0, percent);
-  const nextCompleted = (existing?.completed ?? false) || completed === true || nextPercent >= 95;
+  const nextCompleted = (existing?.completed ?? false) || nextPercent >= 95;
 
   await prisma.videoProgress.upsert({
     where: { userId_videoId: { userId, videoId } },
