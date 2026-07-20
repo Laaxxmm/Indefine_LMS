@@ -198,7 +198,10 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
       fetchTaskTimesheets(String(t.id), { fromMs, toMs }),
     ]);
     const completedOn = detail?.completedOn ?? null;
-    const completedInPeriod = String(t.taskstatus ?? "") === TASK_COMPLETED && completedOn != null && completedOn >= fromMs && completedOn <= toMs;
+    // Same rule as B2/B3: status decides "done". If Turia gives no completion date, don't
+    // drop it — the task is already scoped to the quarter by its in-quarter hours.
+    const completedInPeriod = String(t.taskstatus ?? "") === TASK_COMPLETED
+      && (completedOn == null || (completedOn >= fromMs && completedOn <= toMs));
     const planned = plannedFor(String(t.id), identity);
     const byDirector = new Map<string, number>(); // directorId → their OWN logged hours
     let actualHours = 0;
@@ -295,8 +298,12 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
     // done, no timesheet — would otherwise post its entire invoice as pure profit, since
     // profit = billing − manpower and manpower is still 0. Billing (B2) is unaffected and
     // keeps accruing on invoiced work whether or not the task is complete.
-    const completedInPeriod = detail.status === TASK_COMPLETED && detail.completedOn != null
-      && detail.completedOn >= fromMs && detail.completedOn <= toMs;
+    // "Done" is decided by STATUS, never by the presence of a completion date — Turia
+    // doesn't reliably return one, and requiring it zeroed every partner's profit. The
+    // date only decides *which* quarter; fall back to the invoice date when absent.
+    const completionDate = detail.completedOn ?? bill.invoiceDate;
+    const completedInPeriod = detail.status === TASK_COMPLETED && completionDate != null
+      && completionDate >= fromMs && completionDate <= toMs;
 
     // Bucket 2 — billing follows the timesheet: each partner earns billing in
     // proportion to their *own* logged hours on the task. No logged time → no billing.

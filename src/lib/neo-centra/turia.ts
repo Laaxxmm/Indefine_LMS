@@ -87,6 +87,10 @@ const numf = (v: unknown) => {
   return Number.isFinite(n) ? n : 0;
 };
 const numi = (v: unknown) => (v ? parseInt(String(v), 10) : null);
+// First parseable value across candidate keys. Turia's completion-date key varies, and a
+// silent null there zeroes every completion-gated metric — so try the known spellings.
+const picki = (t: Record<string, unknown>, keys: string[]) => { for (const k of keys) { const n = numi(t[k]); if (n) return n; } return null; };
+const COMPLETED_KEYS = ["completedon", "completeddate", "completed_on", "completiondate", "closedon", "closeddate", "finishedon", "completedat"];
 // First present-and-nonzero value across candidate keys (Turia field names vary).
 const pick = (t: Record<string, unknown>, keys: string[]) => {
   for (const k of keys) { const n = numf(t[k]); if (n) return n; }
@@ -165,7 +169,7 @@ export async function fetchTaskDetail(taskId: string): Promise<TuriaTaskDetail |
       name: String(t.taskname ?? ""),
       status: t.taskstatus != null ? String(t.taskstatus) : null,
       createdOn: numi(t.createdon),
-      completedOn: numi(t.completedon),
+      completedOn: picki(t, COMPLETED_KEYS),
       dueDate: numi(t.targetduedate),
       budgetAmount: numf(t.budgetamount),
       invoiceAmount: pick(t, ["invoiceamount", "invoiceAmount", "revenue", "revenueamount"]),
