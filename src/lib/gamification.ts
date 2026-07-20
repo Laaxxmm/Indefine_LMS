@@ -14,7 +14,7 @@ export interface StreakInfo {
 
 /** Days where the user did *anything* (heartbeat or quiz). */
 async function activityDates(userId: string): Promise<Set<string>> {
-  const [progresses, attempts] = await Promise.all([
+  const [progresses, attempts, active] = await Promise.all([
     prisma.videoProgress.findMany({
       where: { userId },
       select: { updatedAt: true },
@@ -23,17 +23,35 @@ async function activityDates(userId: string): Promise<Set<string>> {
       where: { userId, submittedAt: { not: null } },
       select: { submittedAt: true },
     }),
+    // Days the user simply showed up (logged in / opened the app).
+    prisma.dailyActivity.findMany({ where: { userId }, select: { day: true } }),
   ]);
   const set = new Set<string>();
   for (const p of progresses) set.add(toYMD(p.updatedAt));
   for (const a of attempts) {
     if (a.submittedAt) set.add(toYMD(a.submittedAt));
   }
+  for (const a of active) set.add(a.day);
   return set;
 }
 
+// IST calendar date (the firm's timezone) — the streak "day" must roll over at
+// IST midnight, not UTC (which is 5:30 AM IST and split evenings across days).
 function toYMD(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  return d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+}
+
+/** Record that the user was active today (logged in / opened the app), so the
+ *  streak counts showing up — not only watching a video or taking a quiz. */
+export async function recordDailyActive(userId: string): Promise<void> {
+  const day = toYMD(new Date());
+  await prisma.dailyActivity
+    .upsert({
+      where: { userId_day: { userId, day } },
+      create: { userId, day },
+      update: {},
+    })
+    .catch(() => {});
 }
 
 function addDays(ymd: string, n: number): string {

@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { computeKraScores, getCourseStatusForUser } from "@/lib/kra";
-import { computeLevel, computeStreak } from "@/lib/gamification";
+import { computeLevel, computeStreak, recordDailyActive } from "@/lib/gamification";
 import { computeAchievements } from "@/lib/gamification";
 import { computeTrajectory, ensureDefaultCycle, TIER_META } from "@/lib/trajectory";
 import { OnboardingTour, type TourStep } from "@/components/OnboardingTour";
@@ -99,6 +99,9 @@ export default async function Dashboard() {
 
   await ensureDefaultCycle();
 
+  // Showing up counts: mark today active BEFORE computing the streak so it
+  // reflects this visit immediately.
+  await recordDailyActive(userId);
   const streak = await computeStreak(userId);
   const [myAssignments, modules, statuses, achievements, leaderboard, trajectory] =
     await Promise.all([

@@ -62,6 +62,7 @@ model User {
   liveSessions        LiveSession[]   @relation("LiveSessionOrganizer")
   liveAttendances     LiveAttendance[]
   videosCreated       Video[]         @relation("VideoCreator")
+  dailyActivity       DailyActivity[]
   certificateIssues   CertificateIssue[] @relation("CertificateCreator")
   officeToolRuns      OfficeToolRun[]    @relation("OfficeToolRunner")
 }
@@ -99,6 +100,20 @@ enum Role {
 
 // Physical office location. Lets the firm scale across cities and
 // compare branch performance side-by-side.
+// One row per user per IST day they were active (logged in / opened the app).
+// Feeds the learning streak so simply showing up counts — not only watching a
+// video or taking a quiz. `day` is the IST calendar date "YYYY-MM-DD".
+model DailyActivity {
+  id     String @id @default(cuid())
+  userId String
+  day    String
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, day])
+  @@index([userId])
+}
+
 model Branch {
   id        String   @id @default(cuid())
   name      String   // "Bangalore HQ"
