@@ -214,7 +214,7 @@ export function IncentivesView({
             const cards = [
               { ...BUCKETS[0], value: inr(b.leadConversion.convertedValue), label: "New business won", sub: `${b.leadConversion.convertedLeads}/${b.leadConversion.originatedLeads} converted · ${Math.round(b.leadConversion.conversionRate * 100)}%`, negative: false, standingPct: b1pct, standingLabel: `${b1pct}% of firm's new business` },
               { ...BUCKETS[1], value: inr(b.billing.billedInPeriod), sub: `${b.billing.taskCount} task${b.billing.taskCount === 1 ? "" : "s"}`, negative: false, ...leaderPct(b.billing.billedInPeriod, maxes.b2) },
-              { ...BUCKETS[2], value: inr(b.profitability.profitInPeriod), sub: `${b.profitability.taskCount} task${b.profitability.taskCount === 1 ? "" : "s"}`, negative: b.profitability.profitInPeriod < 0, ...leaderPct(b.profitability.profitInPeriod, maxes.b3) },
+              { ...BUCKETS[2], value: inr(b.profitability.profitInPeriod), suffix: b.profitability.profitPct == null ? undefined : `${b.profitability.profitPct}%`, sub: `${b.profitability.taskCount} task${b.profitability.taskCount === 1 ? "" : "s"}`, negative: b.profitability.profitInPeriod < 0, ...leaderPct(b.profitability.profitInPeriod, maxes.b3) },
               { ...BUCKETS[3], value: `${Math.round(im4.completionRate * 100)}%`, label: "Bucket 4 complete", sub: `${im4.completedTasks}/${im4.totalTasks} tasks done`, negative: false, standingPct: Math.round(im4.completionRate * 100), standingLabel: `${im4.hoursSpent}h${im4.targetHours ? ` / ${im4.targetHours}h target` : " logged"}`, standingRed: im4.overBudget },
             ];
             return (
@@ -286,7 +286,7 @@ export function IncentivesView({
   );
 }
 
-function Kpi({ icon: Icon, color, tint, n, label, value, sub, negative, standingPct, standingLabel, standingRed }: { icon: typeof TrendingUp; color: string; tint: string; n: string; label: string; value: string; sub: string; negative: boolean; standingPct: number; standingLabel: string; standingRed?: boolean }) {
+function Kpi({ icon: Icon, color, tint, n, label, value, suffix, sub, negative, standingPct, standingLabel, standingRed }: { icon: typeof TrendingUp; color: string; tint: string; n: string; label: string; value: string; suffix?: string; sub: string; negative: boolean; standingPct: number; standingLabel: string; standingRed?: boolean }) {
   const pct = Math.max(0, Math.min(100, standingPct));
   return (
     <div className="relative overflow-hidden rounded-2xl border border-border shadow-lift p-4" style={{ background: `linear-gradient(155deg, ${tint} 0%, #ffffff 60%)` }}>
@@ -295,7 +295,7 @@ function Kpi({ icon: Icon, color, tint, n, label, value, sub, negative, standing
         <span className="w-10 h-10 rounded-[13px] grid place-items-center text-white" style={{ background: color, boxShadow: `0 6px 16px -6px ${color}` }}><Icon className="w-5 h-5" /></span>
         <span className="text-[10px] font-extrabold tracking-wider uppercase" style={{ color }}>{n}</span>
       </div>
-      <div className="text-[26px] font-display font-extrabold tracking-tight leading-none" style={{ color: negative ? "#e11d48" : "#1c1c28" }}>{value}</div>
+      <div className="text-[26px] font-display font-extrabold tracking-tight leading-none" style={{ color: negative ? "#e11d48" : "#1c1c28" }}>{value}{suffix ? <span className="ml-1 text-[15px] font-bold align-baseline opacity-70">({suffix})</span> : null}</div>
       <div className="text-[12px] font-bold text-ink-soft mt-1">{label}</div>
       <div className="text-[11px] text-ink-mute mt-0.5">{sub}</div>
       <div className="mt-3">
@@ -391,7 +391,7 @@ function FragmentRow({ d, it, totalConverted, canDrill, isAdmin, partners, open,
         <td className="px-4 py-3 font-bold text-ink">{d.name}</td>
         <td className="px-3 py-3 text-right"><div className="font-semibold">{inr(b.leadConversion.convertedValue)}</div><div className="text-[10.5px] text-ink-faint">{b1pct}% of business · {b.leadConversion.convertedLeads} won</div></td>
         <td className="px-3 py-3 text-right"><div className="font-semibold">{inr(b.billing.billedInPeriod)}</div><div className="text-[10.5px] text-ink-faint">{b.billing.taskCount} tasks</div></td>
-        <td className="px-3 py-3 text-right"><div className={`font-semibold ${b.profitability.profitInPeriod < 0 ? "text-rose-600" : ""}`}>{inr(b.profitability.profitInPeriod)}</div><div className="text-[10.5px] text-ink-faint">{b.profitability.taskCount} tasks</div></td>
+        <td className="px-3 py-3 text-right"><div className={`font-semibold ${b.profitability.profitInPeriod < 0 ? "text-rose-600" : ""}`}>{inr(b.profitability.profitInPeriod)}</div><div className="text-[10.5px] text-ink-faint">{b.profitability.taskCount} tasks{b.profitability.profitPct == null ? "" : ` · ${b.profitability.profitPct}%`}</div></td>
         <td className="px-3 py-3 text-right"><div className="font-semibold">{Math.round(im4.completionRate * 100)}%</div><div className={`text-[10.5px] ${im4.overBudget ? "text-rose-600 font-semibold" : "text-ink-faint"}`}>{im4.completedTasks}/{im4.totalTasks} · {im4.hoursSpent}h{im4.targetHours ? `/${im4.targetHours}h` : ""}</div></td>
         <td className="px-2 py-3 text-ink-faint">{canDrill ? (open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />) : null}</td>
       </tr>
@@ -411,9 +411,13 @@ function Drill({ d, it, isAdmin, partners }: { d: DirectorIncentive; it: Interna
             <span className="text-[10px] font-extrabold tracking-[0.12em] text-emerald-600 uppercase">Buckets 2 &amp; 3 · Client tasks</span>
             <div className="flex items-center gap-2.5 text-[9px] font-bold uppercase tracking-wide text-ink-faint">
               <div className="flex items-center">
-                <span className="w-[74px] text-right">Billed</span>
+                <span className="w-[72px] text-right">Invoice</span>
                 <span className="w-px h-3 bg-border mx-2.5" />
-                <span className="w-[74px] text-right">Profit</span>
+                <span className="w-[72px] text-right">Billed</span>
+                <span className="w-px h-3 bg-border mx-2.5" />
+                <span className="w-[72px] text-right">Profit</span>
+                <span className="w-px h-3 bg-border mx-2.5" />
+                <span className="w-[42px] text-right">Margin</span>
               </div>
               <span className="w-[60px]" />
             </div>
@@ -459,9 +463,13 @@ function ClientTaskRow({ t, isAdmin }: { t: DirectorTaskDrill; isAdmin: boolean 
           {t.flags.map((f) => <span key={f} className="text-[8.5px] font-bold uppercase px-1 py-0.5 rounded bg-rose-50 text-rose-600">{f}</span>)}
         </div>
         <div className="shrink-0 flex items-center tabular-nums">
-          <span className="w-[74px] text-right text-emerald-700 font-semibold">{inr(t.billedPeriod)}</span>
+          <span className="w-[72px] text-right text-ink-mute">{inr(t.invoiceTotal)}</span>
           <span className="w-px h-4 bg-border mx-2.5" />
-          <span className={`w-[74px] text-right ${t.profit < 0 ? "text-rose-600" : "text-sky-700"}`}>{inr(t.profit)}</span>
+          <span className="w-[72px] text-right text-emerald-700 font-semibold">{inr(t.billedPeriod)}</span>
+          <span className="w-px h-4 bg-border mx-2.5" />
+          <span className={`w-[72px] text-right ${t.profit < 0 ? "text-rose-600" : "text-sky-700"}`}>{inr(t.profit)}</span>
+          <span className="w-px h-4 bg-border mx-2.5" />
+          <span className={`w-[42px] text-right font-semibold ${t.profitPct == null ? "text-ink-faint" : t.profitPct < 0 ? "text-rose-600" : "text-sky-700"}`}>{t.profitPct == null ? "—" : `${t.profitPct}%`}</span>
         </div>
         <div className="shrink-0 w-[60px] flex justify-end">
           {splittable && (

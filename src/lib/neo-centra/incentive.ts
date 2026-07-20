@@ -42,13 +42,13 @@ export interface DirectorRow { id: string; name: string; turiaUserId: string | n
 // Budget Time for the task, shown as a reference when allocating.
 export interface InternalTaskResult { taskId: string; identity: string; name: string; completed: boolean; approvedHours: number | null; budgetHours: number | null; actualHours: number; withinApproved: boolean | null; contributors: Array<{ director: string; directorId?: string; hours: number; planned?: number | null }> }
 export interface DirectorLeadItem { id: string; identity: string; name: string; dealValue: number; stage: string; referredBy: string | null; converted: boolean }
-export interface DirectorTaskDrill { taskId: string; identity: string; name: string; budget: number; billedPeriod: number; invoiceTotal: number; profit: number; hours: number | null; sharedWith: number; dueDate: number | null; flags: string[]; profitPartners?: Array<{ directorId: string; name: string; percent: number }>; completed?: boolean }
+export interface DirectorTaskDrill { taskId: string; identity: string; name: string; budget: number; billedPeriod: number; invoiceTotal: number; profit: number; hours: number | null; sharedWith: number; dueDate: number | null; flags: string[]; profitPartners?: Array<{ directorId: string; name: string; percent: number }>; completed?: boolean; profitPct?: number | null }
 export interface DirectorIncentive {
   directorId: string; name: string; turiaUserId: string | null; turiaUsername: string | null; resolved: boolean;
   buckets: {
     leadConversion: { available: boolean; originatedLeads: number; originatedValue: number; convertedLeads: number; convertedValue: number; conversionRate: number };
     billing: { available: boolean; billedInPeriod: number; taskCount: number };
-    profitability: { available: boolean; profitInPeriod: number; taskCount: number };
+    profitability: { available: boolean; profitInPeriod: number; taskCount: number; profitPct: number | null };
     internalImprovement: { available: boolean; completedTasks: number; totalTasks: number; completionRate: number; hoursSpent: number; targetHours: number; overBudget: boolean };
   };
   leads: DirectorLeadItem[];
@@ -267,11 +267,11 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
   // for the manpower cost. Profit = period billing − manpower (Turia's formula, OP≈0).
   // Billing (B2) and profit (B3) are attributed on *different* bases, so each keeps
   // its own task set: B2 credits whoever logged time; B3 credits assigned partners.
-  type MoneyStats = { billed: number; profit: number; billedTaskIds: Set<string>; profitTaskIds: Set<string> };
+  type MoneyStats = { billed: number; profit: number; invoiceValue: number; billedTaskIds: Set<string>; profitTaskIds: Set<string> };
   const moneyByDirector = new Map<string, MoneyStats>();
   const statsFor = (id: string) => {
     let s = moneyByDirector.get(id);
-    if (!s) { s = { billed: 0, profit: 0, billedTaskIds: new Set<string>(), profitTaskIds: new Set<string>() }; moneyByDirector.set(id, s); }
+    if (!s) { s = { billed: 0, profit: 0, invoiceValue: 0, billedTaskIds: new Set<string>(), profitTaskIds: new Set<string>() }; moneyByDirector.set(id, s); }
     return s;
   };
   const tasksByDirector = new Map<string, DirectorTaskDrill[]>();
@@ -328,8 +328,10 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
       const profitShare = isAssigned && completedInPeriod ? periodProfit * (pctFor(id) / 100) : 0;
       const stats = statsFor(id);
       if (hoursByDir.has(id)) { stats.billed += billShare; stats.billedTaskIds.add(taskId); }
-      if (isAssigned && completedInPeriod) { stats.profit += profitShare; stats.profitTaskIds.add(taskId); }
-      const drill: DirectorTaskDrill = { taskId, identity: detail.identity, name: detail.name, budget: Math.round(detail.budgetAmount), billedPeriod: Math.round(billShare), invoiceTotal: Math.round(periodBilling), profit: Math.round(profitShare), hours: parseTatHours(detail.tatHours), sharedWith: participantIds.size, dueDate: detail.dueDate, flags, profitPartners, completed: completedInPeriod };
+      // Track the invoice value behind each partner's profit share (same split %), so the
+      // bucket margin is a value-weighted average of task margins, not a naive mean.
+      if (isAssigned && completedInPeriod) { stats.profit += profitShare; stats.invoiceValue += periodBilling * (pctFor(id) / 100); stats.profitTaskIds.add(taskId); }
+      const drill: DirectorTaskDrill = { taskId, identity: detail.identity, name: detail.name, budget: Math.round(detail.budgetAmount), billedPeriod: Math.round(billShare), invoiceTotal: Math.round(periodBilling), profit: Math.round(profitShare), hours: parseTatHours(detail.tatHours), sharedWith: participantIds.size, dueDate: detail.dueDate, flags, profitPartners, completed: completedInPeriod, profitPct: completedInPeriod && periodBilling > 0 ? Math.round((periodProfit / periodBilling) * 100) : null };
       tasksByDirector.set(id, [...(tasksByDirector.get(id) || []), drill]);
     }
   }
@@ -342,13 +344,13 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
     // the whole task's budget (which would measure every partner against the full 99h).
     const targetHours = contributed.reduce((sum, it) => sum + (it.contributors.find((c) => c.director === d.name)?.planned ?? 0), 0);
     const lead = leadStatsByDirector.get(d.id) || { orig: 0, origVal: 0, conv: 0, convVal: 0 };
-    const money = moneyByDirector.get(d.id) || { billed: 0, profit: 0, billedTaskIds: new Set<string>(), profitTaskIds: new Set<string>() };
+    const money = moneyByDirector.get(d.id) || { billed: 0, profit: 0, invoiceValue: 0, billedTaskIds: new Set<string>(), profitTaskIds: new Set<string>() };
     return {
       directorId: d.id, name: d.name, turiaUserId: d.turiaUserId, turiaUsername: d.turiaUsername, resolved: !!d.turiaUserId,
       buckets: {
         leadConversion: { available: true, originatedLeads: lead.orig, originatedValue: Math.round(lead.origVal), convertedLeads: lead.conv, convertedValue: Math.round(lead.convVal), conversionRate: lead.orig > 0 ? Math.round((lead.conv / lead.orig) * 1000) / 1000 : 0 },
         billing: { available: true, billedInPeriod: Math.round(money.billed), taskCount: money.billedTaskIds.size },
-        profitability: { available: true, profitInPeriod: Math.round(money.profit), taskCount: money.profitTaskIds.size },
+        profitability: { available: true, profitInPeriod: Math.round(money.profit), taskCount: money.profitTaskIds.size, profitPct: money.invoiceValue > 0 ? Math.round((money.profit / money.invoiceValue) * 100) : null },
         internalImprovement: {
           available: true,
           completedTasks, totalTasks: contributed.length,
