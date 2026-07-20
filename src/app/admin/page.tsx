@@ -21,6 +21,7 @@ import {
   Sparkles,
   Building2,
   ChevronDown,
+  Folder,
   Trash2,
   ArrowUp,
   ArrowDown,
@@ -370,126 +371,165 @@ function VideosTab({
         </div>
       )}
 
-      <div className="space-y-5">
-        {modules
-          .filter((m) => m.videos.length > 0)
-          .map((m) => (
-            <details
-              key={m.id}
-              className="rounded-2xl bg-white border border-border overflow-hidden shadow-soft group"
-            >
-              <summary className="px-5 py-4 bg-muted/40 flex items-center justify-between gap-3 cursor-pointer list-none select-none hover:bg-muted/60 transition [&::-webkit-details-marker]:hidden">
-                <div>
-                  <p className="text-[10px] uppercase tracking-wider font-semibold text-ink-faint">
-                    {m.course.title}
-                  </p>
-                  <h3 className="font-display font-bold mt-0.5">{m.title}</h3>
+      <div className="space-y-6">
+        {(() => {
+          const withVideos = modules.filter((m) => m.videos.length > 0);
+          const ungrouped = withVideos.filter((m) => !m.groupName);
+          const groupNames = Array.from(
+            new Set(withVideos.filter((m) => m.groupName).map((m) => m.groupName as string))
+          ).sort((a, b) => a.localeCompare(b));
+          return (
+            <>
+              {ungrouped.length > 0 && (
+                <div className="space-y-5">
+                  {ungrouped.map((m) => (
+                    <ModuleCard key={m.id} m={m} />
+                  ))}
                 </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <div className="text-xs text-ink-mute text-right">
-                    <span className="font-semibold text-ink">{m.videos.length}</span>{" "}
-                    videos ·{" "}
-                    <span className="font-semibold text-ink">
-                      {m.videos.filter((v) => v.quiz).length}
-                    </span>{" "}
-                    with quizzes
-                  </div>
-                  <form action={deleteModuleAction}>
-                    <input type="hidden" name="id" value={m.id} />
-                    <ConfirmButton
-                      message={`Delete the folder "${m.title}" and all ${m.videos.length} of its videos + quizzes? This can't be undone.`}
-                      title="Delete this folder and its videos"
-                      className="p-1.5 rounded-lg text-ink-faint hover:text-rose-600 hover:bg-rose-50 transition"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </ConfirmButton>
-                  </form>
-                  <ChevronDown className="w-4 h-4 text-ink-faint transition group-open:rotate-180" />
-                </div>
-              </summary>
-              <div className="divide-y divide-border border-t border-border">
-                {m.videos.map((v, i) => {
-                  const qCount = v.quiz?._count.questions ?? 0;
-                  const hasQuiz = !!v.quiz;
-                  return (
-                    <div
-                      key={v.id}
-                      className="px-5 py-3 flex items-center justify-between gap-4 hover:bg-muted/30 transition"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="flex flex-col">
-                          <form action={moveVideoAction}>
-                            <input type="hidden" name="id" value={v.id} />
-                            <input type="hidden" name="dir" value="up" />
-                            <button
-                              disabled={i === 0}
-                              className="p-0.5 rounded text-ink-faint hover:text-brand-600 hover:bg-muted disabled:opacity-25 disabled:pointer-events-none transition"
-                              title="Move up"
-                            >
-                              <ArrowUp className="w-3.5 h-3.5" />
-                            </button>
-                          </form>
-                          <form action={moveVideoAction}>
-                            <input type="hidden" name="id" value={v.id} />
-                            <input type="hidden" name="dir" value="down" />
-                            <button
-                              disabled={i === m.videos.length - 1}
-                              className="p-0.5 rounded text-ink-faint hover:text-brand-600 hover:bg-muted disabled:opacity-25 disabled:pointer-events-none transition"
-                              title="Move down"
-                            >
-                              <ArrowDown className="w-3.5 h-3.5" />
-                            </button>
-                          </form>
-                        </div>
-                        <span className="text-xs text-ink-faint tabular-nums w-6 text-right font-mono">
-                          {i + 1}.
-                        </span>
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium truncate">
-                            {prettifyName(v.title)}
-                          </p>
-                          <p className="text-xs text-ink-mute mt-0.5">
-                            {hasQuiz ? (
-                              <>
-                                <CheckCircle2 className="w-3 h-3 inline text-emerald-600 mr-1" />
-                                {qCount} question{qCount === 1 ? "" : "s"}
-                              </>
-                            ) : (
-                              <span className="text-ink-faint">No quiz yet</span>
-                            )}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <Link
-                          href={`/admin/video/${v.id}`}
-                          className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${
-                            hasQuiz
-                              ? "bg-muted hover:bg-border text-ink"
-                              : "bg-brand-500 hover:bg-brand-600 text-white shadow-pop"
-                          }`}
-                        >
-                          {hasQuiz ? "Edit quiz" : "Add quiz"}
-                        </Link>
-                        <form action={deleteVideoAction}>
-                          <input type="hidden" name="id" value={v.id} />
-                          <ConfirmButton
-                            message={`Remove the video "${prettifyName(v.title)}"${hasQuiz ? " and its quiz" : ""}? This can't be undone.`}
-                            title="Remove this video"
-                            className="p-1.5 rounded-lg text-ink-faint hover:text-rose-600 hover:bg-rose-50 transition"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </ConfirmButton>
-                        </form>
-                      </div>
+              )}
+              {groupNames.map((g) => {
+                const mods = withVideos.filter((m) => m.groupName === g);
+                return (
+                  <div key={g}>
+                    <div className="flex items-center gap-2 mb-2.5">
+                      <Folder className="w-4 h-4 text-brand-500" />
+                      <h3 className="font-display font-bold">{g}</h3>
+                      <span className="text-xs text-ink-faint">
+                        {mods.length} folder{mods.length === 1 ? "" : "s"}
+                      </span>
                     </div>
-                  );
-                })}
-              </div>
-            </details>
-          ))}
+                    <div className="ml-1.5 pl-4 border-l-2 border-brand-100 space-y-3">
+                      {mods.map((m) => (
+                        <ModuleCard key={m.id} m={m} />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </>
+          );
+        })()}
       </div>
     </>
+  );
+}
+
+type ModuleRow = Awaited<ReturnType<typeof loadModules>>[number];
+
+function ModuleCard({ m }: { m: ModuleRow }) {
+  return (
+    <details
+      className="rounded-2xl bg-white border border-border overflow-hidden shadow-soft group"
+    >
+      <summary className="px-5 py-4 bg-muted/40 flex items-center justify-between gap-3 cursor-pointer list-none select-none hover:bg-muted/60 transition [&::-webkit-details-marker]:hidden">
+        <div>
+          <p className="text-[10px] uppercase tracking-wider font-semibold text-ink-faint">
+            {m.course.title}
+          </p>
+          <h3 className="font-display font-bold mt-0.5">{m.title}</h3>
+        </div>
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="text-xs text-ink-mute text-right">
+            <span className="font-semibold text-ink">{m.videos.length}</span>{" "}
+            videos ·{" "}
+            <span className="font-semibold text-ink">
+              {m.videos.filter((v) => v.quiz).length}
+            </span>{" "}
+            with quizzes
+          </div>
+          <form action={deleteModuleAction}>
+            <input type="hidden" name="id" value={m.id} />
+            <ConfirmButton
+              message={`Delete the folder "${m.title}" and all ${m.videos.length} of its videos + quizzes? This can't be undone.`}
+              title="Delete this folder and its videos"
+              className="p-1.5 rounded-lg text-ink-faint hover:text-rose-600 hover:bg-rose-50 transition"
+            >
+              <Trash2 className="w-4 h-4" />
+            </ConfirmButton>
+          </form>
+          <ChevronDown className="w-4 h-4 text-ink-faint transition group-open:rotate-180" />
+        </div>
+      </summary>
+      <div className="divide-y divide-border border-t border-border">
+        {m.videos.map((v, i) => {
+          const qCount = v.quiz?._count.questions ?? 0;
+          const hasQuiz = !!v.quiz;
+          return (
+            <div
+              key={v.id}
+              className="px-5 py-3 flex items-center justify-between gap-4 hover:bg-muted/30 transition"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="flex flex-col">
+                  <form action={moveVideoAction}>
+                    <input type="hidden" name="id" value={v.id} />
+                    <input type="hidden" name="dir" value="up" />
+                    <button
+                      disabled={i === 0}
+                      className="p-0.5 rounded text-ink-faint hover:text-brand-600 hover:bg-muted disabled:opacity-25 disabled:pointer-events-none transition"
+                      title="Move up"
+                    >
+                      <ArrowUp className="w-3.5 h-3.5" />
+                    </button>
+                  </form>
+                  <form action={moveVideoAction}>
+                    <input type="hidden" name="id" value={v.id} />
+                    <input type="hidden" name="dir" value="down" />
+                    <button
+                      disabled={i === m.videos.length - 1}
+                      className="p-0.5 rounded text-ink-faint hover:text-brand-600 hover:bg-muted disabled:opacity-25 disabled:pointer-events-none transition"
+                      title="Move down"
+                    >
+                      <ArrowDown className="w-3.5 h-3.5" />
+                    </button>
+                  </form>
+                </div>
+                <span className="text-xs text-ink-faint tabular-nums w-6 text-right font-mono">
+                  {i + 1}.
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">
+                    {prettifyName(v.title)}
+                  </p>
+                  <p className="text-xs text-ink-mute mt-0.5">
+                    {hasQuiz ? (
+                      <>
+                        <CheckCircle2 className="w-3 h-3 inline text-emerald-600 mr-1" />
+                        {qCount} question{qCount === 1 ? "" : "s"}
+                      </>
+                    ) : (
+                      <span className="text-ink-faint">No quiz yet</span>
+                    )}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Link
+                  href={`/admin/video/${v.id}`}
+                  className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${
+                    hasQuiz
+                      ? "bg-muted hover:bg-border text-ink"
+                      : "bg-brand-500 hover:bg-brand-600 text-white shadow-pop"
+                  }`}
+                >
+                  {hasQuiz ? "Edit quiz" : "Add quiz"}
+                </Link>
+                <form action={deleteVideoAction}>
+                  <input type="hidden" name="id" value={v.id} />
+                  <ConfirmButton
+                    message={`Remove the video "${prettifyName(v.title)}"${hasQuiz ? " and its quiz" : ""}? This can't be undone.`}
+                    title="Remove this video"
+                    className="p-1.5 rounded-lg text-ink-faint hover:text-rose-600 hover:bg-rose-50 transition"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </ConfirmButton>
+                </form>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </details>
   );
 }
 

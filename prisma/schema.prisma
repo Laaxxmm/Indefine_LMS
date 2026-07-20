@@ -167,6 +167,10 @@ model Module {
   title       String
   description String?
   order       Int      @default(0)
+  // Parent grouping folder under the L&D root (e.g. "Accounting" for
+  // L&D/Accounting/Isha Misty KT). null for top-level folders. Lets the content
+  // library mirror the SharePoint folder nesting.
+  groupName   String?
 
   course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
   videos      Video[]

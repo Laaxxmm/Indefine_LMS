@@ -28,13 +28,24 @@ async function ensureCourse() {
   });
 }
 
-async function ensureModule(courseId: string, title: string, order: number) {
+async function ensureModule(
+  courseId: string,
+  title: string,
+  order: number,
+  groupName: string | null
+) {
   const found = await prisma.module.findFirst({
     where: { courseId, title },
   });
-  if (found) return found;
+  if (found) {
+    // Keep the grouping in sync if the folder was moved under a parent.
+    if ((found.groupName ?? null) !== groupName) {
+      return prisma.module.update({ where: { id: found.id }, data: { groupName } });
+    }
+    return found;
+  }
   return prisma.module.create({
-    data: { courseId, title, order },
+    data: { courseId, title, order, groupName },
   });
 }
 
@@ -67,24 +78,31 @@ export async function syncOneDriveVideos(opts: { fallbackUserId?: string } = {})
   const items = await listVideosRecursive(driveId, root, token, rootName);
   const course = await ensureCourse();
 
-  // Group videos by their immediate parent folder name. Items found in the
-  // root sync folder fall under the fallback module.
-  const groups = new Map<string, typeof items>();
+  // Group videos by their immediate parent folder name (= Module). Items found
+  // in the root sync folder fall under the fallback module. The folder ONE level
+  // above the module (when the module is nested, e.g. L&D/Accounting/Isha Misty
+  // KT) becomes the module's groupName so the library mirrors the nesting.
+  const groups = new Map<string, { items: typeof items; group: string | null }>();
   for (const item of items) {
-    // Walk up: if parentPath has length 1 it's the root, use fallback.
+    // parentPath = [rootName, ...intermediate..., leafFolder]. Length 1 → root.
     const moduleName =
       item.parentPath.length > 1 ? item.parentFolderName : FALLBACK_MODULE_TITLE;
-    const list = groups.get(moduleName) ?? [];
-    list.push(item);
-    groups.set(moduleName, list);
+    // The grouping folder is the one just above the module's leaf (only if the
+    // module is nested deeper than one level under the root).
+    const group =
+      item.parentPath.length > 2 ? item.parentPath[item.parentPath.length - 2] : null;
+    const g = groups.get(moduleName) ?? { items: [], group };
+    g.items.push(item);
+    if (!g.group && group) g.group = group;
+    groups.set(moduleName, g);
   }
 
   let added = 0;
   let updated = 0;
   let moduleOrder = 0;
 
-  for (const [moduleName, moduleItems] of groups) {
-    const mod = await ensureModule(course.id, moduleName, moduleOrder++);
+  for (const [moduleName, { items: moduleItems, group }] of groups) {
+    const mod = await ensureModule(course.id, moduleName, moduleOrder++, group);
     for (const [i, item] of moduleItems.entries()) {
       const existing = await prisma.video.findFirst({
         where: { graphItemId: item.id, graphDriveId: driveId },
