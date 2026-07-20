@@ -81,6 +81,9 @@ export function IncentivesView({
     return m;
   }, [snapshot]);
   const internalFor = (name: string) => (snapshot?.internalTasks ?? []).filter((t) => t.contributors.some((c) => c.director === name));
+  // Full partner roster — the Bucket 4 allocation editor can target any partner, not
+  // just the ones who have already logged time on the task.
+  const allPartners = useMemo(() => (snapshot?.directors ?? []).map((x) => ({ directorId: x.directorId, name: x.name })), [snapshot]);
 
   async function sync() {
     setSyncing(true); setError(null);
@@ -233,7 +236,7 @@ export function IncentivesView({
                     </button>
                     {expanded === "me" && (
                       <div className="mt-2 rounded-2xl bg-card border border-border shadow-lift p-4">
-                        <Drill d={me} it={internalFor(me.name)} isAdmin={isAdmin} />
+                        <Drill d={me} it={internalFor(me.name)} isAdmin={isAdmin} partners={allPartners} />
                       </div>
                     )}
                   </div>
@@ -269,7 +272,7 @@ export function IncentivesView({
                       const canDrill = isAdmin && (d.leads.length > 0 || d.tasks.length > 0 || it.length > 0);
                       const open = expanded === d.directorId;
                       return (
-                        <FragmentRow key={d.directorId} d={d} it={it} totalConverted={totalConverted} canDrill={canDrill} isAdmin={isAdmin} open={open} onToggle={() => setExpanded((x) => (x === d.directorId ? null : d.directorId))} />
+                        <FragmentRow key={d.directorId} d={d} it={it} totalConverted={totalConverted} canDrill={canDrill} isAdmin={isAdmin} partners={allPartners} open={open} onToggle={() => setExpanded((x) => (x === d.directorId ? null : d.directorId))} />
                       );
                     })}
                   </tbody>
@@ -378,7 +381,7 @@ function Mini({ value, label, tone }: { value: number | string; label: string; t
   return <div><div className={`text-lg font-display font-extrabold leading-none ${tone}`}>{value}</div><div className="text-[9.5px] font-semibold uppercase tracking-wide text-ink-mute mt-0.5">{label}</div></div>;
 }
 
-function FragmentRow({ d, it, totalConverted, canDrill, isAdmin, open, onToggle }: { d: DirectorIncentive; it: InternalTaskResult[]; totalConverted: number; canDrill: boolean; isAdmin: boolean; open: boolean; onToggle: () => void }) {
+function FragmentRow({ d, it, totalConverted, canDrill, isAdmin, partners, open, onToggle }: { d: DirectorIncentive; it: InternalTaskResult[]; totalConverted: number; canDrill: boolean; isAdmin: boolean; partners: Array<{ directorId: string; name: string }>; open: boolean; onToggle: () => void }) {
   const b = d.buckets;
   const im4 = b4of(b.internalImprovement);
   const b1pct = Math.round((b.leadConversion.convertedValue / totalConverted) * 100);
@@ -393,13 +396,13 @@ function FragmentRow({ d, it, totalConverted, canDrill, isAdmin, open, onToggle 
         <td className="px-2 py-3 text-ink-faint">{canDrill ? (open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />) : null}</td>
       </tr>
       {open && canDrill && (
-        <tr><td colSpan={6} className="bg-page/40 px-4 py-3"><Drill d={d} it={it} isAdmin={isAdmin} /></td></tr>
+        <tr><td colSpan={6} className="bg-page/40 px-4 py-3"><Drill d={d} it={it} isAdmin={isAdmin} partners={partners} /></td></tr>
       )}
     </>
   );
 }
 
-function Drill({ d, it, isAdmin }: { d: DirectorIncentive; it: InternalTaskResult[]; isAdmin: boolean }) {
+function Drill({ d, it, isAdmin, partners }: { d: DirectorIncentive; it: InternalTaskResult[]; isAdmin: boolean; partners: Array<{ directorId: string; name: string }> }) {
   return (
     <div className="flex flex-col gap-3">
       {d.tasks.length > 0 && (
@@ -423,15 +426,7 @@ function Drill({ d, it, isAdmin }: { d: DirectorIncentive; it: InternalTaskResul
       {it.length > 0 && (
         <div>
           <div className="text-[10px] font-extrabold tracking-[0.12em] text-amber-600 uppercase mb-1.5">Bucket 4 · Internal tasks</div>
-          {it.map((t) => { const mine = t.contributors.find((c) => c.director === d.name)?.hours ?? 0; const over = t.withinApproved === false; return (
-            <div key={t.taskId} className="flex items-center gap-2 text-[12px] py-1 border-b border-border/40 last:border-0">
-              <span className="font-mono text-[10px] text-ink-faint shrink-0 w-[76px] truncate" title={t.identity}>{t.identity || "—"}</span>
-              <span className="text-ink-soft truncate flex-1">{cleanName(t.name) || "Untitled task"}</span>
-              <span className={`text-[9px] font-bold uppercase px-1 py-0.5 rounded ${t.completed ? "bg-emerald-50 text-emerald-700" : "bg-muted text-ink-faint"}`}>{t.completed ? "done" : "wip"}</span>
-              <span className={over ? "text-rose-600 font-semibold" : "text-ink-mute"}>{Number(t.actualHours) || 0}h{t.approvedHours != null ? ` / ${t.approvedHours}h` : ""}</span>
-              {over ? <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-rose-50 text-rose-600">over</span> : null}
-            </div>
-          ); })}
+          {it.map((t) => <InternalTaskRow key={t.taskId} t={t} directorName={d.name} isAdmin={isAdmin} partners={partners} />)}
         </div>
       )}
       {d.leads.length > 0 && (
@@ -474,6 +469,86 @@ function ClientTaskRow({ t, isAdmin }: { t: DirectorTaskDrill; isAdmin: boolean 
         </div>
       </div>
       {open && splittable && <ProfitSplitEditor task={t} isAdmin={isAdmin} />}
+    </div>
+  );
+}
+
+// One Bucket 4 internal-task row. Shows THIS partner's own logged hours (not the task
+// total — a shared task like Vision Tool has everyone's time in it) against their own
+// planned allocation, red when they exceed it. Admins can open the allocation editor.
+function InternalTaskRow({ t, directorName, isAdmin, partners }: { t: InternalTaskResult; directorName: string; isAdmin: boolean; partners: Array<{ directorId: string; name: string }> }) {
+  const [open, setOpen] = useState(false);
+  const mine = t.contributors.find((c) => c.director === directorName);
+  const myHours = Number(mine?.hours) || 0;
+  const myPlanned = mine?.planned ?? null;
+  const over = myPlanned != null && myPlanned > 0 && myHours > myPlanned;
+  return (
+    <div className="py-1.5 border-b border-border/40 last:border-0">
+      <div className="flex items-center gap-2.5 text-[12px]">
+        <span className="font-mono text-[10px] text-ink-faint shrink-0 w-[76px] truncate" title={t.identity}>{t.identity || "—"}</span>
+        <span className="text-ink-soft truncate flex-1">{cleanName(t.name) || "Untitled task"}</span>
+        <span className={`text-[9px] font-bold uppercase px-1 py-0.5 rounded ${t.completed ? "bg-emerald-50 text-emerald-700" : "bg-muted text-ink-faint"}`}>{t.completed ? "done" : "wip"}</span>
+        <span className={`shrink-0 tabular-nums w-[96px] text-right ${over ? "text-rose-600 font-bold" : "text-ink-mute"}`}>{myHours}h{myPlanned != null ? ` / ${myPlanned}h` : ""}</span>
+        {over ? <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-rose-50 text-rose-600">over</span> : null}
+        <div className="shrink-0 w-[62px] flex justify-end">
+          {isAdmin && (
+            <button onClick={() => setOpen((o) => !o)} className={`inline-flex items-center gap-0.5 text-[10.5px] font-bold rounded px-1.5 py-0.5 transition ${open ? "bg-amber-100 text-amber-700" : "text-amber-600 hover:bg-amber-50"}`}>
+              Hours {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+            </button>
+          )}
+        </div>
+      </div>
+      {open && isAdmin && <HoursSplitEditor task={t} partners={partners} />}
+    </div>
+  );
+}
+
+// Bucket 4 planned-hours allocation, admin-only. Hours are entered freely per partner —
+// Turia's Budget Time is shown as a reference, not enforced. Applies on the next Sync.
+function HoursSplitEditor({ task, partners }: { task: InternalTaskResult; partners: Array<{ directorId: string; name: string }> }) {
+  const [hrs, setHrs] = useState<Record<string, number>>(() => {
+    const m: Record<string, number> = {};
+    for (const c of task.contributors) if (c.directorId && typeof c.planned === "number") m[c.directorId] = c.planned;
+    return m;
+  });
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const allocated = Math.round(Object.values(hrs).reduce((s, n) => s + (Number(n) || 0), 0) * 10) / 10;
+
+  async function save() {
+    setSaving(true); setMsg(null);
+    try {
+      const hours = Object.fromEntries(Object.entries(hrs).filter(([, v]) => Number(v) > 0));
+      if (Object.keys(hours).length === 0) throw new Error("Set hours for at least one partner");
+      const res = await fetch("/api/tools/neo-centra/hours-splits", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ taskName: task.name, taskIdentity: task.identity, turiaTaskId: task.taskId, hours }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Save failed");
+      setMsg("Saved · hit Sync to apply");
+    } catch (e) { setMsg((e as Error).message); } finally { setSaving(false); }
+  }
+  return (
+    <div className="ml-[86px] mt-1.5 rounded-lg bg-amber-50/60 border border-amber-100 px-2.5 py-2 flex items-center flex-wrap gap-x-3 gap-y-1.5 text-[11px]">
+      <span className="text-[8.5px] font-extrabold uppercase tracking-wide text-amber-600">Planned hours</span>
+      {partners.map((p) => {
+        const actual = task.contributors.find((c) => c.directorId === p.directorId)?.hours ?? 0;
+        return (
+          <label key={p.directorId} className="inline-flex items-center gap-1.5 text-ink-soft">
+            <span className="truncate max-w-[90px]">{p.name.split(" ")[0]}</span>
+            <span className="inline-flex items-center rounded border border-amber-200 bg-card overflow-hidden">
+              <input type="number" min={0} step={0.5} value={hrs[p.directorId] ?? ""} placeholder="0"
+                onChange={(e) => setHrs((s) => ({ ...s, [p.directorId]: Math.max(0, Number(e.target.value)) }))}
+                className="w-12 bg-transparent px-1.5 py-0.5 text-[11px] tabular-nums text-right focus:outline-none" />
+              <span className="px-1 text-ink-faint bg-amber-50/80 border-l border-amber-200">h</span>
+            </span>
+            <span className="text-[10px] text-ink-faint tabular-nums">({actual}h done)</span>
+          </label>
+        );
+      })}
+      <span className="tabular-nums text-ink-mute">allocated <b>{allocated}h</b>{task.budgetHours ? ` · Turia budget ${task.budgetHours}h` : ""}</span>
+      <button onClick={save} disabled={saving} className="px-3 py-1 rounded-md bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-white text-[11px] font-bold transition">{saving ? "Saving…" : "Save"}</button>
+      {msg && <span className={`text-[10.5px] ${msg.startsWith("Saved") ? "text-emerald-600" : "text-rose-600"}`}>{msg}</span>}
     </div>
   );
 }
