@@ -42,7 +42,7 @@ export interface DirectorRow { id: string; name: string; turiaUserId: string | n
 // Budget Time for the task, shown as a reference when allocating.
 export interface InternalTaskResult { taskId: string; identity: string; name: string; completed: boolean; approvedHours: number | null; budgetHours: number | null; actualHours: number; withinApproved: boolean | null; contributors: Array<{ director: string; directorId?: string; hours: number; planned?: number | null }> }
 export interface DirectorLeadItem { id: string; identity: string; name: string; dealValue: number; stage: string; referredBy: string | null; converted: boolean }
-export interface DirectorTaskDrill { taskId: string; identity: string; name: string; budget: number; billedPeriod: number; invoiceTotal: number; profit: number; hours: number | null; sharedWith: number; dueDate: number | null; flags: string[]; profitPartners?: Array<{ directorId: string; name: string; percent: number }> }
+export interface DirectorTaskDrill { taskId: string; identity: string; name: string; budget: number; billedPeriod: number; invoiceTotal: number; profit: number; hours: number | null; sharedWith: number; dueDate: number | null; flags: string[]; profitPartners?: Array<{ directorId: string; name: string; percent: number }>; completed?: boolean }
 export interface DirectorIncentive {
   directorId: string; name: string; turiaUserId: string | null; turiaUsername: string | null; resolved: boolean;
   buckets: {
@@ -290,6 +290,14 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
     if (effectiveDate == null || effectiveDate < fromMs || effectiveDate > toMs) continue;
     const periodBilling = bill.subtotal;
 
+    // Profit (B3 only) is booked ONLY once the task is actually finished, in the quarter
+    // it finished. An invoiced but in-progress task — e.g. TSK03742: invoice raised, 0%
+    // done, no timesheet — would otherwise post its entire invoice as pure profit, since
+    // profit = billing − manpower and manpower is still 0. Billing (B2) is unaffected and
+    // keeps accruing on invoiced work whether or not the task is complete.
+    const completedInPeriod = detail.status === TASK_COMPLETED && detail.completedOn != null
+      && detail.completedOn >= fromMs && detail.completedOn <= toMs;
+
     // Bucket 2 — billing follows the timesheet: each partner earns billing in
     // proportion to their *own* logged hours on the task. No logged time → no billing.
     const hoursByDir = new Map<string, number>();
@@ -317,11 +325,11 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
     for (const id of participantIds) {
       const billShare = totalDirHours > 0 ? periodBilling * ((hoursByDir.get(id) || 0) / totalDirHours) : 0;
       const isAssigned = assignedDirs.some((d) => d.id === id);
-      const profitShare = isAssigned ? periodProfit * (pctFor(id) / 100) : 0;
+      const profitShare = isAssigned && completedInPeriod ? periodProfit * (pctFor(id) / 100) : 0;
       const stats = statsFor(id);
       if (hoursByDir.has(id)) { stats.billed += billShare; stats.billedTaskIds.add(taskId); }
-      if (isAssigned) { stats.profit += profitShare; stats.profitTaskIds.add(taskId); }
-      const drill: DirectorTaskDrill = { taskId, identity: detail.identity, name: detail.name, budget: Math.round(detail.budgetAmount), billedPeriod: Math.round(billShare), invoiceTotal: Math.round(periodBilling), profit: Math.round(profitShare), hours: parseTatHours(detail.tatHours), sharedWith: participantIds.size, dueDate: detail.dueDate, flags, profitPartners };
+      if (isAssigned && completedInPeriod) { stats.profit += profitShare; stats.profitTaskIds.add(taskId); }
+      const drill: DirectorTaskDrill = { taskId, identity: detail.identity, name: detail.name, budget: Math.round(detail.budgetAmount), billedPeriod: Math.round(billShare), invoiceTotal: Math.round(periodBilling), profit: Math.round(profitShare), hours: parseTatHours(detail.tatHours), sharedWith: participantIds.size, dueDate: detail.dueDate, flags, profitPartners, completed: completedInPeriod };
       tasksByDirector.set(id, [...(tasksByDirector.get(id) || []), drill]);
     }
   }
