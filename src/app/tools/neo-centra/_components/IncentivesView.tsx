@@ -453,6 +453,9 @@ function ClientTaskRow({ t, isAdmin }: { t: DirectorTaskDrill; isAdmin: boolean 
         <div className="flex-1 min-w-0 flex items-center gap-1.5 flex-wrap">
           <span className="text-ink-soft font-medium truncate">{cleanName(t.name) || "Untitled task"}</span>
           {t.sharedWith > 1 && <span className="text-[9px] font-bold text-ink-faint">×{t.sharedWith}</span>}
+          {/* Profit is only booked on completed tasks, so flag the ones still running —
+              otherwise a task showing billing with ₹0 profit looks like a bug. */}
+          {t.completed === false && <span className="text-[8.5px] font-bold uppercase px-1 py-0.5 rounded bg-muted text-ink-faint" title="Profit is booked when the task is completed">wip</span>}
           {t.flags.map((f) => <span key={f} className="text-[8.5px] font-bold uppercase px-1 py-0.5 rounded bg-rose-50 text-rose-600">{f}</span>)}
         </div>
         <div className="shrink-0 flex items-center tabular-nums">
