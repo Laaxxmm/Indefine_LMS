@@ -862,6 +862,23 @@ model NeoProfitSplit {
   @@index([taskIdentity])
 }
 
+// Bucket 4 planned-hours allocation — how a shared internal task's effort is meant to
+// split between partners (e.g. Lakshmanan 30h, Abijith 69h). Entered freely by admins;
+// not required to reconcile to Turia's Budget Time. No row → that partner has no target.
+model NeoHoursSplit {
+  id           String   @id @default(cuid())
+  turiaTaskId  String?
+  taskIdentity String?  // Turia uniqueidentity, e.g. TSK03625
+  taskName     String
+  hours        Json     // { [directorId]: plannedHours }
+  updatedBy    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([turiaTaskId])
+  @@index([taskIdentity])
+}
+
 // Cached per-period incentive computations (Turia is slow/fragile; UI reads snapshots).
 model NeoIncentiveSnapshot {
   id          String   @id @default(cuid())

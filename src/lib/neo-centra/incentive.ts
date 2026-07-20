@@ -36,7 +36,11 @@ async function mapPool<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R>
 
 // ── Types (identical to the source) ──────────────────────────────────────────
 export interface DirectorRow { id: string; name: string; turiaUserId: string | null; turiaUsername: string | null; isActive: boolean; isAdmin: boolean }
-export interface InternalTaskResult { taskId: string; identity: string; name: string; completed: boolean; approvedHours: number | null; actualHours: number; withinApproved: boolean | null; contributors: Array<{ director: string; hours: number }> }
+// `contributors` carries each partner's OWN hours on the task plus their planned
+// allocation (null = none set). Partners with an allocation but no logged hours are
+// included too, so they still see the task and their 0/N. `budgetHours` = Turia's
+// Budget Time for the task, shown as a reference when allocating.
+export interface InternalTaskResult { taskId: string; identity: string; name: string; completed: boolean; approvedHours: number | null; budgetHours: number | null; actualHours: number; withinApproved: boolean | null; contributors: Array<{ director: string; directorId?: string; hours: number; planned?: number | null }> }
 export interface DirectorLeadItem { id: string; identity: string; name: string; dealValue: number; stage: string; referredBy: string | null; converted: boolean }
 export interface DirectorTaskDrill { taskId: string; identity: string; name: string; budget: number; billedPeriod: number; invoiceTotal: number; profit: number; hours: number | null; sharedWith: number; dueDate: number | null; flags: string[]; profitPartners?: Array<{ directorId: string; name: string; percent: number }> }
 export interface DirectorIncentive {
@@ -114,6 +118,13 @@ export async function getProfitSplits(): Promise<ProfitSplitRow[]> {
   return rows.map((r) => ({ turiaTaskId: r.turiaTaskId, taskIdentity: r.taskIdentity, splits: (r.splits as Record<string, number>) ?? {} }));
 }
 
+// Bucket 4 planned-hours allocations, keyed by Turia task. `hours` = { directorId: hours }.
+export interface HoursSplitRow { turiaTaskId: string | null; taskIdentity: string | null; hours: Record<string, number> }
+export async function getHoursSplits(): Promise<HoursSplitRow[]> {
+  const rows = await prisma.neoHoursSplit.findMany();
+  return rows.map((r) => ({ turiaTaskId: r.turiaTaskId, taskIdentity: r.taskIdentity, hours: (r.hours as Record<string, number>) ?? {} }));
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function parseTatHours(s: string | null): number | null {
   if (!s) return null;
@@ -164,6 +175,9 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
   const profitSplits = await getProfitSplits();
   const splitFor = (taskId: string, identity: string): Record<string, number> | null =>
     profitSplits.find((s) => (s.turiaTaskId && s.turiaTaskId === taskId) || (s.taskIdentity && s.taskIdentity === identity))?.splits ?? null;
+  const hoursSplits = await getHoursSplits();
+  const plannedFor = (taskId: string, identity: string): Record<string, number> =>
+    hoursSplits.find((s) => (s.turiaTaskId && s.turiaTaskId === taskId) || (s.taskIdentity && s.taskIdentity === identity))?.hours ?? {};
 
   const [tasks, leads, invoices] = await Promise.all([
     fetchTuriaTaskList(1, 2000),
@@ -185,20 +199,33 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
     ]);
     const completedOn = detail?.completedOn ?? null;
     const completedInPeriod = String(t.taskstatus ?? "") === TASK_COMPLETED && completedOn != null && completedOn >= fromMs && completedOn <= toMs;
-    const byDirector = new Map<string, number>();
+    const planned = plannedFor(String(t.id), identity);
+    const byDirector = new Map<string, number>(); // directorId → their OWN logged hours
     let actualHours = 0;
     for (const r of rows) {
       if (!(r.hours > 0)) continue;
       actualHours += r.hours;
       const dir = directorForUsername(r.username, directors);
-      if (dir) byDirector.set(dir.name, (byDirector.get(dir.name) || 0) + r.hours);
+      if (dir) byDirector.set(dir.id, (byDirector.get(dir.id) || 0) + r.hours);
     }
+    // Partners on this task = those who logged hours ∪ those given a planned allocation,
+    // so someone allocated 20h who hasn't started still sees the task at 0/20.
+    const contributors = [...new Set<string>([...byDirector.keys(), ...Object.keys(planned)])]
+      .map((id) => {
+        const dir = directors.find((x) => x.id === id);
+        if (!dir) return null;
+        return { director: dir.name, directorId: id, hours: round1(byDirector.get(id) || 0), planned: typeof planned[id] === "number" ? planned[id] : null };
+      })
+      .filter((c): c is { director: string; directorId: string; hours: number; planned: number | null } => c !== null)
+      .sort((a, b) => b.hours - a.hours);
     return {
       taskId: String(t.id), identity, name: String(t.taskname ?? t.clientname ?? "Untitled"),
       completed: completedInPeriod,
-      approvedHours, actualHours: round1(actualHours),
+      approvedHours,
+      budgetHours: parseTatHours(detail?.tatHours ?? null), // Turia's Budget Time, e.g. 99h
+      actualHours: round1(actualHours),
       withinApproved: approvedHours === null ? null : actualHours <= approvedHours,
-      contributors: [...byDirector.entries()].map(([director, hours]) => ({ director, hours: round1(hours) })).sort((a, b) => b.hours - a.hours),
+      contributors,
     };
   })).filter((it) => it.contributors.length > 0 || it.completed);
 
@@ -303,7 +330,9 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
     const contributed = internalTasks.filter((it) => it.contributors.some((c) => c.director === d.name));
     const completedTasks = contributed.filter((it) => it.completed).length;
     const hoursSpent = contributed.reduce((sum, it) => sum + (it.contributors.find((c) => c.director === d.name)?.hours || 0), 0);
-    const targetHours = contributed.reduce((sum, it) => sum + (it.approvedHours ?? 0), 0);
+    // Target = this partner's OWN planned allocation across the tasks they're on — not
+    // the whole task's budget (which would measure every partner against the full 99h).
+    const targetHours = contributed.reduce((sum, it) => sum + (it.contributors.find((c) => c.director === d.name)?.planned ?? 0), 0);
     const lead = leadStatsByDirector.get(d.id) || { orig: 0, origVal: 0, conv: 0, convVal: 0 };
     const money = moneyByDirector.get(d.id) || { billed: 0, profit: 0, billedTaskIds: new Set<string>(), profitTaskIds: new Set<string>() };
     return {
