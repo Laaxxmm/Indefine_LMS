@@ -18,8 +18,11 @@ const CONVERTED_STAGE_PATTERNS = [/won/i, /converted/i, /closed.?won/i, /onboard
 const OPEN_STATUSES = new Set(["1", "2", "6"]);
 const LONG_PENDING_MS = 45 * 86400000;
 
+// A lead is "won" ONLY by its Stage (the authoritative Turia field shown in the Stage
+// column). Matching statusName too used to mis-fire on a "New Lead" whose status text
+// happened to contain a trigger word — inflating a partner's conversions.
 function isLeadConverted(lead: TuriaLead): boolean {
-  return CONVERTED_STAGE_PATTERNS.some((rx) => rx.test(`${lead.stageName} ${lead.statusName}`));
+  return CONVERTED_STAGE_PATTERNS.some((rx) => rx.test(lead.stageName));
 }
 const round1 = (n: number) => Math.round(n * 10) / 10;
 const normalize = (s: string) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
