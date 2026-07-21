@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { currentQuarter } from "./period";
 import { profitPercents } from "./split";
 import {
-  fetchOrgUsers, fetchTuriaTaskList, fetchTaskTimesheets, fetchLeads, fetchTaskDetail, fetchAllInvoices, parseBillable, isCancelled,
+  fetchOrgUsers, fetchTuriaTaskList, fetchTaskTimesheets, fetchLeads, fetchTaskDetail, fetchAllInvoices,
   type TuriaLead, type TuriaTaskDetail,
 } from "./turia";
 
@@ -18,11 +18,8 @@ const CONVERTED_STAGE_PATTERNS = [/won/i, /converted/i, /closed.?won/i, /onboard
 const OPEN_STATUSES = new Set(["1", "2", "6"]);
 const LONG_PENDING_MS = 45 * 86400000;
 
-// A lead is "won" ONLY by its Stage (the authoritative Turia field shown in the Stage
-// column). Matching statusName too used to mis-fire on a "New Lead" whose status text
-// happened to contain a trigger word — inflating a partner's conversions.
 function isLeadConverted(lead: TuriaLead): boolean {
-  return CONVERTED_STAGE_PATTERNS.some((rx) => rx.test(lead.stageName));
+  return CONVERTED_STAGE_PATTERNS.some((rx) => rx.test(`${lead.stageName} ${lead.statusName}`));
 }
 const round1 = (n: number) => Math.round(n * 10) / 10;
 const normalize = (s: string) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -288,7 +285,7 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
     return { taskId, detail, tsRows };
   });
   for (const { taskId, detail, tsRows } of perTask) {
-    if (!detail || detail.cancelled) continue; // cancelled tasks earn nothing
+    if (!detail) continue;
     const bill = billingByTask.get(taskId)!;
     // Quarter = task completion date; fall back to invoice date only when Turia has no
     // completion date (task not finished). Outside the quarter → skip entirely.
@@ -350,33 +347,6 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
     }
   }
 
-  // Bucket 2, second pass — BILLABLE tasks that aren't invoiced yet. Billable work is
-  // billable whether or not an invoice exists, so each partner's in-quarter timesheet
-  // cost on it still counts toward billing. No invoice = no revenue = no profit, so we
-  // don't touch Bucket 3 here (its price/profit is unknown until invoiced + completed).
-  // ponytail: fetches timesheets for every billable un-invoiced task; if the firm's task
-  // list grows huge, pre-filter to tasks a director is on before fetching.
-  const invoicedIds = new Set(billingByTask.keys());
-  const uninvoicedBillable = tasks.filter((t) => !invoicedIds.has(String(t.id)) && parseBillable(t, false) && !isCancelled(t));
-  const uninvoicedRows = await mapPool(uninvoicedBillable, 6, async (t) => ({ t, rows: await fetchTaskTimesheets(String(t.id), { fromMs, toMs }) }));
-  for (const { t, rows } of uninvoicedRows) {
-    const costByDir = new Map<string, number>();
-    const hoursByDir = new Map<string, number>();
-    for (const r of rows) {
-      const dir = directorForUsername(r.username, directors);
-      if (dir) { costByDir.set(dir.id, (costByDir.get(dir.id) || 0) + r.amount); hoursByDir.set(dir.id, (hoursByDir.get(dir.id) || 0) + r.hours); }
-    }
-    const identity = String(t.uniqueidentity ?? "").replace("#", "");
-    const name = String(t.taskname ?? t.clientname ?? "Untitled");
-    for (const [id, cost] of costByDir) {
-      if (!(cost > 0)) continue;
-      const stats = statsFor(id);
-      stats.billed += cost; stats.billedHours += hoursByDir.get(id) || 0; stats.billedTaskIds.add(String(t.id));
-      const drill: DirectorTaskDrill = { taskId: String(t.id), identity, name, budget: 0, billedPeriod: Math.round(cost), invoiceTotal: 0, profit: 0, hours: null, sharedWith: costByDir.size, dueDate: null, flags: [], completed: false, profitPct: null, billable: true };
-      tasksByDirector.set(id, [...(tasksByDirector.get(id) || []), drill]);
-    }
-  }
-
   const directorResults: DirectorIncentive[] = directors.map((d) => {
     const contributed = internalTasks.filter((it) => it.contributors.some((c) => c.director === d.name));
     const completedTasks = contributed.filter((it) => it.completed).length;
@@ -406,30 +376,6 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
   });
 
   return { periodStart: new Date(fromMs).toISOString(), periodEnd: new Date(toMs).toISOString(), generatedAt: new Date().toISOString(), directors: directorResults, internalTasks };
-}
-
-// Diagnostics: per-lead view of exactly what Bucket 1 decides, so a mismatch between the
-// leaderboard and Turia's lead list can be traced to the field/date that flips it.
-export async function analyzeLeadsForPeriod(fromMs: number, toMs: number) {
-  const directors = (await getDirectors()).filter((d) => d.isActive);
-  const leads = await fetchLeads();
-  const iso = (ms: number | null) => (ms == null ? null : new Date(ms).toISOString().slice(0, 10));
-  const rows = leads.map((lead) => {
-    const owner = lead.owners[0] ?? null;
-    const dir = owner ? directorForName(owner.name, directors) : null;
-    const converted = isLeadConverted(lead);
-    const moment = lead.updatedOn ?? lead.createdOn;
-    const inPeriod = moment === null || (moment >= fromMs && moment <= toMs);
-    return {
-      name: lead.name, dealValue: lead.dealValue, owner: owner?.name ?? null, matchedDirector: dir?.name ?? null,
-      stageName: lead.stageName, statusName: lead.statusName,
-      createdOn: iso(lead.createdOn), updatedOn: iso(lead.updatedOn),
-      isConverted: converted, updatedInQuarter: inPeriod, COUNTS_AS_WON: !!dir && converted && inPeriod,
-    };
-  });
-  const wonByDirector: Record<string, { won: number; value: number }> = {};
-  for (const r of rows) if (r.COUNTS_AS_WON && r.matchedDirector) { const w = wonByDirector[r.matchedDirector] ??= { won: 0, value: 0 }; w.won++; w.value += r.dealValue; }
-  return { period: { from: iso(fromMs), to: iso(toMs) }, totalLeads: rows.length, wonByDirector, leads: rows };
 }
 
 // ── Snapshots ────────────────────────────────────────────────────────────────
