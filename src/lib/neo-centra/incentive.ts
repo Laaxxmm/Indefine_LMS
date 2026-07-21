@@ -47,7 +47,7 @@ export interface DirectorIncentive {
   directorId: string; name: string; turiaUserId: string | null; turiaUsername: string | null; resolved: boolean;
   buckets: {
     leadConversion: { available: boolean; originatedLeads: number; originatedValue: number; convertedLeads: number; convertedValue: number; conversionRate: number };
-    billing: { available: boolean; billedInPeriod: number; taskCount: number };
+    billing: { available: boolean; billedInPeriod: number; billedHours: number; taskCount: number };
     profitability: { available: boolean; profitInPeriod: number; taskCount: number; profitPct: number | null };
     internalImprovement: { available: boolean; completedTasks: number; totalTasks: number; completionRate: number; hoursSpent: number; targetHours: number; overBudget: boolean };
   };
@@ -270,11 +270,11 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
   // for the manpower cost. Profit = period billing − manpower (Turia's formula, OP≈0).
   // Billing (B2) and profit (B3) are attributed on *different* bases, so each keeps
   // its own task set: B2 credits whoever logged time; B3 credits assigned partners.
-  type MoneyStats = { billed: number; profit: number; invoiceValue: number; billedTaskIds: Set<string>; profitTaskIds: Set<string> };
+  type MoneyStats = { billed: number; billedHours: number; profit: number; invoiceValue: number; billedTaskIds: Set<string>; profitTaskIds: Set<string> };
   const moneyByDirector = new Map<string, MoneyStats>();
   const statsFor = (id: string) => {
     let s = moneyByDirector.get(id);
-    if (!s) { s = { billed: 0, profit: 0, invoiceValue: 0, billedTaskIds: new Set<string>(), profitTaskIds: new Set<string>() }; moneyByDirector.set(id, s); }
+    if (!s) { s = { billed: 0, billedHours: 0, profit: 0, invoiceValue: 0, billedTaskIds: new Set<string>(), profitTaskIds: new Set<string>() }; moneyByDirector.set(id, s); }
     return s;
   };
   const tasksByDirector = new Map<string, DirectorTaskDrill[]>();
@@ -310,9 +310,13 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
     // tasks. We no longer split the invoice; each partner is credited exactly what their
     // own time cost, so 4h of work shows as 4h of value, not the whole invoice.
     const costByDir = new Map<string, number>();
+    const hoursByDir = new Map<string, number>(); // partner's own hours, shown beside billing
     for (const r of tsRows) {
       const dir = directorForUsername(r.username, directors);
-      if (dir) costByDir.set(dir.id, (costByDir.get(dir.id) || 0) + r.amount);
+      if (dir) {
+        costByDir.set(dir.id, (costByDir.get(dir.id) || 0) + r.amount);
+        hoursByDir.set(dir.id, (hoursByDir.get(dir.id) || 0) + r.hours);
+      }
     }
 
     // Bucket 3 — profit is split among the partners *assigned* to the task, regardless
@@ -334,7 +338,7 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
       const isAssigned = assignedDirs.some((d) => d.id === id);
       const profitShare = isAssigned && completedInPeriod ? periodProfit * (pctFor(id) / 100) : 0;
       const stats = statsFor(id);
-      if (billShare > 0) { stats.billed += billShare; stats.billedTaskIds.add(taskId); }
+      if (billShare > 0) { stats.billed += billShare; stats.billedHours += hoursByDir.get(id) || 0; stats.billedTaskIds.add(taskId); }
       // Track the invoice value behind each partner's profit share (same split %), so the
       // bucket margin is a value-weighted average of task margins, not a naive mean.
       if (isAssigned && completedInPeriod) { stats.profit += profitShare; stats.invoiceValue += periodBilling * (pctFor(id) / 100); stats.profitTaskIds.add(taskId); }
@@ -351,12 +355,12 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
     // the whole task's budget (which would measure every partner against the full 99h).
     const targetHours = contributed.reduce((sum, it) => sum + (it.contributors.find((c) => c.director === d.name)?.planned ?? 0), 0);
     const lead = leadStatsByDirector.get(d.id) || { orig: 0, origVal: 0, conv: 0, convVal: 0 };
-    const money = moneyByDirector.get(d.id) || { billed: 0, profit: 0, invoiceValue: 0, billedTaskIds: new Set<string>(), profitTaskIds: new Set<string>() };
+    const money = moneyByDirector.get(d.id) || { billed: 0, billedHours: 0, profit: 0, invoiceValue: 0, billedTaskIds: new Set<string>(), profitTaskIds: new Set<string>() };
     return {
       directorId: d.id, name: d.name, turiaUserId: d.turiaUserId, turiaUsername: d.turiaUsername, resolved: !!d.turiaUserId,
       buckets: {
         leadConversion: { available: true, originatedLeads: lead.orig, originatedValue: Math.round(lead.origVal), convertedLeads: lead.conv, convertedValue: Math.round(lead.convVal), conversionRate: lead.orig > 0 ? Math.round((lead.conv / lead.orig) * 1000) / 1000 : 0 },
-        billing: { available: true, billedInPeriod: Math.round(money.billed), taskCount: money.billedTaskIds.size },
+        billing: { available: true, billedInPeriod: Math.round(money.billed), billedHours: round1(money.billedHours), taskCount: money.billedTaskIds.size },
         profitability: { available: true, profitInPeriod: Math.round(money.profit), taskCount: money.profitTaskIds.size, profitPct: money.invoiceValue > 0 ? Math.round((money.profit / money.invoiceValue) * 100) : null },
         internalImprovement: {
           available: true,
