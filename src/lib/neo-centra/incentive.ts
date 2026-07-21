@@ -18,8 +18,11 @@ const CONVERTED_STAGE_PATTERNS = [/won/i, /converted/i, /closed.?won/i, /onboard
 const OPEN_STATUSES = new Set(["1", "2", "6"]);
 const LONG_PENDING_MS = 45 * 86400000;
 
+// A lead is "won" ONLY by its Stage (the authoritative Turia field shown in the Stage
+// column). Matching statusName too used to mis-fire on a "New Lead" whose status text
+// happened to contain a trigger word — inflating a partner's conversions.
 function isLeadConverted(lead: TuriaLead): boolean {
-  return CONVERTED_STAGE_PATTERNS.some((rx) => rx.test(`${lead.stageName} ${lead.statusName}`));
+  return CONVERTED_STAGE_PATTERNS.some((rx) => rx.test(lead.stageName));
 }
 const round1 = (n: number) => Math.round(n * 10) / 10;
 const normalize = (s: string) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -403,6 +406,30 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
   });
 
   return { periodStart: new Date(fromMs).toISOString(), periodEnd: new Date(toMs).toISOString(), generatedAt: new Date().toISOString(), directors: directorResults, internalTasks };
+}
+
+// Diagnostics: per-lead view of exactly what Bucket 1 decides, so a mismatch between the
+// leaderboard and Turia's lead list can be traced to the field/date that flips it.
+export async function analyzeLeadsForPeriod(fromMs: number, toMs: number) {
+  const directors = (await getDirectors()).filter((d) => d.isActive);
+  const leads = await fetchLeads();
+  const iso = (ms: number | null) => (ms == null ? null : new Date(ms).toISOString().slice(0, 10));
+  const rows = leads.map((lead) => {
+    const owner = lead.owners[0] ?? null;
+    const dir = owner ? directorForName(owner.name, directors) : null;
+    const converted = isLeadConverted(lead);
+    const moment = lead.updatedOn ?? lead.createdOn;
+    const inPeriod = moment === null || (moment >= fromMs && moment <= toMs);
+    return {
+      name: lead.name, dealValue: lead.dealValue, owner: owner?.name ?? null, matchedDirector: dir?.name ?? null,
+      stageName: lead.stageName, statusName: lead.statusName,
+      createdOn: iso(lead.createdOn), updatedOn: iso(lead.updatedOn),
+      isConverted: converted, updatedInQuarter: inPeriod, COUNTS_AS_WON: !!dir && converted && inPeriod,
+    };
+  });
+  const wonByDirector: Record<string, { won: number; value: number }> = {};
+  for (const r of rows) if (r.COUNTS_AS_WON && r.matchedDirector) { const w = wonByDirector[r.matchedDirector] ??= { won: 0, value: 0 }; w.won++; w.value += r.dealValue; }
+  return { period: { from: iso(fromMs), to: iso(toMs) }, totalLeads: rows.length, wonByDirector, leads: rows };
 }
 
 // ── Snapshots ────────────────────────────────────────────────────────────────
