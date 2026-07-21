@@ -94,15 +94,18 @@ const COMPLETED_KEYS = ["completedon", "completeddate", "completed_on", "complet
 // Turia's billable flag is inconsistent — boolean, 0/1, or a "Billable"/"Non Billable"
 // status string under varying keys. Read defensively and DEFAULT TO BILLABLE when unknown,
 // so a misread can never silently zero Bucket 2. Only a clear "non"/0/false marks it off.
-function parseBillable(t: Record<string, unknown>): boolean {
+// `dflt` is what to return when NO recognizable flag is found: true for task detail (a
+// misread must not zero billing), but false for the task-list pre-filter (an unknown
+// there would make us fetch/price every task).
+export function parseBillable(t: Record<string, unknown>, dflt = true): boolean {
   const name = String(t.billingstatusname ?? t.billingstatus ?? t.billing_status ?? "").toLowerCase().trim();
   if (name.includes("non")) return false;
-  if (name === "billable") return true;
+  if (name.includes("billable")) return true;
   const b = t.billable ?? t.isbillable ?? t.is_billable;
   if (typeof b === "boolean") return b;
   if (typeof b === "number") return b !== 0;
   if (typeof b === "string") { const s = b.toLowerCase().trim(); if (s.includes("non") || s === "0" || s === "false" || s === "no") return false; if (s === "billable" || s === "1" || s === "true" || s === "yes") return true; }
-  return true;
+  return dflt;
 }
 // First present-and-nonzero value across candidate keys (Turia field names vary).
 const pick = (t: Record<string, unknown>, keys: string[]) => {
