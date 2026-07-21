@@ -11,7 +11,7 @@ const NEO_CENTRA = {
   title: "Neo Centra",
   tag: "Directors · Incentive race",
   blurb:
-    "The directors' cockpit — statutory compliance deadlines with filing status, and more modules on the way.",
+    "The directors' cockpit — the four-bucket incentive race scored live from Turia.",
   icon: LayoutDashboard,
   accent: "#6d4be6",
 };

@@ -1,13 +1,11 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { ArrowLeft, ShieldCheck, HelpCircle } from "lucide-react";
+import { ArrowLeft, HelpCircle } from "lucide-react";
 import { canUseNeoCentra, isNeoCentraAdmin } from "@/lib/neo-centra/access";
 import { getSnapshotForPeriod, filterSummaryForViewer } from "@/lib/neo-centra/incentive";
 import { turiaStatus } from "@/lib/neo-centra/turia";
 import { currentQuarter, quartersForFy, fyLabel, type Period } from "@/lib/neo-centra/period";
-import { fyStartYearFor, TYPE_LABEL } from "@/lib/neo-centra/compliance";
-import { getComplianceForFy, summarize } from "@/lib/neo-centra/service";
 import { IncentivesView } from "../_components/IncentivesView";
 
 export const dynamic = "force-dynamic";
@@ -30,16 +28,6 @@ export default async function NeoIncentivesPage({ searchParams }: { searchParams
   const snapshot = raw ? filterSummaryForViewer(raw, session.user.id, admin, session.user.name ?? "") : null;
   const turia = await turiaStatus();
 
-  // Compliance action items for the "what needs doing" strip.
-  const todayIso = new Date().toISOString();
-  const today = todayIso.slice(0, 10);
-  const cList = await getComplianceForFy(fyStartYearFor(today));
-  const cs = summarize(cList, todayIso);
-  const overdue = cList.filter((d) => d.status === "PENDING" && d.dueDate < today).sort((a, b) => a.dueDate.localeCompare(b.dueDate)).slice(0, 6)
-    .map((d) => ({ label: `${TYPE_LABEL[d.type]} · ${d.period}`, dueDate: d.dueDate }));
-  const dueSoon = cList.filter((d) => d.status === "PENDING" && d.dueDate >= today).slice(0, 6)
-    .map((d) => ({ label: `${TYPE_LABEL[d.type]} · ${d.period}`, dueDate: d.dueDate }));
-
   return (
     <div>
       <div className="flex items-center justify-between gap-3 mb-4">
@@ -49,9 +37,6 @@ export default async function NeoIncentivesPage({ searchParams }: { searchParams
         <div className="flex items-center gap-4">
           <Link href="/tools/neo-centra/how-it-works" className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-mute hover:text-ink transition">
             <HelpCircle className="w-4 h-4" /> How it works
-          </Link>
-          <Link href="/tools/neo-centra/compliance" className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-mute hover:text-ink transition">
-            <ShieldCheck className="w-4 h-4" /> Compliance
           </Link>
         </div>
       </div>
@@ -76,7 +61,6 @@ export default async function NeoIncentivesPage({ searchParams }: { searchParams
         isAdmin={admin}
         viewerId={session.user.id}
         viewerName={session.user.name ?? ""}
-        compliance={{ overdue: cs.overdue, dueThisMonth: cs.dueThisMonth, filed: cs.done, total: cs.total, overdueList: overdue, dueSoonList: dueSoon }}
       />
     </div>
   );
