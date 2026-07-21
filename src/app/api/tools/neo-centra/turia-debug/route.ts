@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { canUseNeoCentra } from "@/lib/neo-centra/access";
-import { rawTaskGet, fetchTuriaTaskList } from "@/lib/neo-centra/turia";
+import { rawTaskGet, fetchTuriaTaskList, rawTaskTimesheets } from "@/lib/neo-centra/turia";
 
 // Diagnostics: dump Turia's raw task/get + the matching task/list ROW for one task, so we
 // can see the exact field names/values (esp. billing status) when a bucket looks wrong.
@@ -22,7 +22,10 @@ export async function GET(req: Request) {
     const list = await fetchTuriaTaskList(1, 2000).catch(() => []);
     const listRow = list.find((r) => String(r.id) === taskId || String(r.uniqueidentity ?? "").replace("#", "").toUpperCase() === wantId) ?? null;
     const listBilling = listRow ? Object.fromEntries(Object.entries(listRow).filter(([k, v]) => /bill/i.test(k) || /billable/i.test(String(v)))) : null;
-    return NextResponse.json({ taskId, moneyFields: money, listBillingFields: listBilling, listRow, allKeys: task ? Object.keys(task) : [], raw: task });
+    // First timesheet row raw — so we can see which field carries the work date.
+    const tsRows = await rawTaskTimesheets(taskId).catch(() => []);
+    const sampleTimesheet = tsRows[0] ?? null;
+    return NextResponse.json({ taskId, moneyFields: money, listBillingFields: listBilling, listRow, timesheetCount: tsRows.length, sampleTimesheet, allKeys: task ? Object.keys(task) : [], raw: task });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 502 });
   }

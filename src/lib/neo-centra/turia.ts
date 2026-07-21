@@ -73,7 +73,7 @@ export interface TuriaTaskDetail {
   createdOn: number | null; completedOn: number | null; dueDate: number | null;
   budgetAmount: number; invoiceAmount: number; opAmount: number; profit: number;
   cost: number; // manpower + OP expense (Turia UI's cost side); used to derive profit
-  tatHours: string | null; billable: boolean; users: TuriaTaskUser[];
+  tatHours: string | null; billable: boolean; cancelled: boolean; users: TuriaTaskUser[];
 }
 export interface TuriaInvoice {
   id: string; uniqueNo: string; taskId: string | null; taskUniqueId: string | null;
@@ -112,6 +112,15 @@ export function parseBillable(t: Record<string, unknown>, dflt = true): boolean 
   if (typeof b === "number") return b !== 0;
   if (typeof b === "string") { const s = b.toLowerCase().trim(); if (s.includes("non") || s === "0" || s === "false" || s === "no") return false; if (s === "1" || s === "true" || s === "yes") return true; }
   return dflt;
+}
+
+// Value-agnostic "is this task cancelled?" — the status label varies by field name, so
+// match the word. Cancelled tasks are dead work and must not earn billing/hours anywhere.
+export function isCancelled(t: Record<string, unknown>): boolean {
+  for (const v of Object.values(t)) {
+    if (typeof v === "string" && v.toLowerCase().trim() === "cancelled") return true;
+  }
+  return false;
 }
 // First present-and-nonzero value across candidate keys (Turia field names vary).
 const pick = (t: Record<string, unknown>, keys: string[]) => {
@@ -200,6 +209,7 @@ export async function fetchTaskDetail(taskId: string): Promise<TuriaTaskDetail |
       cost: manpower + opExpense,
       tatHours: (t.tathours as string) || null,
       billable: parseBillable(t),
+      cancelled: isCancelled(t),
       users: Array.isArray(t.userlists) ? (t.userlists as Array<Record<string, unknown>>).map((u) => ({ id: String(u.id), name: String(u.name ?? ""), type: parseInt(String(u.type ?? "0"), 10), role: String(u.role ?? "") })) : [],
     };
   } catch {
@@ -246,13 +256,41 @@ export async function fetchAllInvoices(perPage = 200, maxPages = 20): Promise<Tu
 // Per-task timesheet rows. `amount` = hours × hourlyrate = the manpower cost Turia
 // uses for its Revenue − Manpower − OP profit. The bulk timesheet feed doesn't carry
 // a task id, so cost/hours must be pulled per task.
-export async function fetchTaskTimesheets(taskId: string, range?: { fromMs: number; toMs: number }): Promise<Array<{ username: string; hours: number; amount: number }>> {
-  // Passing fromDate/toDate scopes the rows to a period server-side — Bucket 4 wants only
-  // hours logged *in the quarter*. Omit it for Buckets 2 & 3, whose profit subtracts the
-  // task's full manpower regardless of when it was logged.
-  const data: Record<string, unknown> = { taskId, taskid: taskId };
-  if (range) { data.fromDate = range.fromMs; data.toDate = range.toMs; }
-  const json = await turiaPost("timesheet", "list", data);
+// Parse a Turia date value → epoch ms. Handles ms/seconds epochs, ISO strings, and
+// dd/mm/yyyy or dd-mm-yyyy (Turia's display format).
+function toEpochMs(v: unknown): number | null {
+  if (v == null || v === "") return null;
+  if (typeof v === "number") return v > 1e12 ? v : v > 1e9 ? v * 1000 : null;
+  const s = String(v).trim();
+  if (/^\d+$/.test(s)) { const n = parseInt(s, 10); return n > 1e12 ? n : n > 1e9 ? n * 1000 : null; }
+  const dmy = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+  if (dmy) return Date.UTC(+dmy[3], +dmy[2] - 1, +dmy[1]);
+  const t = Date.parse(s);
+  return Number.isFinite(t) ? t : null;
+}
+// The WORK date of a timesheet row — prefer explicit date fields; `createdon` (row-entry
+// time) is a last resort since it can differ from the date the work was actually logged.
+function tsWorkDate(r: Record<string, unknown>): number | null {
+  for (const k of ["date", "timesheetdate", "workdate", "logdate", "entrydate", "startdate", "startdatetime", "starttime", "createdon"]) {
+    const ms = toEpochMs(r[k]);
+    if (ms != null) return ms;
+  }
+  return null;
+}
+
+export async function fetchTaskTimesheets(taskId: string, range?: { fromMs: number; toMs: number }): Promise<Array<{ username: string; hours: number; amount: number; date: number | null }>> {
+  const json = await turiaPost("timesheet", "list", { taskId, taskid: taskId });
   const rows = (json.tasktimesheets as Array<Record<string, unknown>>) || [];
-  return rows.map((r) => ({ username: String(r.username ?? ""), hours: numf(r.totalhours), amount: numf(r.amount) }));
+  const mapped = rows.map((r) => ({ username: String(r.username ?? ""), hours: numf(r.totalhours), amount: numf(r.amount), date: tsWorkDate(r) }));
+  // Turia IGNORES fromDate/toDate on the per-task call (returns the task's whole history,
+  // incl. prior years), so scope to the period CLIENT-side. Undateable rows are dropped
+  // when a range is asked — better to miss one than to count year-old time in this quarter.
+  if (range) return mapped.filter((r) => r.date != null && r.date >= range.fromMs && r.date <= range.toMs);
+  return mapped;
+}
+
+// Raw timesheet rows — diagnostics only, so we can confirm the work-date field name.
+export async function rawTaskTimesheets(taskId: string): Promise<Array<Record<string, unknown>>> {
+  const json = await turiaPost("timesheet", "list", { taskId, taskid: taskId });
+  return (json.tasktimesheets as Array<Record<string, unknown>>) || [];
 }

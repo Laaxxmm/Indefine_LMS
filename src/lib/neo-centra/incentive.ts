@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { currentQuarter } from "./period";
 import { profitPercents } from "./split";
 import {
-  fetchOrgUsers, fetchTuriaTaskList, fetchTaskTimesheets, fetchLeads, fetchTaskDetail, fetchAllInvoices, parseBillable,
+  fetchOrgUsers, fetchTuriaTaskList, fetchTaskTimesheets, fetchLeads, fetchTaskDetail, fetchAllInvoices, parseBillable, isCancelled,
   type TuriaLead, type TuriaTaskDetail,
 } from "./turia";
 
@@ -285,7 +285,7 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
     return { taskId, detail, tsRows };
   });
   for (const { taskId, detail, tsRows } of perTask) {
-    if (!detail) continue;
+    if (!detail || detail.cancelled) continue; // cancelled tasks earn nothing
     const bill = billingByTask.get(taskId)!;
     // Quarter = task completion date; fall back to invoice date only when Turia has no
     // completion date (task not finished). Outside the quarter → skip entirely.
@@ -354,7 +354,7 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
   // ponytail: fetches timesheets for every billable un-invoiced task; if the firm's task
   // list grows huge, pre-filter to tasks a director is on before fetching.
   const invoicedIds = new Set(billingByTask.keys());
-  const uninvoicedBillable = tasks.filter((t) => !invoicedIds.has(String(t.id)) && parseBillable(t, false));
+  const uninvoicedBillable = tasks.filter((t) => !invoicedIds.has(String(t.id)) && parseBillable(t, false) && !isCancelled(t));
   const uninvoicedRows = await mapPool(uninvoicedBillable, 6, async (t) => ({ t, rows: await fetchTaskTimesheets(String(t.id), { fromMs, toMs }) }));
   for (const { t, rows } of uninvoicedRows) {
     const costByDir = new Map<string, number>();
