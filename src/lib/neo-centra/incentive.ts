@@ -42,7 +42,7 @@ export interface DirectorRow { id: string; name: string; turiaUserId: string | n
 // Budget Time for the task, shown as a reference when allocating.
 export interface InternalTaskResult { taskId: string; identity: string; name: string; completed: boolean; approvedHours: number | null; budgetHours: number | null; actualHours: number; withinApproved: boolean | null; contributors: Array<{ director: string; directorId?: string; hours: number; planned?: number | null }> }
 export interface DirectorLeadItem { id: string; identity: string; name: string; dealValue: number; stage: string; referredBy: string | null; converted: boolean }
-export interface DirectorTaskDrill { taskId: string; identity: string; name: string; budget: number; billedPeriod: number; invoiceTotal: number; profit: number; hours: number | null; sharedWith: number; dueDate: number | null; flags: string[]; profitPartners?: Array<{ directorId: string; name: string; percent: number }>; completed?: boolean; profitPct?: number | null }
+export interface DirectorTaskDrill { taskId: string; identity: string; name: string; budget: number; billedPeriod: number; invoiceTotal: number; profit: number; hours: number | null; sharedWith: number; dueDate: number | null; flags: string[]; profitPartners?: Array<{ directorId: string; name: string; percent: number }>; completed?: boolean; profitPct?: number | null; billable?: boolean }
 export interface DirectorIncentive {
   directorId: string; name: string; turiaUserId: string | null; turiaUsername: string | null; resolved: boolean;
   buckets: {
@@ -305,15 +305,15 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
     const completedInPeriod = detail.status === TASK_COMPLETED && completionDate != null
       && completionDate >= fromMs && completionDate <= toMs;
 
-    // Bucket 2 — billing follows the timesheet: each partner earns billing in
-    // proportion to their *own* logged hours on the task. No logged time → no billing.
-    const hoursByDir = new Map<string, number>();
+    // Bucket 2 — a partner's billing = the cost of their OWN logged time on the task
+    // (Turia's timesheet `amount` = their hours × their rate), counted ONLY on billable
+    // tasks. We no longer split the invoice; each partner is credited exactly what their
+    // own time cost, so 4h of work shows as 4h of value, not the whole invoice.
+    const costByDir = new Map<string, number>();
     for (const r of tsRows) {
-      if (!(r.hours > 0)) continue;
       const dir = directorForUsername(r.username, directors);
-      if (dir) hoursByDir.set(dir.id, (hoursByDir.get(dir.id) || 0) + r.hours);
+      if (dir) costByDir.set(dir.id, (costByDir.get(dir.id) || 0) + r.amount);
     }
-    const totalDirHours = [...hoursByDir.values()].reduce((s, h) => s + h, 0);
 
     // Bucket 3 — profit is split among the partners *assigned* to the task, regardless
     // of who logged time. A saved manual split (40/60 etc.) wins when it covers every
@@ -328,17 +328,17 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
     const periodProfit = periodBilling - manpower; // OP expense treated as 0 (rarely set)
     const flags = periodProfit < 0 ? ["over-budget", ...taskFlags(detail).filter((f) => f !== "over-budget")] : taskFlags(detail).filter((f) => f !== "over-budget");
 
-    const participantIds = new Set<string>([...hoursByDir.keys(), ...assignedDirs.map((d) => d.id)]);
+    const participantIds = new Set<string>([...costByDir.keys(), ...assignedDirs.map((d) => d.id)]);
     for (const id of participantIds) {
-      const billShare = totalDirHours > 0 ? periodBilling * ((hoursByDir.get(id) || 0) / totalDirHours) : 0;
+      const billShare = detail.billable ? (costByDir.get(id) || 0) : 0;
       const isAssigned = assignedDirs.some((d) => d.id === id);
       const profitShare = isAssigned && completedInPeriod ? periodProfit * (pctFor(id) / 100) : 0;
       const stats = statsFor(id);
-      if (hoursByDir.has(id)) { stats.billed += billShare; stats.billedTaskIds.add(taskId); }
+      if (billShare > 0) { stats.billed += billShare; stats.billedTaskIds.add(taskId); }
       // Track the invoice value behind each partner's profit share (same split %), so the
       // bucket margin is a value-weighted average of task margins, not a naive mean.
       if (isAssigned && completedInPeriod) { stats.profit += profitShare; stats.invoiceValue += periodBilling * (pctFor(id) / 100); stats.profitTaskIds.add(taskId); }
-      const drill: DirectorTaskDrill = { taskId, identity: detail.identity, name: detail.name, budget: Math.round(detail.budgetAmount), billedPeriod: Math.round(billShare), invoiceTotal: Math.round(periodBilling), profit: Math.round(profitShare), hours: parseTatHours(detail.tatHours), sharedWith: participantIds.size, dueDate: detail.dueDate, flags, profitPartners, completed: completedInPeriod, profitPct: completedInPeriod && periodBilling > 0 ? Math.round((periodProfit / periodBilling) * 100) : null };
+      const drill: DirectorTaskDrill = { taskId, identity: detail.identity, name: detail.name, budget: Math.round(detail.budgetAmount), billedPeriod: Math.round(billShare), invoiceTotal: Math.round(periodBilling), profit: Math.round(profitShare), hours: parseTatHours(detail.tatHours), sharedWith: participantIds.size, dueDate: detail.dueDate, flags, profitPartners, completed: completedInPeriod, profitPct: completedInPeriod && periodBilling > 0 ? Math.round((periodProfit / periodBilling) * 100) : null, billable: detail.billable };
       tasksByDirector.set(id, [...(tasksByDirector.get(id) || []), drill]);
     }
   }
