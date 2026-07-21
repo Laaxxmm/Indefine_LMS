@@ -21,26 +21,26 @@ const BUCKETS = [
   {
     icon: Receipt, emoji: "🧾", color: "#17b978", tint: "#e6f8f0",
     n: "Bucket 2", title: "Billing realized",
-    what: "The revenue actually invoiced this quarter on tasks you worked on.",
-    counts: "We take each invoice's subtotal and split it equally among the directors assigned to that task. Only invoices dated inside the quarter count.",
-    example: "A ₹40,000 invoice on a task with 2 directors → ₹20,000 each in Bucket 2.",
-    source: "Turia · Invoices + task team",
+    what: "The money invoiced on client tasks, credited to you by the time you put in.",
+    counts: "A task's invoiced amount is divided between partners in proportion to the hours each of you logged on it — your share follows your own time. Log no time on a task and you earn none of its billing, even if you're assigned. Billing counts whether or not the task is finished.",
+    example: "A task invoiced ₹40,000 where you logged 6h of the 8h total → ₹30,000 to you, ₹10,000 to whoever logged the other 2h.",
+    source: "Turia · Invoices + timesheets",
   },
   {
     icon: PiggyBank, emoji: "🐷", color: "#3aa0e8", tint: "#e8f4fd",
     n: "Bucket 3", title: "Profit — the finish line",
-    what: "Billing minus the manpower cost of doing the work. The firm's real bottom line.",
-    counts: "Manpower = each timesheet row's hours × rate on that task. Profit = your billing share − your cost share. This is the number that decides who leads the race.",
-    example: "₹40,000 billed − ₹12,000 of logged time = ₹28,000 profit, split across the task's directors.",
+    what: "Billing minus the manpower cost of the work. The firm's real bottom line, and what decides the race.",
+    counts: "Profit = the task's invoiced amount − the cost of all time logged on it. It's shared between the partners assigned to the task — an even split by default, or a custom split (e.g. 40/60) an admin can set per task — and it's only booked once the task is marked complete. Each figure also shows the margin % (profit ÷ invoice).",
+    example: "₹40,000 invoiced − ₹12,000 of logged time = ₹28,000 profit at a 70% margin, shared between the task's partners once it's done.",
     source: "Turia · Invoices − timesheets",
   },
   {
     icon: Wrench, emoji: "🔧", color: "#e8a13a", tint: "#fdf3e3",
     n: "Bucket 4", title: "Internal / firm-building",
     what: "Firm-building tasks tagged with the “Bucket 4” service category in Turia.",
-    counts: "Tracks how many are completed (a %) and the hours spent versus the board-approved target. Go over the target and the hours turn red.",
-    example: "6 of 8 Bucket-4 tasks done → 75%. Logged 50h against a 40h target → shown in red (over budget).",
-    source: "Turia · “Bucket 4” category",
+    counts: "On a shared task you're measured on your OWN hours — not the whole team's — against the planned hours allocated to you for it (an admin sets each partner's allocation). Go over your own allocation and your hours turn red. The completion % counts the Bucket-4 tasks finished this quarter.",
+    example: "You're allocated 20h on the Vision Tool and have logged 24h → shown in red (over your plan), even though the whole team has logged far more.",
+    source: "Turia · “Bucket 4” category + timesheets",
   },
 ] as const;
 
@@ -128,7 +128,7 @@ export default async function NeoHowItWorksPage() {
             <RefreshCw className="w-4 h-4 text-brand-600" />
             <h2 className="font-display font-extrabold text-[15px]">Where the numbers come from</h2>
           </div>
-          <p className="text-[13px] text-ink-mute leading-relaxed">Everything is pulled straight from <b className="text-ink-soft">Turia</b> — leads, invoices, timesheets and task categories. A small browser extension keeps your logged-in Turia session flowing to Neo Centra, and the figures <b className="text-ink-soft">refresh automatically every 5 minutes</b>. Nothing is typed in by hand, so the leaderboard is always live.</p>
+          <p className="text-[13px] text-ink-mute leading-relaxed">The figures are pulled straight from <b className="text-ink-soft">Turia</b> — leads, invoices, timesheets and task categories — never typed in by hand. A small browser extension keeps your logged-in Turia session flowing to Neo Centra, and everything <b className="text-ink-soft">refreshes every 5 minutes</b>. The only things an admin sets are the per-task <b className="text-ink-soft">profit splits</b> (Bucket 3) and <b className="text-ink-soft">planned-hours allocations</b> (Bucket 4); those take effect on the next sync.</p>
         </div>
       </div>
 
