@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { currentQuarter } from "./period";
 import { profitPercents } from "./split";
 import {
-  fetchOrgUsers, fetchTuriaTaskList, fetchTaskTimesheets, fetchLeads, fetchTaskDetail, fetchAllInvoices,
+  fetchOrgUsers, fetchTuriaTaskList, fetchTaskTimesheets, fetchLeads, fetchTaskDetail, fetchAllInvoices, parseBillable,
   type TuriaLead, type TuriaTaskDetail,
 } from "./turia";
 
@@ -343,6 +343,33 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
       // bucket margin is a value-weighted average of task margins, not a naive mean.
       if (isAssigned && completedInPeriod) { stats.profit += profitShare; stats.invoiceValue += periodBilling * (pctFor(id) / 100); stats.profitTaskIds.add(taskId); }
       const drill: DirectorTaskDrill = { taskId, identity: detail.identity, name: detail.name, budget: Math.round(detail.budgetAmount), billedPeriod: Math.round(billShare), invoiceTotal: Math.round(periodBilling), profit: Math.round(profitShare), hours: parseTatHours(detail.tatHours), sharedWith: participantIds.size, dueDate: detail.dueDate, flags, profitPartners, completed: completedInPeriod, profitPct: completedInPeriod && periodBilling > 0 ? Math.round((periodProfit / periodBilling) * 100) : null, billable: detail.billable };
+      tasksByDirector.set(id, [...(tasksByDirector.get(id) || []), drill]);
+    }
+  }
+
+  // Bucket 2, second pass — BILLABLE tasks that aren't invoiced yet. Billable work is
+  // billable whether or not an invoice exists, so each partner's in-quarter timesheet
+  // cost on it still counts toward billing. No invoice = no revenue = no profit, so we
+  // don't touch Bucket 3 here (its price/profit is unknown until invoiced + completed).
+  // ponytail: fetches timesheets for every billable un-invoiced task; if the firm's task
+  // list grows huge, pre-filter to tasks a director is on before fetching.
+  const invoicedIds = new Set(billingByTask.keys());
+  const uninvoicedBillable = tasks.filter((t) => !invoicedIds.has(String(t.id)) && parseBillable(t, false));
+  const uninvoicedRows = await mapPool(uninvoicedBillable, 6, async (t) => ({ t, rows: await fetchTaskTimesheets(String(t.id), { fromMs, toMs }) }));
+  for (const { t, rows } of uninvoicedRows) {
+    const costByDir = new Map<string, number>();
+    const hoursByDir = new Map<string, number>();
+    for (const r of rows) {
+      const dir = directorForUsername(r.username, directors);
+      if (dir) { costByDir.set(dir.id, (costByDir.get(dir.id) || 0) + r.amount); hoursByDir.set(dir.id, (hoursByDir.get(dir.id) || 0) + r.hours); }
+    }
+    const identity = String(t.uniqueidentity ?? "").replace("#", "");
+    const name = String(t.taskname ?? t.clientname ?? "Untitled");
+    for (const [id, cost] of costByDir) {
+      if (!(cost > 0)) continue;
+      const stats = statsFor(id);
+      stats.billed += cost; stats.billedHours += hoursByDir.get(id) || 0; stats.billedTaskIds.add(String(t.id));
+      const drill: DirectorTaskDrill = { taskId: String(t.id), identity, name, budget: 0, billedPeriod: Math.round(cost), invoiceTotal: 0, profit: 0, hours: null, sharedWith: costByDir.size, dueDate: null, flags: [], completed: false, profitPct: null, billable: true };
       tasksByDirector.set(id, [...(tasksByDirector.get(id) || []), drill]);
     }
   }
