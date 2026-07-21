@@ -16,6 +16,10 @@ function orgId(): string {
 
 export class TuriaSessionError extends Error {}
 
+// Turia returns 404 when a paginated list is asked for a page beyond the last — treat that
+// as "no more pages", not a hard failure that aborts the whole sync.
+const isOverPage404 = (e: unknown) => e instanceof Error && /\b404\b/.test(e.message);
+
 export async function getTuriaCookie(): Promise<string | null> {
   const row = await prisma.neoTuriaSession.findUnique({ where: { id: 1 } });
   return row?.cookie ?? null;
@@ -177,7 +181,9 @@ export async function fetchLeads(perPage = 100, maxPages = 20): Promise<TuriaLea
   // silently vanished from Bucket 1. Page through and dedupe by id.
   const byId = new Map<string, Record<string, unknown>>();
   for (let page = 1; page <= maxPages; page++) {
-    const json = await turiaPost("leads", "list", { page, perPage });
+    let json: Record<string, unknown>;
+    try { json = await turiaPost("leads", "list", { page, perPage }); }
+    catch (e) { if (page > 1 && isOverPage404(e)) break; throw e; }
     const rows = (json.leads || []) as Array<Record<string, unknown>>;
     if (rows.length === 0) break;
     const before = byId.size;
@@ -253,7 +259,9 @@ export async function fetchAllInvoices(perPage = 200, maxPages = 20): Promise<Tu
   const out: TuriaInvoice[] = [];
   let page = 1;
   while (page <= maxPages) {
-    const json = await turiaPost("invoice", "list", { page, perPage });
+    let json: Record<string, unknown>;
+    try { json = await turiaPost("invoice", "list", { page, perPage }); }
+    catch (e) { if (page > 1 && isOverPage404(e)) break; throw e; } // Turia 404s a page past the last
     const wrap = (json.taskinvoices as Record<string, unknown>) || {};
     const rows = ((wrap.taskinvoices as Array<Record<string, unknown>>) || []);
     if (rows.length === 0) break;
@@ -271,6 +279,7 @@ export async function fetchAllInvoices(perPage = 200, maxPages = 20): Promise<Tu
         createdOn: numi(i.createdon),
       });
     }
+    if (rows.length < perPage) break; // short page = last page (Turia gives no reliable total)
     const total = parseInt(String(wrap.total ?? "0"), 10);
     if (total > 0 && out.length >= total) break;
     page++;
