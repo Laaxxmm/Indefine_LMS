@@ -405,28 +405,7 @@ function FragmentRow({ d, it, totalConverted, canDrill, isAdmin, partners, open,
 function Drill({ d, it, isAdmin, partners }: { d: DirectorIncentive; it: InternalTaskResult[]; isAdmin: boolean; partners: Array<{ directorId: string; name: string }> }) {
   return (
     <div className="flex flex-col gap-3">
-      {d.tasks.length > 0 && (
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] font-extrabold tracking-[0.12em] text-emerald-600 uppercase">Buckets 2 &amp; 3 · Client tasks</span>
-            <div className="flex items-center gap-2.5 text-[9px] font-bold uppercase tracking-wide text-ink-faint">
-              <div className="flex items-center">
-                <span className="w-[72px] text-right">Invoice</span>
-                <span className="w-px h-3 bg-border mx-2.5" />
-                <span className="w-[72px] text-right">Billed</span>
-                <span className="w-px h-3 bg-border mx-2.5" />
-                <span className="w-[72px] text-right">Profit</span>
-                <span className="w-px h-3 bg-border mx-2.5" />
-                <span className="w-[42px] text-right">Margin</span>
-              </div>
-              <span className="w-[60px]" />
-            </div>
-          </div>
-          <div className="flex flex-col">
-            {d.tasks.map((t) => <ClientTaskRow key={t.taskId} t={t} isAdmin={isAdmin} />)}
-          </div>
-        </div>
-      )}
+      {d.tasks.length > 0 && <ClientTaskList tasks={d.tasks} isAdmin={isAdmin} />}
       {it.length > 0 && (
         <div>
           <div className="text-[10px] font-extrabold tracking-[0.12em] text-amber-600 uppercase mb-1.5">Bucket 4 · Internal tasks</div>
@@ -447,6 +426,77 @@ function Drill({ d, it, isAdmin, partners }: { d: DirectorIncentive; it: Interna
 
 // One Buckets 2 & 3 client-task row: id · name · billed | profit, plus an opt-in
 // "Split" toggle (only for tasks shared by 2+ partners) that reveals the editor.
+// Buckets 2 & 3 client-task list with sort + filter. Both are local view state — they
+// re-order/hide the already-loaded rows, no re-sync.
+const TASK_SORTS = {
+  profit: { label: "Profit", get: (t: DirectorTaskDrill) => t.profit },
+  invoice: { label: "Invoice", get: (t: DirectorTaskDrill) => t.invoiceTotal },
+  billed: { label: "Billed", get: (t: DirectorTaskDrill) => t.billedPeriod },
+  margin: { label: "Margin", get: (t: DirectorTaskDrill) => t.profitPct ?? -Infinity },
+  name: { label: "Name", get: (t: DirectorTaskDrill) => (cleanName(t.name) || t.identity || "").toLowerCase() },
+} as const;
+type SortKey = keyof typeof TASK_SORTS;
+const TASK_FILTERS: Record<string, (t: DirectorTaskDrill) => boolean> = {
+  all: () => true,
+  completed: (t) => t.completed === true,
+  wip: (t) => t.completed === false,
+  profitable: (t) => t.profit > 0,
+  loss: (t) => t.profit < 0,
+  overdue: (t) => t.flags.includes("overdue"),
+  overbudget: (t) => t.flags.includes("over-budget"),
+};
+const FILTER_LABELS: Record<string, string> = { all: "All tasks", completed: "Completed", wip: "In progress", profitable: "In profit", loss: "Loss-making", overdue: "Overdue", overbudget: "Over-budget" };
+
+function ClientTaskList({ tasks, isAdmin }: { tasks: DirectorTaskDrill[]; isAdmin: boolean }) {
+  const [sort, setSort] = useState<SortKey>("profit");
+  const [asc, setAsc] = useState(false);
+  const [filter, setFilter] = useState<string>("all");
+  const selCls = "text-[10.5px] font-semibold rounded-md border border-border bg-card px-1.5 py-1 text-ink-soft focus:outline-none focus:border-brand-400";
+
+  const rows = useMemo(() => {
+    const get = TASK_SORTS[sort].get;
+    return tasks.filter(TASK_FILTERS[filter]).sort((a, b) => {
+      const av = get(a), bv = get(b);
+      const cmp = typeof av === "string" ? av.localeCompare(bv as string) : (av as number) - (bv as number);
+      return asc ? cmp : -cmp;
+    });
+  }, [tasks, sort, asc, filter]);
+
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[10px] font-extrabold tracking-[0.12em] text-emerald-600 uppercase">Buckets 2 &amp; 3 · Client tasks</span>
+          <select value={filter} onChange={(e) => setFilter(e.target.value)} className={selCls} title="Filter tasks">
+            {Object.keys(TASK_FILTERS).map((k) => <option key={k} value={k}>{FILTER_LABELS[k]}</option>)}
+          </select>
+          <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} className={selCls} title="Sort by">
+            {(Object.keys(TASK_SORTS) as SortKey[]).map((k) => <option key={k} value={k}>Sort: {TASK_SORTS[k].label}</option>)}
+          </select>
+          <button onClick={() => setAsc((v) => !v)} className="text-[10.5px] font-bold rounded-md border border-border bg-card px-1.5 py-1 text-ink-soft hover:border-brand-400 transition" title={asc ? "Ascending" : "Descending"}>{asc ? "↑" : "↓"}</button>
+          <span className="text-[10px] text-ink-faint">{rows.length}/{tasks.length}</span>
+        </div>
+        <div className="flex items-center gap-2.5 text-[9px] font-bold uppercase tracking-wide text-ink-faint">
+          <div className="flex items-center">
+            <span className="w-[72px] text-right">Invoice</span>
+            <span className="w-px h-3 bg-border mx-2.5" />
+            <span className="w-[72px] text-right">Billed</span>
+            <span className="w-px h-3 bg-border mx-2.5" />
+            <span className="w-[72px] text-right">Profit</span>
+            <span className="w-px h-3 bg-border mx-2.5" />
+            <span className="w-[42px] text-right">Margin</span>
+          </div>
+          <span className="w-[60px]" />
+        </div>
+      </div>
+      <div className="flex flex-col">
+        {rows.length === 0 ? <div className="text-[11.5px] text-ink-faint py-2">No tasks match this filter.</div>
+          : rows.map((t) => <ClientTaskRow key={t.taskId} t={t} isAdmin={isAdmin} />)}
+      </div>
+    </div>
+  );
+}
+
 function ClientTaskRow({ t, isAdmin }: { t: DirectorTaskDrill; isAdmin: boolean }) {
   const [open, setOpen] = useState(false);
   const splittable = !!t.profitPartners && t.profitPartners.length > 1;
