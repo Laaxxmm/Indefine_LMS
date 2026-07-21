@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { canUseNeoCentra } from "@/lib/neo-centra/access";
 import { analyzeLeadsForPeriod } from "@/lib/neo-centra/incentive";
+import { rawLeads } from "@/lib/neo-centra/turia";
 import { currentQuarter } from "@/lib/neo-centra/period";
 
 // Diagnostics: per-lead Bucket 1 decision for a quarter, so we can see exactly which lead
@@ -17,7 +18,13 @@ export async function GET(req: Request) {
   const fromMs = from > 0 ? from : q.fromMs;
   const toMs = to > from ? to : q.toMs;
   try {
-    return NextResponse.json(await analyzeLeadsForPeriod(fromMs, toMs));
+    const analysis = await analyzeLeadsForPeriod(fromMs, toMs);
+    // Raw date-ish fields of a converted lead created in a prior quarter (like Moneytree)
+    // pinpoints which key/format carries the conversion date if the gate is still dropping it.
+    const raw = await rawLeads().catch(() => [] as Array<Record<string, unknown>>);
+    const sample = raw.find((l) => /convert/i.test(String(l.stagename ?? ""))) ?? raw[0] ?? null;
+    const sampleDateFields = sample ? Object.fromEntries(Object.entries(sample).filter(([k]) => /date|on$|created|updated|modified|convert|won|stage/i.test(k))) : null;
+    return NextResponse.json({ ...analysis, sampleConvertedLeadKeys: sample ? Object.keys(sample) : [], sampleDateFields });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 502 });
   }

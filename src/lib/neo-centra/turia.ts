@@ -87,6 +87,12 @@ const numf = (v: unknown) => {
   return Number.isFinite(n) ? n : 0;
 };
 const numi = (v: unknown) => (v ? parseInt(String(v), 10) : null);
+// Robust date read: try candidate keys, parse ms/seconds/ISO/dd-mm-yyyy. Used for leads
+// (list APIs name the update date inconsistently and sometimes format it as a string).
+function pickDate(t: Record<string, unknown>, keys: string[]): number | null {
+  for (const k of keys) { const ms = toEpochMs(t[k]); if (ms != null) return ms; }
+  return null;
+}
 // First parseable value across candidate keys. Turia's completion-date key varies, and a
 // silent null there zeroes every completion-gated metric — so try the known spellings.
 const picki = (t: Record<string, unknown>, keys: string[]) => { for (const k of keys) { const n = numi(t[k]); if (n) return n; } return null; };
@@ -179,9 +185,17 @@ export async function fetchLeads(): Promise<TuriaLead[]> {
     dealType: (l.dealtypename as string) || null,
     dealValue: numf(l.dealvalue),
     owners: Array.isArray(l.users) ? (l.users as Array<Record<string, unknown>>).map((u) => ({ id: String(u.id), name: String(u.name) })) : [],
-    createdOn: numi(l.createdon),
-    updatedOn: numi(l.updatedon),
+    createdOn: pickDate(l, ["createdon", "createddate", "created_at", "createddatetime"]),
+    // Prefer an explicit conversion/won date if Turia exposes one; else the last-updated
+    // date (for a won lead that IS the conversion). Names vary, so try several.
+    updatedOn: pickDate(l, ["convertedon", "converteddate", "wonon", "wondate", "stagechangedon", "updatedon", "updateddate", "modifiedon", "modifieddate", "lastupdated", "lastupdatedon", "updated_at"]),
   }));
+}
+
+// Raw leads — diagnostics only, so we can see the exact date field names/formats.
+export async function rawLeads(): Promise<Array<Record<string, unknown>>> {
+  const json = await turiaPost("leads", "list", {});
+  return (json.leads || []) as Array<Record<string, unknown>>;
 }
 
 export async function fetchTaskDetail(taskId: string): Promise<TuriaTaskDetail | null> {
