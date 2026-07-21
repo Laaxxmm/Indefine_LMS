@@ -147,9 +147,22 @@ export async function fetchTuriaTaskList(page = 1, perPage = 50): Promise<Array<
   return ((json.tasks as Record<string, unknown>)?.tasks as Array<Record<string, unknown>>) || [];
 }
 
-export async function fetchLeads(): Promise<TuriaLead[]> {
-  const json = await turiaPost("leads", "list", {});
-  const leads = (json.leads || []) as Array<Record<string, unknown>>;
+export async function fetchLeads(perPage = 100, maxPages = 20): Promise<TuriaLead[]> {
+  // leads/list is PAGINATED — the bare {} call only returned the first ~10, so a lead
+  // behind the newest 10 (e.g. a Q1 lead converted this quarter) vanished from Bucket 1.
+  // Page through, dedupe by id, and stop on a short page (Turia 404s a page past the last).
+  const byId = new Map<string, Record<string, unknown>>();
+  for (let page = 1; page <= maxPages; page++) {
+    let json: Record<string, unknown>;
+    try { json = await turiaPost("leads", "list", { page, perPage }); }
+    catch (e) { if (page > 1 && e instanceof Error && /\b404\b/.test(e.message)) break; throw e; }
+    const rows = (json.leads || []) as Array<Record<string, unknown>>;
+    if (rows.length === 0) break;
+    const before = byId.size;
+    for (const l of rows) byId.set(String(l.id ?? ""), l);
+    if (byId.size === before || rows.length < perPage) break;
+  }
+  const leads = [...byId.values()];
   return leads.map((l) => ({
     id: String(l.id ?? ""),
     identity: String(l.uniqueidentity ?? ""),
