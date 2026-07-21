@@ -91,6 +91,19 @@ const numi = (v: unknown) => (v ? parseInt(String(v), 10) : null);
 // silent null there zeroes every completion-gated metric — so try the known spellings.
 const picki = (t: Record<string, unknown>, keys: string[]) => { for (const k of keys) { const n = numi(t[k]); if (n) return n; } return null; };
 const COMPLETED_KEYS = ["completedon", "completeddate", "completed_on", "completiondate", "closedon", "closeddate", "finishedon", "completedat"];
+// Turia's billable flag is inconsistent — boolean, 0/1, or a "Billable"/"Non Billable"
+// status string under varying keys. Read defensively and DEFAULT TO BILLABLE when unknown,
+// so a misread can never silently zero Bucket 2. Only a clear "non"/0/false marks it off.
+function parseBillable(t: Record<string, unknown>): boolean {
+  const name = String(t.billingstatusname ?? t.billingstatus ?? t.billing_status ?? "").toLowerCase().trim();
+  if (name.includes("non")) return false;
+  if (name === "billable") return true;
+  const b = t.billable ?? t.isbillable ?? t.is_billable;
+  if (typeof b === "boolean") return b;
+  if (typeof b === "number") return b !== 0;
+  if (typeof b === "string") { const s = b.toLowerCase().trim(); if (s.includes("non") || s === "0" || s === "false" || s === "no") return false; if (s === "billable" || s === "1" || s === "true" || s === "yes") return true; }
+  return true;
+}
 // First present-and-nonzero value across candidate keys (Turia field names vary).
 const pick = (t: Record<string, unknown>, keys: string[]) => {
   for (const k of keys) { const n = numf(t[k]); if (n) return n; }
@@ -177,7 +190,7 @@ export async function fetchTaskDetail(taskId: string): Promise<TuriaTaskDetail |
       profit: pick(t, ["profit", "profitamount", "netprofit", "taskprofit", "margin"]),
       cost: manpower + opExpense,
       tatHours: (t.tathours as string) || null,
-      billable: !!t.billable,
+      billable: parseBillable(t),
       users: Array.isArray(t.userlists) ? (t.userlists as Array<Record<string, unknown>>).map((u) => ({ id: String(u.id), name: String(u.name ?? ""), type: parseInt(String(u.type ?? "0"), 10), role: String(u.role ?? "") })) : [],
     };
   } catch {

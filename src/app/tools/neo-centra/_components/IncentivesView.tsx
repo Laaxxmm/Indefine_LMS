@@ -438,6 +438,8 @@ const TASK_SORTS = {
 type SortKey = keyof typeof TASK_SORTS;
 const TASK_FILTERS: Record<string, (t: DirectorTaskDrill) => boolean> = {
   all: () => true,
+  billable: (t) => t.billable !== false,
+  nonbillable: (t) => t.billable === false,
   completed: (t) => t.completed === true,
   wip: (t) => t.completed === false,
   profitable: (t) => t.profit > 0,
@@ -445,7 +447,7 @@ const TASK_FILTERS: Record<string, (t: DirectorTaskDrill) => boolean> = {
   overdue: (t) => t.flags.includes("overdue"),
   overbudget: (t) => t.flags.includes("over-budget"),
 };
-const FILTER_LABELS: Record<string, string> = { all: "All tasks", completed: "Completed", wip: "In progress", profitable: "In profit", loss: "Loss-making", overdue: "Overdue", overbudget: "Over-budget" };
+const FILTER_LABELS: Record<string, string> = { all: "All tasks", billable: "Billable", nonbillable: "Non-billable", completed: "Completed", wip: "In progress", profitable: "In profit", loss: "Loss-making", overdue: "Overdue", overbudget: "Over-budget" };
 
 function ClientTaskList({ tasks, isAdmin }: { tasks: DirectorTaskDrill[]; isAdmin: boolean }) {
   const [sort, setSort] = useState<SortKey>("profit");
@@ -510,6 +512,7 @@ function ClientTaskRow({ t, isAdmin }: { t: DirectorTaskDrill; isAdmin: boolean 
           {/* Profit is only booked on completed tasks, so flag the ones still running —
               otherwise a task showing billing with ₹0 profit looks like a bug. */}
           {t.completed === false && <span className="text-[8.5px] font-bold uppercase px-1 py-0.5 rounded bg-muted text-ink-faint" title="Profit is booked when the task is completed">wip</span>}
+          {t.billable === false && <span className="text-[8.5px] font-bold uppercase px-1 py-0.5 rounded bg-muted text-ink-faint" title="Non-billable — earns no Bucket 2 billing">non-bill</span>}
           {t.flags.map((f) => <span key={f} className="text-[8.5px] font-bold uppercase px-1 py-0.5 rounded bg-rose-50 text-rose-600">{f}</span>)}
         </div>
         <div className="shrink-0 flex items-center tabular-nums">
