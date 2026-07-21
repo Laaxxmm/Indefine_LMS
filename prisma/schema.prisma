@@ -810,24 +810,6 @@ model OfficeToolRun {
   @@index([createdAt])
 }
 
-// Neo Centra (directors' cockpit) — compliance deadline completion tracking.
-// Deadlines themselves are computed from FY rules (src/lib/neo-centra/compliance.ts);
-// this table stores only whether each has been marked done, and by whom.
-model NeoComplianceStatus {
-  id              String    @id @default(cuid())
-  fyStartYear     Int
-  key             String    // "<type>:<period>", stable across regenerations
-  status          String    @default("PENDING") // PENDING | DONE
-  completedAt     DateTime?
-  completedById   String?
-  completedByName String?
-  note            String?
-  updatedAt       DateTime  @updatedAt
-
-  @@unique([fyStartYear, key])
-  @@index([fyStartYear])
-}
-
 // -------------------- Neo Centra · Incentives (Turia-fed) --------------------
 
 // The firm's single Turia session cookie (captured from a logged-in Turia tab and

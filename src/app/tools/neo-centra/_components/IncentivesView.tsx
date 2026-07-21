@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, RefreshCw, AlertTriangle, Link2, ChevronDown, ChevronRight, TrendingUp, Receipt, PiggyBank, Wrench, CheckCircle2, Flag, CalendarClock, Flame, Trophy } from "lucide-react";
+import { Loader2, RefreshCw, AlertTriangle, Link2, ChevronDown, ChevronRight, TrendingUp, Receipt, PiggyBank, Wrench, CheckCircle2, Flag, Flame, Trophy } from "lucide-react";
 import type { DirectorIncentive, IncentiveSummary, InternalTaskResult, DirectorTaskDrill } from "@/lib/neo-centra/incentive";
 
 type Snapshot = (IncentiveSummary & { viewer?: { directorId: string | null; isAdmin: boolean } }) | null;
-type Compliance = { overdue: number; dueThisMonth: number; filed: number; total: number; overdueList: { label: string; dueDate: string }[]; dueSoonList: { label: string; dueDate: string }[] };
 
 const inr = (n: number) => {
   const a = Math.abs(n);
@@ -13,7 +12,6 @@ const inr = (n: number) => {
   return s;
 };
 const fmtWhen = (iso: string | null) => (iso ? new Date(iso).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "");
-const fmtDate = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-IN", { day: "2-digit", month: "short", timeZone: "UTC" });
 // Turia sends the literal string "NULL" for unnamed tasks; treat that (and blanks) as no name.
 const cleanName = (s: string) => { const n = (s || "").trim(); return n && n.toUpperCase() !== "NULL" ? n : ""; };
 
@@ -55,7 +53,7 @@ const BUCKETS = [
 ] as const;
 
 export function IncentivesView({
-  period, snapshot: initial, turia, isAdmin, viewerId, viewerName, compliance,
+  period, snapshot: initial, turia, isAdmin, viewerId, viewerName,
 }: {
   period: { fromMs: number; toMs: number; label: string };
   snapshot: Snapshot;
@@ -63,7 +61,6 @@ export function IncentivesView({
   isAdmin: boolean;
   viewerId: string;
   viewerName: string;
-  compliance: Compliance;
 }) {
   const [snapshot, setSnapshot] = useState<Snapshot>(initial);
   const [syncing, setSyncing] = useState(false);
@@ -246,7 +243,7 @@ export function IncentivesView({
           })()}
 
           {/* Action needed */}
-          <ActionStrip me={me} compliance={compliance} />
+          <ActionStrip me={me} />
 
           {/* Other partners table */}
           {others.length > 0 && (
@@ -318,38 +315,12 @@ function EmptyState({ title, sub }: { title: string; sub: string }) {
   );
 }
 
-function ActionStrip({ me, compliance }: { me: DirectorIncentive | null; compliance: Compliance }) {
-  const [dlOpen, setDlOpen] = useState(false);
+function ActionStrip({ me }: { me: DirectorIncentive | null }) {
   const lossMaking = (me?.tasks ?? []).filter((t) => t.flags.includes("over-budget"));
   const fastAction = (me?.tasks ?? []).filter((t) => t.flags.includes("overdue") || t.flags.includes("long-pending"));
 
   return (
-    <div className="grid md:grid-cols-3 gap-3 mb-4">
-      {/* Deadlines — list hidden until the card is clicked */}
-      <div className="rounded-2xl bg-card border border-border shadow-lift p-4">
-        <button onClick={() => setDlOpen((v) => !v)} className="w-full text-left">
-          <div className="flex items-center justify-between mb-2.5">
-            <span className="flex items-center gap-1.5 text-[10.5px] font-extrabold tracking-[0.12em] text-ink-faint uppercase"><CalendarClock className="w-3.5 h-3.5" /> Deadlines</span>
-            {dlOpen ? <ChevronDown className="w-4 h-4 text-ink-faint" /> : <ChevronRight className="w-4 h-4 text-ink-faint" />}
-          </div>
-          <div className="flex items-center gap-4">
-            <Mini value={compliance.overdue} label="Overdue" tone={compliance.overdue > 0 ? "text-rose-600" : "text-ink"} />
-            <Mini value={compliance.dueThisMonth} label="This month" tone="text-amber-600" />
-            <Mini value={`${compliance.filed}/${compliance.total}`} label="Filed" tone="text-emerald-600" />
-          </div>
-        </button>
-        {dlOpen && (
-          <ul className="flex flex-col gap-1 mt-3 border-t border-border pt-3">
-            {compliance.overdueList.map((d) => (
-              <li key={d.label} className="flex items-center gap-1.5 text-[11.5px]"><AlertTriangle className="w-3 h-3 text-rose-500 shrink-0" /><span className="text-rose-700 truncate flex-1">{d.label}</span><span className="text-ink-faint">{fmtDate(d.dueDate)}</span></li>
-            ))}
-            {compliance.dueSoonList.slice(0, compliance.overdueList.length ? 3 : 6).map((d) => (
-              <li key={d.label} className="flex items-center gap-1.5 text-[11.5px]"><CalendarClock className="w-3 h-3 text-ink-faint shrink-0" /><span className="text-ink-soft truncate flex-1">{d.label}</span><span className="text-ink-faint">{fmtDate(d.dueDate)}</span></li>
-            ))}
-          </ul>
-        )}
-      </div>
-
+    <div className="grid md:grid-cols-2 gap-3 mb-4">
       {/* Loss-making — show task name, not id */}
       <div className="rounded-2xl bg-card border border-border shadow-lift p-4">
         <div className="flex items-center gap-1.5 text-[10.5px] font-extrabold tracking-[0.12em] text-ink-faint uppercase mb-2.5"><PiggyBank className="w-3.5 h-3.5" /> Loss-making tasks</div>
@@ -375,10 +346,6 @@ function ActionStrip({ me, compliance }: { me: DirectorIncentive | null; complia
       </div>
     </div>
   );
-}
-
-function Mini({ value, label, tone }: { value: number | string; label: string; tone: string }) {
-  return <div><div className={`text-lg font-display font-extrabold leading-none ${tone}`}>{value}</div><div className="text-[9.5px] font-semibold uppercase tracking-wide text-ink-mute mt-0.5">{label}</div></div>;
 }
 
 function FragmentRow({ d, it, totalConverted, canDrill, isAdmin, partners, open, onToggle }: { d: DirectorIncentive; it: InternalTaskResult[]; totalConverted: number; canDrill: boolean; isAdmin: boolean; partners: Array<{ directorId: string; name: string }>; open: boolean; onToggle: () => void }) {
