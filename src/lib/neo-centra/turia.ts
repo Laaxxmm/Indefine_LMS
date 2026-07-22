@@ -222,7 +222,11 @@ export async function fetchAllInvoices(perPage = 200, maxPages = 20): Promise<Tu
   const out: TuriaInvoice[] = [];
   let page = 1;
   while (page <= maxPages) {
-    const json = await turiaPost("invoice", "list", { page, perPage });
+    let json: Record<string, unknown>;
+    // Turia 404s a page PAST the last one (rather than returning an empty list), which
+    // otherwise aborts the whole sync. Treat an over-page 404 as end-of-data.
+    try { json = await turiaPost("invoice", "list", { page, perPage }); }
+    catch (e) { if (page > 1 && e instanceof Error && /\b404\b/.test(e.message)) break; throw e; }
     const wrap = (json.taskinvoices as Record<string, unknown>) || {};
     const rows = ((wrap.taskinvoices as Array<Record<string, unknown>>) || []);
     if (rows.length === 0) break;
@@ -240,6 +244,7 @@ export async function fetchAllInvoices(perPage = 200, maxPages = 20): Promise<Tu
         createdOn: numi(i.createdon),
       });
     }
+    if (rows.length < perPage) break; // short page = last page (Turia gives no reliable total)
     const total = parseInt(String(wrap.total ?? "0"), 10);
     if (total > 0 && out.length >= total) break;
     page++;
