@@ -311,9 +311,12 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
     // (Turia's timesheet `amount` = their hours × their rate), counted ONLY on billable
     // tasks. We no longer split the invoice; each partner is credited exactly what their
     // own time cost, so 4h of work shows as 4h of value, not the whole invoice.
+    // Billing counts only IN-QUARTER rows (by work date). Manpower for profit below uses
+    // the task's full history (Turia's Revenue − Manpower formula).
     const costByDir = new Map<string, number>();
     const hoursByDir = new Map<string, number>(); // partner's own hours, shown beside billing
     for (const r of tsRows) {
+      if (r.date == null || r.date < fromMs || r.date > toMs) continue;
       const dir = directorForUsername(r.username, directors);
       if (dir) {
         costByDir.set(dir.id, (costByDir.get(dir.id) || 0) + r.amount);
@@ -384,12 +387,13 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
 // total-hours view can be traced to the exact tasks the buckets drop (non-Bucket-4 tasks
 // with no invoice, or username mismatches). All-time hours, same as the engine reads.
 export async function analyzeDirectorHours(directorName: string) {
+  const q = currentQuarter(Date.now());
   const directors = (await getDirectors()).filter((d) => d.isActive);
   const target = directors.find((d) => normalize(d.name).includes(normalize(directorName)) || normalize(directorName).includes(normalize(d.name))) ?? null;
   const [tasks, invoices] = await Promise.all([fetchTuriaTaskList(1, 2000), fetchAllInvoices()]);
   const invoiced = new Set(invoices.map((i) => i.taskId).filter(Boolean) as string[]);
   const rows = await mapPool(tasks, 8, async (t) => {
-    const tsRows = await fetchTaskTimesheets(String(t.id));
+    const tsRows = await fetchTaskTimesheets(String(t.id), { fromMs: q.fromMs, toMs: q.toMs });
     let hours = 0;
     for (const r of tsRows) { const dir = directorForUsername(r.username, directors); if (dir && target && dir.id === target.id) hours += r.hours; }
     if (!(hours > 0)) return null;

@@ -87,6 +87,25 @@ const numf = (v: unknown) => {
   return Number.isFinite(n) ? n : 0;
 };
 const numi = (v: unknown) => (v ? parseInt(String(v), 10) : null);
+// Date value → epoch ms. Handles ms/seconds epochs, ISO, dd-mm-yyyy.
+function toEpochMs(v: unknown): number | null {
+  if (v == null || v === "") return null;
+  if (typeof v === "number") return v > 1e12 ? v : v > 1e9 ? v * 1000 : null;
+  const s = String(v).trim();
+  if (/^\d+$/.test(s)) { const n = parseInt(s, 10); return n > 1e12 ? n : n > 1e9 ? n * 1000 : null; }
+  const dmy = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+  if (dmy) return Date.UTC(+dmy[3], +dmy[2] - 1, +dmy[1]);
+  const t = Date.parse(s);
+  return Number.isFinite(t) ? t : null;
+}
+// Work date of a timesheet row — explicit date fields first, createdon last.
+function tsWorkDate(r: Record<string, unknown>): number | null {
+  for (const k of ["date", "timesheetdate", "workdate", "logdate", "entrydate", "startdate", "startdatetime", "starttime", "createdon"]) {
+    const ms = toEpochMs(r[k]);
+    if (ms != null) return ms;
+  }
+  return null;
+}
 // First parseable value across candidate keys. Turia's completion-date key varies, and a
 // silent null there zeroes every completion-gated metric — so try the known spellings.
 const picki = (t: Record<string, unknown>, keys: string[]) => { for (const k of keys) { const n = numi(t[k]); if (n) return n; } return null; };
@@ -255,13 +274,12 @@ export async function fetchAllInvoices(perPage = 200, maxPages = 20): Promise<Tu
 // Per-task timesheet rows. `amount` = hours × hourlyrate = the manpower cost Turia
 // uses for its Revenue − Manpower − OP profit. The bulk timesheet feed doesn't carry
 // a task id, so cost/hours must be pulled per task.
-export async function fetchTaskTimesheets(taskId: string, range?: { fromMs: number; toMs: number }): Promise<Array<{ username: string; hours: number; amount: number }>> {
-  // Passing fromDate/toDate scopes the rows to a period server-side — Bucket 4 wants only
-  // hours logged *in the quarter*. Omit it for Buckets 2 & 3, whose profit subtracts the
-  // task's full manpower regardless of when it was logged.
-  const data: Record<string, unknown> = { taskId, taskid: taskId };
-  if (range) { data.fromDate = range.fromMs; data.toDate = range.toMs; }
-  const json = await turiaPost("timesheet", "list", data);
+export async function fetchTaskTimesheets(taskId: string, range?: { fromMs: number; toMs: number }): Promise<Array<{ username: string; hours: number; amount: number; date: number | null }>> {
+  const json = await turiaPost("timesheet", "list", { taskId, taskid: taskId });
   const rows = (json.tasktimesheets as Array<Record<string, unknown>>) || [];
-  return rows.map((r) => ({ username: String(r.username ?? ""), hours: numf(r.totalhours), amount: numf(r.amount) }));
+  const mapped = rows.map((r) => ({ username: String(r.username ?? ""), hours: numf(r.totalhours), amount: numf(r.amount), date: tsWorkDate(r) }));
+  // Turia IGNORES fromDate/toDate on the per-task call, so scope CLIENT-side by each row's
+  // work date. Undateable rows dropped when a range is asked (don't count year-old time).
+  if (range) return mapped.filter((r) => r.date != null && r.date >= range.fromMs && r.date <= range.toMs);
+  return mapped;
 }
