@@ -289,10 +289,9 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
   for (const { taskId, detail, tsRows } of perTask) {
     if (!detail) continue;
     const bill = billingByTask.get(taskId)!;
-    // Quarter = task completion date; fall back to invoice date only when Turia has no
-    // completion date (task not finished). Outside the quarter → skip entirely.
-    const effectiveDate = detail.completedOn ?? bill.invoiceDate;
-    if (effectiveDate == null || effectiveDate < fromMs || effectiveDate > toMs) continue;
+    // No task-level date skip: B2 billing follows each timesheet ROW's date (filtered
+    // below), so a task worked this quarter but invoiced/completed in another still
+    // credits its in-quarter hours. B3 profit stays gated by completedInPeriod.
     const periodBilling = bill.subtotal;
 
     // Profit (B3 only) is booked ONLY once the task is actually finished, in the quarter
