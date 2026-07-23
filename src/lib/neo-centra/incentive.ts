@@ -380,6 +380,33 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
   return { periodStart: new Date(fromMs).toISOString(), periodEnd: new Date(toMs).toISOString(), generatedAt: new Date().toISOString(), directors: directorResults, internalTasks };
 }
 
+// Diagnostics: per-task hour attribution for one director, so a mismatch with Turia's
+// total-hours view can be traced to the exact tasks the buckets drop (non-Bucket-4 tasks
+// with no invoice, or username mismatches). All-time hours, same as the engine reads.
+export async function analyzeDirectorHours(directorName: string) {
+  const directors = (await getDirectors()).filter((d) => d.isActive);
+  const target = directors.find((d) => normalize(d.name).includes(normalize(directorName)) || normalize(directorName).includes(normalize(d.name))) ?? null;
+  const [tasks, invoices] = await Promise.all([fetchTuriaTaskList(1, 2000), fetchAllInvoices()]);
+  const invoiced = new Set(invoices.map((i) => i.taskId).filter(Boolean) as string[]);
+  const rows = await mapPool(tasks, 8, async (t) => {
+    const tsRows = await fetchTaskTimesheets(String(t.id));
+    let hours = 0;
+    for (const r of tsRows) { const dir = directorForUsername(r.username, directors); if (dir && target && dir.id === target.id) hours += r.hours; }
+    if (!(hours > 0)) return null;
+    const b4 = isInternalTask(t);
+    const inv = invoiced.has(String(t.id));
+    return { identity: String(t.uniqueidentity ?? "").replace("#", ""), name: String(t.taskname ?? ""), hours: round1(hours), bucket4: b4, invoiced: inv, bucket: b4 ? "B4" : inv ? "B2 (if billable)" : "EXCLUDED — no invoice" };
+  });
+  const list = (rows.filter(Boolean) as Array<{ identity: string; name: string; hours: number; bucket4: boolean; invoiced: boolean; bucket: string }>).sort((a, b) => b.hours - a.hours);
+  const sum = (f: (r: typeof list[number]) => boolean) => round1(list.filter(f).reduce((s, r) => s + r.hours, 0));
+  return {
+    director: target?.name ?? directorName,
+    totalHours: sum(() => true),
+    byBucket: { bucket4: sum((r) => r.bucket4), bucket2Invoiced: sum((r) => !r.bucket4 && r.invoiced), excludedNoInvoice: sum((r) => !r.bucket4 && !r.invoiced) },
+    tasks: list,
+  };
+}
+
 // ── Snapshots ────────────────────────────────────────────────────────────────
 export async function saveSnapshot(fromMs: number, toMs: number): Promise<IncentiveSummary> {
   const summary = await computeIncentiveSummary(fromMs, toMs);
