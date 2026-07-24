@@ -288,6 +288,7 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
   });
   for (const { taskId, detail, tsRows } of perTask) {
     if (!detail) continue;
+    if (detail.department.toLowerCase() === "roc") continue; // ROC is a separate dept — no B2/B3 credit
     const bill = billingByTask.get(taskId)!;
     // No task-level date skip: B2 billing follows each timesheet ROW's date (filtered
     // below), so a task worked this quarter but invoiced/completed in another still

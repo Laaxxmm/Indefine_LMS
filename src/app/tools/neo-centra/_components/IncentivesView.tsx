@@ -70,7 +70,12 @@ export function IncentivesView({
   const [cookie, setCookie] = useState("");
   const [savingCookie, setSavingCookie] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [quote] = useState(() => QUOTES[Math.floor(Math.random() * QUOTES.length)]);
+  // Randomize + format dates only AFTER mount. Doing it during render makes SSR output
+  // differ from the client (random pick, locale/timezone), triggering React hydration
+  // error #418. Deterministic first paint, then swap in on the client.
+  const [quote, setQuote] = useState(QUOTES[0]);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); setQuote(QUOTES[Math.floor(Math.random() * QUOTES.length)]); }, []);
 
   const birdFor = useMemo(() => {
     const m = new Map<string, string>();
@@ -137,7 +142,7 @@ export function IncentivesView({
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2 text-[13px]">
             <Link2 className={`w-4 h-4 ${connected ? "text-emerald-600" : "text-ink-faint"}`} />
-            {connected ? <span className="text-ink-soft font-semibold">Turia connected{turia.updatedByName ? ` · ${turia.updatedByName}` : ""}{turia.updatedAt ? ` · ${fmtWhen(turia.updatedAt)}` : ""}</span> : <span className="text-ink-mute">Turia not connected — paste a session cookie.</span>}
+            {connected ? <span className="text-ink-soft font-semibold">Turia connected{turia.updatedByName ? ` · ${turia.updatedByName}` : ""}{mounted && turia.updatedAt ? ` · ${fmtWhen(turia.updatedAt)}` : ""}</span> : <span className="text-ink-mute">Turia not connected — paste a session cookie.</span>}
           </div>
           <div className="flex items-center gap-2">
             <button onClick={() => setCookieOpen((v) => !v)} className="text-[12px] font-bold text-brand-600 hover:text-brand-700">{cookieOpen ? "Cancel" : connected ? "Refresh cookie" : "Connect Turia"}</button>

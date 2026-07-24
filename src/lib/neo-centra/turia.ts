@@ -73,7 +73,7 @@ export interface TuriaTaskDetail {
   createdOn: number | null; completedOn: number | null; dueDate: number | null;
   budgetAmount: number; invoiceAmount: number; opAmount: number; profit: number;
   cost: number; // manpower + OP expense (Turia UI's cost side); used to derive profit
-  tatHours: string | null; billable: boolean; users: TuriaTaskUser[];
+  tatHours: string | null; billable: boolean; department: string; users: TuriaTaskUser[];
 }
 export interface TuriaInvoice {
   id: string; uniqueNo: string; taskId: string | null; taskUniqueId: string | null;
@@ -223,6 +223,7 @@ export async function fetchTaskDetail(taskId: string): Promise<TuriaTaskDetail |
       cost: manpower + opExpense,
       tatHours: (t.tathours as string) || null,
       billable: parseBillable(t),
+      department: String(t.departmentname ?? t.department ?? t.deptname ?? "").trim(),
       users: Array.isArray(t.userlists) ? (t.userlists as Array<Record<string, unknown>>).map((u) => ({ id: String(u.id), name: String(u.name ?? ""), type: parseInt(String(u.type ?? "0"), 10), role: String(u.role ?? "") })) : [],
     };
   } catch {
