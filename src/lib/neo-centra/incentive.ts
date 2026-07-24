@@ -326,6 +326,11 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
       }
     }
 
+    // Quarter relevance: no in-quarter director hours AND not completed this quarter →
+    // the task has nothing to show this quarter, skip it (keeps the drill quarter-only
+    // without re-anchoring on invoice date).
+    if (costByDir.size === 0 && !completedInPeriod) continue;
+
     // Bucket 3 — profit is split among the partners *assigned* to the task, regardless
     // of who logged time. A saved manual split (40/60 etc.) wins when it covers every
     // assigned partner; otherwise the profit is divided equally (the default).
