@@ -288,7 +288,9 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
   });
   for (const { taskId, detail, tsRows } of perTask) {
     if (!detail) continue;
-    if (detail.department.toLowerCase() === "roc") continue; // ROC is a separate dept — no B2/B3 credit
+    // ROC = separate dept. Timesheet time/cost STILL counts for Bucket 2 billing, but the
+    // task earns NO Bucket 3 profit for anyone (even a reviewer).
+    const isROC = detail.department.toLowerCase() === "roc";
     const bill = billingByTask.get(taskId)!;
     // No task-level date skip: B2 billing follows each timesheet ROW's date (filtered
     // below), so a task worked this quarter but invoiced/completed in another still
@@ -324,6 +326,11 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
       }
     }
 
+    // Quarter relevance: no in-quarter director hours AND not completed this quarter →
+    // the task has nothing to show this quarter, skip it (keeps the drill quarter-only
+    // without re-anchoring on invoice date).
+    if (costByDir.size === 0 && !completedInPeriod) continue;
+
     // Bucket 3 — profit is split among the partners *assigned* to the task, regardless
     // of who logged time. A saved manual split (40/60 etc.) wins when it covers every
     // assigned partner; otherwise the profit is divided equally (the default).
@@ -341,12 +348,12 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
     for (const id of participantIds) {
       const billShare = detail.billable ? (costByDir.get(id) || 0) : 0;
       const isAssigned = assignedDirs.some((d) => d.id === id);
-      const profitShare = isAssigned && completedInPeriod ? periodProfit * (pctFor(id) / 100) : 0;
+      const profitShare = isAssigned && completedInPeriod && !isROC ? periodProfit * (pctFor(id) / 100) : 0;
       const stats = statsFor(id);
       if (billShare > 0) { stats.billed += billShare; stats.billedHours += hoursByDir.get(id) || 0; stats.billedTaskIds.add(taskId); }
       // Track the invoice value behind each partner's profit share (same split %), so the
       // bucket margin is a value-weighted average of task margins, not a naive mean.
-      if (isAssigned && completedInPeriod) { stats.profit += profitShare; stats.invoiceValue += periodBilling * (pctFor(id) / 100); stats.profitTaskIds.add(taskId); }
+      if (isAssigned && completedInPeriod && !isROC) { stats.profit += profitShare; stats.invoiceValue += periodBilling * (pctFor(id) / 100); stats.profitTaskIds.add(taskId); }
       const drill: DirectorTaskDrill = { taskId, identity: detail.identity, name: detail.name, budget: Math.round(detail.budgetAmount), billedPeriod: Math.round(billShare), invoiceTotal: Math.round(periodBilling), profit: Math.round(profitShare), hours: parseTatHours(detail.tatHours), sharedWith: participantIds.size, dueDate: detail.dueDate, flags, profitPartners, completed: completedInPeriod, profitPct: completedInPeriod && periodBilling > 0 ? Math.round((periodProfit / periodBilling) * 100) : null, billable: detail.billable };
       tasksByDirector.set(id, [...(tasksByDirector.get(id) || []), drill]);
     }
