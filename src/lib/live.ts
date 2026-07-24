@@ -521,11 +521,11 @@ export async function captureAttendance(sessionId: string): Promise<void> {
 }
 
 /**
- * Give live-session attendees credit for the recording: attending the live
- * training IS doing it, so each attendee is marked as having completed the
- * recording video and (if a quiz exists) passed its quiz. Restores points lost
- * when a recording was re-ingested, and means attendees don't have to re-watch.
- * Idempotent — skips anyone already completed / already passed.
+ * Give live-session attendees credit for the RECORDING (not the quiz): attending
+ * the live training counts as watching, so each attendee is marked as having
+ * completed the recording video — no re-watch nag. The quiz is deliberately NOT
+ * auto-passed: these sessions are HARD by design, so employees take the quiz
+ * themselves (video-complete unlocks it). Idempotent.
  */
 export async function creditLiveAttendees(sessionId: string): Promise<void> {
   const s = await prisma.liveSession.findUnique({
@@ -539,7 +539,7 @@ export async function creditLiveAttendees(sessionId: string): Promise<void> {
     select: {
       id: true,
       durationSeconds: true,
-      quiz: { select: { id: true, passPercent: true, questions: { select: { points: true } } } },
+      quiz: { select: { id: true } },
     },
   });
   if (!video) return;
@@ -569,33 +569,26 @@ export async function creditLiveAttendees(sessionId: string): Promise<void> {
         update: { percent: 100, completed: true, completedAt: now },
       })
       .catch(() => {});
+  }
 
-    if (video.quiz && video.quiz.questions.length > 0) {
-      const passed = await prisma.quizAttempt.findFirst({
-        where: { userId: a.userId, quizId: video.quiz.id, passed: true },
-        select: { id: true },
-      });
-      if (!passed) {
-        // Record a PASS at the quiz's pass mark — not a fabricated 100% (which
-        // would inflate best-quiz points and trip the "Perfectionist" badge for
-        // a quiz nobody answered). Attending earns the pass, not a perfect score.
-        const maxScore = video.quiz.questions.reduce((sum, q) => sum + q.points, 0);
-        const pct = video.quiz.passPercent;
-        await prisma.quizAttempt
-          .create({
-            data: {
-              userId: a.userId,
-              quizId: video.quiz.id,
-              score: Math.round((maxScore * pct) / 100),
-              maxScore,
-              percent: pct,
-              passed: true,
-              startedAt: now,
-              submittedAt: now,
-            },
-          })
-          .catch(() => {});
-      }
+  // Clean up the fabricated "auto-pass" attempts an earlier version created: a
+  // passed attempt with no stored answers whose start == submit instant (a real
+  // sitting always has time elapse and an answer map). Scoped to this quiz.
+  if (video.quiz) {
+    const rows = await prisma.quizAttempt.findMany({
+      where: { quizId: video.quiz.id, passed: true },
+      select: { id: true, answers: true, startedAt: true, submittedAt: true },
+    });
+    const fakeIds = rows
+      .filter(
+        (q) =>
+          q.answers == null &&
+          q.submittedAt != null &&
+          q.startedAt.getTime() === q.submittedAt.getTime()
+      )
+      .map((q) => q.id);
+    if (fakeIds.length > 0) {
+      await prisma.quizAttempt.deleteMany({ where: { id: { in: fakeIds } } }).catch(() => {});
     }
   }
 }
@@ -635,7 +628,10 @@ export async function runIngestSweep(): Promise<{
       where: { id: s.recordedVideoId! },
       select: { title: true },
     });
-    if (!v || v.title !== s.title) {
+    // Compare loosely — ignore a stray ".mp4" or punctuation drift so a
+    // cosmetic title difference never triggers a reset (which wipes progress).
+    // Only a genuinely different recording (another session's file) resets.
+    if (!v || normaliseTitle(stripExt(v.title)) !== normaliseTitle(stripExt(s.title))) {
       await prisma.liveSession
         .update({
           where: { id: s.id },
@@ -1029,6 +1025,11 @@ export async function repullRecording(sessionId: string): Promise<IngestResult> 
   }
 
   return ingestRecording(sessionId);
+}
+
+/** Drop a trailing file extension (".mp4", ".mov") before title comparison. */
+function stripExt(n: string): string {
+  return n.replace(/\.[a-z0-9]{2,4}$/i, "");
 }
 
 /** Loose key for comparing a meeting title against a recording file name. */

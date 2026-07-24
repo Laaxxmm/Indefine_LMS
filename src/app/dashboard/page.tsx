@@ -158,6 +158,15 @@ export default async function Dashboard() {
 
   const tier = TIER_META[trajectory.tier];
 
+  // What an assignment is actually worth. A VIDEO always earns the base video
+  // points (mirrors kra.ts videoPoints = 10/video) on completion, on TOP of any
+  // bonus in `points` — which is 0 for auto-assigned live recordings. Showing
+  // just `points` made those videos read as "+0 pt" when they really earn 10
+  // (+ quiz). MODULE/QUIZ carry their bonus alone.
+  const VIDEO_BASE_POINTS = 10;
+  const assignmentWorth = (a: { kind: string; points: number }) =>
+    a.kind === "VIDEO" ? a.points + VIDEO_BASE_POINTS : a.points;
+
   const wizardUser = await prisma.user.findUnique({
     where: { id: userId },
     select: { wizardSubmittedAt: true },
@@ -694,7 +703,7 @@ export default async function Dashboard() {
                   <div className="text-[10.5px] uppercase tracking-[0.1em] text-ink-faint font-extrabold">My assignments</div>
                   <div className="font-bold mt-0.5">{myAssignments.filter((a) => a.status === "PENDING").length} pending</div>
                   <div className="text-sm text-ink-mute font-semibold mt-0.5">
-                    {myAssignments.reduce((s, a) => s + (a.status === "COMPLETED" ? a.points : 0), 0)} / {myAssignments.reduce((s, a) => s + a.points, 0)} pts earned
+                    {myAssignments.reduce((s, a) => s + (a.status === "COMPLETED" ? assignmentWorth(a) : 0), 0)} / {myAssignments.reduce((s, a) => s + assignmentWorth(a), 0)} pts earned
                   </div>
                 </div>
                 <ArrowRight className="w-5 h-5 text-ink-faint" />
@@ -745,7 +754,7 @@ export default async function Dashboard() {
                         <span className={`text-[10px] uppercase tracking-wide font-extrabold px-2 py-0.5 rounded-full ${a.status === "COMPLETED" ? "bg-emerald-50 text-emerald-700" : overdue ? "bg-rose-50 text-rose-700" : "bg-muted text-ink-mute"}`}>
                           {a.status === "COMPLETED" ? "Done" : overdue ? "Overdue" : "Pending"}
                         </span>
-                        <span className="text-xs text-amber-600 font-bold">+{a.points} pt</span>
+                        <span className="text-xs text-amber-600 font-bold">+{assignmentWorth(a)} pt{a.kind === "VIDEO" ? " + quiz" : ""}</span>
                       </div>
                       <p className="font-semibold truncate">{a.title}</p>
                       {a.dueAt && a.status === "PENDING" && <p className="text-xs text-ink-mute mt-0.5">Due {a.dueAt.toLocaleDateString()}</p>}

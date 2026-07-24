@@ -78,6 +78,19 @@ export async function syncOneDriveVideos(opts: { fallbackUserId?: string } = {})
   const items = await listVideosRecursive(driveId, root, token, rootName);
   const course = await ensureCourse();
 
+  // Videos that back a live session carry a curated title (set at ingest, e.g.
+  // "ITR Training Session-01"). Never overwrite those with the raw file name
+  // ("...01.mp4") — the drift makes the live-session self-heal think the session
+  // points at the wrong recording and reset it, wiping learners' progress.
+  const liveVideoIds = new Set(
+    (
+      await prisma.liveSession.findMany({
+        where: { recordedVideoId: { not: null } },
+        select: { recordedVideoId: true },
+      })
+    ).map((r) => r.recordedVideoId!)
+  );
+
   // Group videos by their immediate parent folder name (= Module). Items found
   // in the root sync folder fall under the fallback module. The folder ONE level
   // above the module (when the module is nested, e.g. L&D/Accounting/Isha Misty
@@ -115,7 +128,7 @@ export async function syncOneDriveVideos(opts: { fallbackUserId?: string } = {})
         await prisma.video.update({
           where: { id: existing.id },
           data: {
-            title: item.name,
+            title: liveVideoIds.has(existing.id) ? existing.title : item.name,
             moduleId: mod.id,
             durationSeconds: durationSec ?? existing.durationSeconds,
           },
