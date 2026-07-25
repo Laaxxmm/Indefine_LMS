@@ -18,7 +18,7 @@ const fields: FieldDef[] = [
   { key: "entityName", label: "Entity name", type: "text", required: true },
   { key: "entityRegdOffice", label: "Entity — registered office address", type: "textarea", required: true },
   { key: "authorityName", label: "Name of the authority (tender)", type: "text", required: true },
-  { key: "tenderClause", label: "Tender clause reference (net-worth method)", type: "text", required: true },
+  { key: "tenderClause", label: "Tender clause reference", type: "text", required: true },
   { key: "tenderDocDate", label: "Tender document date", type: "date", required: true },
   { key: "contractReference", label: "Contract reference (enter N/A if none)", type: "text", required: true },
   { key: "engagementLetterDate", label: "Engagement letter/agreement date", type: "date", required: true },
