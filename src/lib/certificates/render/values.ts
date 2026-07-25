@@ -156,6 +156,7 @@ export function resolveValues(template: CertificateTemplate, rawPayload: Record<
   const blocks: Record<string, { enabled: boolean; inline: Record<string, string> }> = {};
 
   for (const f of template.fields) {
+    if (f.type === "computed") continue; // resolver-derived (year-phrase below), never prompted
     if (f.type === "table") {
       tables[f.key] = resolveTable(f, payload[f.key], errors);
       continue;
@@ -177,6 +178,17 @@ export function resolveValues(template: CertificateTemplate, rawPayload: Record<
     } else if (f.required) {
       errors.push({ key: f.key, message: "required" });
     }
+  }
+
+  // Computed FY-list phrase — up to five years (year1 required, year2–5 optional). Fills
+  // the "March 31, Y1, March 31, Y2 and March 31, YN" recurrences. `tight` drops the space
+  // after the FIRST comma (the source's para-9/enclosure phrasing "March 31,20X1").
+  const ys = ["year1", "year2", "year3", "year4", "year5"].map((k) => String(payload[k] ?? "").trim()).filter((y) => /^\d{4}$/.test(y));
+  if (ys.length) {
+    const parts = ys.map((y) => `March 31, ${y}`);
+    const phrase = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+    inline.yearsPhrase = phrase;
+    inline.yearsPhraseTight = phrase.replace("March 31, ", "March 31,");
   }
 
   if (errors.length) throw new CertificateValidationError(errors);
