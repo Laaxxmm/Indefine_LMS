@@ -13,7 +13,7 @@ type Payload = Record<string, unknown>;
 
 // Fields the user actually edits: not derived (deriveFrom), and not auto-conditional blocks.
 function visibleFields(t: CertificateTemplate): FieldDef[] {
-  return t.fields.filter((f) => !f.deriveFrom && !(f.type === "optionalBlock" && f.enabledWhen));
+  return t.fields.filter((f) => !f.deriveFrom && f.type !== "computed" && !(f.type === "optionalBlock" && f.enabledWhen));
 }
 
 function fieldByKey(t: CertificateTemplate): Map<string, FieldDef> {
@@ -28,7 +28,7 @@ function fieldByKey(t: CertificateTemplate): Map<string, FieldDef> {
 function initialPayload(t: CertificateTemplate): Payload {
   const p: Payload = {};
   for (const f of t.fields) {
-    if (f.deriveFrom) continue;
+    if (f.deriveFrom || f.type === "computed") continue;
     if (f.type === "table" && f.table) {
       const nCols = f.table.columns.length;
       if (f.table.dynamicRows) p[f.key] = [Array(nCols).fill("")];

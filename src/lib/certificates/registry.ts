@@ -1,4 +1,4 @@
-import type { CertificateTemplate } from "./types";
+import type { CertificateTemplate, FieldDef } from "./types";
 import { formatI } from "./templates/format-i";
 import { formatII } from "./templates/format-ii";
 import { formatIII } from "./templates/format-iii";
@@ -13,9 +13,21 @@ import { formatXI } from "./templates/format-xi";
 import { formatXII } from "./templates/format-xii";
 import { drafts } from "./templates/drafts";
 
+// Entity identifiers required on EVERY certificate. Added centrally (not per-template) so
+// the ask "PAN + GSTIN mandatory in all certificates" stays one edit. These are FIELDS
+// only — never locked text — so they don't touch hashTemplate (locked-text hash) and are
+// rendered outside the ICAI segments (see toDocx / preview). Format vi already collects
+// the assessee's PAN in its wording; the extra entity PAN there is harmless.
+const ENTITY_IDS: FieldDef[] = [
+  { key: "entityPAN", label: "Entity PAN", type: "text", required: true },
+  { key: "entityGSTIN", label: "Entity GSTIN", type: "text", required: true },
+];
+const withEntityIds = (t: CertificateTemplate): CertificateTemplate =>
+  t.fields.some((f) => f.key === "entityPAN") ? t : { ...t, fields: [...t.fields, ...ENTITY_IDS] };
+
 // The 12 ICAI formats. A template is offered to users only when enabled() — verifier
 // passing + human sign-off. Drafts are hidden from the picker in production (§3.2).
-export const registry: CertificateTemplate[] = [formatI, formatII, formatIII, formatIV, formatV, formatVI, formatVII, formatVIII, formatIX, formatX, formatXI, formatXII, ...drafts];
+export const registry: CertificateTemplate[] = [formatI, formatII, formatIII, formatIV, formatV, formatVI, formatVII, formatVIII, formatIX, formatX, formatXI, formatXII, ...drafts].map(withEntityIds);
 
 export const byId = (id: string): CertificateTemplate | undefined => registry.find((t) => t.id === id);
 
