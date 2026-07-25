@@ -9,10 +9,27 @@ import type { ResolvedTable, ResolvedValues } from "./values";
 // content, which stays verbatim). Both renderers turn these into bold/centred type.
 export type LineStyle = "title" | "heading" | "subheading";
 export interface Line {
-  text: string;
+  text: string; // clean text (bold markers stripped) — used for classify + leak scan
   style?: LineStyle;
+  runs?: { text: string; bold: boolean }[]; // present when the line has mid-line bold spans
 }
 export type Block = { kind: "para"; lines: Line[] } | { kind: "table"; table: ResolvedTable };
+
+// Private control-char markers wrap a bold field value inside the text buffer; stripped
+// for the clean line text, turned into bold runs by flush(). Never appear in output.
+const B_ON = "";
+const B_OFF = "";
+const stripBold = (s: string) => s.replace(/[]/g, "");
+function toRuns(s: string): { text: string; bold: boolean }[] {
+  const runs: { text: string; bold: boolean }[] = [];
+  let bold = false, cur = "";
+  for (const ch of s) {
+    if (ch === B_ON || ch === B_OFF) { if (cur) runs.push({ text: cur, bold }); cur = ""; bold = ch === B_ON; }
+    else cur += ch;
+  }
+  if (cur) runs.push({ text: cur, bold });
+  return runs;
+}
 
 // Known ICAI section headings (exact match) + structural title/statement detection.
 const HEADINGS = new Set([
@@ -94,18 +111,28 @@ function indexFields(fields: FieldDef[]): Map<string, FieldDef> {
   return map;
 }
 
-// Turn a raw text buffer (with \n line breaks and \n\n paragraph breaks) into paragraph blocks.
+// Turn a raw text buffer (with \n line breaks and \n\n paragraph breaks) into paragraph
+// blocks. Bold markers survive into `raw`; each line keeps clean text + optional bold runs.
 function flush(buf: string, out: Block[]): void {
   if (buf === "") return;
   for (const para of buf.split(/\n\s*\n/)) {
     const raw = para.split("\n").map((l) => l.replace(/[ \t]+/g, " ").trim());
-    while (raw.length && raw[0] === "") raw.shift();
-    while (raw.length && raw[raw.length - 1] === "") raw.pop();
-    if (raw.length) out.push({ kind: "para", lines: raw.map((text) => ({ text, style: classifyLine(text) })) });
+    while (raw.length && stripBold(raw[0]) === "") raw.shift();
+    while (raw.length && stripBold(raw[raw.length - 1]) === "") raw.pop();
+    if (raw.length) {
+      out.push({
+        kind: "para",
+        lines: raw.map((rawLine) => {
+          const text = stripBold(rawLine);
+          const runs = toRuns(rawLine);
+          return { text, style: classifyLine(text), runs: runs.some((r) => r.bold) ? runs : undefined };
+        }),
+      });
+    }
   }
 }
 
-function walk(segments: Segment[], byKey: Map<string, FieldDef>, resolved: ResolvedValues, inlineFor: (key: string) => string | undefined, out: Block[]): void {
+function walk(segments: Segment[], byKey: Map<string, FieldDef>, resolved: ResolvedValues, inlineFor: (key: string) => string | undefined, boldSet: Set<string>, out: Block[]): void {
   let buf = "";
   for (const seg of segments) {
     if (seg.kind === "text") {
@@ -126,11 +153,11 @@ function walk(segments: Segment[], byKey: Map<string, FieldDef>, resolved: Resol
       const block = resolved.blocks[seg.key];
       // block sub-segments may reference the block's own sub-fields OR a top-level field
       // (e.g. the signer toggle sg_iwe inside the reliance sentence) — fall back to inline.
-      if (block?.enabled) walk(f.subSegments ?? [], byKey, resolved, (k) => block.inline[k] ?? resolved.inline[k], out);
+      if (block?.enabled) walk(f.subSegments ?? [], byKey, resolved, (k) => block.inline[k] ?? resolved.inline[k], boldSet, out);
     } else {
       const v = inlineFor(seg.key);
       if (v === undefined) throw new Error(`field "${seg.key}" not resolved`);
-      buf += v;
+      buf += boldSet.has(seg.key) ? `${B_ON}${v}${B_OFF}` : v;
     }
   }
   flush(buf, out);
@@ -138,8 +165,9 @@ function walk(segments: Segment[], byKey: Map<string, FieldDef>, resolved: Resol
 
 export function compose(template: CertificateTemplate, resolved: ResolvedValues): Block[] {
   const byKey = indexFields(template.fields);
+  const boldSet = new Set(template.boldFields ?? []);
   const out: Block[] = [];
-  walk(template.segments, byKey, resolved, (k) => resolved.inline[k], out);
+  walk(template.segments, byKey, resolved, (k) => resolved.inline[k], boldSet, out);
 
   // Guardrail: scan everything we are about to emit for residual placeholders —
   // paragraph lines AND table row/column labels AND cells (a "20XX" can hide in a label).

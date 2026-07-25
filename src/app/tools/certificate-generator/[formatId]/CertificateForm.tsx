@@ -297,7 +297,7 @@ function Preview({ blocks }: { blocks: Block[] }) {
               {b.lines.map((l, j) => (
                 <span key={j}>
                   {j > 0 && <br />}
-                  {l.style ? <strong>{l.text}</strong> : l.text}
+                  {l.style ? <strong>{l.text}</strong> : l.runs ? l.runs.map((r, k) => (r.bold ? <strong key={k}>{r.text}</strong> : <span key={k}>{r.text}</span>)) : l.text}
                 </span>
               ))}
             </p>

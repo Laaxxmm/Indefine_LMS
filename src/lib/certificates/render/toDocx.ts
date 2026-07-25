@@ -1,41 +1,54 @@
-import { AlignmentType, Document, Footer, PageNumber, Packer, Paragraph, Table, TableCell, TableRow, TextRun, WidthType } from "docx";
+import { AlignmentType, Document, Packer, Paragraph, Table, TableCell, TableRow, TextRun, WidthType } from "docx";
 import type { CertificateTemplate } from "../types";
 import { compose, isTotalRow } from "./compose";
 import { resolveValues } from "./values";
 
-// Same compose() walk as the HTML preview → Word paragraphs, runs, and tables, with the
-// composer's structural styles (title / heading / subheading) turned into bold/centred
-// type. Pure-JS (docx npm), Railway-safe. Throws (via compose's guard) on any residual
-// placeholder (§0.4). Leaves top space for the firm's letterhead + a page-number footer.
+// Same compose() walk as the HTML preview → Word paragraphs, runs, and tables. The
+// composer's structural styles (title / heading / subheading) become bold/centred type;
+// bold runs inside a line come through line.runs. Pure-JS (docx npm), Railway-safe.
+//
+// Page geometry leaves a top band for the firm's pre-printed letterhead and a bottom band
+// for its pre-printed footer strip (nothing rendered there — reserved print space).
 const FONT = "Times New Roman";
 const SIZE = 22; // half-points => 11pt
-const FAINT = "9AA0AE";
+const LINE = 276; // 1.15 line spacing
+
+// twips (1 inch = 1440). Top/bottom reserve the pre-printed letterhead + footer bands.
+const MARGIN = { top: 2350, bottom: 1750, left: 1200, right: 1200 };
+
+// A "1." / "2." top-level numbered clause, or an "i." / "ii." sub-clause — hanging indent.
+const isNumbered = (t: string) => /^\d+\.\s/.test(t);
+const isSubNumbered = (t: string) => /^[ivx]+\.\s/i.test(t.trim());
 
 export async function renderDocx(template: CertificateTemplate, rawPayload: Record<string, unknown>): Promise<Buffer> {
   const blocks = compose(template, resolveValues(template, rawPayload));
-  const children: (Paragraph | Table)[] = [
-    // letterhead space (§7)
-    new Paragraph({ children: [new TextRun({ text: "", font: FONT, size: SIZE })], spacing: { before: 1400 } }),
-  ];
+  const children: (Paragraph | Table)[] = [];
 
   for (const b of blocks) {
     if (b.kind === "para") {
       const centered = b.lines.some((l) => l.style === "subheading");
-      const emphasised = b.lines.some((l) => l.style === "title" || l.style === "heading");
+      const heading = b.lines.some((l) => l.style === "title" || l.style === "heading");
+      const firstText = b.lines[0]?.text ?? "";
+      const numbered = isNumbered(firstText);
+      const sub = isSubNumbered(firstText);
+      // Hanging indent so wrapped lines align under the text, not the number.
+      const indent = numbered ? { left: 420, hanging: 420 } : sub ? { left: 820, hanging: 400 } : undefined;
+
       children.push(
         new Paragraph({
-          alignment: centered ? AlignmentType.CENTER : AlignmentType.LEFT,
-          spacing: { before: centered || emphasised ? 220 : 0, after: 160 },
-          children: b.lines.map(
-            (line, i) =>
-              new TextRun({
-                text: line.text,
-                font: FONT,
-                size: line.style === "title" ? 26 : SIZE,
-                bold: !!line.style,
-                break: i > 0 ? 1 : undefined,
-              }),
-          ),
+          alignment: centered ? AlignmentType.CENTER : heading ? AlignmentType.LEFT : AlignmentType.JUSTIFIED,
+          spacing: { before: centered || heading ? 200 : 40, after: 140, line: LINE },
+          indent,
+          children: b.lines.flatMap((line, i) => {
+            const lineBold = !!line.style;
+            const size = line.style === "title" ? 26 : SIZE;
+            const brk = i > 0 ? 1 : undefined;
+            // Bold runs inside the line (entity name, authority, dates …) OR a plain line.
+            if (line.runs && line.runs.length) {
+              return line.runs.map((r, j) => new TextRun({ text: r.text, font: FONT, size, bold: lineBold || r.bold, break: j === 0 ? brk : undefined }));
+            }
+            return [new TextRun({ text: line.text, font: FONT, size, bold: lineBold, break: brk })];
+          }),
         }),
       );
     } else {
@@ -50,21 +63,9 @@ export async function renderDocx(template: CertificateTemplate, rawPayload: Reco
     }
   }
 
-  const footer = new Footer({
-    children: [
-      new Paragraph({
-        alignment: AlignmentType.CENTER,
-        children: [
-          new TextRun({ text: "Page ", font: FONT, size: 16, color: FAINT }),
-          new TextRun({ children: [PageNumber.CURRENT], font: FONT, size: 16, color: FAINT }),
-          new TextRun({ text: " of ", font: FONT, size: 16, color: FAINT }),
-          new TextRun({ children: [PageNumber.TOTAL_PAGES], font: FONT, size: 16, color: FAINT }),
-        ],
-      }),
-    ],
-  });
-
-  const doc = new Document({ sections: [{ footers: { default: footer }, children }] });
+  // No header/footer content — the top/bottom margins reserve space for the firm's
+  // pre-printed letterhead so the document prints cleanly onto it.
+  const doc = new Document({ sections: [{ properties: { page: { margin: MARGIN } }, children }] });
   return Packer.toBuffer(doc);
 }
 
