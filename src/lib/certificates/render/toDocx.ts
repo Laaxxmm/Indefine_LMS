@@ -21,8 +21,16 @@ const isNumbered = (t: string) => /^\d+\.\s/.test(t);
 const isSubNumbered = (t: string) => /^[ivx]+\.\s/i.test(t.trim());
 
 export async function renderDocx(template: CertificateTemplate, rawPayload: Record<string, unknown>): Promise<Buffer> {
-  const blocks = compose(template, resolveValues(template, rawPayload));
+  const resolved = resolveValues(template, rawPayload);
+  const blocks = compose(template, resolved);
   const children: (Paragraph | Table)[] = [];
+
+  // Entity identifiers (PAN / GSTIN) — collected on every cert, rendered outside the ICAI
+  // segments (never locked text) as a right-aligned reference line at the top.
+  const idBits = [resolved.inline.entityPAN && `PAN: ${resolved.inline.entityPAN}`, resolved.inline.entityGSTIN && `GSTIN: ${resolved.inline.entityGSTIN}`].filter(Boolean);
+  if (idBits.length) {
+    children.push(new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { after: 160 }, children: [new TextRun({ text: idBits.join("    "), font: FONT, size: SIZE })] }));
+  }
 
   for (const b of blocks) {
     if (b.kind === "para") {
