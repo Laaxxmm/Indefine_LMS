@@ -64,5 +64,6 @@ export interface CertificateTemplate {
   fields: FieldDef[];
   segments: Segment[]; // header + body + signature block, in order
   tables?: string[]; // field keys of type "table", rendered where referenced
+  boldFields?: string[]; // field keys whose value renders BOLD inline (entity/authority names, key dates)
   notes?: string[]; // transcription judgment calls flagged for the human reviewer (§4)
 }
