@@ -14,6 +14,7 @@ export type FieldType =
   | "boolToggle" // include/exclude a conditional clause (and/or swap wording)
   | "udin" // validated ^[0-9A-Z]{18}$, NEVER generated
   | "table" // fixed row labels + fixed columns, numeric cells
+  | "computed" // value derived by the resolver (not prompted), e.g. the FY-list phrase
   | "optionalBlock"; // a whole paragraph the user may switch on, with its own sub-fields
 
 export interface FieldDef {

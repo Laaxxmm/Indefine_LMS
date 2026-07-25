@@ -32,9 +32,13 @@ const fields: FieldDef[] = [
   { key: "engagementLetterDate", label: "Engagement letter/agreement date", type: "date", required: true },
   { key: "auditReportDates", label: "Audit report dates (all 3 years, 'respectively')", type: "text", required: true, help: "e.g. 10 May 2021, 12 May 2022 and 9 May 2023" },
   { key: "certificateDate", label: "Certificate date", type: "date", required: true },
-  { key: "year1", label: "FY-end year 1 (fills March 31, 20X1)", type: "year", required: true },
-  { key: "year2", label: "FY-end year 2 (fills March 31, 20X2)", type: "year", required: true },
-  { key: "year3", label: "FY-end year 3 (fills March 31, 20X3)", type: "year", required: true },
+  { key: "year1", label: "FY-end year 1 (earliest)", type: "year", required: true },
+  { key: "year2", label: "FY-end year 2 (optional)", type: "year" },
+  { key: "year3", label: "FY-end year 3 (optional)", type: "year" },
+  { key: "year4", label: "FY-end year 4 (optional)", type: "year" },
+  { key: "year5", label: "FY-end year 5 (optional)", type: "year" },
+  { key: "yearsPhrase", label: "", type: "computed" },
+  { key: "yearsPhraseTight", label: "", type: "computed" },
 
   { key: "signerType", label: "Signing as", type: "enumToggle", required: true, options: [
     { value: "firm", label: "Firm", fragment: "" },
@@ -88,10 +92,8 @@ const fields: FieldDef[] = [
 
 const f = (key: string): Segment => ({ kind: "field", key });
 const t = (text: string): Segment => ({ kind: "text", text });
-// "March 31, 20X1, March 31, 20X2 and March 31, 20X3" — firstSep is " " normally, "" in para 9 (source drops the space).
-const threeYears = (firstSep = " "): Segment[] => [
-  t(`March 31,${firstSep}`), f("year1"), t(", March 31, "), f("year2"), t(" and March 31, "), f("year3"),
-];
+// FY-list phrase is a computed value (year1 required, year2–5 optional) — see resolveValues.
+// yearsPhrase = "March 31, Y1, … and March 31, YN"; yearsPhraseTight drops the first space.
 
 const segments: Segment[] = [
   t("To\n"),
@@ -99,7 +101,7 @@ const segments: Segment[] = [
   t("\n"),
   f("appointingAuthorityAddress"),
   t("\n\nIndependent Practitioner's Certificate on the Statement of Annual Turnover and computation of Net worth for the Financial Years ended "),
-  ...threeYears(),
+  f("yearsPhrase"),
   t(" pursuant to a Tender requirement"),
 
   t("\n\n1. This Certificate is issued in accordance with the terms of "),
@@ -113,7 +115,7 @@ const segments: Segment[] = [
   t(` (hereinafter the "entity"), having its registered office at `),
   f("entityRegdOffice"),
   t(" to certify the Statement of Annual Turnover and computation of Net worth for the Financial Years ended "),
-  ...threeYears(),
+  f("yearsPhrase"),
   t(` (hereinafter referred to as the "Statement") , containing the details as required pursuant to compliance with the terms and conditions contained in `),
   f("tenderClause"),
   t(" of the tender document issued by "),
@@ -135,9 +137,9 @@ const segments: Segment[] = [
   t("\n\nPractitioner's Responsibility\n\n5. Pursuant to requirement of the Tender document, it is "),
   f("sg_myour"),
   t(" responsibility to provide a reasonable assurance whether:\ni. the amount in the Statement of Annual Turnover have been accurately extracted from the Audited Financial Statements of Financial Years ended "),
-  ...threeYears(),
+  f("yearsPhrase"),
   t("\nii. The amounts in the statement that form part of the Net worth computation have been accurately extracted from the Audited Financial Statements for the Financial Years ended "),
-  ...threeYears(),
+  f("yearsPhrase"),
   t(" and computation of Net worth is arithmetically correct and\niii. The computation of Net worth is in accordance with the method of computation set out in the "),
   f("tenderClause"),
   t(" of the Tender Document."),
@@ -182,9 +184,9 @@ const segments: Segment[] = [
   t(" "),
   f("sg_amare"),
   t(" of the opinion that:\ni. The amount in the Statement in respect of Annual Turnover have been accurately extracted from the Audited Financial Statements for the Financial Years ended "),
-  ...threeYears(""),
+  f("yearsPhraseTight"),
   t(".\nii. The amounts that form part of the Net Worth computation have been accurately extracted from the Audited Financial Statements as at "),
-  ...threeYears(""),
+  f("yearsPhraseTight"),
   t(", is mathematically accurate and in accordance with the method of computation set out in the "),
   f("tenderClause"),
   t(" of the Tender Document."),
@@ -218,11 +220,11 @@ const segments: Segment[] = [
 
   // Enclosure
   t("\n\nEnclosure: Statement of Annual Turnover and Computation of Net worth for the Financial Years ended "),
-  ...threeYears(),
+  f("yearsPhrase"),
 
   // Statement + table
   t("\n\nStatement of Annual Turnover and Computation of Net worth for the Financial Years ended "),
-  ...threeYears(),
+  f("yearsPhrase"),
   t("."),
   f("turnoverTable"),
   t("This Statement is initialed for identification purposes only and should be read along with Certificate dated "),
@@ -234,16 +236,17 @@ export const formatIX: CertificateTemplate = {
   id: "ix-turnover-networth-a",
   romanNo: "ix",
   title: "Independent Practitioner's Certificate on the Statement of Annual Turnover and Computation of Net worth pursuant to a Tender (audited FS available)",
-  version: "2025.10.0",
+  version: "2025.11.0",
   status: "enabled",
   sourcePdf: "src/lib/certificates/source/Certifications_guidebook_ICAI.pdf",
   sourcePages: [85, 89],
-  hash: "68832bf53ec5ce26b69f86e571bbdf6bda242bc8dc4504e597396da832b23dbb", // §6.5 — pinned after clean text pass
+  hash: "cec1501a9594aef482c932b5700831314aa30c7a05446c1cf867377ac2f495f9", // §6.5 — re-pinned: years now computed (1–5)
   verifiedBy: "Rajkumar Annamalai",
   verifiedAt: "2026-07-14",
   fields,
   segments,
   tables: ["turnoverTable"],
+  boldFields: ["entityName", "authorityName"],
   notes: [
     "Three distinct FY-end years (year1/year2/year3) fill March 31, 20X1/20X2/20X3; para 9 drops the space after the first comma ('March 31,20X1') — kept verbatim.",
     "Audit report dates is a free-text field (source: 'reports dated … [specify the dates] respectively' — plural).",

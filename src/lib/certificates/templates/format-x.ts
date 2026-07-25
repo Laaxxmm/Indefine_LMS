@@ -23,9 +23,13 @@ const fields: FieldDef[] = [
   { key: "contractReference", label: "Contract reference (enter N/A if none)", type: "text", required: true },
   { key: "engagementLetterDate", label: "Engagement letter/agreement date", type: "date", required: true },
   { key: "certificateDate", label: "Certificate date", type: "date", required: true },
-  { key: "year1", label: "FY-end year 1 (fills March 31, 20X1)", type: "year", required: true },
-  { key: "year2", label: "FY-end year 2 (fills March 31, 20X2)", type: "year", required: true },
-  { key: "year3", label: "FY-end year 3 (fills March 31, 20X3)", type: "year", required: true },
+  { key: "year1", label: "FY-end year 1 (earliest)", type: "year", required: true },
+  { key: "year2", label: "FY-end year 2 (optional)", type: "year" },
+  { key: "year3", label: "FY-end year 3 (optional)", type: "year" },
+  { key: "year4", label: "FY-end year 4 (optional)", type: "year" },
+  { key: "year5", label: "FY-end year 5 (optional)", type: "year" },
+  { key: "yearsPhrase", label: "", type: "computed" },
+  { key: "yearsPhraseTight", label: "", type: "computed" },
   { key: "examYear", label: "Examination reference year (para 5, fills 'March 31, 20XI')", type: "year", required: true, help: "source shows a typo '20XI' — enter the FY-end year of the examination" },
 
   { key: "signerType", label: "Signing as", type: "enumToggle", required: true, options: [
@@ -53,9 +57,7 @@ const fields: FieldDef[] = [
 
 const f = (key: string): Segment => ({ kind: "field", key });
 const t = (text: string): Segment => ({ kind: "text", text });
-const threeYears = (firstSep = " "): Segment[] => [
-  t(`March 31,${firstSep}`), f("year1"), t(", March 31, "), f("year2"), t(" and March 31, "), f("year3"),
-];
+// FY-list phrase is a computed value (year1 required, year2–5 optional) — see resolveValues.
 
 const segments: Segment[] = [
   t("To\n"),
@@ -63,7 +65,7 @@ const segments: Segment[] = [
   t("\n"),
   f("appointingAuthorityAddress"),
   t("\n\nIndependent Practitioner's Certificate on the Statement of Annual Turnover and computation of Net worth for the Financial Years ended "),
-  ...threeYears(),
+  f("yearsPhrase"),
   t(" pursuant to a Tender requirement"),
 
   t("\n\n1. This Certificate is issued in accordance with the terms of "),
@@ -77,7 +79,7 @@ const segments: Segment[] = [
   t(` (hereinafter the "entity"), having its registered office at `),
   f("entityRegdOffice"),
   t(" to certify the Statement of Annual Turnover and computation of Net worth for the Financial Years ended "),
-  ...threeYears(),
+  f("yearsPhrase"),
   t(` (hereinafter referred to as the "Statement") , containing the details as required pursuant to compliance with the terms and conditions contained in `),
   f("tenderClause"),
   t(" of the tender document issued by "),
@@ -103,9 +105,9 @@ const segments: Segment[] = [
   t(" examination of the particulars furnished with reference to the unaudited Financial Statements for the year ended March 31, "),
   f("examYear"),
   t(" of the entity whether:\ni. the amount in the Statement of Annual Turnover have been accurately extracted from the Unaudited Financial Statements of Financial Years ended "),
-  ...threeYears(),
+  f("yearsPhrase"),
   t("\nii. The amounts in the statement that form part of the Net worth computation have been accurately extracted from the Unaudited Financial Statements for the Financial Years ended "),
-  ...threeYears(),
+  f("yearsPhrase"),
   t(" and computation of Net worth is arithmetically correct and\niii. The computation of Net worth is in accordance with the method of computation set out in the "),
   f("tenderClause"),
   t(" of the Tender Document."),
@@ -135,9 +137,9 @@ const segments: Segment[] = [
   t(" attention that causes "),
   f("sg_meus"),
   t(" to believe that:\ni. The amount in the Statement in respect of Annual Turnover have not been accurately extracted from the Unaudited Financial Statements for the Financial Years ended "),
-  ...threeYears(""),
+  f("yearsPhraseTight"),
   t(".\nii. The amounts that form part of the Net Worth computation have not been accurately extracted from the Unaudited Financial Statements as at "),
-  ...threeYears(""),
+  f("yearsPhraseTight"),
   t(", is mathematically not accurate and not in accordance with the method of computation set out in the "),
   f("tenderClause"),
   t(" of the Tender Document."),
@@ -171,11 +173,11 @@ const segments: Segment[] = [
 
   // Enclosure
   t("\n\nEnclosure: Statement of Annual Turnover and Computation of Net worth for the Financial Years ended "),
-  ...threeYears(),
+  f("yearsPhrase"),
 
   // Statement + table
   t("\n\nStatement of Annual Turnover and Computation of Net worth for the Financial Years ended "),
-  ...threeYears(),
+  f("yearsPhrase"),
   t("."),
   f("turnoverTable"),
   t("This Statement is initialed for identification purposes only and should be read along with Certificate dated "),
@@ -187,16 +189,17 @@ export const formatX: CertificateTemplate = {
   id: "x-turnover-networth-b",
   romanNo: "x",
   title: "Independent Practitioner's Certificate on the Statement of Annual Turnover and Computation of Net worth pursuant to a Tender (audited FS not available)",
-  version: "2025.10.0",
+  version: "2025.11.0",
   status: "enabled",
   sourcePdf: "src/lib/certificates/source/Certifications_guidebook_ICAI.pdf",
   sourcePages: [90, 94],
-  hash: "249059e220568974a62752dba4cbe2592ac21a1be2c983f6340af8f0e992d645", // §6.5 — pinned after clean text pass
+  hash: "4ddaeed0c0e9da7059a4e05ef2ed16232e4659ab3179a0b916a666902796f56d", // §6.5 — re-pinned: years now computed (1–5)
   verifiedBy: "Rajkumar Annamalai",
   verifiedAt: "2026-07-14",
   fields,
   segments,
   tables: ["turnoverTable"],
+  boldFields: ["entityName", "authorityName"],
   notes: [
     "Unaudited limited-assurance twin of Format ix: no audit-party / isCompany / opinion; (i)–(vi) procedures list; negatively-phrased Conclusion ('have not been extracted... nothing has come to attention').",
     "Para 5 single-year reference 'March 31, 20XI' (source typo) → examYear field so the CA sets the examination FY-end explicitly.",
