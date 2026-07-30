@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { currentQuarter } from "./period";
 import { profitPercents } from "./split";
 import {
-  fetchOrgUsers, fetchTuriaTaskList, fetchTaskTimesheets, fetchLeads, fetchTaskDetail, fetchAllInvoices, fetchReviewersByTask,
+  fetchOrgUsers, fetchTuriaTaskList, fetchTaskTimesheets, fetchLeads, fetchTaskDetail, fetchAllInvoices, fetchTaskListMeta,
   type TuriaLead, type TuriaTaskDetail,
 } from "./turia";
 
@@ -282,10 +282,11 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
   const tasksByDirector = new Map<string, DirectorTaskDrill[]>();
   // ponytail: fetches detail for every billed task, then gates by completion date. Fine
   // for this firm's history; if it grows huge, pre-filter by a task-list completion date.
-  // Reviewers per task come from task/list (task/get omits them); merged into detail.users
-  // below so a director who only reviews a task still earns Bucket 3 profit (non-ROC).
-  const [reviewersByTask, perTask] = await Promise.all([
-    fetchReviewersByTask(),
+  // Per-task metadata from task/list (task/get omits both): the reviewer list, merged into
+  // detail.users so a review-only director earns Bucket 3 (non-ROC), and the real completion
+  // date used to bucket profit below.
+  const [taskMeta, perTask] = await Promise.all([
+    fetchTaskListMeta(),
     mapPool([...billingByTask.keys()], 6, async (taskId) => {
       const [detail, tsRows] = await Promise.all([fetchTaskDetail(taskId), fetchTaskTimesheets(taskId)]);
       return { taskId, detail, tsRows };
@@ -293,7 +294,8 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
   ]);
   for (const { taskId, detail, tsRows } of perTask) {
     if (!detail) continue;
-    for (const r of reviewersByTask.get(taskId) ?? []) if (!detail.users.some((u) => u.id === r.id)) detail.users.push(r);
+    const meta = taskMeta.get(taskId);
+    for (const r of meta?.reviewers ?? []) if (!detail.users.some((u) => u.id === r.id)) detail.users.push(r);
     // ROC = separate dept. Timesheet time/cost STILL counts for Bucket 2 billing, but the
     // task earns NO Bucket 3 profit for anyone (even a reviewer).
     const isROC = detail.department.toLowerCase() === "roc";
@@ -308,10 +310,11 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
     // done, no timesheet — would otherwise post its entire invoice as pure profit, since
     // profit = billing − manpower and manpower is still 0. Billing (B2) is unaffected and
     // keeps accruing on invoiced work whether or not the task is complete.
-    // "Done" is decided by STATUS, never by the presence of a completion date — Turia
-    // doesn't reliably return one, and requiring it zeroed every partner's profit. The
-    // date only decides *which* quarter; fall back to the invoice date when absent.
-    const completionDate = detail.completedOn ?? bill.invoiceDate;
+    // Profit is booked in the quarter the task was COMPLETED. The real completion date comes
+    // from task/list (`completedon`); task/get returns null for it. Prefer that, then task/get,
+    // and only as a last resort the invoice date (for a completed task Turia gave no date for).
+    // "Done" is still decided by STATUS — an in-progress task never books profit.
+    const completionDate = meta?.completedOn ?? detail.completedOn ?? bill.invoiceDate;
     const completedInPeriod = detail.status === TASK_COMPLETED && completionDate != null
       && completionDate >= fromMs && completionDate <= toMs;
 
