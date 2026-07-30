@@ -198,6 +198,19 @@ export async function fetchLeads(perPage = 100, maxPages = 20): Promise<TuriaLea
   }));
 }
 
+// Assignees (`userlists`) + reviewers (Turia names the reviewer array differently across
+// endpoints, so scan the likely keys) merged into one user list, deduped by id. Reviewers
+// are tagged role "reviewer"; an assignee entry wins on collision.
+function mergeTaskUsers(t: Record<string, unknown>): TuriaTaskUser[] {
+  const byId = new Map<string, TuriaTaskUser>();
+  const rows = (v: unknown) => (Array.isArray(v) ? (v as Array<Record<string, unknown>>) : []);
+  for (const u of rows(t.userlists)) byId.set(String(u.id), { id: String(u.id), name: String(u.name ?? ""), type: parseInt(String(u.type ?? "0"), 10), role: String(u.role ?? "") });
+  for (const k of ["reviewerlists", "reviewerlist", "reviewers", "reviewer"]) {
+    for (const u of rows(t[k])) { const id = String(u.id); if (id && !byId.has(id)) byId.set(id, { id, name: String(u.name ?? ""), type: parseInt(String(u.type ?? "0"), 10), role: "reviewer" }); }
+  }
+  return [...byId.values()];
+}
+
 export async function fetchTaskDetail(taskId: string): Promise<TuriaTaskDetail | null> {
   try {
     const json = await turiaPost("task", "get", { taskId, id: taskId });
@@ -224,7 +237,10 @@ export async function fetchTaskDetail(taskId: string): Promise<TuriaTaskDetail |
       tatHours: (t.tathours as string) || null,
       billable: parseBillable(t),
       department: String(t.departmentname ?? t.department ?? t.deptname ?? "").trim(),
-      users: Array.isArray(t.userlists) ? (t.userlists as Array<Record<string, unknown>>).map((u) => ({ id: String(u.id), name: String(u.name ?? ""), type: parseInt(String(u.type ?? "0"), 10), role: String(u.role ?? "") })) : [],
+      // Turia splits a task's people: `userlists` = assignees, a separate reviewer array =
+      // reviewers. A director who only *reviews* must still earn Bucket 3 profit on the task
+      // (non-ROC — the ROC gate lives in the engine), so fold reviewers in too, deduped by id.
+      users: mergeTaskUsers(t),
     };
   } catch {
     return null;
