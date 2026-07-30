@@ -166,6 +166,28 @@ export async function fetchTuriaTaskList(page = 1, perPage = 50): Promise<Array<
   return ((json.tasks as Record<string, unknown>)?.tasks as Array<Record<string, unknown>>) || [];
 }
 
+// Reviewers per task, keyed by Turia's internal task id (same id invoices carry as
+// `taskid`, so it matches billingByTask keys in the engine). task/get doesn't return the
+// reviewer array, but task/list does (`t.reviewer`) — so a director who only *reviews* a
+// task can still be credited Bucket 3 profit. Paginated; stops on a short page / over-page 404.
+export async function fetchReviewersByTask(perPage = 100, maxPages = 20): Promise<Map<string, TuriaTaskUser[]>> {
+  const map = new Map<string, TuriaTaskUser[]>();
+  for (let page = 1; page <= maxPages; page++) {
+    let rows: Array<Record<string, unknown>>;
+    try { rows = await fetchTuriaTaskList(page, perPage); }
+    catch (e) { if (page > 1 && e instanceof Error && /\b404\b/.test(e.message)) break; throw e; }
+    if (rows.length === 0) break;
+    for (const t of rows) {
+      const id = String(t.id ?? "");
+      const revs = Array.isArray(t.reviewer) ? (t.reviewer as Array<Record<string, unknown>>) : [];
+      if (!id || revs.length === 0) continue;
+      map.set(id, revs.map((u) => ({ id: String(u.id), name: String(u.name ?? ""), type: parseInt(String(u.type ?? "0"), 10), role: "reviewer" })));
+    }
+    if (rows.length < perPage) break;
+  }
+  return map;
+}
+
 export async function fetchLeads(perPage = 100, maxPages = 20): Promise<TuriaLead[]> {
   // leads/list is PAGINATED — the bare {} call only returned the first ~10, so a lead
   // behind the newest 10 (e.g. a Q1 lead converted this quarter) vanished from Bucket 1.

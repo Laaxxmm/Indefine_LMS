@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { currentQuarter } from "./period";
 import { profitPercents } from "./split";
 import {
-  fetchOrgUsers, fetchTuriaTaskList, fetchTaskTimesheets, fetchLeads, fetchTaskDetail, fetchAllInvoices,
+  fetchOrgUsers, fetchTuriaTaskList, fetchTaskTimesheets, fetchLeads, fetchTaskDetail, fetchAllInvoices, fetchReviewersByTask,
   type TuriaLead, type TuriaTaskDetail,
 } from "./turia";
 
@@ -282,12 +282,18 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
   const tasksByDirector = new Map<string, DirectorTaskDrill[]>();
   // ponytail: fetches detail for every billed task, then gates by completion date. Fine
   // for this firm's history; if it grows huge, pre-filter by a task-list completion date.
-  const perTask = await mapPool([...billingByTask.keys()], 6, async (taskId) => {
-    const [detail, tsRows] = await Promise.all([fetchTaskDetail(taskId), fetchTaskTimesheets(taskId)]);
-    return { taskId, detail, tsRows };
-  });
+  // Reviewers per task come from task/list (task/get omits them); merged into detail.users
+  // below so a director who only reviews a task still earns Bucket 3 profit (non-ROC).
+  const [reviewersByTask, perTask] = await Promise.all([
+    fetchReviewersByTask(),
+    mapPool([...billingByTask.keys()], 6, async (taskId) => {
+      const [detail, tsRows] = await Promise.all([fetchTaskDetail(taskId), fetchTaskTimesheets(taskId)]);
+      return { taskId, detail, tsRows };
+    }),
+  ]);
   for (const { taskId, detail, tsRows } of perTask) {
     if (!detail) continue;
+    for (const r of reviewersByTask.get(taskId) ?? []) if (!detail.users.some((u) => u.id === r.id)) detail.users.push(r);
     // ROC = separate dept. Timesheet time/cost STILL counts for Bucket 2 billing, but the
     // task earns NO Bucket 3 profit for anyone (even a reviewer).
     const isROC = detail.department.toLowerCase() === "roc";
