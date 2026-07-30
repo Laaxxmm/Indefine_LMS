@@ -268,10 +268,6 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
     billingByTask.set(inv.taskId, cur);
   }
 
-  // NEO_DBG — TSK03612 investigation. Is the invoice linked to the task, and via which id?
-  const dbgInv = invoices.filter((i) => /03612/.test(String(i.taskUniqueId ?? "")) || /03612/.test(String(i.uniqueNo ?? "")));
-  console.log("NEO_DBG invoices~03612:", JSON.stringify(dbgInv), "| linkedInBillingByTask:", dbgInv.map((i) => (i.taskId ? billingByTask.has(i.taskId) : "no-taskId")));
-
   // Per billed task: task/get for the director userlists, and the task's timesheets
   // for the manpower cost. Profit = period billing − manpower (Turia's formula, OP≈0).
   // Billing (B2) and profit (B3) are attributed on *different* bases, so each keeps
@@ -295,12 +291,9 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
       return { taskId, detail, tsRows };
     }),
   ]);
-  // NEO_DBG — which reviewer entries did task/list yield, and do any name-match Abijith?
-  console.log("NEO_DBG reviewersByTask size:", reviewersByTask.size, "| abij entries:", JSON.stringify([...reviewersByTask.entries()].filter(([, rs]) => rs.some((r) => /abij/i.test(r.name))).map(([id, rs]) => ({ taskId: id, inBilling: billingByTask.has(id), revs: rs.map((r) => r.name) }))));
   for (const { taskId, detail, tsRows } of perTask) {
     if (!detail) continue;
     for (const r of reviewersByTask.get(taskId) ?? []) if (!detail.users.some((u) => u.id === r.id)) detail.users.push(r);
-    if (/03612/.test(detail.identity)) console.log("NEO_DBG task03612:", JSON.stringify({ taskId, identity: detail.identity, dept: detail.department, status: detail.status, completedOn: detail.completedOn, invoiceDate: billingByTask.get(taskId)?.invoiceDate, fromMs, toMs, mergedReviewers: (reviewersByTask.get(taskId) ?? []).map((r) => r.name), users: detail.users.map((u) => u.name), TASK_COMPLETED }));
     // ROC = separate dept. Timesheet time/cost STILL counts for Bucket 2 billing, but the
     // task earns NO Bucket 3 profit for anyone (even a reviewer).
     const isROC = detail.department.toLowerCase() === "roc";

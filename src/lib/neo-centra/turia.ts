@@ -179,8 +179,6 @@ export async function fetchReviewersByTask(perPage = 100, maxPages = 20): Promis
     if (rows.length === 0) break;
     for (const t of rows) {
       const id = String(t.id ?? "");
-      // NEO_DBG — reveal task/list's exact shape for TSK03612 (reviewer field name?).
-      if (/03612/.test(String(t.uniqueidentity ?? ""))) console.log("NEO_DBG listRow03612 id:", id, "keys:", JSON.stringify(Object.keys(t)), "reviewer:", JSON.stringify(t.reviewer), "reviewerFields:", JSON.stringify(Object.fromEntries(Object.keys(t).filter((k) => /review/i.test(k)).map((k) => [k, t[k]]))));
       const revs = Array.isArray(t.reviewer) ? (t.reviewer as Array<Record<string, unknown>>) : [];
       if (!id || revs.length === 0) continue;
       map.set(id, revs.map((u) => ({ id: String(u.id), name: String(u.name ?? ""), type: parseInt(String(u.type ?? "0"), 10), role: "reviewer" })));
