@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { currentQuarter } from "./period";
 import { profitPercents } from "./split";
 import {
-  fetchOrgUsers, fetchTuriaTaskList, fetchTaskTimesheets, fetchLeads, fetchTaskDetail, fetchAllInvoices, fetchReviewersByTask,
+  fetchOrgUsers, fetchTuriaTaskList, fetchTaskTimesheets, fetchLeads, fetchTaskDetail, fetchAllInvoices, fetchTaskListMeta,
   type TuriaLead, type TuriaTaskDetail,
 } from "./turia";
 
@@ -268,10 +268,6 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
     billingByTask.set(inv.taskId, cur);
   }
 
-  // NEO_DBG — TSK03612 investigation. Is the invoice linked to the task, and via which id?
-  const dbgInv = invoices.filter((i) => /03612/.test(String(i.taskUniqueId ?? "")) || /03612/.test(String(i.uniqueNo ?? "")));
-  console.log("NEO_DBG invoices~03612:", JSON.stringify(dbgInv), "| linkedInBillingByTask:", dbgInv.map((i) => (i.taskId ? billingByTask.has(i.taskId) : "no-taskId")));
-
   // Per billed task: task/get for the director userlists, and the task's timesheets
   // for the manpower cost. Profit = period billing − manpower (Turia's formula, OP≈0).
   // Billing (B2) and profit (B3) are attributed on *different* bases, so each keeps
@@ -286,21 +282,20 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
   const tasksByDirector = new Map<string, DirectorTaskDrill[]>();
   // ponytail: fetches detail for every billed task, then gates by completion date. Fine
   // for this firm's history; if it grows huge, pre-filter by a task-list completion date.
-  // Reviewers per task come from task/list (task/get omits them); merged into detail.users
-  // below so a director who only reviews a task still earns Bucket 3 profit (non-ROC).
-  const [reviewersByTask, perTask] = await Promise.all([
-    fetchReviewersByTask(),
+  // Per-task metadata from task/list (task/get omits both): the reviewer list, merged into
+  // detail.users so a review-only director earns Bucket 3 (non-ROC), and the real completion
+  // date used to bucket profit below.
+  const [taskMeta, perTask] = await Promise.all([
+    fetchTaskListMeta(),
     mapPool([...billingByTask.keys()], 6, async (taskId) => {
       const [detail, tsRows] = await Promise.all([fetchTaskDetail(taskId), fetchTaskTimesheets(taskId)]);
       return { taskId, detail, tsRows };
     }),
   ]);
-  // NEO_DBG — which reviewer entries did task/list yield, and do any name-match Abijith?
-  console.log("NEO_DBG reviewersByTask size:", reviewersByTask.size, "| abij entries:", JSON.stringify([...reviewersByTask.entries()].filter(([, rs]) => rs.some((r) => /abij/i.test(r.name))).map(([id, rs]) => ({ taskId: id, inBilling: billingByTask.has(id), revs: rs.map((r) => r.name) }))));
   for (const { taskId, detail, tsRows } of perTask) {
     if (!detail) continue;
-    for (const r of reviewersByTask.get(taskId) ?? []) if (!detail.users.some((u) => u.id === r.id)) detail.users.push(r);
-    if (/03612/.test(detail.identity)) console.log("NEO_DBG task03612:", JSON.stringify({ taskId, identity: detail.identity, dept: detail.department, status: detail.status, completedOn: detail.completedOn, invoiceDate: billingByTask.get(taskId)?.invoiceDate, fromMs, toMs, mergedReviewers: (reviewersByTask.get(taskId) ?? []).map((r) => r.name), users: detail.users.map((u) => u.name), TASK_COMPLETED }));
+    const meta = taskMeta.get(taskId);
+    for (const r of meta?.reviewers ?? []) if (!detail.users.some((u) => u.id === r.id)) detail.users.push(r);
     // ROC = separate dept. Timesheet time/cost STILL counts for Bucket 2 billing, but the
     // task earns NO Bucket 3 profit for anyone (even a reviewer).
     const isROC = detail.department.toLowerCase() === "roc";
@@ -315,10 +310,11 @@ export async function computeIncentiveSummary(fromMs: number, toMs: number): Pro
     // done, no timesheet — would otherwise post its entire invoice as pure profit, since
     // profit = billing − manpower and manpower is still 0. Billing (B2) is unaffected and
     // keeps accruing on invoiced work whether or not the task is complete.
-    // "Done" is decided by STATUS, never by the presence of a completion date — Turia
-    // doesn't reliably return one, and requiring it zeroed every partner's profit. The
-    // date only decides *which* quarter; fall back to the invoice date when absent.
-    const completionDate = detail.completedOn ?? bill.invoiceDate;
+    // Profit is booked in the quarter the task was COMPLETED. The real completion date comes
+    // from task/list (`completedon`); task/get returns null for it. Prefer that, then task/get,
+    // and only as a last resort the invoice date (for a completed task Turia gave no date for).
+    // "Done" is still decided by STATUS — an in-progress task never books profit.
+    const completionDate = meta?.completedOn ?? detail.completedOn ?? bill.invoiceDate;
     const completedInPeriod = detail.status === TASK_COMPLETED && completionDate != null
       && completionDate >= fromMs && completionDate <= toMs;
 

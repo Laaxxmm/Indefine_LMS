@@ -166,12 +166,18 @@ export async function fetchTuriaTaskList(page = 1, perPage = 50): Promise<Array<
   return ((json.tasks as Record<string, unknown>)?.tasks as Array<Record<string, unknown>>) || [];
 }
 
-// Reviewers per task, keyed by Turia's internal task id (same id invoices carry as
-// `taskid`, so it matches billingByTask keys in the engine). task/get doesn't return the
-// reviewer array, but task/list does (`t.reviewer`) — so a director who only *reviews* a
-// task can still be credited Bucket 3 profit. Paginated; stops on a short page / over-page 404.
-export async function fetchReviewersByTask(perPage = 100, maxPages = 20): Promise<Map<string, TuriaTaskUser[]>> {
-  const map = new Map<string, TuriaTaskUser[]>();
+export interface TaskListMeta { reviewers: TuriaTaskUser[]; completedOn: number | null }
+
+// Per-task metadata from task/list, keyed by Turia's internal task id (same id invoices
+// carry as `taskid`, so it matches billingByTask keys in the engine). task/list carries two
+// things task/get does NOT: the reviewer array (`t.reviewer`) and a populated completion
+// date (`t.completedon`). Bucket 3 needs both — reviewers to credit a director who only
+// reviews, and the REAL completion date to book profit in the quarter the task actually
+// finished (task/get returns completedon: null, which would otherwise force a fall-back to
+// the invoice date and mis-bucket a task invoiced in one quarter but completed in another).
+// Paginated; stops on a short page / over-page 404.
+export async function fetchTaskListMeta(perPage = 100, maxPages = 20): Promise<Map<string, TaskListMeta>> {
+  const map = new Map<string, TaskListMeta>();
   for (let page = 1; page <= maxPages; page++) {
     let rows: Array<Record<string, unknown>>;
     try { rows = await fetchTuriaTaskList(page, perPage); }
@@ -179,11 +185,10 @@ export async function fetchReviewersByTask(perPage = 100, maxPages = 20): Promis
     if (rows.length === 0) break;
     for (const t of rows) {
       const id = String(t.id ?? "");
-      // NEO_DBG — reveal task/list's exact shape for TSK03612 (reviewer field name?).
-      if (/03612/.test(String(t.uniqueidentity ?? ""))) console.log("NEO_DBG listRow03612 id:", id, "keys:", JSON.stringify(Object.keys(t)), "reviewer:", JSON.stringify(t.reviewer), "reviewerFields:", JSON.stringify(Object.fromEntries(Object.keys(t).filter((k) => /review/i.test(k)).map((k) => [k, t[k]]))));
-      const revs = Array.isArray(t.reviewer) ? (t.reviewer as Array<Record<string, unknown>>) : [];
-      if (!id || revs.length === 0) continue;
-      map.set(id, revs.map((u) => ({ id: String(u.id), name: String(u.name ?? ""), type: parseInt(String(u.type ?? "0"), 10), role: "reviewer" })));
+      if (!id) continue;
+      const revRows = Array.isArray(t.reviewer) ? (t.reviewer as Array<Record<string, unknown>>) : [];
+      const reviewers = revRows.map((u) => ({ id: String(u.id), name: String(u.name ?? ""), type: parseInt(String(u.type ?? "0"), 10), role: "reviewer" }));
+      map.set(id, { reviewers, completedOn: toEpochMs(t.completedon) });
     }
     if (rows.length < perPage) break;
   }
