@@ -13,8 +13,11 @@ export async function GET() {
   return NextResponse.json(rows);
 }
 
+// taskName is display/ordering only — Turia returns a blank `taskname` for some tasks,
+// and requiring it here blocked saving an otherwise valid split ("String must contain at
+// least 1 character(s)"). Accept blank and fall back to the task id below.
 const Body = z.object({
-  taskName: z.string().min(1),
+  taskName: z.string().optional(),
   taskIdentity: z.string().optional(),
   turiaTaskId: z.string().optional(),
   splits: z.record(z.string(), z.number().min(0).max(100)),
@@ -27,7 +30,8 @@ export async function POST(req: Request) {
   if (!session?.user || !isNeoCentraAdmin(session.user)) return NextResponse.json({ error: "Admins only" }, { status: 403 });
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid" }, { status: 400 });
-  const { taskName, taskIdentity, turiaTaskId, splits } = parsed.data;
+  const { taskIdentity, turiaTaskId, splits } = parsed.data;
+  const taskName = parsed.data.taskName?.trim() || taskIdentity || turiaTaskId || "Untitled task";
 
   // No unique key on the optional task ids — upsert by hand (match turiaTaskId first).
   const existing = await prisma.neoProfitSplit.findFirst({
