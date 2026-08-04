@@ -15,8 +15,10 @@ export async function GET() {
 
 // Hours are entered freely per partner — deliberately NOT required to add up to Turia's
 // Budget Time, so a partial allocation (only one partner targeted) is valid.
+// taskName is display/ordering only — Turia returns a blank `taskname` for some tasks, so
+// requiring it would block an otherwise valid allocation. Blank falls back to the task id.
 const Body = z.object({
-  taskName: z.string().min(1),
+  taskName: z.string().optional(),
   taskIdentity: z.string().optional(),
   turiaTaskId: z.string().optional(),
   hours: z.record(z.string(), z.number().min(0).max(10000)),
@@ -28,7 +30,8 @@ export async function POST(req: Request) {
   if (!session?.user || !isNeoCentraAdmin(session.user)) return NextResponse.json({ error: "Admins only" }, { status: 403 });
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid" }, { status: 400 });
-  const { taskName, taskIdentity, turiaTaskId, hours } = parsed.data;
+  const { taskIdentity, turiaTaskId, hours } = parsed.data;
+  const taskName = parsed.data.taskName?.trim() || taskIdentity || turiaTaskId || "Untitled task";
 
   // No unique key on the optional task ids — upsert by hand (match turiaTaskId first).
   const existing = await prisma.neoHoursSplit.findFirst({
