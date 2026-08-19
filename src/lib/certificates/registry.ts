@@ -11,6 +11,7 @@ import { formatIX } from "./templates/format-ix";
 import { formatX } from "./templates/format-x";
 import { formatXI } from "./templates/format-xi";
 import { formatXII } from "./templates/format-xii";
+import { auditReport } from "./templates/audit-report";
 import { drafts } from "./templates/drafts";
 
 // Entity identifiers required on EVERY certificate. Added centrally (not per-template) so
@@ -27,7 +28,7 @@ const withEntityIds = (t: CertificateTemplate): CertificateTemplate =>
 
 // The 12 ICAI formats. A template is offered to users only when enabled() — verifier
 // passing + human sign-off. Drafts are hidden from the picker in production (§3.2).
-export const registry: CertificateTemplate[] = [formatI, formatII, formatIII, formatIV, formatV, formatVI, formatVII, formatVIII, formatIX, formatX, formatXI, formatXII, ...drafts].map(withEntityIds);
+export const registry: CertificateTemplate[] = [formatI, formatII, formatIII, formatIV, formatV, formatVI, formatVII, formatVIII, formatIX, formatX, formatXI, formatXII, auditReport, ...drafts].map(withEntityIds);
 
 export const byId = (id: string): CertificateTemplate | undefined => registry.find((t) => t.id === id);
 

@@ -66,14 +66,20 @@ function verifyOne(t: CertificateTemplate): Result {
   const warnings: string[] = [];
   const short = (s: string) => (s.length > 70 ? s.slice(0, 67) + "..." : s);
 
+  // Templates with no sourcePdf are the firm's own documents (the audit report), not ICAI
+  // illustrative formats. There is nothing to diff their locked text against, so checks
+  // 1-4 are skipped; the hash and sign-off gates below still apply.
+  const firmTemplate = t.sourcePdf === "";
   let src = "";
-  try {
-    src = extractSource(t.sourcePdf, t.sourcePages);
-  } catch (e) {
-    return { id: t.id, failures: [(e as Error).message], warnings };
+  if (!firmTemplate) {
+    try {
+      src = extractSource(t.sourcePdf, t.sourcePages);
+    } catch (e) {
+      return { id: t.id, failures: [(e as Error).message], warnings };
+    }
   }
 
-  const locked = lockedTextSegments(t).map(normalize).filter((s) => s !== "");
+  const locked = firmTemplate ? [] : lockedTextSegments(t).map(normalize).filter((s) => s !== "");
 
   // 1+2+3. presence + order (order judged on anchor-length segments to avoid tiny-string noise)
   let cursor = 0;
@@ -96,7 +102,7 @@ function verifyOne(t: CertificateTemplate): Result {
   }
 
   // conditional fixed clauses (order not enforced — they render conditionally)
-  for (const s of fixedConditionalStrings(t.fields).map(normalize)) {
+  for (const s of firmTemplate ? [] : fixedConditionalStrings(t.fields).map(normalize)) {
     if (s && src.indexOf(s) === -1) failures.push(`CONDITIONAL CLAUSE not in source: "${short(s)}"`);
   }
 
@@ -142,7 +148,8 @@ function main() {
       for (const f of r.failures) console.error(`    ${f}`);
       console.error(`    correct hash: ${hashTemplate(registry.find((x) => x.id === r.id)!)}`);
     } else {
-      console.log(`✓ ${r.id} — verifier clean (hash ${hashTemplate(t).slice(0, 12)}…)`);
+      const scope = t.sourcePdf === "" ? "firm template — hash + sign-off only" : "verifier clean";
+      console.log(`✓ ${r.id} — ${scope} (hash ${hashTemplate(t).slice(0, 12)}…)`);
     }
   }
 

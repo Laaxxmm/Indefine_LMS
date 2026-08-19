@@ -12,6 +12,9 @@ import { resolveValues } from "./values";
 const FONT = "Times New Roman";
 const SIZE = 22; // half-points => 11pt
 const LINE = 276; // 1.15 line spacing
+// Characters that fit on one line of the ~6.6" text column at 11pt Times New Roman. A line
+// shorter than this cannot wrap, so it is structural rather than prose (see `structural`).
+const WRAP_CHARS = 90;
 
 // twips (1 inch = 1440). Top/bottom reserve the pre-printed letterhead + footer bands.
 const MARGIN = { top: 2350, bottom: 1750, left: 1200, right: 1200 };
@@ -24,41 +27,51 @@ export async function renderDocx(template: CertificateTemplate, rawPayload: Reco
   const resolved = resolveValues(template, rawPayload);
   const blocks = compose(template, resolved);
   const children: (Paragraph | Table)[] = [];
-
-  // Entity identifiers (PAN / GSTIN) — collected on every cert, rendered outside the ICAI
-  // segments (never locked text) as a right-aligned reference line at the top.
-  const idBits = [resolved.inline.entityPAN && `PAN: ${resolved.inline.entityPAN}`, resolved.inline.entityGSTIN && `GSTIN: ${resolved.inline.entityGSTIN}`].filter(Boolean);
-  if (idBits.length) {
-    children.push(new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { after: 160 }, children: [new TextRun({ text: idBits.join("    "), font: FONT, size: SIZE })] }));
-  }
+  // Lines the template wants on a fresh page (its annexures). Matched by prefix because
+  // the annexure headings carry the entity name.
+  const breakBefore = template.pageBreakBefore ?? [];
 
   for (const b of blocks) {
     if (b.kind === "para") {
-      const centered = b.lines.some((l) => l.style === "subheading");
-      const heading = b.lines.some((l) => l.style === "title" || l.style === "heading");
-      const firstText = b.lines[0]?.text ?? "";
-      const numbered = isNumbered(firstText);
-      const sub = isSubNumbered(firstText);
-      // Hanging indent so wrapped lines align under the text, not the number.
-      const indent = numbered ? { left: 420, hanging: 420 } : sub ? { left: 820, hanging: 400 } : undefined;
-
-      children.push(
-        new Paragraph({
-          alignment: centered ? AlignmentType.CENTER : heading ? AlignmentType.LEFT : AlignmentType.JUSTIFIED,
-          spacing: { before: centered || heading ? 200 : 40, after: 140, line: LINE },
-          indent,
-          children: b.lines.flatMap((line, i) => {
-            const lineBold = !!line.style;
-            const size = line.style === "title" ? 26 : SIZE;
-            const brk = i > 0 ? 1 : undefined;
+      // ONE Word paragraph PER LINE. Emitting a multi-line block as a single justified
+      // paragraph joined by break-runs made Word stretch every line except the last, which
+      // splayed the addressee and signature blocks across the full page width. A line that
+      // is its own paragraph is its own last line, so it is never stretched: short lines
+      // (To / client / address / firm / FRN / M.No / UDIN / Place) sit left naturally,
+      // while long prose still justifies as it wraps. Style is read per line too, so a
+      // heading no longer centres the body that follows it in the same block.
+      // A block whose every line is too short to wrap is structural, not prose — the
+      // addressee ("To / client / address"), the PAN·GSTIN line, the signature block,
+      // the Place/Date footer. Those are left-aligned outright, so they stay on the left
+      // margin even when a long client or firm name does wrap. Prose blocks (which always
+      // carry at least one full-width line) keep justification.
+      const structural = b.lines.every((l) => l.text.length < WRAP_CHARS);
+      b.lines.forEach((line, i) => {
+        const centered = line.style === "subheading";
+        const heading = line.style === "title" || line.style === "heading" || structural;
+        const numbered = isNumbered(line.text);
+        const sub = isSubNumbered(line.text);
+        // Hanging indent so wrapped lines align under the text, not the number.
+        const indent = numbered ? { left: 420, hanging: 420 } : sub ? { left: 820, hanging: 400 } : undefined;
+        const bold = !!line.style;
+        const size = line.style === "title" ? 26 : SIZE;
+        const first = i === 0;
+        const last = i === b.lines.length - 1;
+        children.push(
+          new Paragraph({
+            pageBreakBefore: breakBefore.some((prefix) => line.text.startsWith(prefix)) || undefined,
+            alignment: centered ? AlignmentType.CENTER : heading ? AlignmentType.LEFT : AlignmentType.JUSTIFIED,
+            // Gap only around the block; lines inside it stay tight, as they were when
+            // they were break-separated lines of one paragraph.
+            spacing: { before: first ? (centered || heading ? 200 : 40) : 0, after: last ? 140 : 0, line: LINE },
+            indent,
             // Bold runs inside the line (entity name, authority, dates …) OR a plain line.
-            if (line.runs && line.runs.length) {
-              return line.runs.map((r, j) => new TextRun({ text: r.text, font: FONT, size, bold: lineBold || r.bold, break: j === 0 ? brk : undefined }));
-            }
-            return [new TextRun({ text: line.text, font: FONT, size, bold: lineBold, break: brk })];
+            children: line.runs && line.runs.length
+              ? line.runs.map((r) => new TextRun({ text: r.text, font: FONT, size, bold: bold || r.bold }))
+              : [new TextRun({ text: line.text, font: FONT, size, bold })],
           }),
-        }),
-      );
+        );
+      });
     } else {
       const { columns, rowLabels, cells, dynamic } = b.table;
       const headerRow = new TableRow({ tableHeader: true, children: [...(dynamic ? [] : [cell("", true)]), ...columns.map((c) => cell(c.label, true))] });

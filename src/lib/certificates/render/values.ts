@@ -46,6 +46,12 @@ function fmtNumber(v: string, unit?: string): string {
   return unit ? `${s} ${unit}` : s;
 }
 
+// An untouched optional input. Only strings can be "blank": a boolToggle's `false` and a
+// number 0 are real answers, not absence.
+function isBlank(v: unknown): boolean {
+  return v === undefined || v === null || (typeof v === "string" && v.trim() === "");
+}
+
 function isRequired(f: FieldDef, payload: Record<string, unknown>): boolean {
   if (f.requiredWhen) return payload[f.requiredWhen.field] === f.requiredWhen.equals && !!f.required;
   return !!f.required;
@@ -172,8 +178,13 @@ export function resolveValues(template: CertificateTemplate, rawPayload: Record<
       blocks[f.key] = { enabled, inline: sub };
       continue;
     }
-    // inline field: only enforce presence when required (respecting requiredWhen / derive)
-    if (f.deriveFrom || isRequired(f, payload) || payload[f.key] !== undefined) {
+    // inline field: only enforce presence when required (respecting requiredWhen / derive).
+    // The form seeds EVERY field with "" (never undefined), so an untouched optional field
+    // must be read as absent — otherwise resolveInline flags it "required" and the user is
+    // asked to fill a field the template says is optional.
+    if (!f.deriveFrom && !isRequired(f, payload) && isBlank(payload[f.key])) {
+      inline[f.key] = "";
+    } else if (f.deriveFrom || isRequired(f, payload) || payload[f.key] !== undefined) {
       inline[f.key] = resolveInline(f, payload[f.key], errors);
     } else if (f.required) {
       errors.push({ key: f.key, message: "required" });

@@ -66,5 +66,10 @@ export interface CertificateTemplate {
   segments: Segment[]; // header + body + signature block, in order
   tables?: string[]; // field keys of type "table", rendered where referenced
   boldFields?: string[]; // field keys whose value renders BOLD inline (entity/authority names, key dates)
+  pageBreakBefore?: string[]; // line prefixes that must start a fresh page (annexures)
+  headings?: string[]; // exact lines this template renders as bold section headings.
+  //   ^ compose.classifyLine knows the ICAI headings shared by formats i–xii; a template
+  //     with its own section names (the firm's audit report) declares them here rather
+  //     than growing that shared set.
   notes?: string[]; // transcription judgment calls flagged for the human reviewer (§4)
 }
