@@ -51,9 +51,12 @@ export function classifyLine(text: string): LineStyle | undefined {
   if (HEADINGS.has(t)) return "heading";
   if (/^Independent (Auditor's|Practitioner's) Certificate\b/.test(t)) return "title";
   if (/^(Statement of\b|Statement I\b|Statement II\b|Statement comprising\b|Enclosure|Annexure\b|STATEMENT)/i.test(t)) return "subheading";
-  // ALL-CAPS statement/section titles (e.g. "A. PROPERTY, PLANT AND EQUIPMENTS", "NEGATIVE COVENANTS", "ITR V")
+  // ALL-CAPS statement/section titles (e.g. "A. PROPERTY, PLANT AND EQUIPMENTS", "NEGATIVE COVENANTS", "ITR V").
+  // A "label: value" line is never a title — it is signature-block data whose value happens
+  // to be upper-case ("UDIN: 25255312BMKAAB1234", "PAN: AABCU9603R"), and centring those
+  // was pulling the whole signature block off the left margin.
   const letters = t.replace(/[^A-Za-z]/g, "");
-  if (letters.length >= 3 && letters.length <= 60 && letters === letters.toUpperCase()) return "subheading";
+  if (!t.includes(":") && letters.length >= 3 && letters.length <= 60 && letters === letters.toUpperCase()) return "subheading";
   return undefined;
 }
 
@@ -168,6 +171,14 @@ export function compose(template: CertificateTemplate, resolved: ResolvedValues)
   const boldSet = new Set(template.boldFields ?? []);
   const out: Block[] = [];
   walk(template.segments, byKey, resolved, (k) => resolved.inline[k], boldSet, out);
+
+  // Entity identifiers (PAN / GSTIN) — collected on every certificate, never part of the
+  // locked ICAI text, so they are injected here rather than sitting in segments. They go
+  // directly UNDER the addressee, not above the document: block 0 is always the
+  // "To / <client> / <address>" block (every template opens with t("To\n")). Built as a
+  // styleless line so classifyLine's ALL-CAPS rule can't centre and bold it.
+  const idBits = [resolved.inline.entityPAN && `PAN: ${resolved.inline.entityPAN}`, resolved.inline.entityGSTIN && `GSTIN: ${resolved.inline.entityGSTIN}`].filter(Boolean);
+  if (idBits.length && out.length) out.splice(1, 0, { kind: "para", lines: [{ text: idBits.join("    ") }] });
 
   // Guardrail: scan everything we are about to emit for residual placeholders —
   // paragraph lines AND table row/column labels AND cells (a "20XX" can hide in a label).
