@@ -45,10 +45,10 @@ const HEADINGS = new Set([
   "Restrictions on Use",
 ]);
 
-export function classifyLine(text: string): LineStyle | undefined {
+export function classifyLine(text: string, extraHeadings?: ReadonlySet<string>): LineStyle | undefined {
   const t = text.trim();
   if (!t) return undefined;
-  if (HEADINGS.has(t)) return "heading";
+  if (HEADINGS.has(t) || extraHeadings?.has(t)) return "heading";
   if (/^Independent (Auditor's|Practitioner's) Certificate\b/.test(t)) return "title";
   if (/^(Statement of\b|Statement I\b|Statement II\b|Statement comprising\b|Enclosure|Annexure\b|STATEMENT)/i.test(t)) return "subheading";
   // ALL-CAPS statement/section titles (e.g. "A. PROPERTY, PLANT AND EQUIPMENTS", "NEGATIVE COVENANTS", "ITR V").
@@ -116,7 +116,7 @@ function indexFields(fields: FieldDef[]): Map<string, FieldDef> {
 
 // Turn a raw text buffer (with \n line breaks and \n\n paragraph breaks) into paragraph
 // blocks. Bold markers survive into `raw`; each line keeps clean text + optional bold runs.
-function flush(buf: string, out: Block[]): void {
+function flush(buf: string, out: Block[], headings?: ReadonlySet<string>): void {
   if (buf === "") return;
   for (const para of buf.split(/\n\s*\n/)) {
     const raw = para.split("\n").map((l) => l.replace(/[ \t]+/g, " ").trim());
@@ -128,14 +128,14 @@ function flush(buf: string, out: Block[]): void {
         lines: raw.map((rawLine) => {
           const text = stripBold(rawLine);
           const runs = toRuns(rawLine);
-          return { text, style: classifyLine(text), runs: runs.some((r) => r.bold) ? runs : undefined };
+          return { text, style: classifyLine(text, headings), runs: runs.some((r) => r.bold) ? runs : undefined };
         }),
       });
     }
   }
 }
 
-function walk(segments: Segment[], byKey: Map<string, FieldDef>, resolved: ResolvedValues, inlineFor: (key: string) => string | undefined, boldSet: Set<string>, out: Block[]): void {
+function walk(segments: Segment[], byKey: Map<string, FieldDef>, resolved: ResolvedValues, inlineFor: (key: string) => string | undefined, boldSet: Set<string>, out: Block[], headings?: ReadonlySet<string>): void {
   let buf = "";
   for (const seg of segments) {
     if (seg.kind === "text") {
@@ -145,40 +145,44 @@ function walk(segments: Segment[], byKey: Map<string, FieldDef>, resolved: Resol
     const f = byKey.get(seg.key);
     if (!f) throw new Error(`segment references unknown field "${seg.key}"`);
     if (f.type === "table") {
-      flush(buf, out);
+      flush(buf, out, headings);
       buf = "";
       const table = resolved.tables[seg.key];
       if (!table) throw new Error(`table "${seg.key}" not resolved`);
       out.push({ kind: "table", table });
     } else if (f.type === "optionalBlock") {
-      flush(buf, out);
+      flush(buf, out, headings);
       buf = "";
       const block = resolved.blocks[seg.key];
       // block sub-segments may reference the block's own sub-fields OR a top-level field
       // (e.g. the signer toggle sg_iwe inside the reliance sentence) — fall back to inline.
-      if (block?.enabled) walk(f.subSegments ?? [], byKey, resolved, (k) => block.inline[k] ?? resolved.inline[k], boldSet, out);
+      if (block?.enabled) walk(f.subSegments ?? [], byKey, resolved, (k) => block.inline[k] ?? resolved.inline[k], boldSet, out, headings);
     } else {
       const v = inlineFor(seg.key);
       if (v === undefined) throw new Error(`field "${seg.key}" not resolved`);
       buf += boldSet.has(seg.key) ? `${B_ON}${v}${B_OFF}` : v;
     }
   }
-  flush(buf, out);
+  flush(buf, out, headings);
 }
 
 export function compose(template: CertificateTemplate, resolved: ResolvedValues): Block[] {
   const byKey = indexFields(template.fields);
   const boldSet = new Set(template.boldFields ?? []);
   const out: Block[] = [];
-  walk(template.segments, byKey, resolved, (k) => resolved.inline[k], boldSet, out);
+  const headings = new Set(template.headings ?? []);
+  walk(template.segments, byKey, resolved, (k) => resolved.inline[k], boldSet, out, headings);
 
   // Entity identifiers (PAN / GSTIN) — collected on every certificate, never part of the
   // locked ICAI text, so they are injected here rather than sitting in segments. They go
-  // directly UNDER the addressee, not above the document: block 0 is always the
-  // "To / <client> / <address>" block (every template opens with t("To\n")). Built as a
-  // styleless line so classifyLine's ALL-CAPS rule can't centre and bold it.
+  // directly UNDER the addressee: the block whose first line is "To"/"To:" (formats i–xii
+  // open with it; the audit report puts its title first). Built as a styleless line so
+  // classifyLine's ALL-CAPS rule can't centre and bold it.
   const idBits = [resolved.inline.entityPAN && `PAN: ${resolved.inline.entityPAN}`, resolved.inline.entityGSTIN && `GSTIN: ${resolved.inline.entityGSTIN}`].filter(Boolean);
-  if (idBits.length && out.length) out.splice(1, 0, { kind: "para", lines: [{ text: idBits.join("    ") }] });
+  if (idBits.length && out.length) {
+    const to = out.findIndex((b) => b.kind === "para" && /^To:?$/i.test(b.lines[0]?.text.trim() ?? ""));
+    out.splice((to === -1 ? 0 : to) + 1, 0, { kind: "para", lines: [{ text: idBits.join("    ") }] });
+  }
 
   // Guardrail: scan everything we are about to emit for residual placeholders —
   // paragraph lines AND table row/column labels AND cells (a "20XX" can hide in a label).

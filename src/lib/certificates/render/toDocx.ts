@@ -27,6 +27,9 @@ export async function renderDocx(template: CertificateTemplate, rawPayload: Reco
   const resolved = resolveValues(template, rawPayload);
   const blocks = compose(template, resolved);
   const children: (Paragraph | Table)[] = [];
+  // Lines the template wants on a fresh page (its annexures). Matched by prefix because
+  // the annexure headings carry the entity name.
+  const breakBefore = template.pageBreakBefore ?? [];
 
   for (const b of blocks) {
     if (b.kind === "para") {
@@ -56,6 +59,7 @@ export async function renderDocx(template: CertificateTemplate, rawPayload: Reco
         const last = i === b.lines.length - 1;
         children.push(
           new Paragraph({
+            pageBreakBefore: breakBefore.some((prefix) => line.text.startsWith(prefix)) || undefined,
             alignment: centered ? AlignmentType.CENTER : heading ? AlignmentType.LEFT : AlignmentType.JUSTIFIED,
             // Gap only around the block; lines inside it stay tight, as they were when
             // they were break-separated lines of one paragraph.

@@ -27,8 +27,11 @@ function fieldByKey(t: CertificateTemplate): Map<string, FieldDef> {
 
 function initialPayload(t: CertificateTemplate): Payload {
   const p: Payload = {};
-  for (const f of t.fields) {
-    if (f.deriveFrom || f.type === "computed") continue;
+  // Sub-fields are seeded too: they share this flat payload, and an unseeded boolToggle
+  // reads as undefined rather than false, which the resolver reports as "choose yes/no"
+  // the moment its block is switched on.
+  const seed = (f: FieldDef) => {
+    if (f.deriveFrom || f.type === "computed") return;
     if (f.type === "table" && f.table) {
       const nCols = f.table.columns.length;
       if (f.table.dynamicRows) p[f.key] = [Array(nCols).fill("")];
@@ -36,7 +39,9 @@ function initialPayload(t: CertificateTemplate): Payload {
     } else if (f.type === "boolToggle") p[f.key] = false;
     else if (f.type === "optionalBlock") p[f.key] = false;
     else p[f.key] = "";
-  }
+    (f.subFields ?? []).forEach(seed);
+  };
+  t.fields.forEach(seed);
   return p;
 }
 
