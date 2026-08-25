@@ -1032,6 +1032,84 @@ function stripExt(n: string): string {
   return n.replace(/\.[a-z0-9]{2,4}$/i, "");
 }
 
+/**
+ * Pull the driveId + driveItemId out of a Teams "meetingrecap" share link.
+ * Those two query params point straight at the recording's OneDrive item.
+ */
+function parseRecapLink(url: string): { srcDriveId: string | null; srcItemId: string | null } {
+  try {
+    const q = new URL(url).searchParams;
+    return { srcDriveId: q.get("driveId"), srcItemId: q.get("driveItemId") };
+  } catch {
+    return { srcDriveId: null, srcItemId: null };
+  }
+}
+
+/**
+ * Ingest a recording from a Teams recap/share link — for when the recording
+ * lives in someone OTHER than the organizer's OneDrive (whoever clicked Record),
+ * so the normal /Recordings scan can't find it. Copies the file (by the driveId
+ * + driveItemId in the link) into the session's course folder, then hands off to
+ * the normal ingest, which links it, allots it to attendees and builds the quiz.
+ */
+export async function ingestFromRecapLink(
+  sessionId: string,
+  url: string
+): Promise<IngestResult> {
+  const s = await prisma.liveSession.findUnique({ where: { id: sessionId } });
+  if (!s) return { status: "error", message: "Session not found." };
+  if (s.recordedVideoId) return { status: "ingested", videoId: s.recordedVideoId };
+
+  const driveId = process.env.GRAPH_DRIVE_ID;
+  if (!driveId || !s.targetFolderId) {
+    return { status: "error", message: "Drive / target folder not configured." };
+  }
+
+  const { srcDriveId, srcItemId } = parseRecapLink(url);
+  if (!srcDriveId || !srcItemId) {
+    return {
+      status: "error",
+      message:
+        "Couldn't read driveId/driveItemId from that link — paste the Teams 'meetingrecap' share link for the recording.",
+    };
+  }
+
+  // Reading another person's OneDrive needs the app-only token (Files.ReadWrite.All
+  // Application). Fall back to the organizer's delegated token (works only if the
+  // recording is in their own drive).
+  const tokens = (
+    await Promise.all([getAppOnlyToken(), getUserGraphToken(s.scheduledById)])
+  ).filter((t): t is string => !!t);
+  if (tokens.length === 0) {
+    return { status: "error", message: "No Microsoft Graph token available for the copy." };
+  }
+
+  let monitor: string | null = null;
+  for (const t of tokens) {
+    monitor = await copyDriveItem(
+      t,
+      srcDriveId,
+      srcItemId,
+      driveId,
+      s.targetFolderId,
+      `${sanitizeName(s.title)}.mp4`
+    ).catch(() => null);
+    if (monitor) break;
+  }
+  if (!monitor) {
+    return {
+      status: "error",
+      message:
+        "Found the link but couldn't start the copy — grant the app Files.ReadWrite.All (Application) admin consent in Entra so it can read the recorder's OneDrive.",
+    };
+  }
+  await pollCopyStatus(monitor);
+
+  // The file now sits in the session folder named after the title — the normal
+  // ingest matches it there and does the rest (link + assign + transcript quiz).
+  return ingestRecording(sessionId);
+}
+
 /** Loose key for comparing a meeting title against a recording file name. */
 function normaliseTitle(s: string): string {
   return s

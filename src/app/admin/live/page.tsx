@@ -24,6 +24,7 @@ import {
   cancelLiveSession,
   ingestRecording,
   repullRecording,
+  ingestFromRecapLink,
   confirmSessionEnded,
 } from "@/lib/live";
 import { istLocalInputValue, formatIst } from "@/lib/live-format";
@@ -202,6 +203,23 @@ async function pullRecording(formData: FormData) {
   await requireAdmin();
   const id = String(formData.get("id"));
   const result = await ingestRecording(id);
+  revalidatePath("/admin/live");
+  revalidatePath("/dashboard");
+  const q =
+    result.status === "ingested"
+      ? "pulled=1"
+      : `pullinfo=${encodeURIComponent(result.message ?? result.status)}`;
+  redirect(`/admin/live?${q}`);
+}
+
+// Ingest a recording from a pasted Teams recap/share link — for when the
+// recorder isn't the organizer, so the automatic /Recordings scan misses it.
+async function ingestFromLinkAction(formData: FormData) {
+  "use server";
+  await requireAdmin();
+  const id = String(formData.get("id"));
+  const url = String(formData.get("url") ?? "").trim();
+  const result = await ingestFromRecapLink(id, url);
   revalidatePath("/admin/live");
   revalidatePath("/dashboard");
   const q =
@@ -725,13 +743,31 @@ export default async function AdminLivePage({
                       </form>
                     </div>
                   ) : s.status !== "CANCELLED" ? (
-                    <form action={pullRecording} className="shrink-0">
-                      <input type="hidden" name="id" value={s.id} />
-                      <button className="text-xs px-3 py-1.5 rounded-lg bg-white border border-border hover:bg-muted text-ink-soft font-semibold inline-flex items-center gap-1.5 transition">
-                        <Download className="w-3.5 h-3.5" />
-                        Pull recording
-                      </button>
-                    </form>
+                    <div className="shrink-0 flex flex-col items-end gap-1.5">
+                      <form action={pullRecording}>
+                        <input type="hidden" name="id" value={s.id} />
+                        <button className="text-xs px-3 py-1.5 rounded-lg bg-white border border-border hover:bg-muted text-ink-soft font-semibold inline-flex items-center gap-1.5 transition">
+                          <Download className="w-3.5 h-3.5" />
+                          Pull recording
+                        </button>
+                      </form>
+                      <form action={ingestFromLinkAction} className="flex items-center gap-1.5">
+                        <input type="hidden" name="id" value={s.id} />
+                        <input
+                          name="url"
+                          required
+                          placeholder="Paste Teams recording link"
+                          className="text-xs px-2 py-1.5 rounded-lg border border-border w-52 bg-white"
+                        />
+                        <button
+                          className="text-xs px-3 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-600 text-white font-semibold inline-flex items-center gap-1.5 transition whitespace-nowrap"
+                          title="Ingest a recording from its Teams share link — use when the recorder isn't the organizer"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          Ingest link
+                        </button>
+                      </form>
+                    </div>
                   ) : null}
                   </div>
 
