@@ -13,6 +13,7 @@ import {
   getUserGraphToken,
   getItemParentId,
   uploadFileToFolderId,
+  resolveFolderId,
 } from "@/lib/graph";
 
 export const dynamic = "force-dynamic";
@@ -213,57 +214,73 @@ async function addMaterial(formData: FormData) {
   "use server";
   await requireAdmin();
   const videoId = String(formData.get("videoId"));
-  const file = formData.get("file");
-  if (!(file instanceof File) || file.size === 0) {
-    redirect(`/admin/video/${videoId}?matinfo=${encodeURIComponent("Choose a file first.")}`);
-  }
+  const back = (msg: string) =>
+    `/admin/video/${videoId}?matinfo=${encodeURIComponent(msg)}`;
 
-  const video = await prisma.video.findUnique({ where: { id: videoId } });
-  if (!video) notFound();
+  // Everything that can fail is inside the try, so a bad upload shows a message
+  // instead of throwing and blanking the page. redirect() throws by design, so
+  // it stays OUTSIDE (a caught NEXT_REDIRECT would swallow the navigation).
+  let done: string;
+  try {
+    const file = formData.get("file");
+    if (!(file instanceof File) || file.size === 0) {
+      throw new Error("Choose a file first.");
+    }
 
-  const token = (await getAppOnlyToken()) ?? (await getUserGraphToken((await auth())!.user.id));
-  if (!token) {
-    redirect(
-      `/admin/video/${videoId}?matinfo=${encodeURIComponent("No Microsoft Graph token available.")}`
+    const video = await prisma.video.findUnique({ where: { id: videoId } });
+    if (!video) notFound();
+
+    const session = await auth();
+    const token =
+      (await getAppOnlyToken()) ??
+      (session?.user ? await getUserGraphToken(session.user.id) : null);
+    if (!token) throw new Error("No Microsoft Graph token available.");
+
+    // Store it beside the video (that folder already lives under the L&D root);
+    // if the video's own folder can't be resolved, fall back to the L&D root so
+    // the handout still lands somewhere sensible.
+    let folderId = await getItemParentId(
+      video.graphDriveId,
+      video.graphItemId,
+      token
     );
-  }
+    const rootPath = process.env.GRAPH_VIDEOS_FOLDER_PATH;
+    if (!folderId && rootPath) {
+      folderId = await resolveFolderId(video.graphDriveId, rootPath, token);
+    }
+    if (!folderId) throw new Error("Couldn't find a folder to store the file in.");
 
-  const folderId = await getItemParentId(video.graphDriveId, video.graphItemId, token);
-  if (!folderId) {
-    redirect(
-      `/admin/video/${videoId}?matinfo=${encodeURIComponent("Couldn't find the video's folder.")}`
+    const uploaded = await uploadFileToFolderId(
+      video.graphDriveId,
+      folderId,
+      file.name,
+      await file.arrayBuffer(),
+      token
     );
-  }
+    if (!uploaded) {
+      throw new Error(
+        "Upload was rejected by SharePoint — check the app has Files.ReadWrite.All."
+      );
+    }
 
-  const uploaded = await uploadFileToFolderId(
-    video.graphDriveId,
-    folderId,
-    file.name,
-    await file.arrayBuffer(),
-    token
-  );
-  if (!uploaded) {
-    redirect(
-      `/admin/video/${videoId}?matinfo=${encodeURIComponent(
-        "Upload failed — check the app has Files.ReadWrite.All."
-      )}`
-    );
+    const count = await prisma.material.count({ where: { videoId } });
+    await prisma.material.create({
+      data: {
+        videoId,
+        name: file.name,
+        graphDriveId: video.graphDriveId,
+        graphItemId: uploaded.id,
+        sizeBytes: uploaded.size || file.size,
+        order: count,
+      },
+    });
+    revalidatePath(`/admin/video/${videoId}`);
+    revalidatePath(`/video/${videoId}`);
+    done = back("Material attached.");
+  } catch (e) {
+    done = back((e as Error).message || "Upload failed.");
   }
-
-  const count = await prisma.material.count({ where: { videoId } });
-  await prisma.material.create({
-    data: {
-      videoId,
-      name: file.name,
-      graphDriveId: video.graphDriveId,
-      graphItemId: uploaded.id,
-      sizeBytes: uploaded.size || file.size,
-      order: count,
-    },
-  });
-  revalidatePath(`/admin/video/${videoId}`);
-  revalidatePath(`/video/${videoId}`);
-  redirect(`/admin/video/${videoId}?matinfo=${encodeURIComponent("Material attached.")}`);
+  redirect(done);
 }
 
 // Detach a handout. Removes our pointer only — the file stays in SharePoint, so
@@ -331,8 +348,9 @@ export default async function AdminVideoPage({
       <section className="rounded-2xl bg-white border border-border shadow-soft p-6 mb-8">
         <h2 className="font-display text-lg font-bold mb-1">Materials</h2>
         <p className="text-sm text-ink-mute mb-4">
-          Handouts learners can download from this lesson (PDF, worksheet, checklist).
-          Files are stored in SharePoint alongside the video.
+          Handouts learners can download from this lesson (PDF, worksheet, zipped
+          formats). Stored in the L&amp;D SharePoint folder alongside the video.
+          Up to 50 MB per file.
         </p>
 
         {matinfo && (
