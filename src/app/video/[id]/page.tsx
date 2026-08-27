@@ -9,6 +9,8 @@ import {
   ArrowRight,
   CheckCircle2,
   Clock,
+  Download,
+  FileText,
   GraduationCap,
   LogOut,
   PlayCircle,
@@ -70,6 +72,7 @@ export default async function VideoPage({
           },
         },
       },
+      materials: { orderBy: { order: "asc" } },
       progresses: { where: { userId } },
     },
   });
@@ -137,6 +140,38 @@ export default async function VideoPage({
             initialPercent={progress?.percent ?? 0}
             unlockAtPercent={unlockAt}
           />
+
+          {video.materials.length > 0 && (
+            <section className="mt-4 rounded-[18px] bg-card border border-border p-5">
+              <h2 className="font-display font-bold text-lg mb-3">Materials</h2>
+              <div className="rounded-xl border border-border divide-y divide-border">
+                {video.materials.map((m) => (
+                  <a
+                    key={m.id}
+                    href={`/api/material/${m.id}`}
+                    className="px-4 py-3 flex items-center gap-3 hover:bg-muted transition group"
+                  >
+                    <div className="w-9 h-9 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+                      <FileText className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-sm truncate group-hover:underline">
+                        {m.name}
+                      </p>
+                      {m.sizeBytes ? (
+                        <p className="text-xs text-ink-faint">
+                          {m.sizeBytes < 1024 * 1024
+                            ? `${Math.round(m.sizeBytes / 1024)} KB`
+                            : `${(m.sizeBytes / (1024 * 1024)).toFixed(1)} MB`}
+                        </p>
+                      ) : null}
+                    </div>
+                    <Download className="w-4 h-4 text-ink-faint shrink-0" />
+                  </a>
+                ))}
+              </div>
+            </section>
+          )}
 
           {video.quiz && (
             <section className="mt-4 rounded-[18px] bg-card border border-border p-5">

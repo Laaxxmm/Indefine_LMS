@@ -215,6 +215,25 @@ model Video {
   quiz            Quiz?
   progresses      VideoProgress[]
   assignments     Assignment[]
+  materials       Material[]
+}
+
+// A downloadable handout attached to a video (PDF, worksheet, checklist...).
+// The file itself lives in SharePoint next to the video; we only keep the Graph
+// pointer, so nothing is duplicated into our DB.
+model Material {
+  id           String   @id @default(cuid())
+  videoId      String
+  name         String
+  graphDriveId String
+  graphItemId  String
+  sizeBytes    Int?
+  order        Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  video        Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@index([videoId])
 }
 
 model VideoProgress {

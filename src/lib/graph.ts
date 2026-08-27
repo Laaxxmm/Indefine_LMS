@@ -601,6 +601,42 @@ export async function uploadFileToFolder(
   return res.ok;
 }
 
+/**
+ * Upload a file INTO a folder addressed by its item id (rather than a path),
+ * returning the new item's id and size. Used for video handouts, which land in
+ * whatever folder the video itself lives in.
+ * Simple upload — Graph caps this at 250 MB, which is far above any handout.
+ */
+export async function uploadFileToFolderId(
+  driveId: string,
+  folderId: string,
+  fileName: string,
+  bytes: ArrayBuffer,
+  token: string
+): Promise<{ id: string; size: number } | null> {
+  const res = await fetch(
+    `${GRAPH}/drives/${driveId}/items/${folderId}:/${encodeURIComponent(
+      fileName
+    )}:/content?@microsoft.graph.conflictBehavior=rename`,
+    {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/octet-stream",
+      },
+      body: bytes,
+    }
+  );
+  if (!res.ok) {
+    console.error(
+      `Graph upload ${fileName} failed: ${res.status} ${await res.text().catch(() => "")}`
+    );
+    return null;
+  }
+  const item = (await res.json()) as { id?: string; size?: number };
+  return item.id ? { id: item.id, size: item.size ?? 0 } : null;
+}
+
 /** The parent folder id of a drive item (used to find the folder holding a
  *  session recording, regardless of where it currently sits). */
 export async function getItemParentId(

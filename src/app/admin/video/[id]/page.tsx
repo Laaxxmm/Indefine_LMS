@@ -8,6 +8,12 @@ import { generateQuiz } from "@/lib/quiz-gen";
 import { getQuizDefaults } from "@/lib/settings";
 import { SubmitButton } from "@/components/SubmitButton";
 import { ConfirmButton } from "@/components/ConfirmButton";
+import {
+  getAppOnlyToken,
+  getUserGraphToken,
+  getItemParentId,
+  uploadFileToFolderId,
+} from "@/lib/graph";
 
 export const dynamic = "force-dynamic";
 
@@ -200,13 +206,95 @@ async function deleteQuestion(formData: FormData) {
   revalidatePath(`/admin/video/${videoId}`);
 }
 
+// Attach a downloadable handout to this video. The file is uploaded into the
+// SAME SharePoint folder the video lives in, so materials sit beside the
+// recording and nothing is stored in our DB but the Graph pointer.
+async function addMaterial(formData: FormData) {
+  "use server";
+  await requireAdmin();
+  const videoId = String(formData.get("videoId"));
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    redirect(`/admin/video/${videoId}?matinfo=${encodeURIComponent("Choose a file first.")}`);
+  }
+
+  const video = await prisma.video.findUnique({ where: { id: videoId } });
+  if (!video) notFound();
+
+  const token = (await getAppOnlyToken()) ?? (await getUserGraphToken((await auth())!.user.id));
+  if (!token) {
+    redirect(
+      `/admin/video/${videoId}?matinfo=${encodeURIComponent("No Microsoft Graph token available.")}`
+    );
+  }
+
+  const folderId = await getItemParentId(video.graphDriveId, video.graphItemId, token);
+  if (!folderId) {
+    redirect(
+      `/admin/video/${videoId}?matinfo=${encodeURIComponent("Couldn't find the video's folder.")}`
+    );
+  }
+
+  const uploaded = await uploadFileToFolderId(
+    video.graphDriveId,
+    folderId,
+    file.name,
+    await file.arrayBuffer(),
+    token
+  );
+  if (!uploaded) {
+    redirect(
+      `/admin/video/${videoId}?matinfo=${encodeURIComponent(
+        "Upload failed — check the app has Files.ReadWrite.All."
+      )}`
+    );
+  }
+
+  const count = await prisma.material.count({ where: { videoId } });
+  await prisma.material.create({
+    data: {
+      videoId,
+      name: file.name,
+      graphDriveId: video.graphDriveId,
+      graphItemId: uploaded.id,
+      sizeBytes: uploaded.size || file.size,
+      order: count,
+    },
+  });
+  revalidatePath(`/admin/video/${videoId}`);
+  revalidatePath(`/video/${videoId}`);
+  redirect(`/admin/video/${videoId}?matinfo=${encodeURIComponent("Material attached.")}`);
+}
+
+// Detach a handout. Removes our pointer only — the file stays in SharePoint, so
+// an accidental click here never destroys the firm's copy.
+async function deleteMaterial(formData: FormData) {
+  "use server";
+  await requireAdmin();
+  const id = String(formData.get("id"));
+  const videoId = String(formData.get("videoId"));
+  await prisma.material.delete({ where: { id } }).catch(() => {});
+  revalidatePath(`/admin/video/${videoId}`);
+  revalidatePath(`/video/${videoId}`);
+}
+
+function formatBytes(n: number | null): string {
+  if (!n) return "";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export default async function AdminVideoPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ matinfo?: string }>;
 }) {
   await requireAdmin();
   const { id } = await params;
+  const { matinfo } = await searchParams;
 
   const video = await prisma.video.findUnique({
     where: { id },
@@ -216,6 +304,7 @@ export default async function AdminVideoPage({
           questions: { include: { options: true }, orderBy: { order: "asc" } },
         },
       },
+      materials: { orderBy: { order: "asc" } },
     },
   });
   if (!video) notFound();
@@ -238,6 +327,59 @@ export default async function AdminVideoPage({
         </h1>
         <p className="text-ink-mute text-sm mt-2">Edit quiz settings and questions</p>
       </div>
+
+      <section className="rounded-2xl bg-white border border-border shadow-soft p-6 mb-8">
+        <h2 className="font-display text-lg font-bold mb-1">Materials</h2>
+        <p className="text-sm text-ink-mute mb-4">
+          Handouts learners can download from this lesson (PDF, worksheet, checklist).
+          Files are stored in SharePoint alongside the video.
+        </p>
+
+        {matinfo && (
+          <p className="text-sm mb-4 px-3 py-2 rounded-lg bg-muted text-ink-soft">{matinfo}</p>
+        )}
+
+        {video.materials.length > 0 && (
+          <div className="rounded-xl border border-border divide-y divide-border mb-4">
+            {video.materials.map((m) => (
+              <div key={m.id} className="px-4 py-2.5 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <a
+                    href={`/api/material/${m.id}`}
+                    className="font-semibold text-sm hover:underline truncate block"
+                  >
+                    {m.name}
+                  </a>
+                  <p className="text-xs text-ink-faint">{formatBytes(m.sizeBytes)}</p>
+                </div>
+                <form action={deleteMaterial} className="shrink-0">
+                  <input type="hidden" name="id" value={m.id} />
+                  <input type="hidden" name="videoId" value={video.id} />
+                  <ConfirmButton
+                    message={`Remove "${m.name}" from this lesson? The file stays in SharePoint.`}
+                    className="text-xs px-3 py-1.5 rounded-lg border border-border hover:bg-muted text-ink-soft font-semibold"
+                  >
+                    Remove
+                  </ConfirmButton>
+                </form>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <form action={addMaterial} className="flex items-center gap-3 flex-wrap">
+          <input type="hidden" name="videoId" value={video.id} />
+          <input
+            type="file"
+            name="file"
+            required
+            className="text-sm file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border file:border-border file:bg-white file:text-ink-soft file:font-semibold file:text-xs hover:file:bg-muted"
+          />
+          <SubmitButton className="text-sm px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-bold transition">
+            Attach
+          </SubmitButton>
+        </form>
+      </section>
 
       <section className="rounded-2xl bg-white border border-border shadow-soft p-6 mb-8">
         <h2 className="font-display text-lg font-bold mb-4">Quiz settings</h2>
