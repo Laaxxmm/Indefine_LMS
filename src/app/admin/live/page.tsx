@@ -27,14 +27,16 @@ import {
   ingestFromRecapLink,
   confirmSessionEnded,
 } from "@/lib/live";
-import { istLocalInputValue, formatIst } from "@/lib/live-format";
+import { istLocalInputValue, formatIst, istLocalToUtc } from "@/lib/live-format";
 import {
   getAppOnlyToken,
   getUserGraphToken,
   listSubfolderNames,
+  ensureFolder,
 } from "@/lib/graph";
 import { JoinMeetingButton } from "@/components/JoinMeetingButton";
 import ScheduleLiveForm from "./ScheduleLiveForm";
+import AddPastSessionForm from "./AddPastSessionForm";
 import { AutoIngest } from "./AutoIngest";
 
 export const dynamic = "force-dynamic";
@@ -210,6 +212,78 @@ async function pullRecording(formData: FormData) {
       ? "pulled=1"
       : `pullinfo=${encodeURIComponent(result.message ?? result.status)}`;
   redirect(`/admin/live?${q}`);
+}
+
+// Record a session that happened WITHOUT being scheduled in the LMS, and pull
+// its recording in from a link. Deliberately creates NO Teams meeting and sends
+// NO invite (graphEventId/joinUrl stay null) — the meeting is already over; this
+// only files the recording, allots it, and lets a quiz be added after.
+async function addPastSession(formData: FormData) {
+  "use server";
+  const session = await requireAdmin();
+  const title = String(formData.get("title") || "").trim();
+  const courseTitle = String(formData.get("courseTitle") || "").trim();
+  const folderParent = String(formData.get("folderParent") || "").trim() || null;
+  const heldOn = String(formData.get("heldOn") || "");
+  const durationMin = Number(formData.get("durationMin") || 60);
+  const url = String(formData.get("url") || "").trim();
+  const attendeeIds = formData.getAll("attendeeIds").map(String).filter(Boolean);
+
+  const back = (msg: string) =>
+    redirect(`/admin/live?pullinfo=${encodeURIComponent(msg)}`);
+
+  if (!title || !courseTitle || !heldOn || !url) {
+    back("Title, folder, date and recording link are all required.");
+  }
+
+  const driveId = process.env.GRAPH_DRIVE_ID;
+  const rootPath = process.env.GRAPH_VIDEOS_FOLDER_PATH;
+  if (!driveId || !rootPath) back("Drive not configured.");
+
+  let created: { id: string } | null = null;
+  try {
+    const token =
+      (await getAppOnlyToken()) ?? (await getUserGraphToken(session.user.id));
+    if (!token) throw new Error("No Microsoft Graph token available.");
+
+    // Same folder layout as a scheduled session: L&D/{parent}/{course}.
+    if (folderParent) await ensureFolder(driveId!, rootPath!, folderParent, token);
+    const parentPath = folderParent ? `${rootPath}/${folderParent}` : rootPath!;
+    const targetFolderId = await ensureFolder(driveId!, parentPath, courseTitle, token);
+
+    // Time is cosmetic here (the session is over) — anchor it at 10:00 IST on
+    // the date given so the card sorts and displays sensibly.
+    const startAt = istLocalToUtc(`${heldOn}T10:00`);
+    if (Number.isNaN(startAt.getTime())) throw new Error("Invalid date.");
+    const endAt = new Date(startAt.getTime() + durationMin * 60_000);
+
+    created = await prisma.liveSession.create({
+      data: {
+        title,
+        courseTitle,
+        folderParent,
+        scheduledById: session.user.id,
+        startAt,
+        endAt,
+        attendeeIds,
+        targetFolderId,
+        status: "ENDED",
+      },
+      select: { id: true },
+    });
+  } catch (e) {
+    back((e as Error).message || "Could not create the session.");
+  }
+
+  // Copy the recording in and run the normal pipeline (video + allotment).
+  const result = await ingestFromRecapLink(created!.id, url);
+  revalidatePath("/admin/live");
+  revalidatePath("/dashboard");
+  back(
+    result.status === "ingested"
+      ? "Session added and recording published."
+      : result.message ?? result.status
+  );
 }
 
 // Ingest a recording from a pasted Teams recap/share link — for when the
@@ -434,6 +508,7 @@ export default async function AdminLivePage({
       </div>
 
       {tab === "schedule" && (
+      <>
       <section className="rounded-2xl bg-white border border-border shadow-soft p-5 sm:p-6 mb-8">
         <div className="flex items-start gap-3 mb-5">
           <div className="w-11 h-11 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
@@ -471,6 +546,29 @@ export default async function AdminLivePage({
           </p>
         </div>
       </section>
+
+      <section className="rounded-2xl bg-white border border-border shadow-soft p-6 mb-8">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 grid place-items-center shrink-0">
+            <Download className="w-5 h-5" />
+          </div>
+          <div>
+            <h2 className="font-display text-lg font-bold">Add a past session</h2>
+            <p className="text-xs text-ink-mute mt-0.5">
+              For a session held without scheduling it here. Files the recording from
+              its link and allots it — no Teams meeting is created and no invite is sent.
+            </p>
+          </div>
+        </div>
+
+        <AddPastSessionForm
+          users={users}
+          existingFolders={existingFolders}
+          action={addPastSession}
+          defaultDate={new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" })}
+        />
+      </section>
+      </>
       )}
 
       {tab === "sessions" && (
