@@ -1,0 +1,21 @@
+# Nightly (02:00 IST): retry pending client/job folders on SharePoint and rebuild
+# Clients/_Database/Client Database.xlsx. Uses the same CRON_SECRET as ingest.
+name: Clients nightly rebuild
+
+on:
+  schedule:
+    - cron: "30 20 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call clients cron endpoint
+        run: |
+          if [ -z "${{ secrets.CRON_SECRET }}" ]; then
+            echo "CRON_SECRET repo secret not set — skipping."
+            exit 0
+          fi
+          curl -fsS --max-time 290 \
+            "https://lms.indefine.in/api/cron/clients?key=${{ secrets.CRON_SECRET }}"
