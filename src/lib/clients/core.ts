@@ -98,13 +98,16 @@ export function safeName(s: string): string {
 }
 
 export function folderName(s: string): string {
-  return safeName(s).slice(0, 80);
+  return safeName(s).slice(0, 80).trim();
 }
 
-// Indian financial year, April–March. fyFor(2 Sep 2026) = "2026-27".
+// Indian financial year, April–March, based on the IST calendar date (folders/reports
+// are all IST-facing; using the server's local date would shift the FY boundary on a
+// UTC host). fyFor(2 Sep 2026) = "2026-27".
 export function fyFor(d: Date): string {
-  const y = d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1;
-  return `${y}-${String((y + 1) % 100).padStart(2, "0")}`;
+  const [y, m] = d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }).split("-").map(Number);
+  const fyStart = m >= 4 ? y : y - 1;
+  return `${fyStart}-${String((fyStart + 1) % 100).padStart(2, "0")}`;
 }
 
 export function fyOptions(now = new Date()): string[] {

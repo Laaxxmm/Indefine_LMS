@@ -163,6 +163,9 @@ console.log("verify-clients: core OK");
   assert.equal(keyOf(rows[0], "band"), "Under ₹40 L");
   const byHandler = groupRows(rows, "handler");
   assert.deepEqual(byHandler.map((g) => [g.key, g.jobs, g.clients, g.open, g.done, g.turnover]), [["H One", 2, 1, 1, 1, 1_000_000], ["H Two", 1, 1, 1, 0, 5_000_000]]);
+  // Month grouping sorts chronologically (ascending), not by count.
+  const byMonth = groupRows([row({ id: "d", month: "2026-09" }), row({ id: "e", month: "2026-08" })], "month");
+  assert.deepEqual(byMonth.map((g) => g.key), ["2026-08", "2026-09"]);
   const f = parseFilters({ fy: "2026-27", department: "TAX", band: "BOGUS", from: "2026-09-01", to: "2026-09-30", status: "CLOSED" });
   assert.equal(f.fy, "2026-27");
   assert.equal(f.department, "TAX");

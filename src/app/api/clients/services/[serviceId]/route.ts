@@ -4,9 +4,9 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isClientsAdmin } from "@/lib/clients/core";
 
-const patchZ = z.object({ name: z.string().trim().min(2).max(80).optional(), active: z.boolean().optional() });
+const patchZ = z.object({ active: z.boolean().optional() });
 
-// Rename or (de)activate a service. Admins only. Never deleted — jobs reference it.
+// (De)activate a service. Admins only. Never renamed or deleted — jobs reference it.
 export async function PATCH(req: Request, { params }: { params: Promise<{ serviceId: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

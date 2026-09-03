@@ -1,8 +1,10 @@
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
+import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { DEPARTMENTS, departmentLabel } from "@/lib/ca-firm";
-import { ENTITY_TYPES, JOB_STATUSES, TURNOVER_BANDS, fyOptions, keysOf } from "@/lib/clients/core";
+import { ENTITY_TYPES, JOB_STATUSES, TURNOVER_BANDS, canViewClients, fyOptions, keysOf } from "@/lib/clients/core";
 import { listHandlers } from "@/lib/clients/services";
 import { isDone } from "@/lib/clients/reports";
 import { Plus, Users } from "lucide-react";
@@ -13,6 +15,9 @@ const field = "rounded-lg border border-border bg-page/60 px-3 py-2 text-[13px]"
 const fmt = (d: Date) => d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 
 export default async function ClientsList({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
+  const session = await auth();
+  if (!session?.user) redirect("/");
+  if (!canViewClients(session.user)) redirect("/dashboard");
   const sp = await searchParams;
   const handlers = await listHandlers();
 

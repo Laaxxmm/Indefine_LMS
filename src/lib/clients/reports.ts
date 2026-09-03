@@ -113,17 +113,24 @@ export function summarize(rows: JobRow[], now = new Date()) {
 
 export type GroupRow = { key: string; jobs: number; clients: number; open: number; done: number; turnover: number };
 
+// Order the turnover-band labels canonically (enum declaration order), since the group
+// key is the display label, not the enum key itself.
+const BAND_ORDER = Object.keys(TURNOVER_BANDS).map((k) => TURNOVER_BANDS[k as TurnoverBand]);
+
 export function groupRows(rows: JobRow[], g: GroupKey): GroupRow[] {
   const groups = new Map<string, JobRow[]>();
   for (const r of rows) {
     const k = keyOf(r, g);
     groups.set(k, [...(groups.get(k) ?? []), r]);
   }
-  return [...groups.entries()]
-    .map(([key, rs]) => {
-      const clients = clientTurnover(rs);
-      const done = rs.filter((r) => isDone(r.status)).length;
-      return { key, jobs: rs.length, clients: clients.size, open: rs.length - done, done, turnover: sum(clients) };
-    })
-    .sort((a, b) => b.jobs - a.jobs || a.key.localeCompare(b.key));
+  const out = [...groups.entries()].map(([key, rs]) => {
+    const clients = clientTurnover(rs);
+    const done = rs.filter((r) => isDone(r.status)).length;
+    return { key, jobs: rs.length, clients: clients.size, open: rs.length - done, done, turnover: sum(clients) };
+  });
+  // fy/month sort chronologically (both are "YYYY-.." strings, so lexical == chronological);
+  // band sorts low-to-high turnover; everything else stays count-desc then alphabetical.
+  if (g === "fy" || g === "month") return out.sort((a, b) => a.key.localeCompare(b.key));
+  if (g === "band") return out.sort((a, b) => BAND_ORDER.indexOf(a.key) - BAND_ORDER.indexOf(b.key));
+  return out.sort((a, b) => b.jobs - a.jobs || a.key.localeCompare(b.key));
 }

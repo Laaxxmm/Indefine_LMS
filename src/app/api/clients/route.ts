@@ -20,9 +20,10 @@ export async function POST(req: Request) {
 
   const fname = folderName(client.name);
   if (!/[A-Za-z0-9]/.test(fname)) return NextResponse.json({ error: "Client name needs at least one letter or digit" }, { status: 400 });
+  if (fname.toLowerCase() === "_database") return NextResponse.json({ error: "That name is reserved" }, { status: 400 });
 
   const dup = await prisma.client.findFirst({
-    where: { OR: [{ name: { equals: client.name, mode: "insensitive" } }, { folderName: fname }, ...(client.pan ? [{ pan: client.pan }] : [])] },
+    where: { OR: [{ name: { equals: client.name, mode: "insensitive" } }, { folderName: { equals: fname, mode: "insensitive" } }, ...(client.pan ? [{ pan: client.pan }] : [])] },
     select: { id: true, name: true },
   });
   if (dup) return NextResponse.json({ error: `Client already exists: ${dup.name}`, existingId: dup.id }, { status: 409 });

@@ -7,7 +7,7 @@ import { DEPARTMENTS } from "@/lib/ca-firm";
 import { isClientsAdmin } from "@/lib/clients/core";
 
 const bodyZ = z.object({
-  department: z.enum(DEPARTMENTS as [typeof DEPARTMENTS[number], ...typeof DEPARTMENTS]),
+  department: z.enum(DEPARTMENTS.filter((d) => d !== "GENERAL") as [typeof DEPARTMENTS[number], ...typeof DEPARTMENTS]),
   name: z.string().trim().min(2).max(80),
 });
 

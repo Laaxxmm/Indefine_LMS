@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { fyOptions } from "@/lib/clients/core";
+import { canViewClients, fyOptions } from "@/lib/clients/core";
 import { listHandlers, listServiceTypes } from "@/lib/clients/services";
 import { OnboardForm } from "./OnboardForm";
 
@@ -9,6 +9,7 @@ export const dynamic = "force-dynamic";
 export default async function NewClientPage() {
   const session = await auth();
   if (!session?.user) redirect("/");
+  if (!canViewClients(session.user)) redirect("/dashboard");
   const [services, handlers] = await Promise.all([listServiceTypes(), listHandlers()]);
   return (
     <div>

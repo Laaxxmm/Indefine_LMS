@@ -16,7 +16,12 @@ const driveId = () => process.env.GRAPH_DRIVE_ID ?? "";
 export const clientsRoot = () => (process.env.GRAPH_CLIENTS_ROOT || "Clients").replace(/^\/+|\/+$/g, "");
 
 async function graphToken(userId?: string): Promise<string | null> {
-  return (await getAppOnlyToken()) ?? (userId ? await getUserGraphToken(userId) : null);
+  try {
+    return (await getAppOnlyToken()) ?? (userId ? await getUserGraphToken(userId) : null);
+  } catch (e) {
+    console.error("graph token failed:", (e as Error).message);
+    return null;
+  }
 }
 
 // Single DB read for both ids. Warm path (graphFolderId already set) skips all Graph
@@ -48,7 +53,7 @@ async function ensureClientTree(
     return { clientFolderId, kycFolderId: kycId };
   } catch (e) {
     console.error(`client folder ${client.folderName} failed:`, (e as Error).message);
-    await prisma.client.update({ where: { id: clientId }, data: { folderStatus: "FAILED" } }).catch(() => {});
+    await prisma.client.updateMany({ where: { id: clientId, graphFolderId: null }, data: { folderStatus: "FAILED" } }).catch(() => {});
     return null;
   }
 }
@@ -84,7 +89,7 @@ export async function ensureJobFolder(jobId: string, userId?: string): Promise<s
     return id;
   } catch (e) {
     console.error(`job folder ${base}/${job.fy}/${dept}/${svc} failed:`, (e as Error).message);
-    await prisma.job.update({ where: { id: jobId }, data: { folderStatus: "FAILED" } }).catch(() => {});
+    await prisma.job.updateMany({ where: { id: jobId, graphFolderId: null }, data: { folderStatus: "FAILED" } }).catch(() => {});
     return null;
   }
 }

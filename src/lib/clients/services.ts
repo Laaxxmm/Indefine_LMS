@@ -1,9 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { SEED_SERVICES } from "./core";
 
-// Idempotent seed. One INSERT … ON CONFLICT DO NOTHING per call; cheap enough to run
-// on every page that needs the list, so no separate seed step at deploy.
+// One-time seed: only fires while the table is empty, so it never re-inserts over an
+// admin's edits (renamed department order, deactivated services, etc). Cheap enough to
+// check on every page that needs the list, so no separate seed step at deploy.
 export async function ensureServiceTypes(): Promise<void> {
+  if ((await prisma.serviceType.count()) > 0) return;
   const data = SEED_SERVICES.flatMap(([department, names]) => names.map((name, order) => ({ department, name, order })));
   await prisma.serviceType.createMany({ data, skipDuplicates: true });
 }

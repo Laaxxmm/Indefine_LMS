@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { Download } from "lucide-react";
+import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import { DEPARTMENTS, departmentLabel } from "@/lib/ca-firm";
-import { GROWTH_GOALS, JOB_STATUSES, TURNOVER_BANDS, fyOptions, keysOf } from "@/lib/clients/core";
+import { GROWTH_GOALS, JOB_STATUSES, TURNOVER_BANDS, canViewClients, fyOptions, keysOf } from "@/lib/clients/core";
 import { listHandlers, listServiceTypes } from "@/lib/clients/services";
 import { GROUP_KEYS, filtersToQuery, groupRows, keyOf, loadJobRows, parseFilters, summarize, type GroupKey } from "@/lib/clients/reports";
 import { RebuildButton } from "./RebuildButton";
@@ -13,6 +15,9 @@ const inr = (n: number) => `₹${n.toLocaleString("en-IN")}`;
 const ist = (d: Date | null) => (d ? d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata" }) : "—");
 
 export default async function ReportsPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
+  const session = await auth();
+  if (!session?.user) redirect("/");
+  if (!canViewClients(session.user)) redirect("/dashboard");
   const sp = await searchParams;
   const group: GroupKey = sp.group && sp.group in GROUP_KEYS ? (sp.group as GroupKey) : "fy";
   const [rows, services, handlers] = await Promise.all([loadJobRows(parseFilters(sp)), listServiceTypes(true), listHandlers()]);

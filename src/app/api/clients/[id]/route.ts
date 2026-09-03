@@ -25,14 +25,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid request" }, { status: 400 });
   const body = parsed.data;
 
+  if (body.primaryHandlerId) {
+    const handler = await prisma.user.findUnique({ where: { id: body.primaryHandlerId }, select: { active: true } });
+    if (!handler?.active) return NextResponse.json({ error: "Unknown handler" }, { status: 400 });
+  }
+
   const data: Prisma.ClientUncheckedUpdateInput = { ...body };
   if (body.turnover !== undefined) data.turnoverBand = turnoverBand(body.turnover);
 
   if (body.name && body.name !== existing.name) {
     const fname = folderName(body.name);
     if (!/[A-Za-z0-9]/.test(fname)) return NextResponse.json({ error: "Client name needs at least one letter or digit" }, { status: 400 });
+    if (fname.toLowerCase() === "_database") return NextResponse.json({ error: "That name is reserved" }, { status: 400 });
     const dup = await prisma.client.findFirst({
-      where: { id: { not: id }, OR: [{ name: { equals: body.name, mode: "insensitive" } }, { folderName: fname }] },
+      where: { id: { not: id }, OR: [{ name: { equals: body.name, mode: "insensitive" } }, { folderName: { equals: fname, mode: "insensitive" } }] },
       select: { name: true },
     });
     if (dup) return NextResponse.json({ error: `Another client is already called ${dup.name}` }, { status: 409 });

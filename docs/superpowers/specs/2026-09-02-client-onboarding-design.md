@@ -19,6 +19,7 @@ staff (existing Entra SSO).
 | Where it lives | Inside LMS repo, new `/clients` module. Reuses Entra SSO, app-only Graph token, folder/upload helpers, User table. |
 | Work vs job | Work = existing `Department` enum. Job = a `ServiceType` under that department. |
 | Service list | Admin-editable table, seeded with the list below. |
+| Service list | Create + activate/deactivate only; never renamed or deleted (jobs reference services). |
 | Visibility | All staff see all clients and jobs and can add. Edit client / delete job or document = admin or PARTNER level. |
 | Turnover | Exact ₹ figure stored, band derived for reports. |
 | Growth goal | Pick-list plus optional free-text note. |

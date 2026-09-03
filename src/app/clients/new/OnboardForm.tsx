@@ -35,14 +35,16 @@ export function OnboardForm({ services, handlers, fys, meId }: Props) {
     setError(null);
     setUploadErrors([]);
     setBusy("Saving client…");
+    let createdId: string | null = null;
     try {
       const res = await fetch("/api/clients", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ client, job: { serviceTypeId: job.serviceTypeId, fy: job.fy, handlerId: job.handlerId, dueOn: job.dueOn, fees: job.fees } }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) { setError({ text: data.error || "Could not save", existingId: data.existingId }); return; }
+      createdId = data.id;
 
       // Upload KYC files one doc type at a time; a failed file never blocks the others.
       const byType = new Map<string, File[]>();
@@ -53,9 +55,13 @@ export function OnboardForm({ services, handlers, fys, meId }: Props) {
         const fd = new FormData();
         fd.set("docType", type);
         for (const f of fs) fd.append("files", f);
-        const up = await fetch(`/api/clients/${data.id}/documents`, { method: "POST", body: fd });
-        const r = await up.json().catch(() => ({ failed: fs.map((f) => ({ name: f.name, error: "Upload failed" })) }));
-        for (const f of r.failed ?? []) failed.push(`${f.name}: ${f.error}`);
+        try {
+          const up = await fetch(`/api/clients/${data.id}/documents`, { method: "POST", body: fd });
+          const r = await up.json().catch(() => ({ failed: fs.map((f) => ({ name: f.name, error: "Upload failed" })) }));
+          for (const f of r.failed ?? []) failed.push(`${f.name}: ${f.error}`);
+        } catch {
+          for (const f of fs) failed.push(`${f.name}: network error`);
+        }
       }
       if (failed.length) {
         setUploadErrors(failed);
@@ -65,7 +71,7 @@ export function OnboardForm({ services, handlers, fys, meId }: Props) {
       }
       router.push(`/clients/${data.id}`);
     } catch (err) {
-      setError({ text: (err as Error).message });
+      setError({ text: (err as Error).message, ...(createdId ? { existingId: createdId } : {}) });
     } finally {
       setBusy(null);
     }
@@ -119,7 +125,7 @@ export function OnboardForm({ services, handlers, fys, meId }: Props) {
             {files.map((p, i) => (
               <li key={i} className="py-2 flex items-center justify-between gap-3">
                 <span><span className="font-semibold">{KYC_DOC_TYPES[p.docType as keyof typeof KYC_DOC_TYPES]}</span> · {p.file.name} <span className="text-ink-faint">({Math.ceil(p.file.size / 1024)} KB)</span></span>
-                <button type="button" onClick={() => setFiles((f) => f.filter((_, j) => j !== i))} className="text-ink-faint hover:text-rose-600"><X className="w-4 h-4" /></button>
+                <button type="button" aria-label="Remove file" onClick={() => setFiles((f) => f.filter((_, j) => j !== i))} className="text-ink-faint hover:text-rose-600"><X className="w-4 h-4" /></button>
               </li>
             ))}
           </ul>

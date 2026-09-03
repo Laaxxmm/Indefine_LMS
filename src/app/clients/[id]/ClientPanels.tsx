@@ -88,7 +88,7 @@ export function ClientPanels({ clientId, folderStatus, jobs, documents, services
         <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead className="text-[11px] uppercase tracking-wide text-ink-faint text-left">
-              <tr><th className="py-2 pr-3">FY</th><th className="py-2 pr-3">Department</th><th className="py-2 pr-3">Service</th><th className="py-2 pr-3">Handler</th><th className="py-2 pr-3">Status</th><th className="py-2 pr-3">Due</th><th className="py-2 pr-3">Notes</th><th className="py-2 pr-3">Docs</th><th /></tr>
+              <tr><th className="py-2 pr-3">FY</th><th className="py-2 pr-3">Department</th><th className="py-2 pr-3">Service</th><th className="py-2 pr-3">Handler</th><th className="py-2 pr-3">Status</th><th className="py-2 pr-3">Due</th><th className="py-2 pr-3">Notes</th><th className="py-2 pr-3">Fees (₹)</th><th className="py-2 pr-3">Docs</th><th /></tr>
             </thead>
             <tbody>
               {jobs.map((j) => (
@@ -100,6 +100,7 @@ export function ClientPanels({ clientId, folderStatus, jobs, documents, services
                   <td className="py-2 pr-3"><select value={j.status} onChange={(e) => run(j.id, () => call(`/api/clients/jobs/${j.id}`, json({ status: e.target.value }, "PATCH")))} className={field}>{keysOf(JOB_STATUSES).map((s) => <option key={s} value={s}>{JOB_STATUSES[s]}</option>)}</select></td>
                   <td className="py-2 pr-3"><input type="date" defaultValue={j.dueOn} onBlur={(e) => { if (e.target.value !== j.dueOn) run(j.id, () => call(`/api/clients/jobs/${j.id}`, json({ dueOn: e.target.value }, "PATCH"))); }} className={field} /></td>
                   <td className="py-2 pr-3"><input defaultValue={j.notes} placeholder="Notes" onBlur={(e) => { if (e.target.value !== j.notes) run(j.id, () => call(`/api/clients/jobs/${j.id}`, json({ notes: e.target.value }, "PATCH"))); }} className={`${field} w-40`} /></td>
+                  <td className="py-2 pr-3"><input type="number" min={0} defaultValue={j.fees} onBlur={(e) => { if (e.target.value !== j.fees) run(j.id, () => call(`/api/clients/jobs/${j.id}`, json({ fees: e.target.value }, "PATCH"))); }} className={`${field} w-28`} /></td>
                   <td className="py-2 pr-3">{j.docCount}</td>
                   <td className="py-2 text-right">{canManage && j.docCount === 0 && <button title="Remove job" aria-label="Remove job" onClick={() => { if (confirm("Remove this job record?")) run(j.id, () => call(`/api/clients/jobs/${j.id}`, { method: "DELETE" })); }} className="text-ink-faint hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>}</td>
                 </tr>

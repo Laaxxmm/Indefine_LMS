@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, FolderOpen } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-import { ENTITY_TYPES, GROWTH_GOALS, TURNOVER_BANDS, canManageClients, fyOptions } from "@/lib/clients/core";
+import { ENTITY_TYPES, GROWTH_GOALS, TURNOVER_BANDS, canManageClients, canViewClients, fyOptions } from "@/lib/clients/core";
 import { listHandlers, listServiceTypes } from "@/lib/clients/services";
 import { ClientPanels } from "./ClientPanels";
 import { EditClient } from "./EditClient";
@@ -16,6 +16,7 @@ const inr = (n: number) => `₹${n.toLocaleString("en-IN")}`;
 export default async function ClientPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) redirect("/");
+  if (!canViewClients(session.user)) redirect("/dashboard");
   const { id } = await params;
   const client = await prisma.client.findUnique({
     where: { id },
