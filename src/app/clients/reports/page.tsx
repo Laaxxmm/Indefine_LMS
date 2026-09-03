@@ -74,7 +74,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
         </table>
       </div>
 
-      {drill && (
+      {drill && drill.length > 0 && (
         <div className="overflow-x-auto rounded-2xl bg-card border border-border shadow-lift">
           <div className="px-4 py-3 text-[12px] font-bold text-ink-mute">{GROUP_KEYS[group]}: {sp.drill} · {drill.length} job(s)</div>
           <table className="w-full text-[13.5px]">

@@ -9,10 +9,15 @@ export function RebuildButton() {
   async function rebuild() {
     setBusy(true);
     setMsg(null);
-    const res = await fetch("/api/clients/workbook", { method: "POST" });
-    const data = await res.json().catch(() => ({}));
-    setBusy(false);
-    setMsg(res.ok ? "Workbook rebuilt on SharePoint." : `Rebuild failed: ${data.error ?? res.status}`);
+    try {
+      const res = await fetch("/api/clients/workbook", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      setMsg(res.ok ? "Workbook rebuilt on SharePoint." : `Rebuild failed: ${data.error ?? res.status}`);
+    } catch (e) {
+      setMsg(`Rebuild failed: ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
   }
   return (
     <span className="inline-flex items-center gap-2">
