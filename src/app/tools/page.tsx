@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FileBadge, ArrowRight, BookText, Wrench, LayoutDashboard } from "lucide-react";
+import { FileBadge, ArrowRight, BookText, Wrench, LayoutDashboard, Users } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { canUseNeoCentra } from "@/lib/neo-centra/access";
 
@@ -44,6 +44,15 @@ const TOOLS = [
       "Generate rental agreements, MOUs, partnership, trust and LLP deeds as Word files, and extract GSTR-3B / TDS challan PDFs into Excel. Direct download, full audit trail.",
     icon: Wrench,
     accent: "#e84a8a",
+  },
+  {
+    href: "/clients",
+    title: "Client onboarding",
+    tag: "Clients · Jobs · Documents",
+    blurb:
+      "Onboard a client, file their documents into SharePoint under the client's folder, track jobs by FY and handler, and report on the client base.",
+    icon: Users,
+    accent: "#0ea5e9",
   },
 ];
 
