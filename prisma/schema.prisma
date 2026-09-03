@@ -65,6 +65,11 @@ model User {
   dailyActivity       DailyActivity[]
   certificateIssues   CertificateIssue[] @relation("CertificateCreator")
   officeToolRuns      OfficeToolRun[]    @relation("OfficeToolRunner")
+  clientsHandled      Client[]           @relation("ClientHandler")
+  clientsCreated      Client[]           @relation("ClientCreator")
+  jobsHandled         Job[]              @relation("JobHandler")
+  jobsCreated         Job[]              @relation("JobCreator")
+  clientDocsUploaded  ClientDocument[]   @relation("ClientDocUploader")
 }
 
 enum EmployeeLevel {
@@ -908,4 +913,172 @@ model NeoIncentiveSnapshot {
   data        Json     // full per-director 4-bucket breakdown
 
   @@index([periodStart])
+}
+
+// -------------------- Client onboarding --------------------
+// Client master + per-FY jobs + documents filed to SharePoint under
+// <GRAPH_CLIENTS_ROOT>/<Client.folderName>/... Postgres is the source of truth;
+// the Excel workbook on SharePoint is regenerated from these tables.
+
+enum EntityType {
+  INDIVIDUAL
+  HUF
+  PROPRIETORSHIP
+  PARTNERSHIP
+  LLP
+  PVT_LTD
+  PUBLIC_LTD
+  TRUST_SOCIETY
+  OTHER
+}
+
+enum TurnoverBand {
+  UNDER_40L
+  L40_TO_1CR
+  CR1_TO_5CR
+  CR5_TO_20CR
+  ABOVE_20CR
+}
+
+enum GrowthGoal {
+  EXPAND_LOCATIONS
+  RAISE_FUNDING
+  CONVERT_ENTITY
+  EXPORT
+  COMPLIANCE_CLEANUP
+  COST_REDUCTION
+  EXIT_SALE
+  MAINTAIN
+  OTHER
+}
+
+enum FolderStatus {
+  PENDING
+  READY
+  FAILED
+}
+
+enum JobStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  DELIVERED
+  CLOSED
+}
+
+enum ClientDocType {
+  // client-level (KYC)
+  PAN
+  AADHAAR_DIN
+  INCORPORATION_DEED
+  GST_CERT
+  MOA_AOA
+  BANK
+  ENGAGEMENT_LETTER
+  OTHER_KYC
+  // job-level
+  SOURCE_DATA
+  WORKING_PAPERS
+  FILED_RETURN
+  ACKNOWLEDGEMENT
+  SIGN_OFF
+  OTHER_JOB
+}
+
+model Client {
+  id               String       @id @default(cuid())
+  name             String       @unique
+  folderName       String       @unique
+  entityType       EntityType
+  pan              String?      @unique
+  gstin            String?
+  cin              String?
+  industry         String?
+  city             String?
+  contactName      String?
+  contactPhone     String?
+  contactEmail     String?
+  referralSource   String?
+  turnover         Float        // rupees
+  turnoverBand     TurnoverBand
+  growthGoal       GrowthGoal
+  growthNote       String?
+  onboardedOn      DateTime
+  primaryHandlerId String
+  active           Boolean      @default(true)
+  graphFolderId    String?
+  folderStatus     FolderStatus @default(PENDING)
+  createdById      String
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  primaryHandler User             @relation("ClientHandler", fields: [primaryHandlerId], references: [id])
+  createdBy      User             @relation("ClientCreator", fields: [createdById], references: [id])
+  jobs           Job[]
+  documents      ClientDocument[]
+
+  @@index([primaryHandlerId])
+  @@index([turnoverBand])
+}
+
+// Admin-editable service list, one row per (department, service).
+model ServiceType {
+  id         String     @id @default(cuid())
+  department Department
+  name       String
+  active     Boolean    @default(true)
+  order      Int        @default(0)
+
+  jobs Job[]
+
+  @@unique([department, name])
+}
+
+model Job {
+  id            String       @id @default(cuid())
+  clientId      String
+  serviceTypeId String
+  fy            String       // "2026-27"
+  handlerId     String
+  status        JobStatus    @default(NOT_STARTED)
+  dueOn         DateTime?
+  fees          Float?       // rupees
+  notes         String?
+  graphFolderId String?
+  folderStatus  FolderStatus @default(PENDING)
+  createdById   String
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  client      Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  serviceType ServiceType      @relation(fields: [serviceTypeId], references: [id])
+  handler     User             @relation("JobHandler", fields: [handlerId], references: [id])
+  createdBy   User             @relation("JobCreator", fields: [createdById], references: [id])
+  documents   ClientDocument[]
+
+  @@unique([clientId, serviceTypeId, fy])
+  @@index([handlerId])
+  @@index([fy])
+  @@index([status])
+}
+
+// jobId null = client-level KYC document. Same shape as Material.
+model ClientDocument {
+  id           String        @id @default(cuid())
+  clientId     String
+  jobId        String?
+  docType      ClientDocType
+  name         String
+  graphDriveId String
+  graphItemId  String
+  webUrl       String
+  sizeBytes    Int?
+  uploadedById String
+  createdAt    DateTime      @default(now())
+
+  client     Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  job        Job?   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  uploadedBy User   @relation("ClientDocUploader", fields: [uploadedById], references: [id])
+
+  @@index([clientId])
+  @@index([jobId])
 }

@@ -10,7 +10,8 @@
     "postinstall": "prisma generate",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
-    "verify:certs": "tsx scripts/verify-certificate-templates.ts"
+    "verify:certs": "tsx scripts/verify-certificate-templates.ts",
+    "verify:clients": "tsx scripts/verify-clients.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.4",
