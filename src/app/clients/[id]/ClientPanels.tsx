@@ -32,13 +32,14 @@ export function ClientPanels({ clientId, folderStatus, jobs, documents, services
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
-  async function run(key: string, fn: () => Promise<{ ok: boolean; data: Record<string, unknown> }>) {
+  async function run(key: string, fn: () => Promise<{ ok: boolean; data: Record<string, unknown> }>): Promise<boolean> {
     setBusy(key);
     setError(null);
     try {
       const r = await fn();
       if (!r.ok) setError(String(r.data.error ?? "Failed"));
       else router.refresh();
+      return r.ok;
     } finally {
       setBusy(null);
     }
@@ -65,7 +66,7 @@ export function ClientPanels({ clientId, folderStatus, jobs, documents, services
       const r = await call(`/api/clients/${clientId}/documents`, { method: "POST", body: fd });
       const failed = (r.data.failed as Array<{ name: string; error: string }> | undefined) ?? [];
       setUploadReport(failed.map((f) => `${f.name}: ${f.error}`));
-      return { ok: r.ok, data: { error: "None of the files uploaded — see the list below" } };
+      return { ok: r.ok, data: { error: typeof r.data.error === "string" ? r.data.error : "None of the files uploaded — see the list below" } };
     });
   }
 
@@ -100,13 +101,13 @@ export function ClientPanels({ clientId, folderStatus, jobs, documents, services
                   <td className="py-2 pr-3"><input type="date" defaultValue={j.dueOn} onBlur={(e) => { if (e.target.value !== j.dueOn) run(j.id, () => call(`/api/clients/jobs/${j.id}`, json({ dueOn: e.target.value }, "PATCH"))); }} className={field} /></td>
                   <td className="py-2 pr-3"><input defaultValue={j.notes} placeholder="Notes" onBlur={(e) => { if (e.target.value !== j.notes) run(j.id, () => call(`/api/clients/jobs/${j.id}`, json({ notes: e.target.value }, "PATCH"))); }} className={`${field} w-40`} /></td>
                   <td className="py-2 pr-3">{j.docCount}</td>
-                  <td className="py-2 text-right">{canManage && j.docCount === 0 && <button title="Remove job" onClick={() => { if (confirm("Remove this job record?")) run(j.id, () => call(`/api/clients/jobs/${j.id}`, { method: "DELETE" })); }} className="text-ink-faint hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>}</td>
+                  <td className="py-2 text-right">{canManage && j.docCount === 0 && <button title="Remove job" aria-label="Remove job" onClick={() => { if (confirm("Remove this job record?")) run(j.id, () => call(`/api/clients/jobs/${j.id}`, { method: "DELETE" })); }} className="text-ink-faint hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <form className="mt-4 flex flex-wrap items-end gap-2" onSubmit={(e) => { e.preventDefault(); run("newjob", () => call(`/api/clients/${clientId}/jobs`, json({ serviceTypeId: nj.serviceTypeId, fy: nj.fy, handlerId: nj.handlerId, dueOn: nj.dueOn, fees: nj.fees }))); }}>
+        <form className="mt-4 flex flex-wrap items-end gap-2" onSubmit={async (e) => { e.preventDefault(); const ok = await run("newjob", () => call(`/api/clients/${clientId}/jobs`, json({ serviceTypeId: nj.serviceTypeId, fy: nj.fy, handlerId: nj.handlerId, dueOn: nj.dueOn, fees: nj.fees }))); if (ok) setNj({ ...nj, dueOn: "", fees: "" }); }}>
           <select value={nj.department} onChange={(e) => { const d = e.target.value as ServiceType["department"]; setNj({ ...nj, department: d, serviceTypeId: services.find((s) => s.department === d)?.id ?? "" }); }} className={field}>{[...new Set(services.map((s) => s.department))].map((d) => <option key={d} value={d}>{departmentLabel(d)}</option>)}</select>
           <select value={nj.serviceTypeId} onChange={(e) => setNj({ ...nj, serviceTypeId: e.target.value })} className={field}>{deptServices.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
           <select value={nj.fy} onChange={(e) => setNj({ ...nj, fy: e.target.value })} className={field}>{fys.map((f) => <option key={f}>{f}</option>)}</select>
@@ -152,7 +153,7 @@ function DocGroup({ title, docs, canManage, onDelete }: { title: string; docs: D
             <span><span className="font-semibold">{DOC_TYPES[d.docType]}</span> · {d.name} <span className="text-ink-faint">· {d.uploadedBy} · {d.createdAt}</span></span>
             <span className="flex items-center gap-3">
               <a href={d.webUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-brand-600 font-semibold"><ExternalLink className="w-4 h-4" /> Open</a>
-              {canManage && <button title="Unlink record (file stays on SharePoint)" onClick={() => { if (confirm("Remove this document record? The file stays on SharePoint.")) onDelete(d.id); }} className="text-ink-faint hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>}
+              {canManage && <button title="Unlink record (file stays on SharePoint)" aria-label="Unlink record (file stays on SharePoint)" onClick={() => { if (confirm("Remove this document record? The file stays on SharePoint.")) onDelete(d.id); }} className="text-ink-faint hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>}
             </span>
           </li>
         ))}
