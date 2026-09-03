@@ -613,7 +613,7 @@ export async function uploadFileToFolderId(
   fileName: string,
   bytes: ArrayBuffer,
   token: string
-): Promise<{ id: string; size: number } | null> {
+): Promise<{ id: string; size: number; webUrl: string } | null> {
   const res = await fetch(
     `${GRAPH}/drives/${driveId}/items/${folderId}:/${encodeURIComponent(
       fileName
@@ -633,8 +633,8 @@ export async function uploadFileToFolderId(
     );
     return null;
   }
-  const item = (await res.json()) as { id?: string; size?: number };
-  return item.id ? { id: item.id, size: item.size ?? 0 } : null;
+  const item = (await res.json()) as { id?: string; size?: number; webUrl?: string };
+  return item.id ? { id: item.id, size: item.size ?? 0, webUrl: item.webUrl ?? "" } : null;
 }
 
 /** The parent folder id of a drive item (used to find the folder holding a
