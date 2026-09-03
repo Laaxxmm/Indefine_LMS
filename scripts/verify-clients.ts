@@ -122,5 +122,12 @@ console.log("verify-clients: core OK");
   await back.xlsx.load(bytes);
   assert.equal(back.getWorksheet("Jobs")!.rowCount, 3);
 
+  // Empty tables (no clients/jobs/documents yet) must still build and round-trip.
+  const emptyWb = buildClientWorkbook({ clients: [], jobs: [], documents: [] });
+  const emptyBytes = await emptyWb.xlsx.writeBuffer();
+  const emptyBack = new ExcelJS.Workbook();
+  await emptyBack.xlsx.load(emptyBytes);
+  assert.equal(emptyBack.getWorksheet("Jobs")!.rowCount, 2); // notice row + header row, no data rows
+
   console.log("verify-clients: core + workbook OK");
 })().catch((e) => { console.error(e); process.exit(1); });

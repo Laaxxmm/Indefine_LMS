@@ -44,7 +44,7 @@ function addTableSheet(wb: ExcelJS.Workbook, name: string, columns: string[], ro
     headerRow: true,
     style: { theme: "TableStyleMedium2", showRowStripes: true },
     columns: columns.map((c) => ({ name: c, filterButton: true })),
-    rows: rows.length ? rows : [columns.map(() => "")], // exceljs needs at least one row
+    rows,
   });
   columns.forEach((c, i) => { ws.getColumn(i + 1).width = Math.min(44, Math.max(12, c.length + 4)); });
   ws.views = [{ state: "frozen", ySplit: 2 }];
@@ -122,9 +122,10 @@ export async function loadWorkbookInput(): Promise<WorkbookInput> {
 
 export async function rebuildClientWorkbook(): Promise<{ ok: boolean; error?: string }> {
   const d = process.env.GRAPH_DRIVE_ID;
-  const t = await getAppOnlyToken();
-  if (!d || !t) return { ok: false, error: "Graph not configured (GRAPH_DRIVE_ID / MS_* env)" };
+  if (!d) return { ok: false, error: "Graph not configured (GRAPH_DRIVE_ID / MS_* env)" };
   try {
+    const t = await getAppOnlyToken();
+    if (!t) return { ok: false, error: "Could not get a Graph token" };
     const wb = buildClientWorkbook(await loadWorkbookInput());
     const bytes = new Uint8Array(await wb.xlsx.writeBuffer());
     await ensureFolder(d, "", clientsRoot(), t);
@@ -144,6 +145,6 @@ export function scheduleWorkbookRebuild(delayMs = 30_000): void {
   if (timer) clearTimeout(timer);
   timer = setTimeout(() => {
     timer = null;
-    void rebuildClientWorkbook();
+    rebuildClientWorkbook().catch((e) => console.error("client workbook rebuild failed:", e));
   }, delayMs);
 }
