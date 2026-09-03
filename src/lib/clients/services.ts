@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { SEED_SERVICES } from "./core";
 
 // One-time seed: only fires while the table is empty, so it never re-inserts over an
-// admin's edits (renamed department order, deactivated services, etc). Cheap enough to
+// admin's edits (reordered or deactivated services). Cheap enough to
 // check on every page that needs the list, so no separate seed step at deploy.
 export async function ensureServiceTypes(): Promise<void> {
   if ((await prisma.serviceType.count()) > 0) return;

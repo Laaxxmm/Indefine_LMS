@@ -26,8 +26,8 @@ assert.equal(folderName("///"), "-");
 
 // Indian FY.
 assert.equal(fyFor(new Date(2026, 8, 2)), "2026-27"); // Sep 2026
-assert.equal(fyFor(new Date(2026, 2, 31)), "2025-26"); // Mar 2026
-assert.equal(fyFor(new Date(2026, 3, 1)), "2026-27"); // Apr 2026
+assert.equal(fyFor(new Date("2026-03-31T18:29:59Z")), "2025-26"); // 31 Mar 23:59:59 IST
+assert.equal(fyFor(new Date("2026-03-31T18:30:00Z")), "2026-27"); // 1 Apr 00:00 IST
 assert.deepEqual(fyOptions(new Date(2026, 8, 2)), ["2026-27", "2025-26", "2024-25", "2023-24"]);
 assert.equal(fyFor(new Date(2099, 5, 1)), "2099-00");
 assert.ok(isValidFy("2026-27"));
