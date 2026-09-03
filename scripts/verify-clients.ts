@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import ExcelJS from "exceljs";
 import {
   turnoverBand, safeName, folderName, fyFor, fyOptions, isValidFy, PAN_RE, GSTIN_RE,
   clientBodyZ, jobBodyZ, SEED_SERVICES, isKycDocType, canManageClients, canViewClients,
 } from "../src/lib/clients/core";
+import { buildClientWorkbook, istMonth, istDate, type WorkbookInput } from "../src/lib/clients/workbook";
 
 // Turnover bands (rupees). Boundaries are inclusive on the upper band.
 assert.equal(turnoverBand(0), "UNDER_40L");
@@ -84,3 +86,41 @@ assert.ok(canManageClients({ ...base, level: "PARTNER" }));
 assert.ok(!canManageClients({ ...base, level: "PARTNER", active: false }));
 
 console.log("verify-clients: core OK");
+
+(async () => {
+  // Workbook builder — pure, no DB.
+  assert.equal(istMonth(new Date("2026-03-31T20:00:00Z")), "2026-04"); // 01:30 IST next day
+  assert.equal(istDate(new Date("2026-03-31T20:00:00Z")), "2026-04-01");
+
+  const input: WorkbookInput = {
+    clients: [{
+      name: "Alpha Traders", entityType: "PROPRIETORSHIP", pan: "ABCDE1234F", gstin: null, cin: null, industry: "Retail", city: "Chennai",
+      contactName: "A", contactPhone: "9999999999", contactEmail: null, referralSource: null, turnover: 2_500_000, turnoverBand: "UNDER_40L",
+      growthGoal: "MAINTAIN", growthNote: null, onboardedOn: new Date("2026-09-01T00:00:00Z"), handler: "H One", active: true,
+      jobCount: 1, lastJobOn: new Date("2026-09-01T00:00:00Z"), folderStatus: "READY",
+    }],
+    jobs: [{
+      client: "Alpha Traders", fy: "2026-27", department: "TAX", service: "ITR filing", handler: "H One", status: "IN_PROGRESS",
+      dueOn: null, fees: 5000, turnoverBand: "UNDER_40L", growthGoal: "MAINTAIN", entityType: "PROPRIETORSHIP", city: "Chennai",
+      createdAt: new Date("2026-09-01T00:00:00Z"), createdBy: "H One",
+    }],
+    documents: [{ client: "Alpha Traders", job: "2026-27 · ITR filing", docType: "PAN", name: "PAN - card.pdf", uploadedBy: "H One", createdAt: new Date("2026-09-01T00:00:00Z"), webUrl: "https://example.sharepoint.com/x" }],
+  };
+  const wb = buildClientWorkbook(input);
+  assert.deepEqual(wb.worksheets.map((w) => w.name), ["Clients", "Jobs", "Documents"]);
+  const jobs = wb.getWorksheet("Jobs")!;
+  assert.equal(jobs.getCell("A2").value, "Client");
+  assert.equal(jobs.getCell("A3").value, "Alpha Traders");
+  assert.equal(jobs.getCell("C3").value, "2026-09"); // Month
+  assert.equal(jobs.getCell("D3").value, "Tax");
+  assert.equal(jobs.getCell("G3").value, "In progress");
+  assert.equal(wb.getWorksheet("Clients")!.getCell("M3").value, "Under ₹40 L");
+  assert.equal(wb.getWorksheet("Documents")!.getCell("G3").value, "https://example.sharepoint.com/x");
+  // Round-trips through xlsx (catches invalid table definitions).
+  const bytes = await wb.xlsx.writeBuffer();
+  const back = new ExcelJS.Workbook();
+  await back.xlsx.load(bytes);
+  assert.equal(back.getWorksheet("Jobs")!.rowCount, 3);
+
+  console.log("verify-clients: core + workbook OK");
+})().catch((e) => { console.error(e); process.exit(1); });
