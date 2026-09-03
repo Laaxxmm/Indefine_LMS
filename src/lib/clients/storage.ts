@@ -19,25 +19,31 @@ async function graphToken(userId?: string): Promise<string | null> {
   return (await getAppOnlyToken()) ?? (userId ? await getUserGraphToken(userId) : null);
 }
 
-// Single DB read for both ids. Warm path (graphFolderId already set) still has to
-// ensure KYC, since the KYC id itself is never stored on the client row.
-async function ensureClientTree(clientId: string, userId?: string): Promise<{ clientFolderId: string; kycFolderId: string } | null> {
+// Single DB read for both ids. Warm path (graphFolderId already set) skips all Graph
+// calls unless withKyc is asked for — the KYC id itself is never stored on the client
+// row, so callers that only need the client folder id must not pay for (or fail on) it.
+async function ensureClientTree(
+  clientId: string, userId?: string, withKyc = false
+): Promise<{ clientFolderId: string; kycFolderId: string | null } | null> {
   const client = await prisma.client.findUnique({ where: { id: clientId }, select: { folderName: true, graphFolderId: true } });
   if (!client) return null;
-  const [d, t] = [driveId(), await graphToken(userId)];
-  if (!d || !t) return null;
-  const clientPath = `${clientsRoot()}/${client.folderName}`;
   if (client.graphFolderId) {
+    if (!withKyc) return { clientFolderId: client.graphFolderId, kycFolderId: null };
+    const [d, t] = [driveId(), await graphToken(userId)];
+    if (!d || !t) return { clientFolderId: client.graphFolderId, kycFolderId: null };
+    const clientPath = `${clientsRoot()}/${client.folderName}`;
     const kycId = await ensureFolder(d, clientPath, "KYC", t).catch((e) => {
       console.error(`KYC folder ${clientPath}/KYC failed:`, (e as Error).message);
       return null;
     });
-    return kycId ? { clientFolderId: client.graphFolderId, kycFolderId: kycId } : null;
+    return { clientFolderId: client.graphFolderId, kycFolderId: kycId };
   }
+  const [d, t] = [driveId(), await graphToken(userId)];
+  if (!d || !t) return null;
   try {
     await ensureFolder(d, "", clientsRoot(), t);
     const clientFolderId = await ensureFolder(d, clientsRoot(), client.folderName, t);
-    const kycId = await ensureFolder(d, clientPath, "KYC", t);
+    const kycId = await ensureFolder(d, `${clientsRoot()}/${client.folderName}`, "KYC", t);
     await prisma.client.update({ where: { id: clientId }, data: { graphFolderId: clientFolderId, folderStatus: "READY" } });
     return { clientFolderId, kycFolderId: kycId };
   } catch (e) {
@@ -53,7 +59,7 @@ export async function ensureClientFolder(clientId: string, userId?: string): Pro
 }
 
 async function kycFolderId(clientId: string, userId?: string): Promise<string | null> {
-  return (await ensureClientTree(clientId, userId))?.kycFolderId ?? null;
+  return (await ensureClientTree(clientId, userId, true))?.kycFolderId ?? null;
 }
 
 /** Ensures <root>/<client>/<FY>/<Department>/<Service>; stores the job folder id. */
