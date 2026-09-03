@@ -5,6 +5,7 @@ import {
   clientBodyZ, jobBodyZ, jobPatchZ, SEED_SERVICES, isKycDocType, canManageClients, canViewClients,
 } from "../src/lib/clients/core";
 import { buildClientWorkbook, istMonth, istDate, type WorkbookInput } from "../src/lib/clients/workbook";
+import { groupRows, keyOf, parseFilters, summarize, type JobRow } from "../src/lib/clients/reports";
 
 // Turnover bands (rupees). Boundaries are inclusive on the upper band.
 assert.equal(turnoverBand(0), "UNDER_40L");
@@ -145,5 +146,31 @@ console.log("verify-clients: core OK");
   await emptyBack.xlsx.load(emptyBytes);
   assert.equal(emptyBack.getWorksheet("Jobs")!.rowCount, 2); // notice row + header row, no data rows
 
-  console.log("verify-clients: core + workbook OK");
+  // Reports — pure grouping.
+  const row = (o: Partial<JobRow>): JobRow => ({
+    id: "j", clientId: "c1", client: "Alpha", entityType: "PVT_LTD", city: "Chennai", fy: "2026-27", month: "2026-09",
+    department: "TAX", service: "ITR filing", serviceTypeId: "s1", handlerId: "u1", handler: "H One", status: "IN_PROGRESS",
+    dueOn: null, fees: null, turnover: 1_000_000, turnoverBand: "UNDER_40L", growthGoal: "MAINTAIN", createdAt: new Date("2026-09-01T00:00:00Z"), ...o,
+  });
+  const rows = [
+    row({ id: "a", clientId: "c1", turnover: 1_000_000 }),
+    row({ id: "b", clientId: "c1", turnover: 1_000_000, service: "TDS returns", status: "CLOSED" }),
+    row({ id: "c", clientId: "c2", client: "Beta", turnover: 5_000_000, handlerId: "u2", handler: "H Two", dueOn: new Date("2026-08-01T00:00:00Z") }),
+  ];
+  const now = new Date("2026-09-02T00:00:00Z");
+  assert.deepEqual(summarize(rows, now), { clients: 2, jobs: 3, open: 2, overdue: 1, turnover: 6_000_000 }); // turnover counted once per client
+  assert.equal(keyOf(rows[0], "department"), "Tax");
+  assert.equal(keyOf(rows[0], "band"), "Under ₹40 L");
+  const byHandler = groupRows(rows, "handler");
+  assert.deepEqual(byHandler.map((g) => [g.key, g.jobs, g.clients, g.open, g.done, g.turnover]), [["H One", 2, 1, 1, 1, 1_000_000], ["H Two", 1, 1, 1, 0, 5_000_000]]);
+  const f = parseFilters({ fy: "2026-27", department: "TAX", band: "BOGUS", from: "2026-09-01", to: "2026-09-30", status: "CLOSED" });
+  assert.equal(f.fy, "2026-27");
+  assert.equal(f.department, "TAX");
+  assert.equal(f.band, undefined);
+  assert.equal(f.status, "CLOSED");
+  assert.equal(f.from?.toISOString(), "2026-08-31T18:30:00.000Z"); // 1 Sep 00:00 IST
+  assert.equal(f.to?.toISOString(), "2026-09-30T18:29:59.999Z"); // 30 Sep 23:59:59.999 IST
+  assert.equal(parseFilters({ fy: "nope" }).fy, undefined);
+
+  console.log("verify-clients: core + workbook + reports OK");
 })().catch((e) => { console.error(e); process.exit(1); });
