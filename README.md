@@ -123,6 +123,7 @@ Names and purpose only — **never commit real values**. See `.env.example`.
 | `AUTH_MICROSOFT_ENTRA_ID_ISSUER` | `https://login.microsoftonline.com/<tenant-id>/v2.0` |
 | `GRAPH_DRIVE_ID` | Drive holding the videos |
 | `GRAPH_VIDEOS_FOLDER_PATH` | Path to the videos folder within the drive |
+| `GRAPH_CLIENTS_ROOT` | Top-level SharePoint folder for client onboarding files and the Excel database; defaults to `Clients` |
 | `MS_TENANT_ID` / `MS_CLIENT_ID` / `MS_CLIENT_SECRET` | App-only Graph access (server-side listing + user sync) |
 | `ADMIN_EMAILS` | Comma-separated admin emails (auto-promoted to ADMIN) |
 | `GEMINI_API_KEY` | Google Gemini key (optional — enables AI quizzes) |

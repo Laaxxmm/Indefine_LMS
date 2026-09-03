@@ -240,3 +240,14 @@ flowchart LR
     GH -. "monthly CSV export" .-> IMP["/admin/attendance import"]
     IMP --> KRA["Attendance points → KRA"]
 ```
+
+## Client onboarding (`/clients`)
+
+Client master, admin-editable `ServiceType` per department, `Job` per (client, service, FY)
+with status/due date, and `ClientDocument` rows pointing at files on SharePoint under
+`<GRAPH_CLIENTS_ROOT>/<Client>/KYC` and `<Client>/<FY>/<Department>/<Service>`. Postgres is
+the source of truth; `src/lib/clients/workbook.ts` regenerates
+`<GRAPH_CLIENTS_ROOT>/_Database/Client Database.xlsx` in full (debounced after saves,
+nightly via `/api/cron/clients`, or the button on `/clients/reports`). Nothing in this
+module deletes from SharePoint. Pure helpers are checked by `npm run verify:clients`.
+Design: `docs/superpowers/specs/2026-09-02-client-onboarding-design.md`.
