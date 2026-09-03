@@ -124,9 +124,10 @@ small client forms, API routes under `/api/clients`, same as sop-builder.
 - `/clients/new` — onboarding form, single page: client fields, first job (FY, department →
   service, handler defaults to current user, due date), KYC uploads (multi-file, doc type per
   file). One submit creates client, job, folders, uploads, queues Excel rebuild.
-- `/clients/[id]` — client page. Details header, edit (admin/partner). Tabs: Jobs (add,
-  inline status / handler / due), Documents (KYC vs per job, upload, open-in-SharePoint link),
-  Notes.
+- `/clients/[id]` — client page. Details header, edit (admin/partner). Panels: Jobs (add,
+  inline status / handler / due / notes), Documents (KYC vs per job, upload,
+  open-in-SharePoint link). A "SharePoint folders pending" banner with a Retry button
+  appears while any folder is missing.
 - `/clients/reports` — see below.
 - `/clients/admin/services` — ServiceType CRUD, admin only.
 
