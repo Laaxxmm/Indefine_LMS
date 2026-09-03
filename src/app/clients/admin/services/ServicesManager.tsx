@@ -16,12 +16,18 @@ export function ServicesManager({ services }: { services: ServiceType[] }) {
   async function send(key: string, url: string, method: string, body: unknown) {
     setBusy(key);
     setError(null);
-    const res = await fetch(url, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-    const data = await res.json().catch(() => ({}));
-    setBusy(null);
-    if (!res.ok) { setError(data.error || "Failed"); return false; }
-    router.refresh();
-    return true;
+    try {
+      const res = await fetch(url, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setError(data.error || "Failed"); return false; }
+      router.refresh();
+      return true;
+    } catch (e) {
+      setError((e as Error).message || "Network error");
+      return false;
+    } finally {
+      setBusy(null);
+    }
   }
 
   return (
@@ -34,7 +40,7 @@ export function ServicesManager({ services }: { services: ServiceType[] }) {
           <input required value={name} onChange={(e) => setName(e.target.value)} className="rounded-lg border border-border bg-page/60 px-3 py-2 text-[13px]" />
         </label>
         <button type="submit" disabled={!!busy} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 disabled:bg-ink-faint text-white text-[13px] font-bold">{busy === "add" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Add</button>
-        {error && <p className="w-full text-[12.5px] text-rose-600">{error}</p>}
+        {error && <p role="alert" className="w-full text-[12.5px] text-rose-600">{error}</p>}
       </form>
 
       {DEPARTMENTS.filter((d) => services.some((s) => s.department === d)).map((d) => (
