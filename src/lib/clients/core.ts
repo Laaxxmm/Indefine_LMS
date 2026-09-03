@@ -123,26 +123,31 @@ export function isValidFy(s: string): boolean {
 export const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 export const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 
-// Form fields arrive as strings; "" means "not given".
+// Form fields arrive as strings. For optional/nullable columns, "" means "clear this
+// field" (-> null; Prisma writes null and skips undefined, so an absent key still
+// leaves the column untouched on PATCH). turnover is NOT NULL in the schema, so it
+// can't be cleared this way: blank turnover maps to undefined instead, which fails
+// as required on create and simply isn't sent on PATCH (never silently becomes 0).
+const blankToNull = (v: unknown) => (typeof v === "string" && v.trim() === "" ? null : v);
+const upperBlankToNull = (v: unknown) => (typeof v === "string" ? (v.trim() === "" ? null : v.trim().toUpperCase()) : v);
 const blankToUndef = (v: unknown) => (typeof v === "string" && v.trim() === "" ? undefined : v);
-const upperBlankToUndef = (v: unknown) => (typeof v === "string" ? v.trim().toUpperCase() || undefined : v);
-const optText = z.preprocess(blankToUndef, z.string().trim().max(200).optional());
+const optText = z.preprocess(blankToNull, z.string().trim().max(200).nullable().optional());
 
 export const clientBodyZ = z.object({
   name: z.string().trim().min(2, "Client name is required").max(120),
   entityType: z.enum(keysOf(ENTITY_TYPES)),
-  pan: z.preprocess(upperBlankToUndef, z.string().regex(PAN_RE, "PAN must look like AAAAA9999A").optional()),
-  gstin: z.preprocess(upperBlankToUndef, z.string().regex(GSTIN_RE, "GSTIN must be 15 characters, e.g. 33AAAAA9999A1Z5").optional()),
-  cin: z.preprocess(upperBlankToUndef, z.string().max(30).optional()),
+  pan: z.preprocess(upperBlankToNull, z.string().regex(PAN_RE, "PAN must look like AAAAA9999A").nullable().optional()),
+  gstin: z.preprocess(upperBlankToNull, z.string().regex(GSTIN_RE, "GSTIN must be 15 characters, e.g. 33AAAAA9999A1Z5").nullable().optional()),
+  cin: z.preprocess(upperBlankToNull, z.string().max(30).nullable().optional()),
   industry: optText,
   city: optText,
   contactName: optText,
-  contactPhone: z.preprocess(blankToUndef, z.string().regex(/^\d{10}$/, "Phone must be 10 digits").optional()),
-  contactEmail: z.preprocess(blankToUndef, z.string().email("Invalid email").optional()),
+  contactPhone: z.preprocess(blankToNull, z.string().regex(/^\d{10}$/, "Phone must be 10 digits").nullable().optional()),
+  contactEmail: z.preprocess(blankToNull, z.string().email("Invalid email").nullable().optional()),
   referralSource: optText,
-  turnover: z.coerce.number().min(0, "Turnover cannot be negative"),
+  turnover: z.preprocess(blankToUndef, z.coerce.number().min(0, "Turnover cannot be negative")),
   growthGoal: z.enum(keysOf(GROWTH_GOALS)),
-  growthNote: z.preprocess(blankToUndef, z.string().trim().max(1000).optional()),
+  growthNote: z.preprocess(blankToNull, z.string().trim().max(1000).nullable().optional()),
   onboardedOn: z.coerce.date(),
   primaryHandlerId: z.string().min(1, "Pick a handler"),
 });
@@ -152,9 +157,9 @@ export const jobBodyZ = z.object({
   fy: z.string().refine(isValidFy, "FY must look like 2026-27"),
   handlerId: z.string().min(1, "Pick a handler"),
   status: z.enum(keysOf(JOB_STATUSES)).default("NOT_STARTED"),
-  dueOn: z.preprocess(blankToUndef, z.coerce.date().optional()),
-  fees: z.preprocess(blankToUndef, z.coerce.number().min(0).optional()),
-  notes: z.preprocess(blankToUndef, z.string().trim().max(2000).optional()),
+  dueOn: z.preprocess(blankToNull, z.coerce.date().nullable().optional()),
+  fees: z.preprocess(blankToNull, z.coerce.number().min(0).nullable().optional()),
+  notes: z.preprocess(blankToNull, z.string().trim().max(2000).nullable().optional()),
 });
 
 export const createClientBodyZ = z.object({ client: clientBodyZ, job: jobBodyZ });

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import ExcelJS from "exceljs";
 import {
   turnoverBand, safeName, folderName, fyFor, fyOptions, isValidFy, PAN_RE, GSTIN_RE,
-  clientBodyZ, jobBodyZ, SEED_SERVICES, isKycDocType, canManageClients, canViewClients,
+  clientBodyZ, jobBodyZ, jobPatchZ, SEED_SERVICES, isKycDocType, canManageClients, canViewClients,
 } from "../src/lib/clients/core";
 import { buildClientWorkbook, istMonth, istDate, type WorkbookInput } from "../src/lib/clients/workbook";
 
@@ -49,19 +49,35 @@ const c = clientBodyZ.safeParse({
 assert.ok(c.success, JSON.stringify(c.success ? null : c.error.issues));
 if (c.success) {
   assert.equal(c.data.pan, "ABCDE1234F");
-  assert.equal(c.data.gstin, undefined);
+  assert.equal(c.data.gstin, null);
   assert.equal(c.data.turnover, 1500000);
-  assert.equal(c.data.growthNote, undefined);
+  assert.equal(c.data.growthNote, null);
   assert.ok(c.data.onboardedOn instanceof Date);
 }
 assert.ok(!clientBodyZ.safeParse({ name: "X", entityType: "PVT_LTD", turnover: -1, growthGoal: "MAINTAIN", onboardedOn: "2026-09-02", primaryHandlerId: "u1" }).success);
 assert.ok(!clientBodyZ.safeParse({ name: "Test", entityType: "PVT_LTD", pan: "BAD", turnover: 1, growthGoal: "MAINTAIN", onboardedOn: "2026-09-02", primaryHandlerId: "u1" }).success);
 assert.ok(!clientBodyZ.safeParse({ name: "Test", entityType: "PVT_LTD", contactPhone: "12345", turnover: 1, growthGoal: "MAINTAIN", onboardedOn: "2026-09-02", primaryHandlerId: "u1" }).success);
 
+// Blank turnover fails as required on create (never silently coerces to 0).
+const validMinimalClient = { name: "Test Client", entityType: "PVT_LTD" as const, turnover: 1, growthGoal: "MAINTAIN" as const, onboardedOn: "2026-09-02", primaryHandlerId: "u1" };
+assert.ok(!clientBodyZ.safeParse({ ...validMinimalClient, turnover: "" }).success);
+// On PATCH (.partial()), turnover is NOT NULL in the schema so it can't be cleared like
+// the nullable text fields: a blank turnover is still rejected (zod's optional-wrapping
+// from .partial() only short-circuits a truly-absent key, not a blank string that a
+// preprocess step turns into undefined afterwards) — the caller must omit the key
+// entirely to leave turnover untouched, which the "missing" case below confirms works.
+assert.ok(!clientBodyZ.partial().safeParse({ turnover: "" }).success);
+assert.equal(clientBodyZ.partial().safeParse({}).data?.turnover, undefined);
+
 const j = jobBodyZ.safeParse({ serviceTypeId: "s1", fy: "2026-27", handlerId: "u1", dueOn: "", fees: "" });
 assert.ok(j.success);
-if (j.success) { assert.equal(j.data.status, "NOT_STARTED"); assert.equal(j.data.dueOn, undefined); assert.equal(j.data.fees, undefined); }
+if (j.success) { assert.equal(j.data.status, "NOT_STARTED"); assert.equal(j.data.dueOn, null); assert.equal(j.data.fees, null); }
 assert.ok(!jobBodyZ.safeParse({ serviceTypeId: "s1", fy: "2026-28", handlerId: "u1" }).success);
+
+// jobPatchZ (dueOn/fees/notes are optional+nullable in both contexts, no create/patch
+// tension): blank clears to null, an absent key is left untouched (undefined).
+assert.equal(jobPatchZ.safeParse({ dueOn: "" }).data?.dueOn, null);
+assert.equal(jobPatchZ.safeParse({}).data?.dueOn, undefined);
 
 // Seed list: every entry is a known department, no duplicate names within a department.
 for (const [dept, names] of SEED_SERVICES) {

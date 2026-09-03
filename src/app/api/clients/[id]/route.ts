@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canManageClients, clientBodyZ, folderName, turnoverBand } from "@/lib/clients/core";
 import { renameClientFolder } from "@/lib/clients/storage";
 import { scheduleWorkbookRebuild } from "@/lib/clients/workbook";
+
+export const maxDuration = 60;
 
 const patchZ = clientBodyZ.partial().extend({ active: z.boolean().optional() });
 
@@ -45,7 +47,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (dup) return NextResponse.json({ error: `PAN already belongs to ${dup.name}` }, { status: 409 });
   }
 
-  await prisma.client.update({ where: { id }, data });
+  try {
+    await prisma.client.update({ where: { id }, data });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")
+      return NextResponse.json({ error: "Another client already has that name or PAN" }, { status: 409 });
+    throw e;
+  }
   scheduleWorkbookRebuild();
   return NextResponse.json({ ok: true });
 }

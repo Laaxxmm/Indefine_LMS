@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canViewClients, createClientBodyZ, folderName, turnoverBand } from "@/lib/clients/core";
@@ -34,16 +35,23 @@ export async function POST(req: Request) {
   if (!service?.active) return NextResponse.json({ error: "Unknown service" }, { status: 400 });
   if (handlers.length !== handlerIds.length) return NextResponse.json({ error: "Unknown handler" }, { status: 400 });
 
-  const created = await prisma.client.create({
-    data: {
-      ...client,
-      folderName: fname,
-      turnoverBand: turnoverBand(client.turnover),
-      createdById: session.user.id,
-      jobs: { create: { ...job, createdById: session.user.id } },
-    },
-    include: { jobs: { select: { id: true } } },
-  });
+  let created;
+  try {
+    created = await prisma.client.create({
+      data: {
+        ...client,
+        folderName: fname,
+        turnoverBand: turnoverBand(client.turnover),
+        createdById: session.user.id,
+        jobs: { create: { ...job, createdById: session.user.id } },
+      },
+      include: { jobs: { select: { id: true } } },
+    });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")
+      return NextResponse.json({ error: "Client already exists" }, { status: 409 });
+    throw e;
+  }
 
   const jobId = created.jobs[0].id;
   const folderId = await ensureJobFolder(jobId, session.user.id); // also creates the client + KYC folders

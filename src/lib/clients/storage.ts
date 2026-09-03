@@ -126,9 +126,14 @@ export async function renameClientFolder(clientId: string, newFolderName: string
   if (!client?.graphFolderId) return true; // nothing on SharePoint yet
   const [d, t] = [driveId(), await graphToken(userId)];
   if (!d || !t) return false;
-  const parent = await resolveFolderId(d, clientsRoot(), t);
-  if (!parent) return false;
-  return moveDriveItem(d, client.graphFolderId, parent, t, newFolderName);
+  try {
+    const parent = await resolveFolderId(d, clientsRoot(), t);
+    if (!parent) return false;
+    return await moveDriveItem(d, client.graphFolderId, parent, t, newFolderName);
+  } catch (e) {
+    console.error("client folder rename failed:", (e as Error).message);
+    return false;
+  }
 }
 
 export async function retryPendingFolders(): Promise<{ clients: number; jobs: number }> {
