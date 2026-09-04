@@ -163,8 +163,9 @@ a plain one-line message shown inline.
 - New work always starts in `INBOX`, whoever creates it.
 - `INBOX → ACTIVE`: by lead, or automatically when the lead adds the work to a week plan.
 - `ACTIVE ↔ PARKED`: by lead, or `ACTIVE → PARKED` automatically after 28 untouched days.
-- `ACTIVE → DONE`: by lead, or automatically when the last open task is finished (see
-  auto shifts). `DONE → ACTIVE` ("Reopen") by lead any time.
+- `ACTIVE → DONE`: by lead, or automatically when an action (tick done, drop, or review)
+  leaves the work with no `TODO` task and no task awaiting review, and at least one task
+  `DONE` (see auto shifts). `DONE → ACTIVE` ("Reopen") by lead any time.
 - Any status `→ OBSOLETE`: by lead, `obsoleteReason` required.
 - WIP cap: at most 3 `ACTIVE` works per owner. Activating a fourth, by any route, is
   refused with "3 works already active, pause or finish one first".
@@ -185,33 +186,39 @@ a plain one-line message shown inline.
 - Each person picks up to 3 works for the week. Amit may pick only `ACTIVE` works. Lead
   may also pick `INBOX` works, which activates them (WIP cap applies).
 - A work may sit in both people's plans.
-- Plan can be edited any day of the week; the gate only asks for it when empty.
+- Plan can be edited any day of the week; the gate only asks for it when empty. Saving
+  writes `WEEK_PLANNED` on each work added.
 
 **Day pick**
 
 - Day is the IST calendar day. Weekdays only; weekends have no gate and no picks.
 - Up to 3 tasks per person per day. Each must be a `TODO` task assigned to that person
-  whose work is in that person's plan for the current week.
+  whose work is `ACTIVE` and in that person's plan for the current week.
+- Picks can be added during the day up to the cap ("Pick another" on the Today view). A
+  pick cannot be removed; it is a promise, and an unfinished one becomes `CARRIED`.
 - A pick row is created with `outcome = null`. Ticking the task done sets the task `DONE`
   and today's pick `DONE`. Ticking done from the board does the same if a pick exists.
 - The nightly close flips every open pick whose task is still `TODO` to `CARRIED`.
 - Next morning, tasks that were `CARRIED` on the person's most recent pick day and are
   still `TODO` appear pre-checked in the pick screen.
 - A person with no open `TODO` task in any `ACTIVE` work sees "Nothing assigned yet" and
-  passes the gate without a pick. The morning nudge skips them.
+  passes both gate steps without a plan or a pick. The morning nudge skips them.
 
 **Stale**
 
 - Stale = `ACTIVE` and `lastTouchedAt` older than 14 days at the time of checking.
 - Stale works owned by a person appear in that person's Friday review with three choices
-  and no dismiss: **Continue** (must type the next task; creating it bumps the touch),
+  and no dismiss: **Continue** (must type the next task, created as `TODO` assigned to the
+  owner; creating it bumps the touch),
   **Pause** (`PARKED`), **Obsolete** (reason required).
 - The lead can act on any work from the board regardless of owner.
 
 **Score (per person, per week)**
 
-- Kept-promise % = pick rows with outcome `DONE` ÷ all pick rows for the week. A task
-  carried three days then finished counts 1 of 4. Carrying is meant to hurt.
+- Kept-promise % = pick rows with outcome `DONE` ÷ pick rows with any outcome set, for
+  the week. Today's still-open picks are excluded until the nightly close. A task carried
+  three days then finished counts 1 of 4. Carrying is meant to hurt. No picks yet shows
+  "—", not 0 %.
 - Shipped = works with `doneAt` in the week, plus the same for the calendar month.
 - Stale count = as above.
 - "Review done" button is enabled only when the person's stale list is empty. Pressing it
@@ -224,7 +231,7 @@ The board moves itself. Nothing below needs a drag.
 | Trigger | Effect | Event |
 |---|---|---|
 | Lead adds an `INBOX` work to a week plan | Work → `ACTIVE` | `WORK_STATUS` |
-| Last open task of an `ACTIVE` work is ticked done, and no task on it is awaiting review | Work → `DONE`, `doneAt` set. Toast with **Undo** (which reopens). | `WORK_STATUS` |
+| Tick done, drop, or review leaves an `ACTIVE` work with no `TODO` task, no task awaiting review, and at least one task `DONE` | Work → `DONE`, `doneAt` set. Toast with **Undo** (which reopens). | `WORK_STATUS` |
 | `ACTIVE` work untouched 14 days | "Stale" badge on card, appears in owner's review | none (derived) |
 | `ACTIVE` work untouched 28 days (nightly sweep) | Work → `PARKED` | `AUTO_PAUSED` |
 | Task picked for today | Task shows in the **Today** lane | `PICKED` |
