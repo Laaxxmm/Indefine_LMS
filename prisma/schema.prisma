@@ -70,6 +70,14 @@ model User {
   jobsHandled         Job[]              @relation("JobHandler")
   jobsCreated         Job[]              @relation("JobCreator")
   clientDocsUploaded  ClientDocument[]   @relation("ClientDocUploader")
+  worksOwned          Work[]             @relation("WorkOwner")
+  worksCreated        Work[]             @relation("WorkCreator")
+  workTasksAssigned   WorkTask[]         @relation("WorkTaskAssignee")
+  workTasksCreated    WorkTask[]         @relation("WorkTaskCreator")
+  weekPlanWorks       WeekPlanWork[]
+  dayPicks            DayPick[]
+  weekReviews         WeekReview[]
+  workEvents          WorkEvent[]        @relation("WorkEventActor")
 }
 
 enum EmployeeLevel {
@@ -281,6 +289,8 @@ model Settings {
   quizTimeLimitSec    Int      @default(600) // 10 min
   quizPassPercent     Int      @default(70)
   quizUnlockAtPercent Int      @default(90)
+  // Graph chat id of the "Tech Work" group chat used by the work-tracker nudges.
+  workTeamsChatId     String?
   updatedAt           DateTime @updatedAt
 }
 
@@ -1081,4 +1091,144 @@ model ClientDocument {
 
   @@index([clientId])
   @@index([jobId])
+}
+
+// -------------------- Tech work tracker (/work) --------------------
+// Two-person focus tool. Work -> Task. Rules in src/lib/work/core.ts, every
+// write in src/lib/work/db.ts appends a WorkEvent in the same transaction.
+
+enum WorkStatus {
+  INBOX     // "Ideas"
+  ACTIVE    // "Working"
+  PARKED    // "Paused"
+  DONE
+  OBSOLETE
+}
+
+enum WorkTaskStatus {
+  TODO
+  DONE
+  DROPPED
+}
+
+enum DayPickOutcome {
+  DONE
+  CARRIED
+}
+
+enum WorkEventKind {
+  WORK_CREATED
+  WORK_STATUS
+  WORK_REOPENED
+  TASK_CREATED
+  TASK_DONE
+  TASK_DROPPED
+  TASK_REVIEWED
+  TASK_REOPENED
+  PICKED
+  CARRIED
+  AUTO_PAUSED
+  WEEK_PLANNED
+  WEEK_REVIEWED
+}
+
+model Work {
+  id             String     @id @default(cuid())
+  title          String
+  why            String?    // one line: what changes when this is done
+  ownerId        String
+  status         WorkStatus @default(INBOX)
+  obsoleteReason String?
+  lastTouchedAt  DateTime   @default(now())
+  doneAt         DateTime?
+  createdById    String
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  owner     User           @relation("WorkOwner", fields: [ownerId], references: [id])
+  createdBy User           @relation("WorkCreator", fields: [createdById], references: [id])
+  tasks     WorkTask[]
+  events    WorkEvent[]
+  weekPlans WeekPlanWork[]
+
+  @@index([ownerId, status])
+  @@index([status, lastTouchedAt])
+}
+
+model WorkTask {
+  id          String         @id @default(cuid())
+  workId      String
+  title       String
+  assigneeId  String
+  status      WorkTaskStatus @default(TODO)
+  order       Int            @default(0)
+  doneAt      DateTime?
+  reviewedAt  DateTime?      // lead's tick on a task someone else finished; set at once for the lead's own
+  createdById String
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  work      Work      @relation(fields: [workId], references: [id], onDelete: Cascade)
+  assignee  User      @relation("WorkTaskAssignee", fields: [assigneeId], references: [id])
+  createdBy User      @relation("WorkTaskCreator", fields: [createdById], references: [id])
+  picks     DayPick[]
+
+  @@index([workId, status])
+  @@index([assigneeId, status])
+}
+
+// One row per (person, week, work): "this work is in my plan this week".
+model WeekPlanWork {
+  id        String   @id @default(cuid())
+  userId    String
+  weekStart DateTime // Monday 00:00 IST, stored as the UTC instant
+  workId    String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  work Work @relation(fields: [workId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, weekStart, workId])
+}
+
+// One row per (person, day, task) the person promised to do that day.
+model DayPick {
+  id      String          @id @default(cuid())
+  userId  String
+  day     DateTime        // IST calendar day, 00:00 IST as the UTC instant
+  taskId  String
+  outcome DayPickOutcome? // null while the day is open
+
+  user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task WorkTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, day, taskId])
+  @@index([userId, day])
+}
+
+// Exists once the person has finished the Friday review for that week.
+model WeekReview {
+  id        String   @id @default(cuid())
+  userId    String
+  weekStart DateTime
+  doneAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, weekStart])
+}
+
+// Append-only timeline. Every server action and cron sweep writes one row.
+model WorkEvent {
+  id     String        @id @default(cuid())
+  workId String
+  taskId String?
+  userId String?       // null when written by cron
+  kind   WorkEventKind
+  detail String?       // one plain line, e.g. the task title or "Ideas → Working"
+  at     DateTime      @default(now())
+
+  work Work  @relation(fields: [workId], references: [id], onDelete: Cascade)
+  user User? @relation("WorkEventActor", fields: [userId], references: [id])
+
+  @@index([workId, at])
 }

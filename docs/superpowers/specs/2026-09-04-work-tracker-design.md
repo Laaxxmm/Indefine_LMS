@@ -22,7 +22,7 @@ tags, no comments. Independent of Turia.
 | Where it lives | Inside LMS repo, new `/work` module. Reuses Entra SSO, Prisma/Postgres, delegated Graph token refresh, GitHub Actions cron with `CRON_SECRET`, `istDate` helper from the clients module. |
 | Who | Two users, listed by email in env `WORK_TRACKER_EMAILS`. First email is the lead (Lakshmanan). Second is Amit (`info@indefine.in`, a real licensed user). Everyone else gets 404. |
 | Hierarchy | Work → Task. Two levels only. No subtasks. |
-| Roles | Lead creates works, assigns tasks to either person, reviews Amit's done tasks, changes work status. Amit sees all works, adds tasks to himself, ticks his own tasks, cannot change work status. |
+| Roles | Lead creates works, assigns tasks to either person, reviews Amit's done tasks, changes work status. Amit sees all works, adds tasks to himself, ticks his own tasks, and may change the status only of works he owns (ideas he captured). |
 | Ritual | Weekly plan (Monday) sets the pool of works. Daily pick (up to 3 tasks) comes from that pool. Friday review shows the score and forces a decision on every stale work. |
 | Score | Kept-promise % (picked tasks finished), shipped count, stale list with forced decision, Amit's column beside the lead's. Nothing else. |
 | Nudge | Teams group chat "Tech Work" with both people. Posted as the lead via delegated Graph token. Morning if no pick, Friday afternoon if no review. Silent when done. |
@@ -149,9 +149,9 @@ model WorkEvent {
 //   workTeamsChatId String?   // Graph chat id of the "Tech Work" group chat
 ```
 
-`lastTouchedAt` is a denormalised copy of the latest event time for the work. Every
-action that writes a `WorkEvent` for a work also sets `lastTouchedAt` in the same
-transaction.
+`lastTouchedAt` is bumped by every human action that writes a `WorkEvent`, in the same
+transaction. Cron-written events (`CARRIED`, `AUTO_PAUSED`) do not bump it, so carrying a
+task every day cannot keep a work from going stale.
 
 ## Rules
 
@@ -161,12 +161,12 @@ a plain one-line message shown inline.
 **Work status**
 
 - New work always starts in `INBOX`, whoever creates it.
-- `INBOX → ACTIVE`: by lead, or automatically when the lead adds the work to a week plan.
-- `ACTIVE ↔ PARKED`: by lead, or `ACTIVE → PARKED` automatically after 28 untouched days.
-- `ACTIVE → DONE`: by lead, or automatically when an action (tick done, drop, or review)
+- `INBOX → ACTIVE`: by owner or lead, or automatically when the lead adds the work to a week plan.
+- `ACTIVE ↔ PARKED`: by owner or lead, or `ACTIVE → PARKED` automatically after 28 untouched days.
+- `ACTIVE → DONE`: by owner or lead, or automatically when an action (tick done, drop, or review)
   leaves the work with no `TODO` task and no task awaiting review, and at least one task
-  `DONE` (see auto shifts). `DONE → ACTIVE` ("Reopen") by lead any time.
-- Any status `→ OBSOLETE`: by lead, `obsoleteReason` required.
+  `DONE` (see auto shifts). `DONE → ACTIVE` ("Reopen") by owner or lead any time.
+- Any status `→ OBSOLETE`: by owner or lead, `obsoleteReason` required. `OBSOLETE → INBOX` ("Reopen") for a mistaken obsolete.
 - WIP cap: at most 3 `ACTIVE` works per owner. Activating a fourth, by any route, is
   refused with "3 works already active, pause or finish one first".
 
@@ -203,6 +203,7 @@ a plain one-line message shown inline.
   still `TODO` appear pre-checked in the pick screen.
 - A person with no open `TODO` task in any `ACTIVE` work sees "Nothing assigned yet" and
   passes both gate steps without a plan or a pick. The morning nudge skips them.
+- A person whose plan holds no open task of theirs (not yet picked today) also passes the gate; the Today view says so and points to the board and the Week page. The gate never dead-ends.
 
 **Stale**
 
