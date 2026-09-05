@@ -150,26 +150,49 @@ src/
   app/
     page.tsx                 sign-in
     dashboard/               employee landing
-    video/[id]/              player + heartbeat + speed control
-    quiz/[id]/               MCQ player, result
+    video/[id]/  quiz/[id]/  player + heartbeat; MCQ player, result
     leaderboard/ team/ initiatives/ checkin/ recap/ wizard/
-    admin/                   overview, video quiz editor, auto-quiz, courses,
-                             attendance, kra, team, branches, trajectory, …
+    admin/                   overview, video quiz editor, auto-quiz, courses, live,
+                             attendance, kra, team, branches, trajectory, settings
+    tools/                   hub: sop-builder, certificate-generator, office-tools, neo-centra
+    clients/                 client database, jobs, documents
+    work/                    tech work tracker
     api/
       auth/[...nextauth]/    NextAuth handlers
-      video/[id]/stream      fresh Graph download URL
-      video/[id]/progress    watch heartbeat
-      quiz/[id]/start|submit start (answers stripped) / submit (server re-grade)
-      admin/quiz/generate    AI quiz drafts (review)
-      admin/quiz/from-video  transcribe + auto-generate
-      admin/kra/export       KRA CSV
+      video/ quiz/ material/ learning core
+      admin/                 quiz generation, KRA export, live ingest trigger
+      tools/ clients/ work/  one folder per module, thin route handlers
+      cron/                  live/ingest, clients, work, neo-centra (all behind CRON_SECRET)
+  components/                shared pieces: Logo, buttons, ui.ts (class strings + fetch wrapper)
   lib/
-    auth.ts prisma.ts graph.ts sync.ts users-sync.ts
-    quiz.ts quiz-gen.ts gemini.ts transcribe.ts auto-quiz.ts
-    kra.ts attendance.ts trajectory.ts gamification.ts checkins.ts …
-prisma/schema.prisma         full data model
-docs/                        architecture, employee guide, test report
+    auth.ts prisma.ts graph.ts gemini.ts settings.ts ca-firm.ts   shared infrastructure
+    access.ts                who is who: isActive / isAdmin / isPartner / isManagement
+    ist.ts                   the firm's clock (only file that knows Asia/Kolkata)
+    cron-auth.ts             the CRON_SECRET handshake
+    sync.ts users-sync.ts quiz*.ts auto-quiz.ts distill.ts transcribe.ts   learning core
+    kra.ts trajectory.ts snapshots.ts recap.ts year-recap.ts gamification.ts …   scoring
+    live/                    Teams sessions: schedule, ingest, attendance, sweep
+    clients/ sop/ neo-centra/ office-tools/ certificates/ work/   one folder per module
+prisma/schema.prisma         full data model, one section per module
+scripts/verify-*.ts          assert-based self-checks (npm run verify:<name>)
+docs/                        architecture (with module index), employee guide, test report
+docs/superpowers/            design specs and implementation plans
 ```
+
+## Conventions for new code
+
+- **Route handlers, not server actions.** New pages call `src/app/api/<module>/**/route.ts`
+  through the `call()` helper in `src/components/ui.ts`. Older inline `"use server"` actions
+  remain in the wizard, check-in and approvals pages.
+- **Roles** come from `src/lib/access.ts`; never compare `role`/`level` strings inline.
+- **Dates** go through `src/lib/ist.ts`; nothing else mentions `Asia/Kolkata`.
+- **Cron routes** start with `cronUnauthorized(req)` from `src/lib/cron-auth.ts`.
+- **Styling**: reuse the class strings in `src/components/ui.ts` before writing new ones.
+- **A new module** follows the template in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) §10:
+  `core.ts` (pure rules) + `access.ts` + `db.ts`/`storage.ts`, routes, pages, a schema
+  section, a `scripts/verify-<module>.ts`, and a design note under `docs/superpowers/`.
+- **Never delete user data or SharePoint files.** Flag as inactive, obsolete or archived.
+- **Schema changes are additive.** Deploy runs `prisma db push`; there are no migrations.
 
 ---
 

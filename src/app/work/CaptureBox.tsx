@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { btnPrimary, call, field } from "./ui";
+import { btnPrimary, call, field } from "@/components/ui";
 
 // One line in, one Ideas card out. Present on every Today screen, including the gate steps,
 // so a passing thought can be parked without breaking the gate.

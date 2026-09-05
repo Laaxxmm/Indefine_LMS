@@ -1,4 +1,6 @@
-// Shared bits for the client panels under /work. No "use client" needed: plain module.
+// Shared bits for client panels: a fetch wrapper that returns { ok, error, data }, and the
+// Tailwind class strings every module's buttons, cards and fields use. Plain module, no
+// "use client" needed. Import from "@/components/ui" instead of restyling per module.
 export type CallResult = { ok: boolean; error: string | null; data: Record<string, unknown> };
 
 export async function call(url: string, body?: unknown, method = "POST"): Promise<CallResult> {

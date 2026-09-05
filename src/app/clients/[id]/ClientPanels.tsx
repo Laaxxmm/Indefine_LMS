@@ -7,6 +7,7 @@ import type { ClientDocType, JobStatus, ServiceType } from "@prisma/client";
 import { departmentLabel } from "@/lib/ca-firm";
 import { DOC_TYPES, JOB_DOC_TYPES, JOB_STATUSES, KYC_DOC_TYPES, keysOf } from "@/lib/clients/core";
 import type { Handler } from "@/lib/clients/services";
+import { card, h2 } from "@/components/ui";
 
 export type JobView = { id: string; fy: string; department: ServiceType["department"]; service: string; handlerId: string; status: JobStatus; dueOn: string; fees: string; notes: string; folderStatus: string; docCount: number };
 export type DocView = { id: string; jobId: string | null; docType: ClientDocType; name: string; webUrl: string; uploadedBy: string; createdAt: string };
@@ -17,8 +18,6 @@ type Props = {
 };
 
 const field = "rounded-lg border border-border bg-page/60 px-2.5 py-1.5 text-[13px]";
-const card = "rounded-2xl bg-card border border-border shadow-lift p-5";
-const h2 = "text-[10.5px] font-extrabold tracking-[0.12em] text-ink-faint uppercase mb-3";
 
 async function call(url: string, init: RequestInit): Promise<{ ok: boolean; data: Record<string, unknown> }> {
   const res = await fetch(url, init);

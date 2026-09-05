@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import type { WorkStatus } from "@prisma/client";
 import { WORK_STATUS_LABELS } from "@/lib/work/core";
 import { PlanForm, type PlanWork } from "../PlanForm";
-import { btnGhost, btnPrimary, call, card, errorText, field, h2, type CallResult } from "../ui";
+import { btnGhost, btnPrimary, call, card, errorText, field, h2, type CallResult } from "@/components/ui";
 
 export type Column = {
   user: { id: string; name: string };

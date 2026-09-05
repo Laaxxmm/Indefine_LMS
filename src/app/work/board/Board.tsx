@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { WorkStatus } from "@prisma/client";
 import { WORK_STATUS_LABELS, WORK_STATUS_ORDER, actionForMove, actionsFor, type WorkAction } from "@/lib/work/core";
-import { btnGhost, call, errorText } from "../ui";
+import { btnGhost, call, errorText } from "@/components/ui";
 
 export type Card = { id: string; title: string; status: WorkStatus; ownerId: string; owner: string; openTasks: number; days: number; stale: boolean };
 

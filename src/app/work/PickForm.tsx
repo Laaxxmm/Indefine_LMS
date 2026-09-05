@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { PickGroup } from "@/lib/work/core";
-import { btnPrimary, call, card, errorText, h2 } from "./ui";
+import { btnPrimary, call, card, errorText, h2 } from "@/components/ui";
 
 // Promise up to `remaining` tasks for today. Carried tasks come pre-checked.
 export function PickForm({ groups, precheck, remaining }: { groups: PickGroup[]; precheck: string[]; remaining: number }) {

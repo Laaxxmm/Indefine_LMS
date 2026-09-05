@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { WorkStatus, WorkTaskStatus } from "@prisma/client";
 import { WORK_STATUS_LABELS, actionsFor, type TaskAction, type TaskLane, type WorkAction } from "@/lib/work/core";
-import { btnGhost, btnPrimary, call, card, errorText, field, h2, type CallResult } from "../ui";
+import { btnGhost, btnPrimary, call, card, errorText, field, h2, type CallResult } from "@/components/ui";
 
 export type TaskView = { id: string; title: string; status: WorkTaskStatus; assigneeId: string; assignee: string; lane: TaskLane; awaitsReview: boolean };
 

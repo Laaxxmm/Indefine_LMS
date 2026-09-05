@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { DayPickOutcome, WorkTaskStatus } from "@prisma/client";
-import { btnGhost, call, card, errorText } from "./ui";
+import { btnGhost, call, card, errorText } from "@/components/ui";
 
 export type TodayPick = { taskId: string; title: string; status: WorkTaskStatus; outcome: DayPickOutcome | null; workId: string; workTitle: string };
 

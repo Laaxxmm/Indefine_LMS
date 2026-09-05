@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { WorkStatus } from "@prisma/client";
 import { WORK_STATUS_LABELS } from "@/lib/work/core";
-import { btnPrimary, call, card, errorText } from "./ui";
+import { btnPrimary, call, card, errorText } from "@/components/ui";
 
 export type PlanWork = { id: string; title: string; status: WorkStatus; owner: string };
 
