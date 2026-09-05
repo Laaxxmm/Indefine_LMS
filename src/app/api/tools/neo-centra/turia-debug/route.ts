@@ -7,6 +7,8 @@ import { rawTaskGet } from "@/lib/neo-centra/turia";
 // names/values when a bucket looks wrong. Directors only. e.g.
 //   /api/tools/neo-centra/turia-debug?taskId=TSK03683
 export async function GET(req: Request) {
+  // Diagnostics stay off in production unless NEO_CENTRA_DEBUG=1 is set on the host.
+  if (process.env.NEO_CENTRA_DEBUG !== "1") return NextResponse.json({ error: "Not found" }, { status: 404 });
   const session = await auth();
   if (!session?.user || !canUseNeoCentra(session.user)) return NextResponse.json({ error: "Not permitted" }, { status: 403 });
   const taskId = new URL(req.url).searchParams.get("taskId");

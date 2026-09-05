@@ -1,8 +1,7 @@
 // Hands-off recording ingestion.
 //
 // Hit this on a schedule (e.g. every 15 min) with the shared secret:
-//   GET /api/cron/live/ingest?key=$CRON_SECRET
-//   (or Authorization: Bearer $CRON_SECRET)
+//   GET /api/cron/live/ingest   with Authorization: Bearer $CRON_SECRET
 //
 // Runs one runIngestSweep() pass (also triggered when an admin opens the Live
 // sessions page, so ingestion still happens if this cron isn't configured).

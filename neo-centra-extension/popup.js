@@ -21,7 +21,7 @@ async function loadState() {
 saveBtn.addEventListener("click", async () => {
   const lmsUrl = lmsEl.value.trim().replace(/\/$/, "");
   const relayToken = tokenEl.value.trim();
-  if (!/^https?:\/\//.test(lmsUrl)) { renderStatus({ ok: false, msg: "LMS URL must start with http(s)://" }); return; }
+  if (!/^https:\/\//.test(lmsUrl)) { renderStatus({ ok: false, msg: "LMS URL must start with https:// (the relay token and cookie travel over it)." }); return; }
   if (!relayToken) { renderStatus({ ok: false, reason: "no-config", msg: "Enter the relay token." }); return; }
   await chrome.runtime.sendMessage({ type: "SET_CONFIG", lmsUrl, relayToken });
   renderStatus({ ok: true, msg: "Saved. Click Sync now.", ts: Date.now() });

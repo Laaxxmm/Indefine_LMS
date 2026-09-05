@@ -1,5 +1,5 @@
 // Server-side Neo Centra incentive sync. Point a scheduler at this every 5 min:
-//   GET /api/cron/neo-centra?key=$CRON_SECRET   (or Authorization: Bearer $CRON_SECRET)
+//   GET /api/cron/neo-centra   with Authorization: Bearer $CRON_SECRET
 // Recomputes the current quarter's snapshot from live Turia (needs a fresh cookie,
 // kept alive by the browser extension). Independent of whether anyone has the page open.
 import { NextRequest, NextResponse } from "next/server";

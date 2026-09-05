@@ -6,7 +6,10 @@ import { isAdmin } from "@/lib/access";
 
 function csvEscape(v: unknown): string {
   if (v == null) return "";
-  const s = String(v);
+  let s = String(v);
+  // Excel evaluates a cell starting with = + - @ (or a tab / CR) as a formula. Text
+  // values get an apostrophe prefix so a crafted name cannot run anything on open.
+  if (typeof v === "string" && /^[=+\-@\t\r]/.test(s)) s = `'${s}`;
   if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
   return s;
 }

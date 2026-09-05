@@ -14,6 +14,7 @@
     "verify:clients": "tsx scripts/verify-clients.ts",
     "verify:work": "tsx scripts/verify-work.ts",
     "verify:access": "tsx scripts/verify-access.ts",
+    "verify:cron-auth": "tsx scripts/verify-cron-auth.ts",
     "verify:office-tools": "tsx scripts/verify-office-tools.ts",
     "verify:profit-split": "tsx scripts/verify-profit-split.ts"
   },

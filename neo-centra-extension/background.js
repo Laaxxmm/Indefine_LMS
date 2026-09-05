@@ -13,7 +13,9 @@ const SYNC_INTERVAL_MIN = 5;
 
 async function getConfig() {
   const { lmsUrl, relayToken } = await chrome.storage.local.get(["lmsUrl", "relayToken"]);
-  return { lmsUrl: (lmsUrl || "").replace(/\/$/, ""), relayToken: relayToken || "" };
+  const url = (lmsUrl || "").replace(/\/$/, "");
+  // Never send the cookie or the relay token over plain http.
+  return { lmsUrl: /^https:\/\//.test(url) ? url : "", relayToken: relayToken || "" };
 }
 
 async function buildCookieHeader() {

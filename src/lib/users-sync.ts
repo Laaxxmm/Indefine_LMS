@@ -75,10 +75,14 @@ export async function syncOrgUsers(opts: { fallbackUserId?: string } = {}) {
     select: { id: true },
   });
   if (stale.length > 0) {
+    const staleIds = stale.map((s) => s.id);
     await prisma.user.updateMany({
-      where: { id: { in: stale.map((s) => s.id) } },
+      where: { id: { in: staleIds } },
       data: { active: false, deactivatedAt: new Date() },
     });
+    // A database session would otherwise outlive the M365 account until it expires.
+    // Ending it here means "deactivated" takes effect on the next request.
+    await prisma.session.deleteMany({ where: { userId: { in: staleIds } } });
     deactivated = stale.length;
   }
 

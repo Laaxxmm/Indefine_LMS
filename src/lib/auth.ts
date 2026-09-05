@@ -36,6 +36,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   pages: { signIn: "/" },
   callbacks: {
     async signIn({ user, account }) {
+      // Someone the org sync has deactivated gets no new session, even if Entra
+      // still lets them through (sync lag, or a licence removed but not disabled).
+      if (user.email) {
+        const row = await prisma.user.findFirst({
+          where: { email: { equals: user.email, mode: "insensitive" } },
+          select: { active: true },
+        });
+        if (row && !row.active) return false;
+      }
       // Promote configured admins on first login
       if (user.email && adminEmails.includes(user.email.toLowerCase())) {
         await prisma.user.update({

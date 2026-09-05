@@ -375,7 +375,7 @@ an append-only `WorkEvent` timeline. Rules in `work/core.ts`, every write in
 
 ## 12. Scheduled jobs
 
-All cron endpoints accept `Authorization: Bearer $CRON_SECRET` (or `?key=`) and are
+All cron endpoints require `Authorization: Bearer $CRON_SECRET` (never in the URL) and are
 guarded by `src/lib/cron-auth.ts`. GitHub Actions calls them; the same secret lives on
 Railway and as a repository Actions secret.
 
@@ -395,6 +395,7 @@ There is no test framework. Each module's pure rules are asserted by a script:
 ```bash
 npx tsc --noEmit
 npm run verify:access      # role predicates
+npm run verify:cron-auth   # bearer-only CRON_SECRET handshake
 npm run verify:work        # IST clock, statuses, auto-done, kept-promise, gate
 npm run verify:clients     # turnover bands, FY, names, workbook, reports
 npm run verify:office-tools

@@ -9,6 +9,8 @@ export const maxDuration = 300;
 // view can be pinned to the tasks the buckets drop. Directors only.
 // e.g. /api/tools/neo-centra/hours-debug?director=Rajkumar
 export async function GET(req: Request) {
+  // Diagnostics stay off in production unless NEO_CENTRA_DEBUG=1 is set on the host.
+  if (process.env.NEO_CENTRA_DEBUG !== "1") return NextResponse.json({ error: "Not found" }, { status: 404 });
   const session = await auth();
   if (!session?.user || !canUseNeoCentra(session.user)) return NextResponse.json({ error: "Not permitted" }, { status: 403 });
   const director = new URL(req.url).searchParams.get("director");
