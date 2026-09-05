@@ -99,7 +99,7 @@ Without a key, the AI panels show a "set GEMINI_API_KEY" note and the rest of th
 ```bash
 cp .env.example .env     # then fill in every value (see table below)
 npm install
-npx prisma db push       # create the database schema
+npx prisma migrate deploy  # create the database schema from prisma/migrations
 npm run dev              # http://localhost:3000
 ```
 
@@ -139,7 +139,7 @@ Names and purpose only — **never commit real values**. See `.env.example`.
 4. Set the remaining variables from the table above in the service **Variables** tab.
 5. Set `AUTH_URL` to your Railway domain and add the matching `/api/auth/callback/...`
    redirect URI to the Entra app.
-6. Build: `npm run build` · Start: `npm start` (the start script runs `prisma db push`).
+6. Build: `npm run build` · Start: `npm start` (the start script runs `scripts/migrate.mjs`, which applies pending migrations; on the first boot after an old `db push` database it records the baseline instead).
 
 ---
 
@@ -192,7 +192,9 @@ docs/superpowers/            design specs and implementation plans
   `core.ts` (pure rules) + `access.ts` + `db.ts`/`storage.ts`, routes, pages, a schema
   section, a `scripts/verify-<module>.ts`, and a design note under `docs/superpowers/`.
 - **Never delete user data or SharePoint files.** Flag as inactive, obsolete or archived.
-- **Schema changes are additive.** Deploy runs `prisma db push`; there are no migrations.
+- **Schema changes are migrations.** Edit `prisma/schema.prisma`, then write the migration:
+  `npx prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --script > prisma/migrations/$(date +%Y%m%d%H%M%S)_<name>/migration.sql`
+  (create the folder first), read the SQL, commit it with the schema. Deploy runs `prisma migrate deploy`; nothing at boot can drop data unless a committed migration says so. Never edit an applied migration.
 
 ---
 

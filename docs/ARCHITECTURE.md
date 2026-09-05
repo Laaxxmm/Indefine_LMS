@@ -317,7 +317,7 @@ docs/superpowers/         design specs and implementation plans for the newer mo
 - Dates: IST only, through `src/lib/ist.ts`. Nothing else mentions `Asia/Kolkata`.
 - Deletes: none on user data or SharePoint. "Obsolete", "inactive" or "archived" flags instead.
 - Secrets: environment variables only; `.env.example` lists every one by name.
-- Schema changes deploy through `prisma db push` on start (Railway); there are no migration files, so changes must be additive.
+- Schema changes are migrations under `prisma/migrations/`; `scripts/migrate.mjs` runs `prisma migrate deploy` at boot (and records the `0_init` baseline once on a database that predates migrations). Write a migration with `prisma migrate diff` (recipe in README), read it, commit it with the schema.
 - Route handlers are the standard for new work; the older inline server actions (`"use server"`) remain in the wizard, check-in and approvals pages.
 
 ---
@@ -348,7 +348,8 @@ versions (`SopVersion`) and views; `SopEditor` grants let non-admins author with
 own department.
 
 **Neo Centra (`/tools/neo-centra`).** The directors' cockpit. `turia.ts` reads the
-practice-management system (Turia) with a stored session cookie (`NeoTuriaSession`);
+practice-management system (Turia) with a stored session cookie (`NeoTuriaSession`,
+encrypted at rest with `NEO_TURIA_COOKIE_KEY` via `src/lib/secret-box.ts`);
 `period.ts` fixes the quarter, `split.ts` computes profit and hours splits from
 `NeoProfitSplit` / `NeoHoursSplit` / `NeoInternalBudget`, and `incentive.ts` freezes
 each run into `NeoIncentiveSnapshot`. Partners only.
@@ -396,6 +397,7 @@ There is no test framework. Each module's pure rules are asserted by a script:
 npx tsc --noEmit
 npm run verify:access      # role predicates
 npm run verify:cron-auth   # bearer-only CRON_SECRET handshake
+npm run verify:secret-box  # AES-GCM at-rest encryption used for the Turia cookie
 npm run verify:work        # IST clock, statuses, auto-done, kept-promise, gate
 npm run verify:clients     # turnover bands, FY, names, workbook, reports
 npm run verify:office-tools
