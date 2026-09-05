@@ -62,6 +62,12 @@ export async function createWork(input: { title: string; why?: string }, actor: 
 
 const WIP_MESSAGE = `${WIP_CAP} works already active, pause or finish one first`;
 
+/** Refuses when the owner already has WIP_CAP active works. */
+async function wipCheck(tx: Tx, ownerId: string): Promise<string | null> {
+  const active = await tx.work.count({ where: { ownerId, status: "ACTIVE" } });
+  return wipAllows(active) ? null : WIP_MESSAGE;
+}
+
 export async function changeWorkStatus(
   workId: string,
   action: WorkAction,
@@ -78,15 +84,15 @@ export async function changeWorkStatus(
     const to = nextStatus(action, work.status);
     if (!to) return fail(`Cannot ${action} work that is ${WORK_STATUS_LABELS[work.status].toLowerCase()}`);
     if (to === "ACTIVE") {
-      const active = await tx.work.count({ where: { ownerId: work.ownerId, status: "ACTIVE" } });
-      if (!wipAllows(active)) return fail(WIP_MESSAGE);
+      const wipError = await wipCheck(tx, work.ownerId);
+      if (wipError) return fail(wipError);
     }
     await tx.work.update({
       where: { id: workId },
       data: {
         status: to,
         doneAt: to === "DONE" ? now : to === "ACTIVE" ? null : undefined,
-        obsoleteReason: to === "OBSOLETE" ? why : undefined,
+        obsoleteReason: to === "OBSOLETE" ? why : action === "reopen" ? null : undefined,
       },
     });
     await touch(
@@ -190,8 +196,8 @@ export async function setWeekPlan(workIds: string[], actor: Actor, now = new Dat
     for (const w of works) {
       if (w.status === "ACTIVE") continue;
       if (w.status === "INBOX" && actor.isLead) {
-        const active = await tx.work.count({ where: { ownerId: w.ownerId, status: "ACTIVE" } });
-        if (!wipAllows(active)) return fail(WIP_MESSAGE);
+        const wipError = await wipCheck(tx, w.ownerId);
+        if (wipError) return fail(wipError);
         await tx.work.update({ where: { id: w.id }, data: { status: "ACTIVE", doneAt: null } });
         await touch(tx, w.id, { kind: "WORK_STATUS", userId: actor.id, detail: "Ideas → Working, added to the week plan" }, now);
         continue;
@@ -218,13 +224,18 @@ export async function addPicks(taskIds: string[], actor: Actor, now = new Date()
   const weekStart = istWeekStart(now);
   const ids = [...new Set(taskIds)];
   return prisma.$transaction(async (tx) => {
-    const existing = await tx.dayPick.count({ where: { userId: actor.id, day } });
-    if (existing + ids.length > PICK_CAP) return fail(`Only ${PICK_CAP} picks a day, ${existing} already picked`);
+    const existingPicks = await tx.dayPick.findMany({ where: { userId: actor.id, day }, select: { taskId: true } });
+    const already = new Set(existingPicks.map((p) => p.taskId));
+    const newIds = ids.filter((id) => !already.has(id));
+    if (existingPicks.length + newIds.length > PICK_CAP) {
+      return fail(`Only ${PICK_CAP} picks a day, ${existingPicks.length} already picked`);
+    }
+    if (newIds.length === 0) return okr(NONE);
     const tasks = await tx.workTask.findMany({
-      where: { id: { in: ids } },
+      where: { id: { in: newIds } },
       include: { work: { select: { status: true, title: true, weekPlans: { where: { userId: actor.id, weekStart }, select: { id: true } } } } },
     });
-    if (tasks.length !== ids.length) return fail("Unknown task");
+    if (tasks.length !== newIds.length) return fail("Unknown task");
     for (const t of tasks) {
       if (t.assigneeId !== actor.id) return fail(`"${t.title}" is not your task`);
       if (t.status !== "TODO") return fail(`"${t.title}" is not open`);
@@ -232,8 +243,6 @@ export async function addPicks(taskIds: string[], actor: Actor, now = new Date()
       if (t.work.weekPlans.length === 0) return fail(`"${t.work.title}" is not in your plan this week`);
     }
     for (const t of tasks) {
-      const dup = await tx.dayPick.findUnique({ where: { userId_day_taskId: { userId: actor.id, day, taskId: t.id } } });
-      if (dup) continue;
       await tx.dayPick.create({ data: { userId: actor.id, day, taskId: t.id } });
       await touch(tx, t.workId, { kind: "PICKED", taskId: t.id, userId: actor.id, detail: t.title }, now);
     }
