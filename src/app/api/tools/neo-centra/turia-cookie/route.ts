@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { canUseNeoCentra } from "@/lib/neo-centra/access";
-import { storeTuriaCookie, turiaStatus } from "@/lib/neo-centra/turia";
+import { TuriaSessionError, storeTuriaCookie, turiaStatus } from "@/lib/neo-centra/turia";
 
 // Store / inspect the firm's Turia session cookie. Two callers:
 //  - a director in the LMS (session-gated), pasting the cookie manually, or
@@ -32,7 +32,12 @@ export async function POST(req: Request) {
   const parsed = z.object({ cookie: z.string().min(10) }).safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "A cookie string is required" }, { status: 400 });
 
-  await storeTuriaCookie(parsed.data.cookie, byId, byName);
+  try {
+    await storeTuriaCookie(parsed.data.cookie, byId, byName);
+  } catch (e) {
+    if (e instanceof TuriaSessionError) return NextResponse.json({ error: e.message }, { status: 503 });
+    throw e;
+  }
   return NextResponse.json({ ok: true });
 }
 
