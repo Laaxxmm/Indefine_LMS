@@ -13,10 +13,11 @@ import { prisma } from "@/lib/prisma";
 
 const GRAPH = "https://graph.microsoft.com/v1.0";
 
-/** Delegated scopes requested at sign-in and on refresh. auth.ts imports this so the two
- *  never drift. Chat.Create + ChatMessage.Send carry the work-tracker nudges. */
-export const GRAPH_SCOPES =
-  "openid profile email offline_access User.Read Files.Read.All Files.ReadWrite.All Calendars.ReadWrite OnlineMeetings.ReadWrite OnlineMeetingTranscript.Read.All OnlineMeetingArtifact.Read.All Chat.Create ChatMessage.Send";
+/** Delegated scopes every LMS user consented to. Used for token refresh by default. */
+export const BASE_GRAPH_SCOPES =
+  "openid profile email offline_access User.Read Files.Read.All Files.ReadWrite.All Calendars.ReadWrite OnlineMeetings.ReadWrite OnlineMeetingTranscript.Read.All OnlineMeetingArtifact.Read.All";
+/** Requested at sign-in so new consent is collected; the extra two carry the work-tracker nudges. */
+export const GRAPH_SCOPES = `${BASE_GRAPH_SCOPES} Chat.Create ChatMessage.Send`;
 
 let cachedAppToken: { token: string; exp: number } | null = null;
 
@@ -55,7 +56,7 @@ export async function getAppOnlyToken(): Promise<string | null> {
   return cachedAppToken.token;
 }
 
-export async function getUserGraphToken(userId: string): Promise<string | null> {
+export async function getUserGraphToken(userId: string, scope: string = BASE_GRAPH_SCOPES): Promise<string | null> {
   const account = await prisma.account.findFirst({
     where: { userId, provider: "microsoft-entra-id" },
   });
@@ -93,7 +94,7 @@ export async function getUserGraphToken(userId: string): Promise<string | null> 
       client_secret: clientSecret,
       grant_type: "refresh_token",
       refresh_token: account.refresh_token,
-      scope: GRAPH_SCOPES,
+      scope,
     }),
   });
   if (!res.ok) {

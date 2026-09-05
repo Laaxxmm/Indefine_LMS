@@ -75,7 +75,7 @@ model WorkTask {
   status      WorkTaskStatus @default(TODO)
   order       Int            @default(0)
   doneAt      DateTime?
-  reviewedAt  DateTime?      // set by lead on a task Amit finished
+  reviewedAt  DateTime?      // lead's tick on a task someone else finished; set at once for the lead's own
   createdById String
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt

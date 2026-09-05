@@ -4,9 +4,9 @@ import {
   trackerEmails, canUseWork, isWorkLead,
   istDayKey, istDayStart, istWeekday, isWeekend, istWeekStart, istMonthStart, parseDayKey, addDays,
   daysUntouched, isStale, shouldAutoPause,
-  nextStatus, actionForMove, actionsFor, wipAllows,
+  nextStatus, actionForMove, actionsFor, wipAllows, wipAllowsMany,
   taskLane, awaitsReview, autoDone, keptPromise, precheckTaskIds, gateStep, eventLine,
-  createWorkZ, picksZ,
+  createWorkZ, picksZ, planZ,
 } from "../src/lib/work/core";
 
 // Access: env order decides the lead, matching is case-insensitive.
@@ -28,6 +28,7 @@ assert.equal(istDayStart(friEvening).toISOString(), "2026-09-03T18:30:00.000Z");
 assert.equal(istWeekday(friEvening), 5);
 assert.equal(isWeekend(friEvening), false);
 assert.equal(isWeekend(new Date("2026-09-05T03:00:00Z")), true); // Saturday IST
+assert.equal(isWeekend(new Date("2026-09-06T03:00:00Z")), true); // Sunday IST
 assert.equal(istWeekStart(friEvening).toISOString(), "2026-08-30T18:30:00.000Z"); // Mon 31 Aug 00:00 IST
 assert.equal(istWeekStart(new Date("2026-08-30T18:30:00Z")).toISOString(), "2026-08-30T18:30:00.000Z"); // Monday itself
 assert.equal(istWeekStart(new Date("2026-09-06T18:29:00Z")).toISOString(), "2026-08-30T18:30:00.000Z"); // Sunday 23:59 IST, same week
@@ -71,8 +72,12 @@ assert.deepEqual(actionsFor("PARKED")[0], ["activate", "Resume"]);
 assert.deepEqual(actionsFor("INBOX")[0], ["activate", "Start"]);
 assert.deepEqual(actionsFor("ACTIVE").map(([a]) => a), ["pause", "finish", "obsolete"]);
 assert.deepEqual(actionsFor("DONE").map(([a]) => a), ["obsolete", "reopen"]);
+assert.deepEqual(actionsFor("OBSOLETE").map(([a]) => a), ["reopen"]);
 assert.equal(wipAllows(WIP_CAP - 1), true);
 assert.equal(wipAllows(WIP_CAP), false);
+assert.equal(wipAllowsMany(1, 2), true);
+assert.equal(wipAllowsMany(1, 3), false);
+assert.equal(wipAllowsMany(0, WIP_CAP), true);
 
 // Task lanes and auto-done.
 assert.equal(taskLane("TODO", false), "TODO");
@@ -125,5 +130,7 @@ assert.equal(createWorkZ.safeParse({ title: " XBRL " }).data?.title, "XBRL");
 assert.equal(picksZ.safeParse({ taskIds: ["a", "b", "c", "d"] }).success, false);
 assert.equal(picksZ.safeParse({ taskIds: [] }).success, false);
 assert.equal(PICK_CAP, 3);
+assert.equal(planZ.safeParse({ workIds: [] }).success, true);
+assert.equal(planZ.safeParse({ workIds: ["a", "b", "c", "d"] }).success, false);
 
 console.log("verify-work: all checks passed");

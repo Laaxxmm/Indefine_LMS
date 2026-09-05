@@ -128,6 +128,10 @@ export function actionsFor(status: WorkStatus): Array<[WorkAction, string]> {
 export function wipAllows(activeCount: number): boolean {
   return activeCount < WIP_CAP;
 }
+/** Can `toActivate` more works be started when `activeCount` are already active? */
+export function wipAllowsMany(activeCount: number, toActivate: number): boolean {
+  return activeCount + toActivate <= WIP_CAP;
+}
 
 // ---------------- tasks ----------------
 

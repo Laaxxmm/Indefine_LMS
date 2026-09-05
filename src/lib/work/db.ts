@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import {
   AUTO_PAUSE_DAYS, PICK_CAP, PLAN_CAP, STALE_DAYS, WIP_CAP, WORK_STATUS_LABELS,
   addDays, autoDone, gateStep, isWeekend, istDayKey, istDayStart, istMonthStart, istWeekStart,
-  keptPromise, nextStatus, precheckTaskIds, trackerEmails, wipAllows,
+  keptPromise, nextStatus, precheckTaskIds, trackerEmails, wipAllows, wipAllowsMany,
   type Actor, type PickGroup, type Result, type TaskAction, type WorkAction,
 } from "./core";
 
@@ -38,7 +38,7 @@ export async function trackerUsers(): Promise<TrackerUser[]> {
   const emails = trackerEmails();
   if (emails.length === 0) return [];
   const rows = await prisma.user.findMany({
-    where: { email: { in: emails, mode: "insensitive" } },
+    where: { OR: emails.map((e) => ({ email: { equals: e, mode: "insensitive" as const } })) },
     select: { id: true, email: true, name: true },
   });
   return emails.flatMap((e) => {
@@ -193,16 +193,31 @@ export async function setWeekPlan(workIds: string[], actor: Actor, now = new Dat
   return prisma.$transaction(async (tx) => {
     const works = await tx.work.findMany({ where: { id: { in: ids } } });
     if (works.length !== ids.length) return fail("Unknown work");
+
+    // First pass (no writes): validate every work, collecting Ideas that the lead is
+    // activating. Any refusal here must happen before anything below is written.
+    const toActivate: typeof works = [];
     for (const w of works) {
       if (w.status === "ACTIVE") continue;
       if (w.status === "INBOX" && actor.isLead) {
-        const wipError = await wipCheck(tx, w.ownerId);
-        if (wipError) return fail(wipError);
-        await tx.work.update({ where: { id: w.id }, data: { status: "ACTIVE", doneAt: null } });
-        await touch(tx, w.id, { kind: "WORK_STATUS", userId: actor.id, detail: "Ideas → Working, added to the week plan" }, now);
+        toActivate.push(w);
         continue;
       }
       return fail(`"${w.title}" is ${WORK_STATUS_LABELS[w.status].toLowerCase()}, only Working items can be planned`);
+    }
+    const byOwner = new Map<string, typeof works>();
+    for (const w of toActivate) {
+      byOwner.set(w.ownerId, [...(byOwner.get(w.ownerId) ?? []), w]);
+    }
+    for (const [ownerId, group] of byOwner) {
+      const active = await tx.work.count({ where: { ownerId, status: "ACTIVE" } });
+      if (!wipAllowsMany(active, group.length)) return fail(WIP_MESSAGE);
+    }
+
+    // Second pass: all checks passed, now write.
+    for (const w of toActivate) {
+      await tx.work.update({ where: { id: w.id }, data: { status: "ACTIVE", doneAt: null } });
+      await touch(tx, w.id, { kind: "WORK_STATUS", userId: actor.id, detail: "Ideas → Working, added to the week plan" }, now);
     }
     const existing = await tx.weekPlanWork.findMany({ where: { userId: actor.id, weekStart }, select: { workId: true } });
     const have = new Set(existing.map((e) => e.workId));
@@ -276,11 +291,12 @@ export async function completeReview(actor: Actor, now = new Date()): Promise<Re
 
 // ---------------- nightly close ----------------
 
-/** Flip today's unfinished picks to CARRIED and auto-pause works untouched 28 days. */
+/** Flip unfinished picks up to and including today to CARRIED (so a missed cron run
+ *  cannot leave picks open forever) and auto-pause works untouched 28 days. */
 export async function closeDay(now = new Date()): Promise<{ carried: number; paused: number }> {
   const day = istDayStart(now);
   const open = await prisma.dayPick.findMany({
-    where: { day, outcome: null, task: { status: "TODO" } },
+    where: { day: { lte: day }, outcome: null, task: { status: "TODO" } },
     select: { id: true, taskId: true, userId: true, task: { select: { workId: true, title: true } } },
   });
   for (const p of open) {
@@ -325,7 +341,7 @@ export function planCandidates(actor: Actor) {
   const statuses: WorkStatus[] = actor.isLead ? ["ACTIVE", "INBOX"] : ["ACTIVE"];
   return prisma.work.findMany({
     where: { status: { in: statuses } },
-    orderBy: [{ status: "asc" }, { lastTouchedAt: "desc" }],
+    orderBy: [{ status: "desc" }, { lastTouchedAt: "desc" }],
     select: { id: true, title: true, status: true, owner: { select: { name: true, email: true } } },
   });
 }

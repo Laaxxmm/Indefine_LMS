@@ -2689,7 +2689,14 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 Skip this commit if the build was clean.
 
-- [ ] **Step 3: Report and wait for "push"**
+- [ ] **Step 3: Before the push: one-time setup (Lakshmanan does these; the plan only lists them)**
+
+1. Railway → Variables → add `WORK_TRACKER_EMAILS` = his email, then `info@indefine.in`, comma-separated, lead first. Redeploy picks it up; `prisma db push` on start creates the new tables.
+2. Entra → App registrations → the LMS app → API permissions → add the delegated scopes `Chat.Create` and `ChatMessage.Send` and click Grant admin consent. Do this before deploying; the lead's nudge token asks for these scopes.
+3. Sign out of the LMS and sign in again as the lead so the stored refresh token carries the new scopes.
+4. Amit signs in once with `info@indefine.in` so his `User` row is linked.
+
+- [ ] **Step 4: Report and wait for "push"**
 
 Tell Lakshmanan the branch is ready: list the commits (`git log --oneline origin/main..HEAD`), state that build, typecheck and both self-checks pass, and stop. Do not push. When he says "push":
 
@@ -2699,13 +2706,6 @@ git rebase origin/main
 npx tsc --noEmit
 git push origin main
 ```
-
-- [ ] **Step 4: After the push, one-time setup (Lakshmanan does these, the plan only lists them)**
-
-1. Railway → Variables → add `WORK_TRACKER_EMAILS` = his email, then `info@indefine.in`, comma-separated, lead first. Redeploy picks it up; `prisma db push` on start creates the new tables.
-2. Entra → App registrations → the LMS app → API permissions → confirm the delegated scopes `Chat.Create` and `ChatMessage.Send` are listed (add them if the tenant needs admin consent, then Grant admin consent).
-3. Sign out of the LMS and sign in again as the lead so the stored refresh token carries the new scopes.
-4. Amit signs in once with `info@indefine.in` so his `User` row is linked.
 
 - [ ] **Step 5: Smoke test on the live site, in this order**
 
@@ -2717,8 +2717,9 @@ git push origin main
 6. GitHub → Actions → "Work tracker nudges" → Run workflow with job `close`: response `{"carried":1,"paused":0}`; `/work` next morning shows that task pre-checked as carried; Week shows 50 %.
 7. Sign in as Amit: sees the same board, his one task, gate asks him to plan and pick.
 8. Amit ticks his task: lead sees "Check" on the work detail; lead ticks Check; when the lead's remaining task is done the work moves to Done with the Undo banner.
-9. Run workflow with job `morning` while one person has no pick: the Teams chat "Tech Work" appears with the message. If the response carries `error`, read it: `sign out and in again` means step 4.3 above was skipped; `403` from Graph means the scopes are not consented.
+9. Run workflow with job `morning` while one person has no pick: the Teams chat "Tech Work" appears with the message. If the response carries `error`, read it: `sign out and in again` means step 3.3 above was skipped; `403` from Graph means the scopes are not consented.
 10. Someone outside the list opens `/work`: 404, and no Work link on their dashboard.
+11. As a non-tracker user, open an existing live session or stream a video: the shared delegated-token path must still work.
 
 ---
 

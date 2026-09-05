@@ -28,7 +28,7 @@ export default async function WeekPage({ searchParams }: { searchParams: Promise
     users.map(async (u) => {
       const mine = u.id === actor.id;
       const [plan, stats] = await Promise.all([
-        prisma.weekPlanWork.findMany({ where: { userId: u.id, weekStart }, include: { work: { select: { id: true, title: true, status: true } } } }),
+        prisma.weekPlanWork.findMany({ where: { userId: u.id, weekStart }, orderBy: { id: "asc" }, include: { work: { select: { id: true, title: true, status: true } } } }),
         weekStats(u.id, weekStart, now),
       ]);
       return {

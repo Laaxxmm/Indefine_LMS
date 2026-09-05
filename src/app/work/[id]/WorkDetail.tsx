@@ -65,7 +65,7 @@ export function WorkDetail({ work, tasks, users, events, isLead, meId }: Props) 
         <div className="flex items-start justify-between gap-4 flex-wrap mt-2">
           <div>
             <h1 className="font-display font-extrabold text-3xl tracking-[-0.03em]">{work.title}</h1>
-            <p className="text-ink-mute text-[14px] mt-1">{work.why ?? "No 'why' written yet."}</p>
+            {work.why && <p className="text-ink-mute text-[14px] mt-1">{work.why}</p>}
             <p className="text-[12px] text-ink-faint mt-2 flex items-center gap-2 flex-wrap">
               <span className="px-2 py-0.5 rounded-full bg-muted font-bold uppercase tracking-wide text-[10.5px] text-ink">{WORK_STATUS_LABELS[work.status]}</span>
               <span>{work.owner} · last touched {work.days === 0 ? "today" : `${work.days}d ago`}</span>
@@ -84,7 +84,7 @@ export function WorkDetail({ work, tasks, users, events, isLead, meId }: Props) 
         {undo && (
           <div className="mt-4 rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-[13px] flex items-center justify-between gap-3">
             <span>All tasks finished, so this work is Done.</span>
-            <button type="button" onClick={() => workAction("reopen")} className={btnGhost}>Undo</button>
+            <button type="button" disabled={busy} onClick={() => workAction("reopen")} className={btnGhost}>Undo</button>
           </div>
         )}
         {error && <p className={`mt-3 ${errorText}`}>{error}</p>}
@@ -101,7 +101,7 @@ export function WorkDetail({ work, tasks, users, events, isLead, meId }: Props) 
                 return (
                   <li key={t.id} className="rounded-xl bg-card border border-border p-3 flex items-start gap-3">
                     {open && (mine || isLead) ? (
-                      <input type="checkbox" disabled={busy} onChange={() => taskAct(t.id, "done")} className="w-5 h-5 mt-0.5" aria-label={`Finish ${t.title}`} />
+                      <input type="checkbox" checked={false} disabled={busy} onChange={() => taskAct(t.id, "done")} className="w-5 h-5 mt-0.5" aria-label={`Finish ${t.title}`} />
                     ) : (
                       <span className="w-5 h-5 mt-0.5 inline-block" />
                     )}
@@ -129,9 +129,9 @@ export function WorkDetail({ work, tasks, users, events, isLead, meId }: Props) 
       <form onSubmit={addTask} className={card}>
         <p className={h2}>Add a task</p>
         <div className="flex flex-col sm:flex-row gap-2">
-          <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={160} placeholder="One clear next step" className={field} />
+          <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={160} placeholder="One clear next step" className={field} aria-label="Task title" />
           {isLead ? (
-            <select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)} className={`${field} sm:w-48`}>
+            <select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)} className={`${field} sm:w-48`} aria-label="Assignee">
               {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
             </select>
           ) : (

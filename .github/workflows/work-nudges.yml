@@ -20,12 +20,14 @@ jobs:
     steps:
       - name: Pick job from schedule
         id: pick
+        env:
+          INPUT_JOB: ${{ github.event.inputs.job }}
         run: |
           case "${{ github.event.schedule }}" in
             "30 3 * * 1-5") echo "job=morning" >> "$GITHUB_OUTPUT" ;;
             "30 10 * * 5")  echo "job=friday"  >> "$GITHUB_OUTPUT" ;;
             "30 14 * * *")  echo "job=close"   >> "$GITHUB_OUTPUT" ;;
-            *)              echo "job=${{ github.event.inputs.job }}" >> "$GITHUB_OUTPUT" ;;
+            *) echo "job=$INPUT_JOB" >> "$GITHUB_OUTPUT" ;;
           esac
       - name: Call work cron endpoint
         run: |
