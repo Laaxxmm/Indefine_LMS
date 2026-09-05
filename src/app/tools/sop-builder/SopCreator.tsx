@@ -70,7 +70,7 @@ export function SopCreator({ defaultDepartment, lockDepartment, editSopId, initi
         <ArrowLeft className="w-4 h-4" /> {editSopId ? "Back to SOP" : "All SOPs"}
       </button>
       <h1 className="font-display font-extrabold text-2xl sm:text-[28px] tracking-[-0.02em] mb-1">{editSopId ? "New version" : "New SOP"}</h1>
-      <p className="text-ink-mute text-[14px] mb-6">Describe the procedure plainly. The AI checks it's in scope, refines it into a brief for you to confirm, then generates the SOP.</p>
+      <p className="text-ink-mute text-[14px] mb-6">Describe the procedure plainly. The AI checks it&apos;s in scope, refines it into a brief for you to confirm, then generates the SOP.</p>
 
       {/* Step 1 — input */}
       <section className="rounded-2xl bg-card border border-border shadow-lift p-5 mb-4">

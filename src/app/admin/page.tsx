@@ -165,18 +165,7 @@ export default async function AdminOverview({
 
   const [modules, userCount, assignmentCount, pendingAssignments, pendingApprovals] =
     await Promise.all([
-      prisma.module.findMany({
-        include: {
-          course: true,
-          videos: {
-            orderBy: { order: "asc" },
-            include: {
-              quiz: { include: { _count: { select: { questions: true } } } },
-            },
-          },
-        },
-        orderBy: [{ courseId: "asc" }, { order: "asc" }],
-      }),
+      loadModules(),
       prisma.user.count({ where: { active: true } }),
       prisma.assignment.count(),
       prisma.assignment.count({ where: { status: "PENDING" } }),
@@ -357,8 +346,8 @@ function VideosTab({
           {totalVideos} videos imported across {modules.filter((m) => m.videos.length > 0).length} module
           {modules.filter((m) => m.videos.length > 0).length === 1 ? "" : "s"}.{" "}
           {totalQuizzes} of them have a quiz attached.{" "}
-          <strong className="text-ink">Click "Add quiz"</strong> on any video to create
-          its MCQ quiz, or <strong className="text-ink">"Edit quiz"</strong> to update
+          <strong className="text-ink">Click &ldquo;Add quiz&rdquo;</strong> on any video to create
+          its MCQ quiz, or <strong className="text-ink">&ldquo;Edit quiz&rdquo;</strong> to update
           an existing one.
         </p>
       </div>

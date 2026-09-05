@@ -7,13 +7,11 @@ import VideoPlayer from "./VideoPlayer";
 import {
   ArrowLeft,
   ArrowRight,
-  CheckCircle2,
   Clock,
   Download,
   FileText,
   GraduationCap,
   LogOut,
-  PlayCircle,
 } from "lucide-react";
 import { isAdmin } from "@/lib/access";
 

@@ -37,7 +37,7 @@ export default async function SopDashboard({ searchParams }: { searchParams: Pro
         <div>
           <p className="text-[10.5px] font-extrabold tracking-[0.14em] text-ink-faint uppercase">Tools · SOP Builder</p>
           <h1 className="font-display font-extrabold text-3xl sm:text-[34px] tracking-[-0.03em] mt-1">Standard Operating Procedures</h1>
-          <p className="text-ink-mute text-[15px] mt-1.5 max-w-2xl">Browse the firm's SOPs by department. {canEdit ? "Create new ones from a plain description — the AI refines it into a brief you confirm before generating." : "You have view access; ask an admin for edit rights to create or update SOPs."}</p>
+          <p className="text-ink-mute text-[15px] mt-1.5 max-w-2xl">Browse the firm&apos;s SOPs by department. {canEdit ? "Create new ones from a plain description — the AI refines it into a brief you confirm before generating." : "You have view access; ask an admin for edit rights to create or update SOPs."}</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {admin && (

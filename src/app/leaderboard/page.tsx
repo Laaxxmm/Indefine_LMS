@@ -7,7 +7,6 @@ import { computeGrade, TIER_META } from "@/lib/trajectory";
 import type { TierKind } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
-  ACTIVE_LEVELS,
   DEPARTMENTS,
   departmentColor,
   departmentLabel,

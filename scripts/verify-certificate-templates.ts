@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { CertificateTemplate, FieldDef } from "../src/lib/certificates/types";
-import { canonicalLockedText, hashTemplate, lockedTextSegments, normalize } from "../src/lib/certificates/normalize";
+import { hashTemplate, lockedTextSegments, normalize } from "../src/lib/certificates/normalize";
 import { registry } from "../src/lib/certificates/registry";
 
 // §6 fidelity gate. For each template: every locked segment must appear verbatim (after

@@ -53,7 +53,7 @@ const BUCKETS = [
 ] as const;
 
 export function IncentivesView({
-  period, snapshot: initial, turia, isAdmin, viewerId, viewerName,
+  period, snapshot: initial, turia, isAdmin, viewerId,
 }: {
   period: { fromMs: number; toMs: number; label: string };
   snapshot: Snapshot;

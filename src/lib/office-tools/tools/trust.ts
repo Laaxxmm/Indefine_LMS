@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Paragraph, TextRun } from "docx";
-import { buildDoc, clause, heading, para, spacer, bulletsFrom, b, t } from "../docx";
+import { buildDoc, clause, heading, para, bulletsFrom, b } from "../docx";
 import { ordinal, MONTHS } from "../date";
 import { numToWords } from "../numToWords";
 

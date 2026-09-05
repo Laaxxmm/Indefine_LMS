@@ -27,7 +27,7 @@ export function PickForm({ groups, precheck, remaining }: { groups: PickGroup[];
 
   return (
     <div className={card}>
-      {groups.length === 0 && <p className="text-ink-mute text-[13.5px]">No open tasks in this week's plan.</p>}
+      {groups.length === 0 && <p className="text-ink-mute text-[13.5px]">No open tasks in this week&apos;s plan.</p>}
       {groups.map((g) => (
         <div key={g.workId} className="mb-4 last:mb-0">
           <p className={h2}>{g.workTitle}</p>

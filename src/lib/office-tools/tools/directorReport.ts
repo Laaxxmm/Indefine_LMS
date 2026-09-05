@@ -1,6 +1,6 @@
 import { z } from "zod";
 import {
-  Document, Packer, Header, Paragraph, Table, TextRun, AlignmentType, BorderStyle,
+  Document, Packer, Header, Paragraph, Table, BorderStyle,
   PageBorderDisplay, PageBorderOffsetFrom, type ISectionOptions,
 } from "docx";
 import { gridTable, paraML, boxedText, type Cell } from "../docx";

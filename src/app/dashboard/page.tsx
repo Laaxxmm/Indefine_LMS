@@ -25,14 +25,11 @@ import {
   Trophy,
   Zap,
   Calendar,
-  PlayCircle,
   GraduationCap,
   Target,
   Footprints,
   Award,
   ArrowRight,
-  Clock,
-  Fingerprint,
   ExternalLink,
   Radio,
 } from "lucide-react";
@@ -229,7 +226,6 @@ export default async function Dashboard() {
   const modulesWithVideos = modules.filter((m) => m.videos.length > 0);
   const allVideos = modulesWithVideos.flatMap((m) => m.videos);
   const totalCompleted = allVideos.filter((v) => v.progresses[0]?.completed).length;
-  const overallPct = allVideos.length > 0 ? (totalCompleted / allVideos.length) * 100 : 0;
 
   // Deadlines shown only for courses the user can actually see.
   const visibleCourseIds = new Set(modulesWithVideos.map((m) => m.courseId));

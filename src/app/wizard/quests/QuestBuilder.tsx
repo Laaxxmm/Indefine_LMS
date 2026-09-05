@@ -86,7 +86,7 @@ export default function QuestBuilder({
     setQuests((arr) => arr.filter((_, idx) => idx !== i));
   const add = () =>
     setQuests((arr) => (arr.length >= 5 ? arr : [...arr, blankQuest()]));
-  const useTemplate = (t: Quest) =>
+  const applyTemplate = (t: Quest) =>
     setQuests((arr) => (arr.length >= 5 ? arr : [...arr, { ...t, milestones: t.milestones.map((m) => ({ ...m })) }]));
 
   const validCount = quests.filter((q) => q.title.trim()).length;
@@ -121,7 +121,7 @@ export default function QuestBuilder({
             {TEMPLATES.map((t) => (
               <button
                 key={t.title}
-                onClick={() => useTemplate(t)}
+                onClick={() => applyTemplate(t)}
                 type="button"
                 className="text-xs px-3 py-1.5 rounded-lg bg-white border border-border hover:border-brand-200 hover:bg-brand-50 inline-flex items-center gap-1.5 transition"
               >
