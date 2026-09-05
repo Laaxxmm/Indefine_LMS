@@ -404,3 +404,7 @@ npm run build
 ```
 
 Run all of them before a push. `main` deploys to Railway on push.
+
+`verify:certs` needs the ICAI guidebook PDF at `src/lib/certificates/source/`, which is
+kept out of the repo; without it the twelve format templates report a missing source and
+the script exits 1. That is expected on a fresh clone, not a regression.
