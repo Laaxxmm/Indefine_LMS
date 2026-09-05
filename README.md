@@ -18,7 +18,7 @@ NextAuth v5 (Microsoft Entra ID) · Microsoft Graph API · Google Gemini · Rail
 
 | Doc | What's in it |
 |---|---|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Site map + full **flowcharts** (auth, sync, quiz, AI, KRA, trajectory) |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Site map, **flowcharts** (auth, sync, quiz, AI, KRA, trajectory), how the code is laid out, module index, cron jobs, verification |
 | [docs/EMPLOYEE_GUIDE.md](docs/EMPLOYEE_GUIDE.md) | Employee handout — how to use the portal |
 | [docs/TEST_REPORT.md](docs/TEST_REPORT.md) | End-to-end audit results + manual test checklist |
 
