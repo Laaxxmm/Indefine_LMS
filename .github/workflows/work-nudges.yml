@@ -30,6 +30,8 @@ jobs:
             *) echo "job=$INPUT_JOB" >> "$GITHUB_OUTPUT" ;;
           esac
       - name: Call work cron endpoint
+        env:
+          JOB: ${{ steps.pick.outputs.job }}
         run: |
           if [ -z "${{ secrets.CRON_SECRET }}" ]; then
             echo "CRON_SECRET repo secret not set — skipping."
@@ -37,4 +39,4 @@ jobs:
           fi
           curl -fsS --max-time 290 \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            "https://lms.indefine.in/api/cron/work?job=${{ steps.pick.outputs.job }}"
+            "https://lms.indefine.in/api/cron/work?job=$JOB"

@@ -211,7 +211,7 @@ export async function setWeekPlan(workIds: string[], actor: Actor, now = new Dat
     }
     for (const [ownerId, group] of byOwner) {
       const active = await tx.work.count({ where: { ownerId, status: "ACTIVE" } });
-      if (!wipAllowsMany(active, group.length)) return fail(WIP_MESSAGE);
+      if (!wipAllowsMany(active, group.length)) return fail(`Only ${WIP_CAP} works can be active at once, ${active} already are`);
     }
 
     // Second pass: all checks passed, now write.

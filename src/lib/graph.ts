@@ -62,9 +62,10 @@ export async function getUserGraphToken(userId: string, scope: string = BASE_GRA
   });
   if (!account) return null;
 
-  // Token still valid (with 60s slack) → use as-is.
+  // Token still valid (with 60s slack) → use as-is. Only for the default scope set:
+  // a caller asking for extra scopes must refresh so the token actually carries them.
   const now = Math.floor(Date.now() / 1000);
-  if (account.access_token && account.expires_at && account.expires_at > now + 60) {
+  if (scope === BASE_GRAPH_SCOPES && account.access_token && account.expires_at && account.expires_at > now + 60) {
     return account.access_token;
   }
 
