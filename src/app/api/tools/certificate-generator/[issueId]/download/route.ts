@@ -5,6 +5,7 @@ import { canUseCertificateTool } from "@/lib/certificates/access";
 import { byId } from "@/lib/certificates/registry";
 import { renderDocx } from "@/lib/certificates/render/toDocx";
 import { DOCX_MIME, certificateFilename } from "@/lib/certificates/download";
+import { isAdmin } from "@/lib/access";
 
 // Regenerate-on-demand (§8). Nothing is read from disk — the DOCX is rebuilt from the
 // stored payload against the exact pinned template version that issued it.
@@ -18,7 +19,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ issueId
   if (!issue) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   // Privacy — only the creator or an admin may download (§8).
-  if (issue.createdById !== session.user.id && session.user.role !== "ADMIN") {
+  if (issue.createdById !== session.user.id && !isAdmin(session.user)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

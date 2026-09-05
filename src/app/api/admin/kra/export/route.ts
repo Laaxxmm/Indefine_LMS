@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { computeKraScores, getCourseStatusForUser } from "@/lib/kra";
 import { prisma } from "@/lib/prisma";
+import { isAdmin } from "@/lib/access";
 
 function csvEscape(v: unknown): string {
   if (v == null) return "";
@@ -17,7 +18,7 @@ function toCsv(rows: (string | number | null | undefined)[][]): string {
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (session.user.role !== "ADMIN") {
+  if (!isAdmin(session.user)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

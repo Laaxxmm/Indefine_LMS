@@ -27,13 +27,14 @@ import {
   ArrowDown,
 } from "lucide-react";
 import { ConfirmButton } from "@/components/ConfirmButton";
+import { isAdmin } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
 async function syncAction(): Promise<void> {
   "use server";
   const session = await auth();
-  if (session?.user?.role !== "ADMIN") return;
+  if (!session?.user || !isAdmin(session.user)) return;
   const cookieStore = await cookies();
   try {
     const r = await syncOneDriveVideos({ fallbackUserId: session.user.id });
@@ -59,7 +60,7 @@ async function syncAction(): Promise<void> {
 async function deleteVideoAction(formData: FormData): Promise<void> {
   "use server";
   const session = await auth();
-  if (session?.user?.role !== "ADMIN") return;
+  if (!session?.user || !isAdmin(session.user)) return;
   const id = String(formData.get("id"));
   if (!id) return;
   await prisma.assignment.deleteMany({ where: { videoId: id } });
@@ -73,7 +74,7 @@ async function deleteVideoAction(formData: FormData): Promise<void> {
 async function deleteModuleAction(formData: FormData): Promise<void> {
   "use server";
   const session = await auth();
-  if (session?.user?.role !== "ADMIN") return;
+  if (!session?.user || !isAdmin(session.user)) return;
   const id = String(formData.get("id"));
   if (!id) return;
   const vids = await prisma.video.findMany({
@@ -93,7 +94,7 @@ async function deleteModuleAction(formData: FormData): Promise<void> {
 async function moveVideoAction(formData: FormData): Promise<void> {
   "use server";
   const session = await auth();
-  if (session?.user?.role !== "ADMIN") return;
+  if (!session?.user || !isAdmin(session.user)) return;
   const id = String(formData.get("id"));
   const dir = String(formData.get("dir"));
   const v = await prisma.video.findUnique({
@@ -121,7 +122,7 @@ async function moveVideoAction(formData: FormData): Promise<void> {
 async function syncUsersAction(): Promise<void> {
   "use server";
   const session = await auth();
-  if (session?.user?.role !== "ADMIN") return;
+  if (!session?.user || !isAdmin(session.user)) return;
   const cookieStore = await cookies();
   try {
     const r = await syncOrgUsers({ fallbackUserId: session.user.id });
@@ -154,7 +155,7 @@ export default async function AdminOverview({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/");
-  if (session.user.role !== "ADMIN") redirect("/dashboard");
+  if (!isAdmin(session.user)) redirect("/dashboard");
 
   const sp = await searchParams;
   const tab = sp.tab;

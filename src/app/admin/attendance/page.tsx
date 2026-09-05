@@ -11,13 +11,14 @@ import {
 } from "@/lib/attendance";
 import { AttendanceImporter } from "./AttendanceImporter";
 import { ConfirmButton } from "@/components/ConfirmButton";
+import { isAdmin } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
 async function requireAdmin() {
   const session = await auth();
   if (!session?.user) redirect("/");
-  if (session.user.role !== "ADMIN") redirect("/dashboard");
+  if (!isAdmin(session.user)) redirect("/dashboard");
   return session;
 }
 
@@ -33,7 +34,7 @@ async function saveAttendance(data: {
 }): Promise<{ ok: boolean; error?: string; saved?: number }> {
   "use server";
   const session = await auth();
-  if (!session?.user || session.user.role !== "ADMIN") {
+  if (!session?.user || !isAdmin(session.user)) {
     return { ok: false, error: "Unauthorized" };
   }
   const periodMonth = periodMonthFromString(data.periodMonth);
@@ -83,7 +84,7 @@ async function saveAttendance(data: {
 async function deleteAttendanceRecord(formData: FormData) {
   "use server";
   const session = await auth();
-  if (!session?.user || session.user.role !== "ADMIN") return;
+  if (!session?.user || !isAdmin(session.user)) return;
   const id = String(formData.get("id"));
   await prisma.attendanceRecord.delete({ where: { id } }).catch(() => {});
   revalidatePath("/admin/attendance");

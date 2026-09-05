@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { refreshVideoAssignments, canAccessVideo } from "@/lib/assignments";
 import { z } from "zod";
+import { isAdmin } from "@/lib/access";
 
 const Body = z.object({
   lastPosition: z.number().int().nonnegative(),
@@ -25,7 +26,7 @@ export async function POST(
     where: { id: videoId },
     select: { id: true },
   });
-  if (!exists || !(await canAccessVideo(userId, videoId, session.user.role === "ADMIN"))) {
+  if (!exists || !(await canAccessVideo(userId, videoId, isAdmin(session.user)))) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 

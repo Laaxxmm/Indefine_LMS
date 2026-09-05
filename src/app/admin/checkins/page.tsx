@@ -15,13 +15,14 @@ import {
   MessageSquareReply,
   Send,
 } from "lucide-react";
+import { isAdmin } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
 async function reply(formData: FormData) {
   "use server";
   const session = await auth();
-  if (session?.user?.role !== "ADMIN") return;
+  if (!session?.user || !isAdmin(session.user)) return;
   const id = String(formData.get("id"));
   const text = String(formData.get("reply") || "").trim();
   await prisma.weeklyCheckin.update({
@@ -38,7 +39,7 @@ export default async function AdminCheckinsPage({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/");
-  if (session.user.role !== "ADMIN") redirect("/dashboard");
+  if (!isAdmin(session.user)) redirect("/dashboard");
 
   const sp = await searchParams;
   const week = sp.week === "previous" ? previousWeekStart() : currentWeekStart();

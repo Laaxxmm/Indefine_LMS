@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessVideo } from "@/lib/assignments";
 import { getAppOnlyToken, getStreamUrl, getUserGraphToken } from "@/lib/graph";
+import { isAdmin } from "@/lib/access";
 
 // Download a video's handout. Same access boundary as streaming the video
 // itself: the learner must have the video (or its module) assigned, so a
@@ -19,7 +20,7 @@ export async function GET(
   const material = await prisma.material.findUnique({ where: { id } });
   if (
     !material ||
-    !(await canAccessVideo(userId, material.videoId, session.user.role === "ADMIN"))
+    !(await canAccessVideo(userId, material.videoId, isAdmin(session.user)))
   ) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }

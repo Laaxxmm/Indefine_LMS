@@ -11,13 +11,14 @@ import {
   departmentLabel,
   levelLabel,
 } from "@/lib/ca-firm";
+import { isAdmin } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
 async function saveHierarchy(formData: FormData) {
   "use server";
   const session = await auth();
-  if (session?.user?.role !== "ADMIN") return;
+  if (!session?.user || !isAdmin(session.user)) return;
   const meId = session.user.id;
 
   const ops: Promise<unknown>[] = [];
@@ -78,7 +79,7 @@ export default async function AdminTeamPage({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/");
-  if (session.user.role !== "ADMIN") redirect("/dashboard");
+  if (!isAdmin(session.user)) redirect("/dashboard");
   const sp = await searchParams;
 
   const [users, branches] = await Promise.all([

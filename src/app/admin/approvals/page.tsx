@@ -3,13 +3,14 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { Info } from "lucide-react";
 import { ApprovalsBoard } from "@/components/ApprovalsBoard";
+import { isAdmin } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
 export default async function ApprovalsPage() {
   const session = await auth();
   if (!session?.user) redirect("/");
-  if (session.user.role !== "ADMIN") redirect("/dashboard");
+  if (!isAdmin(session.user)) redirect("/dashboard");
 
   // Approvals route to each employee's direct manager. As an admin you see
   // your own reports plus anyone who has no manager assigned (the fallback).

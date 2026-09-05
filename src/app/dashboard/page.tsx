@@ -36,6 +36,7 @@ import {
   ExternalLink,
   Radio,
 } from "lucide-react";
+import { isAdmin } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
@@ -97,7 +98,7 @@ export default async function Dashboard() {
   const session = await auth();
   if (!session?.user) redirect("/");
   const userId = session.user.id;
-  const role = session.user.role;
+  const admin = isAdmin(session.user);
 
   await ensureDefaultCycle();
 
@@ -140,7 +141,7 @@ export default async function Dashboard() {
         // session recordings are auto-assigned to their attendees on ingest).
         // Admins see the whole library.
         where:
-          role === "ADMIN"
+          admin
             ? { course: { published: true } }
             : {
                 course: { published: true },
@@ -233,7 +234,7 @@ export default async function Dashboard() {
   // Deadlines shown only for courses the user can actually see.
   const visibleCourseIds = new Set(modulesWithVideos.map((m) => m.courseId));
   const upcoming = statuses
-    .filter((s) => role === "ADMIN" || visibleCourseIds.has(s.courseId))
+    .filter((s) => admin || visibleCourseIds.has(s.courseId))
     .flatMap((s) =>
       s.deadlines.filter((d) => d.state === "pending").map((d) => ({ ...d, courseTitle: s.courseTitle }))
     )
@@ -328,7 +329,7 @@ export default async function Dashboard() {
           <UserMenu
             name={session.user.name ?? "You"}
             initial={initial}
-            isAdmin={role === "ADMIN"}
+            isAdmin={admin}
             reportCount={reportCount}
             signOutAction={async () => {
               "use server";
@@ -617,10 +618,10 @@ export default async function Dashboard() {
             <div className="rounded-[20px] bg-card border border-dashed border-border p-12 text-center">
               <div className="text-4xl mb-3">🎬</div>
               <p className="font-semibold mb-1">
-                {role === "ADMIN" ? "No courses yet" : "No courses allotted yet"}
+                {admin ? "No courses yet" : "No courses allotted yet"}
               </p>
               <p className="text-ink-mute text-sm">
-                {role === "ADMIN"
+                {admin
                   ? "Sync your SharePoint folder to import videos."
                   : "Your admin assigns your training — it'll appear here the moment something is allotted to you."}
               </p>

@@ -5,13 +5,14 @@ import { revalidatePath } from "next/cache";
 import { Settings as SettingsIcon } from "lucide-react";
 import { getSettings } from "@/lib/settings";
 import { SubmitButton } from "@/components/SubmitButton";
+import { isAdmin } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
 async function requireAdmin() {
   const session = await auth();
   if (!session?.user) redirect("/");
-  if (session.user.role !== "ADMIN") redirect("/dashboard");
+  if (!isAdmin(session.user)) redirect("/dashboard");
 }
 
 function clampInt(v: FormDataEntryValue | null, min: number, max: number, fallback: number): number {

@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessVideo } from "@/lib/assignments";
 import { getAppOnlyToken, getStreamUrl, getUserGraphToken } from "@/lib/graph";
+import { isAdmin } from "@/lib/access";
 
 export async function GET(
   _req: Request,
@@ -18,7 +19,7 @@ export async function GET(
   // must not stream a video the employee was never assigned. Admins: anything.
   if (
     !video ||
-    !(await canAccessVideo(userId, id, session.user.role === "ADMIN"))
+    !(await canAccessVideo(userId, id, isAdmin(session.user)))
   ) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }

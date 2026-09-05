@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { autoQuizFromVideo } from "@/lib/auto-quiz";
+import { isAdmin } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 // Transcription + generation can take a couple of minutes per video.
@@ -8,7 +9,7 @@ export const maxDuration = 300;
 
 export async function POST(req: Request) {
   const session = await auth();
-  if (!session?.user || session.user.role !== "ADMIN") {
+  if (!session?.user || !isAdmin(session.user)) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 

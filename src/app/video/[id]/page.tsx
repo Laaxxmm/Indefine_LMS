@@ -15,6 +15,7 @@ import {
   LogOut,
   PlayCircle,
 } from "lucide-react";
+import { isAdmin } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
@@ -45,7 +46,7 @@ export default async function VideoPage({
 
   // Employees can only open videos allotted to them — enforced the same way in
   // the stream + progress APIs via the shared canAccessVideo helper.
-  if (!(await canAccessVideo(userId, id, session.user.role === "ADMIN"))) {
+  if (!(await canAccessVideo(userId, id, isAdmin(session.user)))) {
     redirect("/dashboard");
   }
 

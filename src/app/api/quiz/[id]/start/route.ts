@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canStartAttempt, loadQuizForAttempt, toPublicQuestions } from "@/lib/quiz";
+import { isAdmin } from "@/lib/access";
 
 export async function POST(
   _req: Request,
@@ -17,7 +18,7 @@ export async function POST(
     where: { id: quizId },
     select: { video: { select: { module: { select: { course: { select: { published: true } } } } } } },
   });
-  if (!access || (session.user.role !== "ADMIN" && !access.video?.module?.course?.published)) {
+  if (!access || (!isAdmin(session.user) && !access.video?.module?.course?.published)) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 

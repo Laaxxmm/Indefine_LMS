@@ -6,6 +6,7 @@ import { canUseCertificateTool } from "@/lib/certificates/access";
 import { registry } from "@/lib/certificates/registry";
 import { ArrowLeft, Download, FileText } from "lucide-react";
 import type { Prisma } from "@prisma/client";
+import { isAdmin } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
@@ -13,12 +14,12 @@ export default async function HistoryPage({ searchParams }: { searchParams: Prom
   const session = await auth();
   if (!session?.user) redirect("/");
   if (!canUseCertificateTool(session.user)) redirect("/dashboard");
-  const isAdmin = session.user.role === "ADMIN";
+  const admin = isAdmin(session.user);
   const sp = await searchParams;
 
   const where: Prisma.CertificateIssueWhereInput = {};
   // Staff see only their own; admins see all (§5).
-  if (!isAdmin) where.createdById = session.user.id;
+  if (!admin) where.createdById = session.user.id;
   else if (sp.creatorId) where.createdById = sp.creatorId;
   if (sp.formatId) where.formatId = sp.formatId;
   if (sp.from || sp.to) {
@@ -34,7 +35,7 @@ export default async function HistoryPage({ searchParams }: { searchParams: Prom
       take: 500,
       include: { createdBy: { select: { name: true, email: true } } },
     }),
-    isAdmin
+    admin
       ? prisma.certificateIssue.findMany({
           distinct: ["createdById"],
           select: { createdById: true, createdBy: { select: { name: true, email: true } } },
@@ -53,7 +54,7 @@ export default async function HistoryPage({ searchParams }: { searchParams: Prom
         <p className="text-[10.5px] font-extrabold tracking-[0.14em] text-ink-faint uppercase">Certification generator</p>
         <h1 className="font-display font-extrabold text-3xl tracking-[-0.03em] mt-1">History</h1>
         <p className="text-ink-mute text-[15px] mt-1.5">
-          {isAdmin ? "Every certificate issued across the firm." : "Certificates you have issued."} Re-download any of them — they regenerate deterministically.
+          {admin ? "Every certificate issued across the firm." : "Certificates you have issued."} Re-download any of them — they regenerate deterministically.
         </p>
       </div>
 
@@ -76,7 +77,7 @@ export default async function HistoryPage({ searchParams }: { searchParams: Prom
           <span className="text-[11px] font-bold text-ink-mute">To</span>
           <input type="date" name="to" defaultValue={sp.to ?? ""} className="rounded-lg border border-border bg-page/60 px-3 py-2 text-[13px]" />
         </label>
-        {isAdmin && (
+        {admin && (
           <label className="flex flex-col gap-1">
             <span className="text-[11px] font-bold text-ink-mute">Creator</span>
             <select name="creatorId" defaultValue={sp.creatorId ?? ""} className="rounded-lg border border-border bg-page/60 px-3 py-2 text-[13px]">
@@ -106,7 +107,7 @@ export default async function HistoryPage({ searchParams }: { searchParams: Prom
                   <th className="px-4 py-2.5">Date</th>
                   <th className="px-4 py-2.5">Format</th>
                   <th className="px-4 py-2.5">Client</th>
-                  {isAdmin && <th className="px-4 py-2.5">Creator</th>}
+                  {admin && <th className="px-4 py-2.5">Creator</th>}
                   <th className="px-4 py-2.5 text-right">Action</th>
                 </tr>
               </thead>
@@ -119,7 +120,7 @@ export default async function HistoryPage({ searchParams }: { searchParams: Prom
                       <span className="block text-[11px] text-ink-faint">v{i.templateVersion}</span>
                     </td>
                     <td className="px-4 py-3 font-medium">{i.clientName}</td>
-                    {isAdmin && <td className="px-4 py-3 text-ink-mute">{i.createdBy?.name ?? i.createdBy?.email ?? "—"}</td>}
+                    {admin && <td className="px-4 py-3 text-ink-mute">{i.createdBy?.name ?? i.createdBy?.email ?? "—"}</td>}
                     <td className="px-4 py-3 text-right">
                       <a
                         href={`/api/tools/certificate-generator/${i.id}/download`}

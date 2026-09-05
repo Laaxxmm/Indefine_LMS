@@ -38,13 +38,14 @@ import { JoinMeetingButton } from "@/components/JoinMeetingButton";
 import ScheduleLiveForm from "./ScheduleLiveForm";
 import AddPastSessionForm from "./AddPastSessionForm";
 import { AutoIngest } from "./AutoIngest";
+import { isAdmin } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
 async function requireAdmin() {
   const session = await auth();
   if (!session?.user) redirect("/");
-  if (session.user.role !== "ADMIN") redirect("/dashboard");
+  if (!isAdmin(session.user)) redirect("/dashboard");
   return session;
 }
 

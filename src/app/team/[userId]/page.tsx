@@ -18,6 +18,7 @@ import {
   Target,
   Rocket,
 } from "lucide-react";
+import { isAdmin } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +36,7 @@ async function rateCraft(formData: FormData) {
     select: { managerId: true },
   });
   if (!target || target.managerId !== session.user.id) {
-    if (session.user.role !== "ADMIN") return;
+    if (!isAdmin(session.user)) return;
   }
   if (![1, 2, 3, 4, 5].includes(score)) return;
 
@@ -68,7 +69,7 @@ async function endorseGeneric(formData: FormData) {
     select: { managerId: true },
   });
   if (!target || target.managerId !== session.user.id) {
-    if (session.user.role !== "ADMIN") return;
+    if (!isAdmin(session.user)) return;
   }
   await prisma.endorsement.create({
     data: { fromId: session.user.id, toId, kind, reason: reason || null },
@@ -90,7 +91,7 @@ async function approveQuestMilestone(formData: FormData) {
     where: { id: milestone.quest.userId },
     select: { managerId: true },
   });
-  if (!target || (target.managerId !== session.user.id && session.user.role !== "ADMIN")) return;
+  if (!target || (target.managerId !== session.user.id && !isAdmin(session.user))) return;
 
   await prisma.questMilestone.update({
     where: { id },
@@ -118,8 +119,8 @@ export default async function ReportDrillIn({
 
   // Allow access to direct manager or any admin
   const isManager = target.managerId === session.user.id;
-  const isAdmin = session.user.role === "ADMIN";
-  if (!isManager && !isAdmin) redirect("/dashboard");
+  const admin = isAdmin(session.user);
+  if (!isManager && !admin) redirect("/dashboard");
 
   const [trajectory, quests, checkins, endorsements, streak] = await Promise.all([
     computeTrajectory(userId),

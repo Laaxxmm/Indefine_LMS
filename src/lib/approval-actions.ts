@@ -8,11 +8,12 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { isAdmin } from "@/lib/access";
 
 async function actorFor(employeeUserId: string): Promise<string | null> {
   const session = await auth();
   if (!session?.user) return null;
-  if (session.user.role === "ADMIN") return session.user.id;
+  if (isAdmin(session.user)) return session.user.id;
   const emp = await prisma.user.findUnique({
     where: { id: employeeUserId },
     select: { managerId: true },

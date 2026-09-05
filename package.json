@@ -12,7 +12,8 @@
     "db:studio": "prisma studio",
     "verify:certs": "tsx scripts/verify-certificate-templates.ts",
     "verify:clients": "tsx scripts/verify-clients.ts",
-    "verify:work": "tsx scripts/verify-work.ts"
+    "verify:work": "tsx scripts/verify-work.ts",
+    "verify:access": "tsx scripts/verify-access.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.4",

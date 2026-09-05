@@ -5,13 +5,14 @@ import { revalidatePath } from "next/cache";
 import { computeKraScores } from "@/lib/kra";
 import { Building2, Plus, Save, Trash2, Users, Trophy } from "lucide-react";
 import { ConfirmButton } from "@/components/ConfirmButton";
+import { isAdmin } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
 async function requireAdmin() {
   const session = await auth();
   if (!session?.user) redirect("/");
-  if (session.user.role !== "ADMIN") redirect("/dashboard");
+  if (!isAdmin(session.user)) redirect("/dashboard");
 }
 
 async function createBranch(formData: FormData) {

@@ -1,4 +1,5 @@
 import type { Session } from "next-auth";
+import { isActive } from "@/lib/access";
 
 // §2 access rule — internal users only. Because Microsoft Entra is single-tenant and
 // User rows are pre-provisioned by the admin org-sync (users-sync.ts), only internal
@@ -6,5 +7,5 @@ import type { Session } from "next-auth";
 // rule in this one function so it can be tightened later (departments/roles) without
 // hunting through code. Do NOT fall back to `!!user`.
 export function canUseCertificateTool(user: Session["user"] | undefined | null): boolean {
-  return !!user && user.active === true;
+  return isActive(user);
 }

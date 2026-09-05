@@ -3,13 +3,14 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { Sparkles } from "lucide-react";
 import { BulkQuizRunner } from "./BulkQuizRunner";
+import { isAdmin } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
 export default async function AutoQuizPage() {
   const session = await auth();
   if (!session?.user) redirect("/");
-  if (session.user.role !== "ADMIN") redirect("/dashboard");
+  if (!isAdmin(session.user)) redirect("/dashboard");
 
   // Every video, with how many quiz questions it already has, so completed
   // ones can show a persistent ✓ and we never regenerate them.

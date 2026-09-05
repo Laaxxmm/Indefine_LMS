@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { computeKraScores } from "@/lib/kra";
+import { isAdmin } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +29,7 @@ export default async function KraPage({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/");
-  if (session.user.role !== "ADMIN") redirect("/dashboard");
+  if (!isAdmin(session.user)) redirect("/dashboard");
 
   const sp = await searchParams;
   const def = defaultRange();

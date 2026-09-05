@@ -4,6 +4,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getCourseStatusForUser } from "@/lib/kra";
 import PrintButton from "./PrintButton";
+import { isAdmin } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,7 @@ export default async function EmployeeKraDetail({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/");
-  if (session.user.role !== "ADMIN") redirect("/dashboard");
+  if (!isAdmin(session.user)) redirect("/dashboard");
 
   const { userId } = await params;
   const sp = await searchParams;

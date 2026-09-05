@@ -3,6 +3,7 @@
 import { z } from "zod";
 import type { Session } from "next-auth";
 import type { ClientDocType, Department, EntityType, GrowthGoal, JobStatus, TurnoverBand } from "@prisma/client";
+import { isActive, isAdmin, isManagement } from "@/lib/access";
 
 export const keysOf = <T extends string>(o: Record<T, string>) => Object.keys(o) as [T, ...T[]];
 
@@ -176,13 +177,13 @@ export type JobBody = z.infer<typeof jobBodyZ>;
 type U = Session["user"] | null | undefined;
 
 export function canViewClients(user: U): boolean {
-  return !!user && user.active === true;
+  return isActive(user);
 }
 
 export function canManageClients(user: U): boolean {
-  return canViewClients(user) && (user!.role === "ADMIN" || user!.level === "PARTNER");
+  return canViewClients(user) && isManagement(user);
 }
 
 export function isClientsAdmin(user: U): boolean {
-  return canViewClients(user) && user!.role === "ADMIN";
+  return canViewClients(user) && isAdmin(user);
 }

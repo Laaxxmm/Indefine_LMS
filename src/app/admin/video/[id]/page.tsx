@@ -15,13 +15,14 @@ import {
   uploadFileToFolderId,
   resolveFolderId,
 } from "@/lib/graph";
+import { isAdmin } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
 async function requireAdmin() {
   const session = await auth();
   if (!session?.user) redirect("/");
-  if (session.user.role !== "ADMIN") redirect("/dashboard");
+  if (!isAdmin(session.user)) redirect("/dashboard");
   return session;
 }
 
@@ -32,7 +33,7 @@ async function addGeneratedQuestion(data: {
 }): Promise<{ ok: boolean; error?: string }> {
   "use server";
   const session = await auth();
-  if (!session?.user || session.user.role !== "ADMIN") {
+  if (!session?.user || !isAdmin(session.user)) {
     return { ok: false, error: "Unauthorized" };
   }
   const text = data.text?.trim();
@@ -70,7 +71,7 @@ async function saveScript(data: {
 }): Promise<{ ok: boolean; error?: string }> {
   "use server";
   const session = await auth();
-  if (!session?.user || session.user.role !== "ADMIN") {
+  if (!session?.user || !isAdmin(session.user)) {
     return { ok: false, error: "Unauthorized" };
   }
   const sourceText = (data.sourceText ?? "").trim();
@@ -103,7 +104,7 @@ async function generateAndAddLive(data: {
 }): Promise<{ ok: boolean; generated?: number; dropped?: number; error?: string }> {
   "use server";
   const session = await auth();
-  if (!session?.user || session.user.role !== "ADMIN") {
+  if (!session?.user || !isAdmin(session.user)) {
     return { ok: false, error: "Unauthorized" };
   }
   const sourceText = (data.sourceText ?? "").trim();

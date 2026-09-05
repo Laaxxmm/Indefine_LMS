@@ -8,20 +8,21 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { ArrowLeft } from "lucide-react";
 import { ApprovalsBoard } from "@/components/ApprovalsBoard";
+import { isAdmin } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
 export default async function TeamApprovalsPage() {
   const session = await auth();
   if (!session?.user) redirect("/");
-  const isAdmin = session.user.role === "ADMIN";
+  const admin = isAdmin(session.user);
 
   const reportCount = await prisma.user.count({
     where: { managerId: session.user.id, active: true },
   });
-  if (!isAdmin && reportCount === 0) redirect("/dashboard");
+  if (!admin && reportCount === 0) redirect("/dashboard");
 
-  const scope = isAdmin
+  const scope = admin
     ? { OR: [{ managerId: session.user.id }, { managerId: null }] }
     : { managerId: session.user.id };
 

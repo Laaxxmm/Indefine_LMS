@@ -3,13 +3,14 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { runIngestSweep } from "@/lib/live";
+import { isAdmin } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 export async function POST() {
   const session = await auth();
-  if (session?.user?.role !== "ADMIN") {
+  if (!session?.user || !isAdmin(session.user)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   try {

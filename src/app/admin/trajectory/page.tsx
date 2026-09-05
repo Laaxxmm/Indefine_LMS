@@ -6,6 +6,7 @@ import { freezeQuarter, closeCycle } from "@/lib/snapshots";
 import { revalidatePath } from "next/cache";
 import type { EmployeeLevel, TrackKind } from "@prisma/client";
 import { Sparkles, Save, Plus, Snowflake, Lock } from "lucide-react";
+import { isAdmin } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,7 @@ const TRACKS: TrackKind[] = [
 async function requireAdmin() {
   const session = await auth();
   if (!session?.user) redirect("/");
-  if (session.user.role !== "ADMIN") redirect("/dashboard");
+  if (!isAdmin(session.user)) redirect("/dashboard");
 }
 
 async function saveTargets(formData: FormData) {
@@ -66,7 +67,7 @@ async function saveTargets(formData: FormData) {
 async function snapshotQuarter(formData: FormData) {
   "use server";
   const session = await auth();
-  if (session?.user?.role !== "ADMIN") return;
+  if (!session?.user || !isAdmin(session.user)) return;
   const cycleId = String(formData.get("cycleId"));
   const quarter = Number(formData.get("quarter"));
   if (!cycleId || ![1, 2, 3, 4].includes(quarter)) return;
@@ -77,7 +78,7 @@ async function snapshotQuarter(formData: FormData) {
 async function closeActiveCycle(formData: FormData) {
   "use server";
   const session = await auth();
-  if (session?.user?.role !== "ADMIN") return;
+  if (!session?.user || !isAdmin(session.user)) return;
   const cycleId = String(formData.get("cycleId"));
   if (!cycleId) return;
   await closeCycle(cycleId);
