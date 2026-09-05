@@ -2,7 +2,7 @@
 // recordings pull + quizzes generate without relying on the external cron.
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { runIngestSweep } from "@/lib/live";
+import { runIngestSweep } from "@/lib/live/sweep";
 import { isAdmin } from "@/lib/access";
 
 export const dynamic = "force-dynamic";

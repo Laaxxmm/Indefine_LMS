@@ -295,7 +295,7 @@ docs/superpowers/         design specs and implementation plans for the newer mo
 
 **The original LMS core** (`src/lib/*.ts`, flat files): `sync.ts` and `users-sync.ts`
 (OneDrive and Entra → DB), `quiz.ts` / `quiz-gen.ts` / `auto-quiz.ts` / `distill.ts` /
-`transcribe.ts` (quiz pipeline), `live.ts` (Teams sessions, recording ingest, attendance),
+`transcribe.ts` (quiz pipeline), `live/` (Teams sessions: `schedule.ts`, `ingest.ts`, `attendance.ts`, and the cron-driven `sweep.ts`),
 `kra.ts` / `trajectory.ts` / `snapshots.ts` / `recap.ts` / `year-recap.ts` / `coaching.ts`
 / `gamification.ts` / `checkins.ts` / `assignments.ts` / `attendance.ts` (scoring layer).
 

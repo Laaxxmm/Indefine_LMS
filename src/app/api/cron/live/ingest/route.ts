@@ -8,7 +8,7 @@
 // sessions page, so ingestion still happens if this cron isn't configured).
 
 import { NextRequest, NextResponse } from "next/server";
-import { runIngestSweep } from "@/lib/live";
+import { runIngestSweep } from "@/lib/live/sweep";
 import { cronUnauthorized } from "@/lib/cron-auth";
 
 export const dynamic = "force-dynamic";

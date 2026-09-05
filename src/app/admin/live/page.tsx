@@ -22,11 +22,9 @@ import {
   updateLiveSession,
   moveSessionFolder,
   cancelLiveSession,
-  ingestRecording,
-  repullRecording,
-  ingestFromRecapLink,
   confirmSessionEnded,
-} from "@/lib/live";
+} from "@/lib/live/schedule";
+import { ingestRecording, repullRecording, ingestFromRecapLink } from "@/lib/live/ingest";
 import { istLocalInputValue, formatIst, istLocalToUtc, istDate } from "@/lib/ist";
 import {
   getAppOnlyToken,
