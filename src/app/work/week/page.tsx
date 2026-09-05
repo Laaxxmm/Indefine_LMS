@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { currentActor } from "@/lib/work/actor";
-import { PLAN_CAP, addDays, daysUntouched, istDayKey, istWeekStart, parseDayKey } from "@/lib/work/core";
+import { PLAN_CAP, daysUntouched } from "@/lib/work/core";
+import { addDays, istDayKey, istLabel, istWeekStart, parseDayKey } from "@/lib/ist";
 import { gateState, planCandidates, trackerUsers, weekStats } from "@/lib/work/db";
 import { WeekPanels, type Column } from "./WeekPanels";
 
@@ -45,7 +46,7 @@ export default async function WeekPage({ searchParams }: { searchParams: Promise
     }),
   );
 
-  const label = (d: Date) => d.toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" });
+  const label = (d: Date) => istLabel(d, { day: "numeric", month: "short" });
   const nav = "px-3 py-1.5 rounded-lg text-[12.5px] font-semibold text-ink-mute hover:bg-muted hover:text-ink";
   return (
     <div>

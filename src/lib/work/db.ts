@@ -3,12 +3,8 @@
 // The rules themselves live in ./core.ts; this file only applies them.
 import { Prisma, type WorkEventKind, type WorkStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import {
-  AUTO_PAUSE_DAYS, PICK_CAP, PLAN_CAP, STALE_DAYS, WIP_CAP, WORK_STATUS_LABELS,
-  addDays, autoDone, gateStep, isWeekend, istDayKey, istDayStart, istMonthStart, istWeekStart,
-  keptPromise, nextStatus, precheckTaskIds, trackerEmails, wipAllows, wipAllowsMany,
-  type Actor, type PickGroup, type Result, type TaskAction, type WorkAction,
-} from "./core";
+import { AUTO_PAUSE_DAYS, PICK_CAP, PLAN_CAP, STALE_DAYS, WIP_CAP, WORK_STATUS_LABELS, autoDone, gateStep, keptPromise, nextStatus, precheckTaskIds, trackerEmails, wipAllows, wipAllowsMany, type Actor, type PickGroup, type Result, type TaskAction, type WorkAction } from "./core";
+import { addDays, isWeekend, istDayKey, istDayStart, istMonthStart, istWeekStart } from "@/lib/ist";
 
 type Tx = Prisma.TransactionClient;
 const fail = (error: string): Result<never> => ({ ok: false, error });

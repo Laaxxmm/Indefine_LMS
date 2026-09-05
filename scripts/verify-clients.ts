@@ -4,7 +4,8 @@ import {
   turnoverBand, safeName, folderName, fyFor, fyOptions, isValidFy, PAN_RE, GSTIN_RE,
   clientBodyZ, jobBodyZ, jobPatchZ, SEED_SERVICES, isKycDocType, canManageClients, canViewClients,
 } from "../src/lib/clients/core";
-import { buildClientWorkbook, istMonth, istDate, type WorkbookInput } from "../src/lib/clients/workbook";
+import { buildClientWorkbook, type WorkbookInput } from "../src/lib/clients/workbook";
+import { istDate, istMonth } from "../src/lib/ist";
 import { groupRows, keyOf, parseFilters, summarize, type JobRow } from "../src/lib/clients/reports";
 
 // Turnover bands (rupees). Boundaries are inclusive on the upper band.

@@ -1,13 +1,6 @@
 import assert from "node:assert/strict";
-import {
-  WIP_CAP, PICK_CAP, STALE_DAYS, AUTO_PAUSE_DAYS,
-  trackerEmails, canUseWork, isWorkLead,
-  istDayKey, istDayStart, istWeekday, isWeekend, istWeekStart, istMonthStart, parseDayKey, addDays,
-  daysUntouched, isStale, shouldAutoPause,
-  nextStatus, actionForMove, actionsFor, wipAllows, wipAllowsMany,
-  taskLane, awaitsReview, autoDone, keptPromise, precheckTaskIds, gateStep, eventLine,
-  createWorkZ, picksZ, planZ,
-} from "../src/lib/work/core";
+import { WIP_CAP, PICK_CAP, STALE_DAYS, AUTO_PAUSE_DAYS, trackerEmails, canUseWork, isWorkLead, daysUntouched, isStale, shouldAutoPause, nextStatus, actionForMove, actionsFor, wipAllows, wipAllowsMany, taskLane, awaitsReview, autoDone, keptPromise, precheckTaskIds, gateStep, eventLine, createWorkZ, picksZ, planZ } from "../src/lib/work/core";
+import { istDayKey, istDayStart, istWeekday, isWeekend, istWeekStart, istMonthStart, parseDayKey, addDays } from "../src/lib/ist";
 
 // Access: env order decides the lead, matching is case-insensitive.
 const emails = trackerEmails("Lead@Indefine.in, info@indefine.in ,");

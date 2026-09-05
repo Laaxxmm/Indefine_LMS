@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { Session } from "next-auth";
 import type { ClientDocType, Department, EntityType, GrowthGoal, JobStatus, TurnoverBand } from "@prisma/client";
 import { isActive, isAdmin, isManagement } from "@/lib/access";
+import { istDayKey } from "@/lib/ist";
 
 export const keysOf = <T extends string>(o: Record<T, string>) => Object.keys(o) as [T, ...T[]];
 
@@ -106,7 +107,7 @@ export function folderName(s: string): string {
 // are all IST-facing; using the server's local date would shift the FY boundary on a
 // UTC host). fyFor(2 Sep 2026) = "2026-27".
 export function fyFor(d: Date): string {
-  const [y, m] = d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }).split("-").map(Number);
+  const [y, m] = istDayKey(d).split("-").map(Number);
   const fyStart = m >= 4 ? y : y - 1;
   return `${fyStart}-${String((fyStart + 1) % 100).padStart(2, "0")}`;
 }

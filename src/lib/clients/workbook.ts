@@ -7,6 +7,7 @@ import { departmentLabel } from "@/lib/ca-firm";
 import { ensureFolder, getAppOnlyToken, uploadFileContent } from "@/lib/graph";
 import { DOC_TYPES, ENTITY_TYPES, GROWTH_GOALS, JOB_STATUSES, TURNOVER_BANDS } from "./core";
 import { clientsRoot } from "./storage";
+import { istDate, istMonth } from "@/lib/ist";
 
 export const WORKBOOK_PATH = () => `${clientsRoot()}/_Database/Client Database.xlsx`;
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -27,9 +28,6 @@ export type WorkbookInput = {
   documents: Array<{ client: string; job: string; docType: ClientDocType; name: string; uploadedBy: string; createdAt: Date; webUrl: string }>;
 };
 
-const IST = "Asia/Kolkata";
-export const istDate = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: IST }); // YYYY-MM-DD
-export const istMonth = (d: Date) => istDate(d).slice(0, 7);
 const dateOrBlank = (d: Date | null) => (d ? istDate(d) : "");
 
 type Cell = string | number;

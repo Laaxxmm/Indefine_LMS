@@ -2,6 +2,7 @@
 
 import { ENTITY_TYPES, GROWTH_GOALS, keysOf } from "@/lib/clients/core";
 import type { Handler } from "@/lib/clients/services";
+import { istDate } from "@/lib/ist";
 
 export type ClientFormValue = {
   name: string; entityType: string; pan: string; gstin: string; cin: string; industry: string; city: string;
@@ -13,7 +14,7 @@ export function emptyClient(d: Partial<ClientFormValue> = {}): ClientFormValue {
   return {
     name: "", entityType: "PVT_LTD", pan: "", gstin: "", cin: "", industry: "", city: "", contactName: "", contactPhone: "",
     contactEmail: "", referralSource: "", turnover: "", growthGoal: "MAINTAIN", growthNote: "",
-    onboardedOn: new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }), primaryHandlerId: "", ...d,
+    onboardedOn: istDate(new Date()), primaryHandlerId: "", ...d,
   };
 }
 

@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { departmentLabel } from "@/lib/ca-firm";
 import { canViewClients, ENTITY_TYPES, GROWTH_GOALS, JOB_STATUSES, TURNOVER_BANDS } from "@/lib/clients/core";
 import { loadJobRows, parseFilters } from "@/lib/clients/reports";
-import { istDate } from "@/lib/clients/workbook";
+import { istDate } from "@/lib/ist";
 import { addSheet, workbookBytes } from "@/lib/office-tools/xlsx";
 
 export const runtime = "nodejs";

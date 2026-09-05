@@ -1,7 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { currentActor } from "@/lib/work/actor";
-import { awaitsReview, daysUntouched, eventLine, isStale, istDayStart, taskLane } from "@/lib/work/core";
+import { awaitsReview, daysUntouched, eventLine, isStale, taskLane } from "@/lib/work/core";
+import { istDayStart, istLabel } from "@/lib/ist";
 import { gateState, trackerUsers } from "@/lib/work/db";
 import { WorkDetail } from "./WorkDetail";
 
@@ -34,7 +35,7 @@ export default async function WorkPage({ params }: { params: Promise<{ id: strin
   ]);
   if (!work) notFound();
 
-  const when = (d: Date) => d.toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" });
+  const when = (d: Date) => istLabel(d, { day: "numeric", month: "short" });
   return (
     <WorkDetail
       work={{

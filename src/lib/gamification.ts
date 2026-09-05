@@ -5,6 +5,7 @@
 // don't need new tables. Cheap, idempotent, and always in sync.
 
 import { prisma } from "@/lib/prisma";
+import { istDayKey } from "@/lib/ist";
 
 export interface StreakInfo {
   current: number;
@@ -38,7 +39,7 @@ async function activityDates(userId: string): Promise<Set<string>> {
 // IST calendar date (the firm's timezone) — the streak "day" must roll over at
 // IST midnight, not UTC (which is 5:30 AM IST and split evenings across days).
 function toYMD(d: Date): string {
-  return d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  return istDayKey(d);
 }
 
 /** Record that the user was active today (logged in / opened the app), so the

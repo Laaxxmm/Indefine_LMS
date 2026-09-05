@@ -1,6 +1,8 @@
 // Pure rules for the tech work tracker. No Prisma, no fetch — everything here is
 // exercised by scripts/verify-work.ts. db.ts applies these against the database.
+// Calendar arithmetic (IST day/week/month) lives in src/lib/ist.ts.
 import { z } from "zod";
+import { DAY_MS } from "@/lib/ist";
 import type { DayPickOutcome, WorkEventKind, WorkStatus, WorkTaskStatus } from "@prisma/client";
 
 export const WIP_CAP = 3;
@@ -32,48 +34,6 @@ export function canUseWork(email: string | null | undefined, emails: string[] = 
 }
 export function isWorkLead(email: string | null | undefined, emails: string[] = trackerEmails()): boolean {
   return !!email && emails.length > 0 && emails[0] === email.toLowerCase();
-}
-
-// ---------------- IST clock (India has no DST, so a fixed offset is exact) ----------------
-
-const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
-const DAY_MS = 24 * 60 * 60 * 1000;
-const shifted = (d: Date) => new Date(d.getTime() + IST_OFFSET_MS);
-
-/** "YYYY-MM-DD" of the IST calendar day. */
-export function istDayKey(d: Date): string {
-  return shifted(d).toISOString().slice(0, 10);
-}
-/** 00:00 IST of the IST calendar day, as a UTC instant. */
-export function istDayStart(d: Date): Date {
-  const s = shifted(d);
-  return new Date(Date.UTC(s.getUTCFullYear(), s.getUTCMonth(), s.getUTCDate()) - IST_OFFSET_MS);
-}
-/** 0 = Sunday … 6 = Saturday, in IST. */
-export function istWeekday(d: Date): number {
-  return shifted(d).getUTCDay();
-}
-export function isWeekend(d: Date): boolean {
-  const w = istWeekday(d);
-  return w === 0 || w === 6;
-}
-export function addDays(d: Date, n: number): Date {
-  return new Date(d.getTime() + n * DAY_MS);
-}
-/** Monday 00:00 IST of the IST week containing d. */
-export function istWeekStart(d: Date): Date {
-  return addDays(istDayStart(d), -((istWeekday(d) + 6) % 7));
-}
-/** The 1st, 00:00 IST, of the IST month containing d. */
-export function istMonthStart(d: Date): Date {
-  const s = shifted(d);
-  return new Date(Date.UTC(s.getUTCFullYear(), s.getUTCMonth(), 1) - IST_OFFSET_MS);
-}
-/** "YYYY-MM-DD" → 00:00 IST of that day, or null when malformed. */
-export function parseDayKey(key: string | undefined): Date | null {
-  if (!key || !/^\d{4}-\d{2}-\d{2}$/.test(key)) return null;
-  const t = Date.parse(`${key}T00:00:00.000Z`);
-  return Number.isNaN(t) ? null : new Date(t - IST_OFFSET_MS);
 }
 
 // ---------------- stale ----------------

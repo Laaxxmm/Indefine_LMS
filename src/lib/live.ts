@@ -43,7 +43,7 @@ import {
   istLocalToUtc,
   utcToIstWall,
   istLocalInputValue,
-} from "@/lib/live-format";
+} from "@/lib/ist";
 
 export interface ScheduleInput {
   title: string;

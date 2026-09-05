@@ -4,7 +4,7 @@ import type { Department, EntityType, GrowthGoal, JobStatus, TurnoverBand } from
 import { prisma } from "@/lib/prisma";
 import { DEPARTMENTS, departmentLabel } from "@/lib/ca-firm";
 import { ENTITY_TYPES, GROWTH_GOALS, JOB_STATUSES, TURNOVER_BANDS, isValidFy } from "./core";
-import { istMonth } from "./workbook";
+import { istMonth } from "@/lib/ist";
 
 export type JobRow = {
   id: string; clientId: string; client: string; entityType: EntityType; city: string | null; fy: string; month: string;

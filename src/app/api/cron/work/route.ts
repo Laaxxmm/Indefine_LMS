@@ -3,9 +3,10 @@
 //   ?job=friday   16:00 IST Fri      name whoever has not finished the week review
 //   ?job=close    20:00 IST daily    carry unfinished picks, auto-pause quiet works
 import { NextRequest, NextResponse } from "next/server";
-import { isWeekend } from "@/lib/work/core";
+import { isWeekend } from "@/lib/ist";
 import { closeDay, usersMissingPick, usersMissingReview } from "@/lib/work/db";
 import { postTechWorkMessage } from "@/lib/work/teams";
+import { cronUnauthorized } from "@/lib/cron-auth";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -14,9 +15,8 @@ const APP_URL = (process.env.AUTH_URL ?? "https://lms.indefine.in").replace(/\/$
 const firstNames = (users: { name: string }[]) => users.map((u) => u.name.split(" ")[0]).join(" and ");
 
 export async function GET(req: NextRequest) {
-  const secret = process.env.CRON_SECRET;
-  const provided = req.nextUrl.searchParams.get("key") ?? req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-  if (!secret || provided !== secret) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const denied = cronUnauthorized(req);
+  if (denied) return denied;
   const job = req.nextUrl.searchParams.get("job");
   const now = new Date();
 

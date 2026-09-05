@@ -6,15 +6,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveDirectors, saveSnapshot } from "@/lib/neo-centra/incentive";
 import { currentQuarter } from "@/lib/neo-centra/period";
 import { TuriaSessionError } from "@/lib/neo-centra/turia";
+import { cronUnauthorized } from "@/lib/cron-auth";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 export async function GET(req: NextRequest) {
-  const secret = process.env.CRON_SECRET;
-  const provided = req.nextUrl.searchParams.get("key") ?? req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-  if (!secret || provided !== secret) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
+  const denied = cronUnauthorized(req);
+  if (denied) return denied;
   const q = currentQuarter(Date.now());
   try {
     await resolveDirectors();

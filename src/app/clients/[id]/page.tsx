@@ -7,10 +7,11 @@ import { ENTITY_TYPES, GROWTH_GOALS, TURNOVER_BANDS, canManageClients, canViewCl
 import { listHandlers, listServiceTypes } from "@/lib/clients/services";
 import { ClientPanels } from "./ClientPanels";
 import { EditClient } from "./EditClient";
+import { istDate } from "@/lib/ist";
 
 export const dynamic = "force-dynamic";
 
-const ist = (d: Date | null) => (d ? d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }) : "");
+const ist = (d: Date | null) => (d ? istDate(d) : "");
 const inr = (n: number) => `₹${n.toLocaleString("en-IN")}`;
 
 export default async function ClientPage({ params }: { params: Promise<{ id: string }> }) {

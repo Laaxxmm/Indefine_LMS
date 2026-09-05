@@ -7,12 +7,13 @@ import { GROWTH_GOALS, JOB_STATUSES, TURNOVER_BANDS, canViewClients, fyOptions, 
 import { listHandlers, listServiceTypes } from "@/lib/clients/services";
 import { GROUP_KEYS, filtersToQuery, groupRows, keyOf, loadJobRows, parseFilters, summarize, type GroupKey } from "@/lib/clients/reports";
 import { RebuildButton } from "./RebuildButton";
+import { istLabel } from "@/lib/ist";
 
 export const dynamic = "force-dynamic";
 
 const field = "rounded-lg border border-border bg-page/60 px-3 py-2 text-[13px]";
 const inr = (n: number) => `₹${n.toLocaleString("en-IN")}`;
-const ist = (d: Date | null) => (d ? d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata" }) : "—");
+const ist = (d: Date | null) => (d ? istLabel(d, { day: "2-digit", month: "short", year: "numeric" }) : "—");
 
 export default async function ReportsPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const session = await auth();

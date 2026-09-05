@@ -6,6 +6,7 @@ import { CaptureBox } from "./CaptureBox";
 import { PlanForm } from "./PlanForm";
 import { PickForm } from "./PickForm";
 import { TodayList } from "./TodayList";
+import { istLabel } from "@/lib/ist";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +29,7 @@ export default async function TodayPage() {
   const actor = await currentActor();
   if (!actor) redirect("/");
   const now = new Date();
-  const kicker = now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Kolkata" });
+  const kicker = istLabel(now, { weekday: "long", day: "numeric", month: "long" });
   const gate = await gateState(actor.id, now);
 
   if (gate.step === "plan") {

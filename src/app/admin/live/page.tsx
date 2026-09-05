@@ -27,7 +27,7 @@ import {
   ingestFromRecapLink,
   confirmSessionEnded,
 } from "@/lib/live";
-import { istLocalInputValue, formatIst, istLocalToUtc } from "@/lib/live-format";
+import { istLocalInputValue, formatIst, istLocalToUtc, istDate } from "@/lib/ist";
 import {
   getAppOnlyToken,
   getUserGraphToken,
@@ -566,7 +566,7 @@ export default async function AdminLivePage({
           users={users}
           existingFolders={existingFolders}
           action={addPastSession}
-          defaultDate={new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" })}
+          defaultDate={istDate(new Date())}
         />
       </section>
       </>

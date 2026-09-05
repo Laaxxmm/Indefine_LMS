@@ -17,7 +17,7 @@ import {
   computeCheckinStreak,
   currentWeekStart,
 } from "@/lib/checkins";
-import { formatIst } from "@/lib/live-format";
+import { formatIst } from "@/lib/ist";
 import { canUseWork } from "@/lib/work/core";
 import {
   Flame,
