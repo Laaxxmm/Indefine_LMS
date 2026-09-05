@@ -18,6 +18,7 @@ import {
   currentWeekStart,
 } from "@/lib/checkins";
 import { formatIst } from "@/lib/live-format";
+import { canUseWork } from "@/lib/work/core";
 import {
   Flame,
   Sparkles,
@@ -308,6 +309,9 @@ export default async function Dashboard() {
           <Link href="/recap/year" className="px-4 py-2 rounded-full text-ink-mute font-semibold text-[13.5px] hover:text-ink transition">Recap</Link>
           <Link href="/tools" className="px-4 py-2 rounded-full text-ink-mute font-semibold text-[13.5px] hover:text-ink transition">Tools</Link>
           <Link href="/clients" className="px-4 py-2 rounded-full text-ink-mute font-semibold text-[13.5px] hover:text-ink transition">Clients</Link>
+          {canUseWork(session.user.email) && (
+            <Link href="/work" className="px-4 py-2 rounded-full text-ink-mute font-semibold text-[13.5px] hover:text-ink transition">Work</Link>
+          )}
         </nav>
 
         <div className="flex items-center gap-3">

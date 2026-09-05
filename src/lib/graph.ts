@@ -13,6 +13,11 @@ import { prisma } from "@/lib/prisma";
 
 const GRAPH = "https://graph.microsoft.com/v1.0";
 
+/** Delegated scopes requested at sign-in and on refresh. auth.ts imports this so the two
+ *  never drift. Chat.Create + ChatMessage.Send carry the work-tracker nudges. */
+export const GRAPH_SCOPES =
+  "openid profile email offline_access User.Read Files.Read.All Files.ReadWrite.All Calendars.ReadWrite OnlineMeetings.ReadWrite OnlineMeetingTranscript.Read.All OnlineMeetingArtifact.Read.All Chat.Create ChatMessage.Send";
+
 let cachedAppToken: { token: string; exp: number } | null = null;
 
 export async function getAppOnlyToken(): Promise<string | null> {
@@ -88,8 +93,7 @@ export async function getUserGraphToken(userId: string): Promise<string | null> 
       client_secret: clientSecret,
       grant_type: "refresh_token",
       refresh_token: account.refresh_token,
-      scope:
-        "openid profile email offline_access User.Read Files.Read.All Files.ReadWrite.All Calendars.ReadWrite OnlineMeetings.ReadWrite OnlineMeetingTranscript.Read.All OnlineMeetingArtifact.Read.All",
+      scope: GRAPH_SCOPES,
     }),
   });
   if (!res.ok) {

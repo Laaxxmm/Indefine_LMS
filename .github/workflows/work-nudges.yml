@@ -1,0 +1,38 @@
+# Work tracker: three scheduled calls into /api/cron/work. GitHub cron is UTC;
+# IST = UTC + 5:30. Reuses the CRON_SECRET repo secret set up for recording ingest.
+name: Work tracker nudges
+
+on:
+  schedule:
+    - cron: "30 3 * * 1-5"   # 09:00 IST Mon-Fri  -> morning
+    - cron: "30 10 * * 5"    # 16:00 IST Fri      -> friday
+    - cron: "30 14 * * *"    # 20:00 IST daily    -> close
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "morning | friday | close"
+        required: true
+        default: "close"
+
+jobs:
+  nudge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pick job from schedule
+        id: pick
+        run: |
+          case "${{ github.event.schedule }}" in
+            "30 3 * * 1-5") echo "job=morning" >> "$GITHUB_OUTPUT" ;;
+            "30 10 * * 5")  echo "job=friday"  >> "$GITHUB_OUTPUT" ;;
+            "30 14 * * *")  echo "job=close"   >> "$GITHUB_OUTPUT" ;;
+            *)              echo "job=${{ github.event.inputs.job }}" >> "$GITHUB_OUTPUT" ;;
+          esac
+      - name: Call work cron endpoint
+        run: |
+          if [ -z "${{ secrets.CRON_SECRET }}" ]; then
+            echo "CRON_SECRET repo secret not set — skipping."
+            exit 0
+          fi
+          curl -fsS --max-time 290 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "https://lms.indefine.in/api/cron/work?job=${{ steps.pick.outputs.job }}"
