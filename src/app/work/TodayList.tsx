@@ -55,6 +55,7 @@ export function TodayList({ picks }: { picks: TodayPick[] }) {
               <div className="flex-1 min-w-0">
                 <p className={`text-[15px] font-semibold ${finished ? "line-through text-ink-faint" : ""}`}>{p.title}</p>
                 <Link href={`/work/${p.workId}`} className="text-[12px] text-ink-mute hover:text-brand-600">{p.workTitle}</Link>
+                <Link href={`/work/${p.workId}`} className="ml-2 text-[12px] text-brand-600 hover:underline">+ add task</Link>
               </div>
               {p.outcome === "CARRIED" && <span className="text-[10.5px] uppercase tracking-wide text-amber-700">carried</span>}
             </li>

@@ -30,9 +30,10 @@ export function CaptureBox() {
 
   return (
     <form onSubmit={submit} className="rounded-2xl border border-dashed border-border bg-card/60 p-4">
-      <label className="block text-[11px] font-bold text-ink-mute mb-1.5">Capture an idea</label>
+      <label htmlFor="capture-idea" className="block text-[11px] font-bold text-ink-mute mb-1.5">Capture an idea</label>
       <div className="flex gap-2">
         <input
+          id="capture-idea"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           maxLength={120}

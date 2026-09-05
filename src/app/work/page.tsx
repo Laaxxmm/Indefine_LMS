@@ -84,7 +84,7 @@ export default async function TodayPage() {
         <details className="mt-4">
           <summary className="cursor-pointer text-[13px] font-bold text-brand-600">Pick another ({remaining} left)</summary>
           <div className="mt-3">
-            <PickForm groups={more.groups} precheck={[]} remaining={remaining} />
+            <PickForm key={remaining} groups={more.groups} precheck={[]} remaining={remaining} />
           </div>
         </details>
       )}
