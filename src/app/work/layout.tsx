@@ -19,7 +19,7 @@ export default async function WorkLayout({ children }: { children: React.ReactNo
   return (
     <div className="min-h-screen">
       <header className="border-b border-border bg-card/80 backdrop-blur sticky top-0 z-30">
-        <div className="max-w-[1180px] mx-auto px-5 sm:px-8 h-16 flex items-center justify-between gap-4">
+        <div className="max-w-[1400px] mx-auto px-5 sm:px-8 h-16 flex items-center justify-between gap-4">
           <Link href="/work" className="flex items-center gap-2.5">
             <LogoMark size={34} />
             <div className="leading-tight">
@@ -35,7 +35,7 @@ export default async function WorkLayout({ children }: { children: React.ReactNo
           </nav>
         </div>
       </header>
-      <main className="max-w-[1180px] mx-auto px-5 sm:px-8 py-8">{children}</main>
+      <main className="max-w-[1400px] mx-auto px-5 sm:px-8 py-8">{children}</main>
     </div>
   );
 }
