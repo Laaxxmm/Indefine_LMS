@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { WorkStatus, WorkTaskStatus } from "@prisma/client";
 import { WORK_STATUS_LABELS, actionsFor, type TaskAction, type TaskLane, type WorkAction } from "@/lib/work/core";
-import { btnGhost, btnPrimary, call, card, errorText, field, h2, type CallResult } from "@/components/ui";
+import { btnDanger, btnGhost, btnPrimary, btnSm, btnSuccess, call, card, errorText, field, firstName, h2, workActionClass, type CallResult } from "@/components/ui";
 
 export type TaskView = { id: string; title: string; status: WorkTaskStatus; assigneeId: string; assignee: string; lane: TaskLane; awaitsReview: boolean };
 
@@ -18,7 +18,11 @@ type Props = {
   meId: string;
 };
 
-const LANES: Array<[TaskLane, string]> = [["TODO", "To do"], ["TODAY", "Today"], ["DONE", "Done"]];
+const LANES: Array<[TaskLane, string, string]> = [
+  ["TODO", "To do", "Open tasks. Tick when finished."],
+  ["TODAY", "Today", "Promised for today on the Today page."],
+  ["DONE", "Done", "Finished or dropped."],
+];
 
 export function WorkDetail({ work, tasks, users, events, isLead, meId }: Props) {
   const router = useRouter();
@@ -68,7 +72,7 @@ export function WorkDetail({ work, tasks, users, events, isLead, meId }: Props) 
             {work.why && <p className="text-ink-mute text-[14px] mt-1">{work.why}</p>}
             <p className="text-[12px] text-ink-faint mt-2 flex items-center gap-2 flex-wrap">
               <span className="px-2 py-0.5 rounded-full bg-muted font-bold uppercase tracking-wide text-[10.5px] text-ink">{WORK_STATUS_LABELS[work.status]}</span>
-              <span>{work.owner} · last touched {work.days === 0 ? "today" : `${work.days}d ago`}</span>
+              <span>{firstName(work.owner)} · {tasks.filter((t) => t.status === "TODO").length} open · last touched {work.days === 0 ? "today" : `${work.days}d ago`}</span>
               {work.stale && <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-bold uppercase text-[10px]">Stale</span>}
               {work.obsoleteReason && <span>· {work.obsoleteReason}</span>}
             </p>
@@ -76,7 +80,7 @@ export function WorkDetail({ work, tasks, users, events, isLead, meId }: Props) 
           {work.canChange && (
             <div className="flex flex-wrap gap-1.5">
               {actionsFor(work.status).map(([a, label]) => (
-                <button key={a} type="button" disabled={busy} onClick={() => workAction(a)} className={btnGhost}>{label}</button>
+                <button key={a} type="button" disabled={busy} onClick={() => workAction(a)} className={workActionClass(a)}>{label}</button>
               ))}
             </div>
           )}
@@ -90,33 +94,53 @@ export function WorkDetail({ work, tasks, users, events, isLead, meId }: Props) 
         {error && <p className={`mt-3 ${errorText}`}>{error}</p>}
       </div>
 
+      <form onSubmit={addTask} className={`${card} !py-4`}>
+        <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
+          <span className={`${h2} !mb-0 sm:w-24 shrink-0`}>Add a task</span>
+          <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={160} placeholder="One clear next step" className={field} aria-label="Task title" />
+          {isLead ? (
+            <select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)} className={`${field} sm:w-44`} aria-label="Assignee">
+              {users.map((u) => <option key={u.id} value={u.id}>{firstName(u.name)}</option>)}
+            </select>
+          ) : (
+            <span className="text-[12.5px] text-ink-mute self-center whitespace-nowrap">for you</span>
+          )}
+          <button type="submit" disabled={busy || !title.trim()} className={btnPrimary}>Add</button>
+        </div>
+      </form>
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        {LANES.map(([lane, label]) => (
-          <div key={lane} className="rounded-2xl bg-muted/40 border border-border p-3 min-h-[120px]">
-            <p className={h2}>{label}</p>
-            <ul className="space-y-2">
+        {LANES.map(([lane, label, hint]) => (
+          <div key={lane} className="rounded-2xl bg-muted/40 border border-border p-2.5 min-h-[120px]">
+            <p className={`${h2} !mb-0.5`}>{label} · {tasks.filter((t) => t.lane === lane).length}</p>
+            <p className="text-[11px] text-ink-faint mb-2.5">{hint}</p>
+            <ul className="space-y-1.5">
               {tasks.filter((t) => t.lane === lane).map((t) => {
                 const mine = t.assigneeId === meId;
                 const open = t.status === "TODO";
                 return (
-                  <li key={t.id} className="rounded-xl bg-card border border-border p-3 flex items-start gap-3">
+                  <li key={t.id} className="rounded-lg bg-card border border-border px-2.5 py-2 flex items-start gap-2.5">
                     {open && (mine || isLead) ? (
-                      <input type="checkbox" checked={false} disabled={busy} onChange={() => taskAct(t.id, "done")} className="w-5 h-5 mt-0.5" aria-label={`Finish ${t.title}`} />
+                      <input type="checkbox" checked={false} disabled={busy} onChange={() => taskAct(t.id, "done")} className="w-4 h-4 mt-[3px] shrink-0" aria-label={`Finish ${t.title}`} />
                     ) : (
-                      <span className="w-5 h-5 mt-0.5 inline-block" />
+                      <span className="w-4 h-4 mt-[3px] inline-block shrink-0" />
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className={`text-[14px] font-semibold ${t.status === "DROPPED" ? "line-through text-ink-faint" : ""}`}>{t.title}</p>
-                      <p className="text-[11.5px] text-ink-mute mt-0.5">{t.assignee}{t.status === "DROPPED" && " · dropped"}</p>
-                      <div className="flex flex-wrap gap-1.5 mt-2">
-                        {t.awaitsReview && (isLead ? (
-                          <button type="button" disabled={busy} onClick={() => taskAct(t.id, "review")} className={btnPrimary}>Check</button>
-                        ) : (
-                          <span className="text-[10.5px] uppercase tracking-wide text-amber-700 self-center">waiting for check</span>
-                        ))}
-                        {open && isLead && <button type="button" disabled={busy} onClick={() => taskAct(t.id, "drop")} className={btnGhost}>Drop</button>}
-                        {!open && (mine || isLead) && <button type="button" disabled={busy} onClick={() => taskAct(t.id, "reopen")} className={btnGhost}>Reopen</button>}
-                      </div>
+                      <p className={`text-[13.5px] font-semibold leading-snug ${t.status === "DROPPED" ? "line-through text-ink-faint" : ""}`}>
+                        {t.title}
+                        <span className="ml-1.5 text-[11px] font-medium text-ink-faint">{firstName(t.assignee)}{t.status === "DROPPED" && " · dropped"}</span>
+                      </p>
+                      {(t.awaitsReview || (open && isLead) || (!open && (mine || isLead))) && (
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {t.awaitsReview && (isLead ? (
+                            <button type="button" disabled={busy} onClick={() => taskAct(t.id, "review")} className={`${btnSuccess} ${btnSm}`}>Check</button>
+                          ) : (
+                            <span className="text-[10.5px] uppercase tracking-wide text-amber-700 self-center">waiting for check</span>
+                          ))}
+                          {open && isLead && <button type="button" disabled={busy} onClick={() => taskAct(t.id, "drop")} className={`${btnDanger} ${btnSm}`}>Drop</button>}
+                          {!open && (mine || isLead) && <button type="button" disabled={busy} onClick={() => taskAct(t.id, "reopen")} className={`${btnGhost} ${btnSm}`}>Reopen</button>}
+                        </div>
+                      )}
                     </div>
                   </li>
                 );
@@ -126,29 +150,14 @@ export function WorkDetail({ work, tasks, users, events, isLead, meId }: Props) 
         ))}
       </div>
 
-      <form onSubmit={addTask} className={card}>
-        <p className={h2}>Add a task</p>
-        <div className="flex flex-col sm:flex-row gap-2">
-          <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={160} placeholder="One clear next step" className={field} aria-label="Task title" />
-          {isLead ? (
-            <select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)} className={`${field} sm:w-48`} aria-label="Assignee">
-              {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-            </select>
-          ) : (
-            <span className="text-[12.5px] text-ink-mute self-center whitespace-nowrap">for you</span>
-          )}
-          <button type="submit" disabled={busy || !title.trim()} className={btnPrimary}>Add</button>
-        </div>
-      </form>
-
       <div className={card}>
         <p className={h2}>Timeline</p>
         {events.length === 0 ? (
           <p className="text-ink-mute text-[13px]">Nothing yet.</p>
         ) : (
-          <ul className="space-y-1.5 text-[13px]">
+          <ul className="space-y-1 text-[12.5px]">
             {events.map((e) => (
-              <li key={e.id} className="flex gap-3"><span className="text-ink-faint w-16 shrink-0">{e.when}</span><span>{e.line}</span></li>
+              <li key={e.id} className="flex gap-3"><span className="text-ink-faint w-14 shrink-0 tabular-nums">{e.when}</span><span className="text-ink-mute">{e.line}</span></li>
             ))}
           </ul>
         )}

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import type { WorkStatus } from "@prisma/client";
 import { WORK_STATUS_LABELS } from "@/lib/work/core";
 import { PlanForm, type PlanWork } from "../PlanForm";
-import { btnGhost, btnPrimary, call, card, errorText, field, h2, type CallResult } from "@/components/ui";
+import { btnDanger, btnGhost, btnPrimary, btnWarn, call, card, errorText, field, h2, type CallResult } from "@/components/ui";
 
 export type Column = {
   user: { id: string; name: string };
@@ -90,6 +90,12 @@ function PersonColumn({ c, isCurrent, cap }: { c: Column; isCurrent: boolean; ca
 
       <div className={card}>
         <p className={h2}>{c.user.name} · review</p>
+        {isCurrent && (
+          <p className="text-[12.5px] text-ink-mute mb-3">
+            Friday: read the three numbers, decide on every stale work below, then press <strong className="text-ink">Review done</strong>.
+            Nothing stale means nothing to decide; press it anyway so the week counts as reviewed.
+          </p>
+        )}
         <div className="grid grid-cols-3 gap-2 mb-4">
           <Stat label="Kept promises" value={c.kept === null ? "—" : `${c.kept}%`} />
           <Stat label="Shipped this week" value={String(c.shippedWeek)} />
@@ -119,8 +125,8 @@ function PersonColumn({ c, isCurrent, cap }: { c: Column; isCurrent: boolean; ca
                         ) : (
                           <div className="flex flex-wrap gap-1.5">
                             <button type="button" disabled={busy} onClick={() => { setNext(""); setContinueId(s.id); }} className={btnPrimary}>Continue</button>
-                            <button type="button" disabled={busy} onClick={() => pause(s.id)} className={btnGhost}>Pause</button>
-                            <button type="button" disabled={busy} onClick={() => obsolete(s.id, s.title)} className={btnGhost}>Obsolete</button>
+                            <button type="button" disabled={busy} onClick={() => pause(s.id)} className={btnWarn}>Pause</button>
+                            <button type="button" disabled={busy} onClick={() => obsolete(s.id, s.title)} className={btnDanger}>Obsolete</button>
                           </div>
                         )}
                       </div>
