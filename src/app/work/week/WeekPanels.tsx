@@ -69,7 +69,11 @@ function PersonColumn({ c, isCurrent, cap }: { c: Column; isCurrent: boolean; ca
       <div className={card}>
         <p className={h2}>{c.user.name} · plan</p>
         {c.candidates ? (
-          <PlanForm works={c.candidates} selected={c.plan.map((p) => p.id)} cap={cap} />
+          (() => {
+            const visible = new Set((c.candidates ?? []).map((w) => w.id));
+            const selected = c.plan.map((p) => p.id).filter((id) => visible.has(id));
+            return <PlanForm key={selected.join(",")} works={c.candidates} selected={selected} cap={cap} />;
+          })()
         ) : c.plan.length === 0 ? (
           <p className="text-ink-mute text-[13px]">No plan.</p>
         ) : (
@@ -108,7 +112,7 @@ function PersonColumn({ c, isCurrent, cap }: { c: Column; isCurrent: boolean; ca
                       <div className="mt-2">
                         {continueId === s.id ? (
                           <div className="flex gap-2">
-                            <input value={next} onChange={(e) => setNext(e.target.value)} maxLength={160} placeholder="Next task" className={field} autoFocus />
+                            <input value={next} onChange={(e) => setNext(e.target.value)} maxLength={160} placeholder="Next task" aria-label="Next task" className={field} autoFocus />
                             <button type="button" disabled={busy || !next.trim()} onClick={() => continueWork(s.id)} className={btnPrimary}>Add</button>
                             <button type="button" onClick={() => setContinueId(null)} className={btnGhost}>Cancel</button>
                           </div>
