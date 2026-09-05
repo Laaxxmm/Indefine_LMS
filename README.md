@@ -193,8 +193,8 @@ docs/superpowers/            design specs and implementation plans
   section, a `scripts/verify-<module>.ts`, and a design note under `docs/superpowers/`.
 - **Never delete user data or SharePoint files.** Flag as inactive, obsolete or archived.
 - **Schema changes are migrations.** Edit `prisma/schema.prisma`, then write the migration:
-  `npx prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --script > prisma/migrations/$(date +%Y%m%d%H%M%S)_<name>/migration.sql`
-  (create the folder first), read the SQL, commit it with the schema. Deploy runs `prisma migrate deploy`; nothing at boot can drop data unless a committed migration says so. Never edit an applied migration.
+  `git show origin/main:prisma/schema.prisma > /tmp/before.prisma && mkdir -p prisma/migrations/$(date +%Y%m%d%H%M%S)_<name> && npx prisma migrate diff --from-schema-datamodel /tmp/before.prisma --to-schema-datamodel prisma/schema.prisma --script > prisma/migrations/<that folder>/migration.sql`
+  (no database needed), read the SQL, commit it with the schema. Deploy runs `prisma migrate deploy`; nothing at boot can drop data unless a committed migration says so. Never edit an applied migration.
 
 ---
 
@@ -205,6 +205,6 @@ docs/superpowers/            design specs and implementation plans
 - **Quizzes are graded server-side** — clients never receive correct answers or report scores.
 - **AI questions are grounded** — each must quote the source verbatim or it's dropped.
 - **No video re-hosting** — only metadata is stored; each play resolves a short-lived URL.
-- App-only Graph token for consistent listing, with a delegated fallback.
+- App-only Graph token for listing and streaming. Sign-in grants identity only; organisers connect Microsoft 365 once at `/connect` for calendar, meeting and drive scopes. Stored Graph tokens and the Turia cookie are encrypted at rest.
 
 See [docs/TEST_REPORT.md](docs/TEST_REPORT.md) for the full audit.

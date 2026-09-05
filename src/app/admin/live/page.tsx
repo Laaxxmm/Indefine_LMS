@@ -378,10 +378,10 @@ export default async function AdminLivePage({
           },
         },
       }),
-      // Only people who've signed in to the LMS have a Microsoft token we can
-      // act as — they're the only valid meeting organizers.
+      // Only people who connected Microsoft 365 at /connect hold a refresh token
+      // we can act with on their calendar — they're the only valid organizers.
       prisma.account.findMany({
-        where: { provider: "microsoft-entra-id" },
+        where: { provider: "microsoft-entra-id", refresh_token: { not: null } },
         select: { userId: true },
       }),
       auth(),
@@ -533,9 +533,9 @@ export default async function AdminLivePage({
         <div className="mt-5 rounded-xl bg-muted/50 border border-border p-3 flex items-start gap-2.5">
           <Info className="w-4 h-4 text-ink-faint shrink-0 mt-0.5" />
           <p className="text-xs text-ink-mute leading-relaxed">
-            One-time setup: your Entra admin must grant these delegated Graph
-            permissions on the app registration, then you sign out and back in
-            once —{" "}
+            One-time setup: an organizer opens <code className="text-[11px] bg-white px-1 py-0.5 rounded border border-border">/connect</code> and
+            grants these delegated Graph permissions (your Entra admin must have
+            allowed them on the app registration) —{" "}
             <code className="text-[11px] bg-white px-1 py-0.5 rounded border border-border">
               Calendars.ReadWrite · Files.ReadWrite.All · OnlineMeetings.ReadWrite ·
               OnlineMeetingTranscript.Read.All · OnlineMeetingArtifact.Read.All

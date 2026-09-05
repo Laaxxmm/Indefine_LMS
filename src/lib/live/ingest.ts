@@ -51,7 +51,7 @@ export async function ingestRecording(sessionId: string): Promise<IngestResult> 
   if (!token) {
     return {
       status: "error",
-      message: "Organizer's Microsoft token unavailable — they need to sign in.",
+      message: "Organizer's Microsoft 365 connection is missing — they need to open /connect once.",
     };
   }
 

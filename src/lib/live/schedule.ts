@@ -96,7 +96,7 @@ export async function scheduleLiveSession(
   const token = await getUserGraphToken(organizerUserId);
   if (!token) {
     throw new Error(
-      "No Microsoft token for the chosen organizer — they need to sign in to the LMS once (or sign out and back in), then try again."
+      "The chosen organizer has not connected Microsoft 365 — ask them to open /connect in the LMS once, then try again."
     );
   }
 
@@ -302,7 +302,7 @@ export async function updateLiveSession(sessionId: string, input: EditInput) {
     throw new Error("Only upcoming sessions can be edited.");
   }
   const token = await getUserGraphToken(s.scheduledById);
-  if (!token) throw new Error("Organizer's Microsoft token unavailable — they need to sign in.");
+  if (!token) throw new Error("Organizer's Microsoft 365 connection is missing — they need to open /connect once.");
 
   const startAt = istLocalToUtc(input.startLocal);
   if (Number.isNaN(startAt.getTime())) throw new Error("Invalid start time.");

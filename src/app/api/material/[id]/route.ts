@@ -25,8 +25,8 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  let token = await getUserGraphToken(userId);
-  if (!token) token = await getAppOnlyToken();
+  let token = await getAppOnlyToken();
+  if (!token) token = await getUserGraphToken(userId);
   if (!token) return NextResponse.json({ error: "No Graph token" }, { status: 500 });
 
   try {

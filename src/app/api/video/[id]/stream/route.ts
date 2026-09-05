@@ -24,10 +24,11 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  // Prefer the user's delegated token for streaming — app-only tokens
-  // sometimes omit @microsoft.graph.downloadUrl on SharePoint items.
-  let token = await getUserGraphToken(userId);
-  if (!token) token = await getAppOnlyToken();
+  // App-only first: employees sign in with identity scopes only, so most have no
+  // delegated token. getStreamUrl falls back to the /content redirect when an
+  // app-only item lacks @microsoft.graph.downloadUrl.
+  let token = await getAppOnlyToken();
+  if (!token) token = await getUserGraphToken(userId);
   if (!token) return NextResponse.json({ error: "No Graph token" }, { status: 500 });
 
   try {

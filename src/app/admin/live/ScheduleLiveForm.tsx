@@ -21,7 +21,7 @@ export default function ScheduleLiveForm({
   defaultStart,
 }: {
   users: UserLite[];
-  /** Users who've signed in to the LMS (have a Microsoft token) — the only valid hosts. */
+  /** Users who connected Microsoft 365 at /connect (hold a refresh token) — the only valid hosts. */
   organizers: UserLite[];
   currentUserId: string;
   /** Course folders already present under the L&D root. */

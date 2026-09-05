@@ -2,15 +2,30 @@ import NextAuth from "next-auth";
 import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
-import { GRAPH_SCOPES } from "@/lib/graph";
+import { sealGraphToken } from "@/lib/graph";
+import { ELEVATED_SCOPES, SIGNIN_SCOPES, scopesCover } from "@/lib/graph-scopes";
+import type { Adapter, AdapterAccount } from "next-auth/adapters";
 
 const adminEmails = (process.env.ADMIN_EMAILS ?? "")
   .split(",")
   .map((e) => e.trim().toLowerCase())
   .filter(Boolean);
 
+// The Prisma adapter writes the first Account row itself (after the signIn callback),
+// so token sealing has to happen inside linkAccount as well as in the callback.
+const baseAdapter = PrismaAdapter(prisma);
+const adapter: Adapter = {
+  ...baseAdapter,
+  linkAccount: (account: AdapterAccount) =>
+    baseAdapter.linkAccount!({
+      ...account,
+      access_token: sealGraphToken(account.access_token),
+      refresh_token: sealGraphToken(account.refresh_token),
+    }),
+};
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  adapter: PrismaAdapter(prisma),
+  adapter,
   session: { strategy: "database" },
   providers: [
     MicrosoftEntraID({
@@ -19,7 +34,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       issuer: process.env.AUTH_MICROSOFT_ENTRA_ID_ISSUER,
       authorization: {
         params: {
-          scope: GRAPH_SCOPES,
+          // Identity only. No offline_access, so an ordinary employee has no refresh
+          // token in the database. Organisers grant the elevated tier at /connect.
+          scope: SIGNIN_SCOPES,
         },
       },
       // Employees are pre-provisioned by the admin-triggered org sync
@@ -67,8 +84,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               providerAccountId: account.providerAccountId,
             },
             data: {
-              access_token: account.access_token,
-              refresh_token: account.refresh_token ?? undefined,
+              access_token: sealGraphToken(account.access_token),
+              // An identity-only sign-in returns no refresh token; keep the elevated
+              // one from an earlier /connect rather than overwriting it with nothing.
+              refresh_token: sealGraphToken(account.refresh_token) ?? undefined,
               expires_at:
                 typeof account.expires_at === "number"
                   ? account.expires_at
@@ -76,6 +95,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               scope: account.scope,
               token_type: account.token_type,
               id_token: account.id_token,
+              ...(scopesCover(account.scope, ELEVATED_SCOPES) ? { elevatedAt: new Date() } : {}),
             },
           })
           .catch(() => {});

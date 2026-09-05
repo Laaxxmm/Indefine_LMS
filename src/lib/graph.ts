@@ -10,14 +10,35 @@
 // We prefer app-only because video listings should be identical for everyone.
 
 import { prisma } from "@/lib/prisma";
+import { ELEVATED_SCOPES, scopesCover } from "@/lib/graph-scopes";
+import { keyFromEnv, open, seal } from "@/lib/secret-box";
 
 const GRAPH = "https://graph.microsoft.com/v1.0";
 
-/** Delegated scopes every LMS user consented to. Used for token refresh by default. */
-export const BASE_GRAPH_SCOPES =
-  "openid profile email offline_access User.Read Files.Read.All Files.ReadWrite.All Calendars.ReadWrite OnlineMeetings.ReadWrite OnlineMeetingTranscript.Read.All OnlineMeetingArtifact.Read.All";
-/** Requested at sign-in so new consent is collected; the extra two carry the work-tracker nudges. */
-export const GRAPH_SCOPES = `${BASE_GRAPH_SCOPES} Chat.Create ChatMessage.Send`;
+// Delegated scope tiers live in ./graph-scopes.ts (pure, asserted). Stored tokens are
+// sealed with GRAPH_TOKEN_KEY (src/lib/secret-box.ts); without the key they are stored
+// as-is and a warning is logged once per process.
+export { ELEVATED_SCOPES, LEAD_SCOPES, SIGNIN_SCOPES } from "@/lib/graph-scopes";
+
+const TOKEN_KEY_ENV = "GRAPH_TOKEN_KEY";
+let warnedNoKey = false;
+/** Seal a token for storage. Null/undefined pass through. */
+export function sealGraphToken<T extends string | null | undefined>(value: T): T {
+  if (value == null) return value;
+  const key = keyFromEnv(TOKEN_KEY_ENV);
+  if (!key) {
+    if (!warnedNoKey) {
+      warnedNoKey = true;
+      console.error(`${TOKEN_KEY_ENV} is not set: Microsoft Graph tokens are being stored unencrypted. Set it (openssl rand -hex 32).`);
+    }
+    return value;
+  }
+  return seal(value, key) as T;
+}
+/** Read a stored token. Legacy plaintext passes through; a sealed value needs the key. */
+function openGraphToken(value: string | null): string | null {
+  return value == null ? null : open(value, keyFromEnv(TOKEN_KEY_ENV));
+}
 
 let cachedAppToken: { token: string; exp: number } | null = null;
 
@@ -56,22 +77,35 @@ export async function getAppOnlyToken(): Promise<string | null> {
   return cachedAppToken.token;
 }
 
-export async function getUserGraphToken(userId: string, scope: string = BASE_GRAPH_SCOPES): Promise<string | null> {
+/**
+ * A delegated token for `userId` that carries every scope in `required`
+ * (default: the elevated tier). Returns null when the person never connected
+ * Microsoft 365 with those scopes; callers fall back to the app-only token or
+ * tell the user to visit /connect. Refreshes with `required`, so a sign-in-only
+ * account (no refresh token) can never be quietly upgraded.
+ */
+export async function getUserGraphToken(userId: string, required: string = ELEVATED_SCOPES): Promise<string | null> {
   const account = await prisma.account.findFirst({
     where: { userId, provider: "microsoft-entra-id" },
   });
   if (!account) return null;
 
-  // Token still valid (with 60s slack) → use as-is. Only for the default scope set:
-  // a caller asking for extra scopes must refresh so the token actually carries them.
-  const now = Math.floor(Date.now() / 1000);
-  if (scope === BASE_GRAPH_SCOPES && account.access_token && account.expires_at && account.expires_at > now + 60) {
-    return account.access_token;
+  let accessToken: string | null;
+  let refreshToken: string | null;
+  try {
+    accessToken = openGraphToken(account.access_token);
+    refreshToken = openGraphToken(account.refresh_token);
+  } catch (e) {
+    console.error(`Stored Graph token for ${userId} is unreadable (${TOKEN_KEY_ENV} missing or changed):`, (e as Error).message);
+    return null;
   }
 
-  // Expired and no refresh token — force a clean re-auth upstream rather than
-  // handing back a dead token (Graph rejects it with a confusing 401).
-  if (!account.refresh_token) return null;
+  // Cached token still valid (60s slack) and minted with at least the scopes asked for.
+  const now = Math.floor(Date.now() / 1000);
+  if (accessToken && account.expires_at && account.expires_at > now + 60 && scopesCover(account.scope, required)) {
+    return accessToken;
+  }
+  if (!refreshToken) return null;
 
   // Refresh using the SAME Entra app that minted the delegated token (the one
   // NextAuth signs in with), falling back to the app-only client vars only if
@@ -94,19 +128,22 @@ export async function getUserGraphToken(userId: string, scope: string = BASE_GRA
       client_id: clientId,
       client_secret: clientSecret,
       grant_type: "refresh_token",
-      refresh_token: account.refresh_token,
-      scope,
+      refresh_token: refreshToken,
+      scope: required,
     }),
   });
   if (!res.ok) {
-    console.error("Refresh token failed:", await res.text());
+    // Typically consent_required: this person never granted these scopes. Not an outage.
+    console.error(`Refresh for ${userId} with scopes "${required}" refused:`, (await res.text()).slice(0, 300));
     return null;
   }
   const json = (await res.json()) as {
     access_token: string;
     expires_in: number;
     refresh_token?: string;
+    scope?: string;
   };
+  const grantedScope = json.scope ?? required;
   await prisma.account.update({
     where: {
       provider_providerAccountId: {
@@ -115,9 +152,11 @@ export async function getUserGraphToken(userId: string, scope: string = BASE_GRA
       },
     },
     data: {
-      access_token: json.access_token,
+      access_token: sealGraphToken(json.access_token),
       expires_at: now + json.expires_in,
-      refresh_token: json.refresh_token ?? account.refresh_token,
+      refresh_token: sealGraphToken(json.refresh_token ?? refreshToken),
+      scope: grantedScope,
+      elevatedAt: account.elevatedAt ?? (scopesCover(grantedScope, ELEVATED_SCOPES) ? new Date() : null),
     },
   });
   return json.access_token;

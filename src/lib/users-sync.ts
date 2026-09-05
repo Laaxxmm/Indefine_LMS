@@ -86,11 +86,19 @@ export async function syncOrgUsers(opts: { fallbackUserId?: string } = {}) {
     deactivated = stale.length;
   }
 
+  // Tokens left over from the days when sign-in requested the full Graph scope set.
+  // Non-admins who never connected at /connect have no reason to hold one.
+  const purged = await prisma.account.updateMany({
+    where: { provider: "microsoft-entra-id", elevatedAt: null, refresh_token: { not: null }, user: { role: { not: "ADMIN" } } },
+    data: { refresh_token: null, access_token: null, expires_at: null },
+  });
+
   return {
     added,
     updated,
     deactivated,
     reactivated,
+    tokensPurged: purged.count,
     total: orgUsers.length,
   };
 }

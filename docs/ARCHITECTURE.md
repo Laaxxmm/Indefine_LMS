@@ -108,6 +108,16 @@ sequenceDiagram
 Every page and API enforces this in code: unauthenticated → redirect `/`;
 non-admin hitting an admin route → redirect `/dashboard`; admin APIs return `401`.
 
+**Microsoft Graph, two tiers** (`src/lib/graph-scopes.ts`): sign-in asks for identity only
+(`openid profile email User.Read`, no `offline_access`), so an ordinary employee has no
+refresh token in the database and every read of videos, users or files uses the app-only
+token. People who must act as themselves on Graph (live-session organisers, the
+work-tracker lead) open `/connect` once and grant the elevated tier (calendar, meetings,
+transcripts, drive writes; plus Teams chat for the lead). `getUserGraphToken(userId,
+required)` returns a token only when the stored grant covers `required`, refreshing with
+exactly those scopes. Stored tokens are encrypted with `GRAPH_TOKEN_KEY`; the org sync
+clears leftover tokens from non-admin accounts that never connected.
+
 **Who is who** is decided in one file, `src/lib/access.ts`:
 
 | Predicate | Means | Set where |
@@ -397,7 +407,8 @@ There is no test framework. Each module's pure rules are asserted by a script:
 npx tsc --noEmit
 npm run verify:access      # role predicates
 npm run verify:cron-auth   # bearer-only CRON_SECRET handshake
-npm run verify:secret-box  # AES-GCM at-rest encryption used for the Turia cookie
+npm run verify:secret-box  # AES-GCM at-rest encryption used for the Turia cookie and Graph tokens
+npm run verify:graph-scopes # sign-in / elevated / lead scope tiers and coverage check
 npm run verify:work        # IST clock, statuses, auto-done, kept-promise, gate
 npm run verify:clients     # turnover bands, FY, names, workbook, reports
 npm run verify:office-tools

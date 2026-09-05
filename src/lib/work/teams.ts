@@ -1,7 +1,8 @@
 // Nudges go into a Teams chat as the lead. Graph does not allow app-only tokens to post
 // chat messages, so this rides on the lead's delegated token (getUserGraphToken), which
 // means the lead must have signed in after Chat.Create / ChatMessage.Send were added.
-import { getUserGraphToken, GRAPH_SCOPES } from "@/lib/graph";
+import { getUserGraphToken } from "@/lib/graph";
+import { LEAD_SCOPES } from "@/lib/graph-scopes";
 import { prisma } from "@/lib/prisma";
 import { getSettings } from "@/lib/settings";
 import { trackerUsers } from "./db";
@@ -42,8 +43,8 @@ export async function postTechWorkMessage(text: string): Promise<{ ok: boolean; 
   try {
     const lead = (await trackerUsers())[0];
     if (!lead) return { ok: false, error: "No tracker users configured" };
-    const token = await getUserGraphToken(lead.id, GRAPH_SCOPES);
-    if (!token) return { ok: false, error: "Lead has no usable Graph token, sign out and in again" };
+    const token = await getUserGraphToken(lead.id, LEAD_SCOPES);
+    if (!token) return { ok: false, error: "Lead has not connected Microsoft 365 with the chat scopes, open /connect once" };
     const chatId = await ensureChat(token);
     const res = await fetch(`${GRAPH}/chats/${chatId}/messages`, post(token, { body: { contentType: "text", content: text } }));
     if (!res.ok) return { ok: false, error: `Graph post failed: ${res.status} ${await res.text()}` };

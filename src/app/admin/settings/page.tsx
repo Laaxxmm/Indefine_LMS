@@ -6,6 +6,7 @@ import { Settings as SettingsIcon } from "lucide-react";
 import { getSettings } from "@/lib/settings";
 import { SubmitButton } from "@/components/SubmitButton";
 import { isAdmin } from "@/lib/access";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
@@ -74,6 +75,18 @@ export default async function AdminSettingsPage() {
           </p>
         </div>
       </div>
+
+      <section className="rounded-2xl bg-white border border-border shadow-soft p-6 mb-6">
+        <h2 className="font-display text-lg font-bold mb-1">Microsoft 365 connection</h2>
+        <p className="text-sm text-ink-mute mb-4">
+          Sign-in asks for identity only. Anyone who organises live sessions, and the work-tracker
+          lead, connects once to grant the calendar, meeting and drive permissions the LMS acts with
+          on their behalf. Organizers who have not connected do not appear in the scheduling picker.
+        </p>
+        <Link href="/connect" className="inline-flex px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold">
+          Open /connect
+        </Link>
+      </section>
 
       <section className="rounded-2xl bg-white border border-border shadow-soft p-6">
         <h2 className="font-display text-lg font-bold mb-1">Default quiz settings</h2>

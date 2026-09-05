@@ -152,6 +152,9 @@ model Account {
   scope             String?
   id_token          String? @db.Text
   session_state     String?
+  // Set when this account granted the elevated Graph scopes (see src/lib/graph-scopes.ts).
+  // The org sync clears stored tokens from non-admin accounts that never did.
+  elevatedAt        DateTime?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
