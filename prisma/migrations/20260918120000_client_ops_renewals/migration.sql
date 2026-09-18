@@ -1,14 +1,27 @@
 -- Client ops: hosting/domain renewals and billing reminders.
 -- Separate from the CA-firm `Client` table on purpose: different people, different billing.
+--
+-- Re-runnable, per scripts/migrate.mjs: Prisma does not wrap a migration in a transaction,
+-- so a boot that dies mid-file leaves part of this applied. Every statement below is
+-- guarded, which makes the retry after `migrate resolve --rolled-back` a no-op for whatever
+-- already exists.
 
 -- CreateEnum
-CREATE TYPE "SubscriptionKind" AS ENUM ('DOMAIN', 'HOSTING', 'VERCEL', 'RAILWAY', 'EMAIL', 'OTHER');
+DO $$ BEGIN
+    CREATE TYPE "SubscriptionKind" AS ENUM ('DOMAIN', 'HOSTING', 'VERCEL', 'RAILWAY', 'EMAIL', 'OTHER');
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- CreateEnum
-CREATE TYPE "BillingCycle" AS ENUM ('MONTHLY', 'YEARLY');
+DO $$ BEGIN
+    CREATE TYPE "BillingCycle" AS ENUM ('MONTHLY', 'YEARLY');
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- CreateTable
-CREATE TABLE "OpsClient" (
+CREATE TABLE IF NOT EXISTS "OpsClient" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "email" TEXT NOT NULL,
@@ -23,7 +36,7 @@ CREATE TABLE "OpsClient" (
 );
 
 -- CreateTable
-CREATE TABLE "OpsSubscription" (
+CREATE TABLE IF NOT EXISTS "OpsSubscription" (
     "id" TEXT NOT NULL,
     "clientId" TEXT NOT NULL,
     "kind" "SubscriptionKind" NOT NULL,
@@ -48,7 +61,7 @@ CREATE TABLE "OpsSubscription" (
 );
 
 -- CreateTable
-CREATE TABLE "OpsReminder" (
+CREATE TABLE IF NOT EXISTS "OpsReminder" (
     "id" TEXT NOT NULL,
     "subscriptionId" TEXT NOT NULL,
     "sentById" TEXT NOT NULL,
@@ -60,37 +73,57 @@ CREATE TABLE "OpsReminder" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "OpsClient_name_key" ON "OpsClient"("name");
+CREATE UNIQUE INDEX IF NOT EXISTS "OpsClient_name_key" ON "OpsClient"("name");
 
 -- CreateIndex
-CREATE INDEX "OpsClient_active_idx" ON "OpsClient"("active");
+CREATE INDEX IF NOT EXISTS "OpsClient_active_idx" ON "OpsClient"("active");
 
 -- CreateIndex
-CREATE INDEX "OpsSubscription_clientId_idx" ON "OpsSubscription"("clientId");
+CREATE INDEX IF NOT EXISTS "OpsSubscription_clientId_idx" ON "OpsSubscription"("clientId");
 
 -- CreateIndex
-CREATE INDEX "OpsSubscription_expiresOn_idx" ON "OpsSubscription"("expiresOn");
+CREATE INDEX IF NOT EXISTS "OpsSubscription_expiresOn_idx" ON "OpsSubscription"("expiresOn");
 
 -- CreateIndex
-CREATE INDEX "OpsSubscription_active_expiresOn_idx" ON "OpsSubscription"("active", "expiresOn");
+CREATE INDEX IF NOT EXISTS "OpsSubscription_active_expiresOn_idx" ON "OpsSubscription"("active", "expiresOn");
 
 -- CreateIndex
-CREATE INDEX "OpsReminder_subscriptionId_idx" ON "OpsReminder"("subscriptionId");
+CREATE INDEX IF NOT EXISTS "OpsReminder_subscriptionId_idx" ON "OpsReminder"("subscriptionId");
 
 -- CreateIndex
-CREATE INDEX "OpsReminder_sentAt_idx" ON "OpsReminder"("sentAt");
+CREATE INDEX IF NOT EXISTS "OpsReminder_sentAt_idx" ON "OpsReminder"("sentAt");
 
 -- AddForeignKey
-ALTER TABLE "OpsClient" ADD CONSTRAINT "OpsClient_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "OpsClient" ADD CONSTRAINT "OpsClient_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "OpsSubscription" ADD CONSTRAINT "OpsSubscription_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "OpsClient"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "OpsSubscription" ADD CONSTRAINT "OpsSubscription_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "OpsClient"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "OpsSubscription" ADD CONSTRAINT "OpsSubscription_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "OpsSubscription" ADD CONSTRAINT "OpsSubscription_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "OpsReminder" ADD CONSTRAINT "OpsReminder_subscriptionId_fkey" FOREIGN KEY ("subscriptionId") REFERENCES "OpsSubscription"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "OpsReminder" ADD CONSTRAINT "OpsReminder_subscriptionId_fkey" FOREIGN KEY ("subscriptionId") REFERENCES "OpsSubscription"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "OpsReminder" ADD CONSTRAINT "OpsReminder_sentById_fkey" FOREIGN KEY ("sentById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "OpsReminder" ADD CONSTRAINT "OpsReminder_sentById_fkey" FOREIGN KEY ("sentById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
