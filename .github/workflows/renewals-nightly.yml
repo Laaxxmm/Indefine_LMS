@@ -1,0 +1,22 @@
+# Nightly (07:30 IST): refresh registry and certificate expiry for tracked client services.
+# Uses the same CRON_SECRET as the other cron workflows.
+name: Client ops renewals refresh
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call renewals cron endpoint
+        run: |
+          if [ -z "${{ secrets.CRON_SECRET }}" ]; then
+            echo "CRON_SECRET repo secret not set — skipping."
+            exit 0
+          fi
+          curl -fsS --max-time 290 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "https://lms.indefine.in/api/cron/renewals"

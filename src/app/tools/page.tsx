@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FileBadge, ArrowRight, BookText, Wrench, LayoutDashboard, Users } from "lucide-react";
+import { FileBadge, ArrowRight, BookText, Wrench, LayoutDashboard, Users, CalendarClock } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { canUseNeoCentra } from "@/lib/neo-centra/access";
 
@@ -44,6 +44,15 @@ const TOOLS = [
       "Generate rental agreements, MOUs, partnership, trust and LLP deeds as Word files, and extract GSTR-3B / TDS challan PDFs into Excel. Direct download, full audit trail.",
     icon: Wrench,
     accent: "#e84a8a",
+  },
+  {
+    href: "/tools/client-ops",
+    title: "Client ops",
+    tag: "Hosting · Domains · Renewals",
+    blurb:
+      "Hosting and domain renewals for web clients — what expires when, what we bill for it, and a drafted reminder to send. Registry and certificate dates refresh themselves nightly.",
+    icon: CalendarClock,
+    accent: "#0ea5e9",
   },
   {
     href: "/clients",

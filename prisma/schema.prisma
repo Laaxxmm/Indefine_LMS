@@ -65,6 +65,9 @@ model User {
   dailyActivity       DailyActivity[]
   certificateIssues   CertificateIssue[] @relation("CertificateCreator")
   officeToolRuns      OfficeToolRun[]    @relation("OfficeToolRunner")
+  opsClients          OpsClient[]        @relation("OpsClientCreator")
+  opsSubscriptions    OpsSubscription[]  @relation("OpsSubscriptionCreator")
+  opsReminders        OpsReminder[]      @relation("OpsReminderSender")
   clientsHandled      Client[]           @relation("ClientHandler")
   clientsCreated      Client[]           @relation("ClientCreator")
   jobsHandled         Job[]              @relation("JobHandler")
@@ -1234,4 +1237,96 @@ model WorkEvent {
   user User? @relation("WorkEventActor", fields: [userId], references: [id])
 
   @@index([workId, at])
+}
+
+// -------------------- Client ops: hosting & domain renewals --------------------
+// Deliberately separate from `Client` above: those are the firm's CA clients (audit, tax,
+// ROC). These are the web/hosting accounts the studio runs — a different list of people,
+// different billing. Keeping them apart means neither tool can corrupt the other's data.
+
+enum SubscriptionKind {
+  DOMAIN
+  HOSTING
+  VERCEL
+  RAILWAY
+  EMAIL
+  OTHER
+}
+
+enum BillingCycle {
+  MONTHLY
+  YEARLY
+}
+
+/// A web/hosting client. No credentials are ever stored here — see docs/client-ops.md.
+model OpsClient {
+  id      String  @id @default(cuid())
+  name    String  @unique
+  email   String
+  contact String?
+  active  Boolean @default(true)
+  notes   String?
+
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy     User              @relation("OpsClientCreator", fields: [createdById], references: [id])
+  subscriptions OpsSubscription[]
+
+  @@index([active])
+}
+
+/// One renewable service: a domain, a hosting plan, a PaaS project. `expiresOn` is the
+/// billing deadline. `sslExpiresOn` is the certificate, which rides its own ~90-day cycle
+/// and is never written into the billing date.
+model OpsSubscription {
+  id           String           @id @default(cuid())
+  clientId     String
+  kind         SubscriptionKind
+  provider     String
+  expiresOn    DateTime
+  cycle        BillingCycle     @default(YEARLY)
+  costPaid     Float?           // rupees we pay the provider
+  chargeAmount Float            // rupees we bill the client
+  renewalLink  String?
+  active       Boolean          @default(true)
+  notes        String?
+
+  // Credential-free auto-checks. `domain` is looked up in the registry (RDAP);
+  // `sslHost` is TLS-probed. Neither needs a provider account.
+  domain       String?
+  sslHost      String?
+  sslExpiresOn DateTime?
+  checkedAt    DateTime?
+  checkNote    String?
+
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  client    OpsClient     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy User          @relation("OpsSubscriptionCreator", fields: [createdById], references: [id])
+  reminders OpsReminder[]
+
+  @@index([clientId])
+  @@index([expiresOn])
+  @@index([active, expiresOn])
+}
+
+/// A renewal reminder the team sent (or marked as sent) — an audit trail in the same
+/// spirit as OfficeToolRun: who asked which client for what, and when.
+model OpsReminder {
+  id             String   @id @default(cuid())
+  subscriptionId String
+  sentById       String
+  sentAt         DateTime @default(now())
+  subject        String
+  body           String
+
+  subscription OpsSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  sentBy       User            @relation("OpsReminderSender", fields: [sentById], references: [id])
+
+  @@index([subscriptionId])
+  @@index([sentAt])
 }
