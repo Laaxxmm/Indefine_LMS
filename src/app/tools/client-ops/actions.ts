@@ -55,6 +55,30 @@ export async function addClient(formData: FormData) {
   refreshPaths();
 }
 
+export async function updateClient(formData: FormData) {
+  const user = await actor();
+  if (!user) return;
+  const id = text(formData, "id");
+  const name = text(formData, "name");
+  const email = text(formData, "email");
+  if (!id || !name || !email) return;
+  await prisma.opsClient.update({
+    where: { id },
+    data: { name, email, contact: optional(formData, "contact") },
+  });
+  refreshPaths();
+}
+
+/** Stopping a client hides its services from the dashboard; nothing is deleted. */
+export async function setClientActive(formData: FormData) {
+  const user = await actor();
+  if (!user) return;
+  const id = text(formData, "id");
+  if (!id) return;
+  await prisma.opsClient.update({ where: { id }, data: { active: text(formData, "active") === "true" } });
+  refreshPaths();
+}
+
 export async function addSubscription(formData: FormData) {
   const user = await actor();
   if (!user) return;

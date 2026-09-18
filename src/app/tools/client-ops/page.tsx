@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AlertTriangle, ArrowRight, CalendarClock, IndianRupee, Plus, RefreshCw, ShieldCheck, Wallet } from "lucide-react";
+import { AlertTriangle, ArrowRight, CalendarClock, IndianRupee, Plus, RefreshCw, ShieldCheck, Users, Wallet } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
@@ -16,7 +16,7 @@ import {
   shortDate,
   statusOf,
 } from "@/lib/client-ops/core";
-import { addClient, addSubscription, refreshNow } from "./actions";
+import { addClient, addSubscription, refreshNow, setClientActive, updateClient } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -68,20 +68,28 @@ export default async function ClientOpsDashboard({ searchParams }: { searchParam
 
   const [subscriptions, clients, reminders] = await Promise.all([
     prisma.opsSubscription.findMany({
-      where: { active: true },
+      // A stopped client takes its services off the board without deleting anything.
+      where: { active: true, client: { active: true } },
       orderBy: { expiresOn: "asc" },
       include: {
         client: { select: { id: true, name: true, email: true } },
         reminders: { orderBy: { sentAt: "desc" }, take: 1, select: { sentAt: true } },
       },
     }),
-    prisma.opsClient.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    // Stopped clients are listed too — hiding them would leave no way to switch one back on.
+    prisma.opsClient.findMany({
+      orderBy: [{ active: "desc" }, { name: "asc" }],
+      select: { id: true, name: true, email: true, contact: true, active: true, _count: { select: { subscriptions: true } } },
+    }),
     prisma.opsReminder.findMany({
       orderBy: { sentAt: "desc" },
       take: 8,
       include: { subscription: { include: { client: { select: { name: true } } } }, sentBy: { select: { name: true } } },
     }),
   ]);
+
+  const liveClients = clients.filter((c) => c.active);
+  const stoppedClients = clients.filter((c) => !c.active);
 
   const rows = subscriptions.map((s) => ({
     ...s,
@@ -159,7 +167,7 @@ export default async function ClientOpsDashboard({ searchParams }: { searchParam
           </Link>
         </div>
         <p className="text-[12px] text-ink-faint">
-          Annual run-rate across {rows.length} services: <span className="font-bold text-ink-mute">{inr(runRate)}</span>
+          Annual run-rate across {rows.length} {rows.length === 1 ? "service" : "services"}: <span className="font-bold text-ink-mute">{inr(runRate)}</span>
         </p>
       </div>
 
@@ -245,28 +253,80 @@ export default async function ClientOpsDashboard({ searchParams }: { searchParam
       )}
 
       <div className="grid lg:grid-cols-2 gap-4 mt-6">
-        <details className="bg-card border border-border rounded-[20px] p-5 shadow-lift">
-          <summary className="cursor-pointer font-display font-bold text-[15px] flex items-center gap-2">
-            <Plus className="w-4 h-4 text-brand-500" /> Add a web client
-          </summary>
-          <form action={addClient} className="grid sm:grid-cols-2 gap-3 mt-4">
-            <label className={label}><span className={labelText}>Name</span><input name="name" required className={field} /></label>
-            <label className={label}><span className={labelText}>Billing email</span><input name="email" type="email" required className={field} /></label>
-            <label className={`${label} sm:col-span-2`}><span className={labelText}>Contact person (optional)</span><input name="contact" className={field} /></label>
-            <button type="submit" className="justify-self-start px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-[13px] font-bold transition">Add client</button>
-          </form>
-        </details>
+        <div className="bg-card border border-border rounded-[20px] p-5 shadow-lift">
+          <h2 className="font-display font-bold text-[15px] flex items-center gap-2 mb-3">
+            <Users className="w-4 h-4 text-brand-500" /> Web clients · {liveClients.length}
+          </h2>
+
+          {liveClients.length > 0 && (
+            <div className="divide-y divide-border border-y border-border mb-4">
+              {liveClients.map((c) => (
+                <details key={c.id} className="py-2.5">
+                  <summary className="cursor-pointer flex items-baseline justify-between gap-3">
+                    <span>
+                      <span className="font-semibold text-[13.5px]">{c.name}</span>
+                      <span className="text-[12px] text-ink-faint ml-2">{c.email}</span>
+                    </span>
+                    <span className="text-[11.5px] text-ink-faint whitespace-nowrap">
+                      {c._count.subscriptions} {c._count.subscriptions === 1 ? "service" : "services"} · edit
+                    </span>
+                  </summary>
+                  <form action={updateClient} className="grid sm:grid-cols-2 gap-3 mt-3">
+                    <input type="hidden" name="id" value={c.id} />
+                    <label className={label}><span className={labelText}>Name</span><input name="name" defaultValue={c.name} required className={field} /></label>
+                    <label className={label}><span className={labelText}>Billing email</span><input name="email" type="email" defaultValue={c.email} required className={field} /></label>
+                    <label className={`${label} sm:col-span-2`}><span className={labelText}>Contact person</span><input name="contact" defaultValue={c.contact ?? ""} className={field} /></label>
+                    <button type="submit" className="justify-self-start px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-[13px] font-bold transition">Save</button>
+                  </form>
+                  <form action={setClientActive} className="mt-2">
+                    <input type="hidden" name="id" value={c.id} />
+                    <input type="hidden" name="active" value="false" />
+                    <button type="submit" className="text-[12px] font-semibold text-ink-faint hover:text-rose-600 transition">
+                      Stop tracking this client and its services
+                    </button>
+                  </form>
+                </details>
+              ))}
+            </div>
+          )}
+
+          {stoppedClients.length > 0 && (
+            <div className="mb-4">
+              <p className="text-[11px] font-bold text-ink-faint uppercase tracking-wide mb-1.5">Stopped</p>
+              {stoppedClients.map((c) => (
+                <form action={setClientActive} key={c.id} className="flex items-baseline justify-between gap-3 py-1">
+                  <span className="text-[13px] text-ink-mute">{c.name}</span>
+                  <input type="hidden" name="id" value={c.id} />
+                  <input type="hidden" name="active" value="true" />
+                  <button type="submit" className="text-[12px] font-bold text-brand-500 hover:text-brand-600 transition">Resume tracking</button>
+                </form>
+              ))}
+            </div>
+          )}
+
+          <details>
+            <summary className="cursor-pointer font-semibold text-[13.5px] flex items-center gap-2">
+              <Plus className="w-4 h-4 text-brand-500" /> Add a web client
+            </summary>
+            <form action={addClient} className="grid sm:grid-cols-2 gap-3 mt-3">
+              <label className={label}><span className={labelText}>Name</span><input name="name" required className={field} /></label>
+              <label className={label}><span className={labelText}>Billing email</span><input name="email" type="email" required className={field} /></label>
+              <label className={`${label} sm:col-span-2`}><span className={labelText}>Contact person (optional)</span><input name="contact" className={field} /></label>
+              <button type="submit" className="justify-self-start px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-[13px] font-bold transition">Add client</button>
+            </form>
+          </details>
+        </div>
 
         <details className="bg-card border border-border rounded-[20px] p-5 shadow-lift">
           <summary className="cursor-pointer font-display font-bold text-[15px] flex items-center gap-2">
             <Plus className="w-4 h-4 text-accent-mint" /> Add a service
           </summary>
-          {clients.length === 0 ? (
+          {liveClients.length === 0 ? (
             <p className="text-[13px] text-ink-mute mt-3">Add a client first.</p>
           ) : (
             <form action={addSubscription} className="grid sm:grid-cols-2 gap-3 mt-4">
               <label className={label}><span className={labelText}>Client</span>
-                <select name="clientId" className={field}>{clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+                <select name="clientId" className={field}>{liveClients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
               </label>
               <label className={label}><span className={labelText}>Kind</span>
                 <select name="kind" className={field}>{Object.entries(KIND_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
