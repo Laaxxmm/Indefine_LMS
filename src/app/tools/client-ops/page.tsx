@@ -62,7 +62,9 @@ export default async function ClientOpsDashboard({ searchParams }: { searchParam
   if (!canUseClientOps(session.user)) redirect("/dashboard");
 
   const sp = await searchParams;
-  const win = WINDOWS.includes(Number(sp.days) as (typeof WINDOWS)[number]) ? Number(sp.days) : 30;
+  // "all" is the escape hatch: without it a portfolio that renews next year looks empty.
+  const showAll = sp.days === "all";
+  const win = showAll ? Infinity : WINDOWS.includes(Number(sp.days) as (typeof WINDOWS)[number]) ? Number(sp.days) : 30;
 
   const [subscriptions, clients, reminders] = await Promise.all([
     prisma.opsSubscription.findMany({
@@ -121,7 +123,7 @@ export default async function ClientOpsDashboard({ searchParams }: { searchParam
           <p className="text-[11.5px] text-ink-faint mt-2 text-right">
             {lastChecked
               ? `Checked ${shortDate(lastChecked)} · ${checkable.length} looked up`
-              : `${checkable.length} services can be looked up`}
+              : `${checkable.length} ${checkable.length === 1 ? "service has" : "services have"} a domain or host to check`}
           </p>
         </form>
       </div>
@@ -129,13 +131,13 @@ export default async function ClientOpsDashboard({ searchParams }: { searchParam
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
         <Stat icon={AlertTriangle} value={rows.filter((r) => r.status === "expired").length} caption="Expired" accent="#f43f5e" />
         <Stat icon={CalendarClock} value={countIn(30)} caption="Due in 30 days" accent="#ffb020" />
-        <Stat icon={IndianRupee} value={inr(billable)} caption={`Billable in ${win} days`} accent="#5b4be6" />
+        <Stat icon={IndianRupee} value={inr(billable)} caption={showAll ? "Billable, all tracked" : `Billable in ${win} days`} accent="#5b4be6" />
         <Stat icon={Wallet} value={inr(margin)} caption="Margin over cost" accent="#17b978" />
         <Stat icon={ShieldCheck} value={certAlarms.length} caption={`Certs under ${CERT_ALARM_DAYS} days`} accent="#0ea5e9" />
       </div>
 
       <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {WINDOWS.map((n) => (
             <Link
               key={n}
@@ -147,6 +149,14 @@ export default async function ClientOpsDashboard({ searchParams }: { searchParam
               Next {n} days · {countIn(n)}
             </Link>
           ))}
+          <Link
+            href="/tools/client-ops?days=all"
+            className={`px-4 py-2 rounded-full text-[13px] font-bold border transition ${
+              showAll ? "bg-ink text-white border-ink" : "bg-card text-ink-mute border-border hover:text-ink"
+            }`}
+          >
+            Everything · {rows.length}
+          </Link>
         </div>
         <p className="text-[12px] text-ink-faint">
           Annual run-rate across {rows.length} services: <span className="font-bold text-ink-mute">{inr(runRate)}</span>
@@ -158,7 +168,14 @@ export default async function ClientOpsDashboard({ searchParams }: { searchParam
           <CalendarClock className="w-8 h-8 mx-auto text-ink-faint mb-2" />
           <p className="font-semibold">{rows.length === 0 ? "No services tracked yet" : `Nothing due in the next ${win} days`}</p>
           <p className="text-[13px] text-ink-mute mt-1">
-            {rows.length === 0 ? "Add a client below, then add the domains and hosting you renew for them." : "Widen the window or check back after the next refresh."}
+            {rows.length === 0 ? (
+              "Add a client below, then add the domains and hosting you renew for them."
+            ) : (
+              <>
+                {rows.length} tracked {rows.length === 1 ? "service renews" : "services renew"} later than that —{" "}
+                <Link href="/tools/client-ops?days=all" className="font-bold text-brand-500 hover:text-brand-600">see everything</Link>.
+              </>
+            )}
           </p>
         </div>
       ) : (
