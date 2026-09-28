@@ -24,6 +24,7 @@ Built 28 Sep 2026 from the reference letter *Deepa – Srikrish Traders FY 24-25
 2. Pick the **letter type** first. This pre-fills the subject, services, exclusions, frequency and billing.
 3. Fill in the client, client signatory, term, fees and Indefine partner. Required fields show a red border until they are filled.
 4. Optionally attach the partner's **signature image**. It is used only in this browser tab and is never saved in any file.
+   **Or sign with a DSC:** tick *Sign with DSC in Adobe Acrobat Reader*. The letter leaves a blank space under "For Indefine". Save the PDF, open it in Acrobat Reader → All tools → Use a certificate → Digitally sign, drag a box in that space, pick the DSC certificate (token plugged in), save as a new file and enter the token PIN. Sign last; any later edit invalidates the signature.
 5. **Print / Save as PDF**: choose "Save as PDF" and **turn off "Headers and footers"** in the print dialog. The file name is set automatically to `EL_<Client>_FY<yy-yy>`.
 6. **Download Word (.doc)**: opens in Word, ready for edits.
 7. **Save form (.json)**: keep this with the client file. Next year, **Load form**, change the dates and fee, and print.
