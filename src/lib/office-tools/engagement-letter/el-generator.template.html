@@ -140,6 +140,8 @@
     <div class="hint">Names you print or download are remembered in this browser.</div>
     <label>Signature image (optional, PNG/JPG; not saved anywhere)</label>
     <input type="file" id="sigFile" accept="image/png,image/jpeg">
+    <label class="inline"><input type="checkbox" name="dsc"> Sign with DSC in Adobe Acrobat Reader</label>
+    <div class="hint" id="dscHelp" hidden>Leaves blank space under "For Indefine" and skips the signature image. After saving the PDF: open it in Adobe Acrobat Reader &rarr; All tools &rarr; Use a certificate &rarr; Digitally sign (older versions: Tools &rarr; Certificates &rarr; Digitally Sign) &rarr; drag a box in the blank space &rarr; pick the DSC certificate (token plugged in) &rarr; Sign &rarr; save as a new file &rarr; enter the token PIN. Sign last: any edit afterwards invalidates the signature.</div>
   </fieldset>
 
   <div class="actions">
@@ -319,7 +321,7 @@ const fy = dt => { if (!dt) return ''; const y = dt.getMonth() >= 3 ? dt.getFull
 const SIG_KEYS = ['name', 'desig', 'email', 'phone'];
 function state() {
   const extraSigs = [...document.querySelectorAll('#extraSigs .xsig')].map(row => Object.fromEntries(SIG_KEYS.map(k => [k, row.querySelector(`[data-k=${k}]`).value])));
-  return { ...Object.fromEntries(new FormData(f)), autorenew: f.autorenew.checked, extraSigs };
+  return { ...Object.fromEntries(new FormData(f)), autorenew: f.autorenew.checked, dsc: f.dsc.checked, extraSigs };
 }
 
 // ===== the letter =====
@@ -374,7 +376,7 @@ ${excl.length ? `<h3>Services not included in the scope</h3>
 
 <div class="keep">
 <p class="l">Thanking you,<br>Yours faithfully,<br>For <b>${FIRM}</b><br>(a unit of ${ENTITY})</p>
-${sigSrc ? `<img class="sig" src="${esc(sigSrc)}" height="48" alt="">` : '<p><br><br></p>'}
+${d.dsc ? '<p style="height:25mm"></p>' : sigSrc ? `<img class="sig" src="${esc(sigSrc)}" height="48" alt="">` : '<p><br><br></p>'}
 <p class="l"><b>${esc(p.name)}</b>${p.designation ? `<br>${esc(p.designation)}` : ''}${p.phone || p.email ? `<br>${[p.phone, p.email].filter(Boolean).map(esc).join(' | ')}` : ''}</p>
 </div>
 
@@ -392,7 +394,11 @@ ${ANNEXURE}`;
 }
 
 const letterEl = $('letter');
-function refresh() { letterEl.innerHTML = render(state(), sigData); }
+function refresh() {
+  letterEl.innerHTML = render(state(), sigData);
+  $('dscHelp').hidden = !f.dsc.checked;   // DSC space replaces the signature image
+  $('sigFile').disabled = f.dsc.checked;
+}
 
 // ===== partners: PARTNERS plus any typed here before, remembered per browser =====
 const PKEY = 'el.partners';
