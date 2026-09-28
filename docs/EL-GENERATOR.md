@@ -46,7 +46,7 @@ The client signs by hand. Indefine's stamp is applied physically; there is room 
 | 12–13 | Signatory details, contact no., email | Acceptance block (client) |
 | extra | Letter date, ref no., subject, salutation, billing, initial term, Indefine partner, signature | |
 
-**To add partners**, edit `PARTNERS` at the top of the `<script>` in the template, then run `./build.sh`.
+**Indefine signatory** is typed in (name, designation, phone, email). Names used for a print or Word download are remembered in that browser and offered in the Name dropdown; picking one fills the rest. To offer a partner to everyone, add them to `PARTNERS` at the top of the `<script>` in the template.
 **To change the default wording of the three letter types**, edit `TYPES` / `COMMON_EXCLUSIONS` in the same place.
 
 ## 4. Annexure review: what was wrong, what was fixed, what was added
