@@ -3,12 +3,12 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { canUseOfficeTools } from "@/lib/office-tools/access";
 import { OFFICE_TOOLS, type ToolCategory } from "@/lib/office-tools/registry";
-import { Home, Handshake, Users, Landmark, Building2, FileSpreadsheet, Receipt, ScrollText, ArrowRight, Clock, History } from "lucide-react";
+import { Home, Handshake, Users, Landmark, Building2, FileSpreadsheet, Receipt, ScrollText, FileSignature, ArrowRight, Clock, History } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
 const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  Home, Handshake, Users, Landmark, Building2, FileSpreadsheet, Receipt, ScrollText,
+  Home, Handshake, Users, Landmark, Building2, FileSpreadsheet, Receipt, ScrollText, FileSignature,
 };
 
 const CATEGORY_ORDER: ToolCategory[] = ["Legal", "Tax", "Financial"];
