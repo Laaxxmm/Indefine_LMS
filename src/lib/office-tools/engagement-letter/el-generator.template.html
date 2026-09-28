@@ -85,7 +85,7 @@
     </div>
   </fieldset>
 
-  <fieldset><legend>Client signatory</legend>
+  <fieldset><legend>Client signatories</legend>
     <div class="row">
       <div><label>Name</label><input name="sigName" required></div>
       <div><label>Designation</label><input name="sigDesig" placeholder="Director / Proprietor"></div>
@@ -94,7 +94,9 @@
       <div><label>Email ID</label><input type="email" name="sigEmail"></div>
       <div><label>Contact number</label><input type="tel" name="sigPhone"></div>
     </div>
-    <label>Salutation ("Dear …")</label><input name="salutation" placeholder="Defaults to the signatory's first name">
+    <div id="extraSigs"></div>
+    <button type="button" id="btnAddSig" style="margin-top:8px">+ Add another signatory</button>
+    <label>Salutation ("Dear …")</label><input name="salutation" placeholder="Defaults to the first signatory's first name">
   </fieldset>
 
   <fieldset><legend>Term</legend>
@@ -313,8 +315,11 @@ function words(n) {
 
 const fy = dt => { if (!dt) return ''; const y = dt.getMonth() >= 3 ? dt.getFullYear() : dt.getFullYear() - 1; return `${String(y % 100).padStart(2, '0')}-${String((y + 1) % 100).padStart(2, '0')}`; };
 
+// Extra client signatories have no `name` attribute, so FormData skips them; they travel as `extraSigs`.
+const SIG_KEYS = ['name', 'desig', 'email', 'phone'];
 function state() {
-  return { ...Object.fromEntries(new FormData(f)), autorenew: f.autorenew.checked };
+  const extraSigs = [...document.querySelectorAll('#extraSigs .xsig')].map(row => Object.fromEntries(SIG_KEYS.map(k => [k, row.querySelector(`[data-k=${k}]`).value])));
+  return { ...Object.fromEntries(new FormData(f)), autorenew: f.autorenew.checked, extraSigs };
 }
 
 // ===== the letter =====
@@ -375,12 +380,12 @@ ${sigSrc ? `<img class="sig" src="${esc(sigSrc)}" height="48" alt="">` : '<p><br
 
 <h2 class="pb">Acceptance / Appointment Confirmation</h2>
 <p>We have read the above engagement letter and the annexure in detail. We are pleased to engage ${FIRM}, a unit of ${ENTITY}, to render the above services to <b>${esc(d.client)}</b> on the terms and conditions set out in this letter and the annexure.</p>
-<div class="keep">
 <p>For <b>${esc(d.client)}</b></p>
+${[{ name: d.sigName, desig: d.sigDesig, email: d.sigEmail, phone: d.sigPhone }, ...(d.extraSigs || [])].map(s => `<div class="keep">
 <p class="l"><br><br><br>______________________________<br>Signature and seal</p>
-<p class="l">Name: ${esc(d.sigName)}<br>${d.sigDesig ? `Designation: ${esc(d.sigDesig)}<br>` : ''}${d.sigPhone ? `Phone: ${esc(d.sigPhone)}<br>` : ''}${d.sigEmail ? `Email: ${esc(d.sigEmail)}` : ''}</p>
-<p class="l">Date: <span class="blank">&nbsp;</span><br><br>Place: <span class="blank">&nbsp;</span></p>
-</div>
+<p class="l">Name: ${esc(s.name)}<br>${s.desig ? `Designation: ${esc(s.desig)}<br>` : ''}${s.phone ? `Phone: ${esc(s.phone)}<br>` : ''}${s.email ? `Email: ${esc(s.email)}` : ''}</p>
+</div>`).join('')}
+<p class="l keep">Date: <span class="blank">&nbsp;</span><br><br>Place: <span class="blank">&nbsp;</span></p>
 
 <h2 class="pb">Annexure<br>General Terms of Engagement</h2>
 ${ANNEXURE}`;
@@ -473,6 +478,8 @@ $('loadFile').onchange = async e => {
   const file = e.target.files[0]; if (!file) return;
   try {
     const d = JSON.parse(await file.text());
+    $('extraSigs').replaceChildren();
+    (d.extraSigs || []).forEach(addSig);
     for (const [k, v] of Object.entries(d)) {
       const el = f.elements[k];
       if (el) el.type === 'checkbox' ? (el.checked = !!v) : (el.value = v);
@@ -482,6 +489,25 @@ $('loadFile').onchange = async e => {
   } catch { alert('That file is not a saved engagement letter form.'); }
   e.target.value = '';
 };
+
+function addSig(v = {}) {
+  const row = document.createElement('div');
+  row.className = 'xsig';
+  row.style.cssText = 'border-top:1px dashed var(--line);margin-top:10px;padding-top:4px';
+  row.innerHTML = `<div class="row">
+      <div><label>Name</label><input data-k="name" required></div>
+      <div><label>Designation</label><input data-k="desig" placeholder="Director / Proprietor"></div>
+    </div>
+    <div class="row">
+      <div><label>Email ID</label><input type="email" data-k="email"></div>
+      <div><label>Contact number</label><input type="tel" data-k="phone"></div>
+    </div>
+    <button type="button" style="margin-top:6px;font-size:12px;padding:4px 8px">Remove this signatory</button>`;
+  for (const k of SIG_KEYS) row.querySelector(`[data-k=${k}]`).value = v[k] || '';
+  row.querySelector('button').onclick = () => { row.remove(); refresh(); };
+  $('extraSigs').append(row);
+}
+$('btnAddSig').onclick = () => { addSig(); refresh(); };
 
 $('sigFile').onchange = e => {
   const file = e.target.files[0];
