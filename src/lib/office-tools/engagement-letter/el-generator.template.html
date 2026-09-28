@@ -127,7 +127,15 @@
   </fieldset>
 
   <fieldset><legend>Indefine signatory</legend>
-    <label>Partner</label><select name="partner"></select>
+    <label>Name (type a new one, or pick a saved one)</label>
+    <input name="pName" list="partnerList" required>
+    <datalist id="partnerList"></datalist>
+    <label>Designation</label><input name="pDesig" value="Partner">
+    <div class="row">
+      <div><label>Contact number</label><input type="tel" name="pPhone" value="+91 86609 49078"></div>
+      <div><label>Email ID</label><input type="email" name="pEmail" value="info@indefine.in"></div>
+    </div>
+    <div class="hint">Names you print or download are remembered in this browser.</div>
     <label>Signature image (optional, PNG/JPG; not saved anywhere)</label>
     <input type="file" id="sigFile" accept="image/png,image/jpeg">
   </fieldset>
@@ -153,11 +161,9 @@
 </div>
 
 <script>
-// ===== EDIT HERE: one entry per partner who signs engagement letters =====
-const PARTNERS = [
-  { name: 'Partner Name 1', designation: 'Partner', phone: '+91 86609 49078', email: 'info@indefine.in' },
-  { name: 'Partner Name 2', designation: 'Partner', phone: '+91 86609 49078', email: 'info@indefine.in' },
-];
+// ===== EDIT HERE (optional): partners offered to everyone in the Name dropdown =====
+// e.g. { name: 'CA A. Kumar', designation: 'Partner', phone: '+91 86609 49078', email: 'info@indefine.in' }
+const PARTNERS = [];
 
 // ===== EDIT HERE: the three letter types and their default wording =====
 const COMMON_EXCLUSIONS = [
@@ -313,7 +319,7 @@ function state() {
 
 // ===== the letter =====
 function render(d, sigSrc) {
-  const p = PARTNERS[d.partner] || PARTNERS[0];
+  const p = { name: d.pName, designation: d.pDesig, phone: d.pPhone, email: d.pEmail };
   const start = parseDate(d.start);
   const term = Math.max(1, parseInt(d.term) || 12);
   const end = start && endDate(start, term);
@@ -364,7 +370,7 @@ ${excl.length ? `<h3>Services not included in the scope</h3>
 <div class="keep">
 <p class="l">Thanking you,<br>Yours faithfully,<br>For <b>${FIRM}</b><br>(a unit of ${ENTITY})</p>
 ${sigSrc ? `<img class="sig" src="${esc(sigSrc)}" height="48" alt="">` : '<p><br><br></p>'}
-<p class="l"><b>${esc(p.name)}</b><br>${esc(p.designation)}<br>${esc(p.phone)} | ${esc(p.email)}</p>
+<p class="l"><b>${esc(p.name)}</b>${p.designation ? `<br>${esc(p.designation)}` : ''}${p.phone || p.email ? `<br>${[p.phone, p.email].filter(Boolean).map(esc).join(' | ')}` : ''}</p>
 </div>
 
 <h2 class="pb">Acceptance / Appointment Confirmation</h2>
@@ -382,6 +388,22 @@ ${ANNEXURE}`;
 
 const letterEl = $('letter');
 function refresh() { letterEl.innerHTML = render(state(), sigData); }
+
+// ===== partners: PARTNERS plus any typed here before, remembered per browser =====
+const PKEY = 'el.partners';
+const savedPartners = () => { try { return JSON.parse(localStorage.getItem(PKEY)) || []; } catch { return []; } };
+const allPartners = () => { const m = new Map(); for (const p of [...PARTNERS, ...savedPartners()]) m.set(p.name, p); return [...m.values()]; };
+function fillPartnerList() { $('partnerList').replaceChildren(...allPartners().map(p => new Option(p.name))); }
+function rememberPartner() {
+  const d = state(); if (!d.pName.trim()) return;
+  const p = { name: d.pName.trim(), designation: d.pDesig, phone: d.pPhone, email: d.pEmail };
+  try { localStorage.setItem(PKEY, JSON.stringify([...savedPartners().filter(x => x.name !== p.name), p])); } catch {}
+  fillPartnerList();
+}
+f.pName.addEventListener('change', () => {
+  const p = allPartners().find(x => x.name === f.pName.value.trim());
+  if (p) { f.pDesig.value = p.designation || ''; f.pPhone.value = p.phone || ''; f.pEmail.value = p.email || ''; refresh(); }
+});
 
 // ===== type switching =====
 let curType;
@@ -412,6 +434,7 @@ function download(blob, name) {
 
 $('btnPdf').onclick = () => {
   if (!f.reportValidity()) return;
+  rememberPartner();
   const t = document.title; document.title = fileBase();   // Chrome uses the title as the PDF file name
   window.print(); document.title = t;
 };
@@ -440,6 +463,7 @@ ${css}
 }
 $('btnDoc').onclick = () => {
   if (!f.reportValidity()) return;
+  rememberPartner();
   download(new Blob([buildDoc()], { type: 'application/msword' }), fileBase() + '.doc');
 };
 
@@ -469,7 +493,7 @@ $('sigFile').onchange = e => {
 
 // ===== init =====
 f.type.append(...Object.entries(TYPES).map(([k, t]) => new Option(t.label, k)));
-f.partner.append(...PARTNERS.map((p, i) => new Option(p.name, i)));
+fillPartnerList();
 f.letterDate.value = new Date().toLocaleDateString('en-CA');
 f.addEventListener('input', refresh);
 applyType();
