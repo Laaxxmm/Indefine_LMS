@@ -2,7 +2,7 @@
 // route slugs, and audit-log labels. Ported from the original dashboard's tool list.
 
 export type ToolCategory = "Legal" | "Tax" | "Financial";
-export type ToolFormat = "docx" | "xlsx";
+export type ToolFormat = "docx" | "xlsx" | "pdf";
 
 export type ToolMeta = {
   id: string; // route slug + audit id
@@ -64,6 +64,18 @@ export const OFFICE_TOOLS: ToolMeta[] = [
     icon: "Building2",
     accent: "#5B4BE6",
     format: "docx",
+    live: true,
+  },
+  {
+    // Runs entirely in the browser (PDF via print, .doc download) — no server
+    // generation, so no OfficeToolRun audit row.
+    id: "engagement-letter",
+    title: "Engagement Letter",
+    category: "Legal",
+    blurb: "Client engagement letter on the Indefine letterhead — retainer, annual compliance or Virtual CFO — as PDF or Word.",
+    icon: "FileSignature",
+    accent: "#5B4BE6",
+    format: "pdf",
     live: true,
   },
   {
