@@ -156,7 +156,7 @@
     <label>Signature image (optional, PNG/JPG; not saved anywhere)</label>
     <input type="file" id="sigFile" accept="image/png,image/jpeg">
     <label class="inline"><input type="checkbox" name="dsc"> Sign with DSC in Adobe Acrobat Reader</label>
-    <div class="hint" id="dscHelp" hidden>Leaves blank space under "For Indefine" and skips the signature image. After saving the PDF: open it in Adobe Acrobat Reader &rarr; All tools &rarr; Use a certificate &rarr; Digitally sign (older versions: Tools &rarr; Certificates &rarr; Digitally Sign) &rarr; drag a box in the blank space &rarr; pick the DSC certificate (token plugged in) &rarr; Sign &rarr; save as a new file &rarr; enter the token PIN. Then upload the signed PDF in the register. Sign last: any edit afterwards invalidates the signature.</div>
+    <div class="hint" id="dscHelp" hidden>Leaves blank space under "For Indefine" and skips the signature image. After saving the PDF: open it in Adobe Acrobat Reader &rarr; All tools &rarr; Use a certificate &rarr; Digitally sign (older versions: Tools &rarr; Certificates &rarr; Digitally Sign) &rarr; drag a box in the blank space &rarr; pick the DSC certificate (token plugged in) &rarr; Sign &rarr; save as a new file &rarr; enter the token PIN. Sign only after the client approves the draft, then upload the signed PDF in the register. Sign last: any edit afterwards invalidates the signature.</div>
   </fieldset>
 
   <div class="actions">
@@ -561,7 +561,7 @@ async function saveToRegister(overwrite = false) {
     letterId = j.id;
     history.replaceState(null, '', `?id=${encodeURIComponent(j.id)}`);
     $('banner').textContent = `Editing ${j.clientName}, FY 20${j.fy} (v${j.version}).`;
-    saveMsg(`Saved as v${j.version}. Next: Print / Save as PDF, sign it, then upload the signed PDF in the <a href="${REGISTER}">register</a>.`);
+    saveMsg(`Saved as v${j.version}. Next: Print / Save as PDF (unsigned) and upload it as the draft in the <a href="${REGISTER}">register</a>, then email it for approval.`);
   } catch { saveMsg('Save failed: check your connection and try again.'); }
   finally { $('btnReg').disabled = false; }
 }

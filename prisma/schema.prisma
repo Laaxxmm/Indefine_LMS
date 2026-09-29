@@ -1336,11 +1336,16 @@ model OpsReminder {
 // regenerate). The PDFs live in SharePoint under Engagement Letters/<client>/ with a
 // fixed name per FY, so a re-upload replaces the file and SharePoint keeps the
 // version history. Every save/upload/send is appended to EngagementLetterEvent.
+// Flow: draft PDF (unsigned) → emailed for approval → client approves → Indefine signs
+// → signed PDF emailed → client countersigns. Saving an edit restarts at DRAFT.
 enum EngagementLetterStatus {
-  DRAFT          // form saved, no signed PDF uploaded (or edited since)
-  SIGNED         // Indefine-signed PDF uploaded
-  SENT           // emailed to the client
-  CLIENT_SIGNED  // client's countersigned copy uploaded
+  DRAFT              // form saved; no draft PDF for this version yet
+  DRAFT_UPLOADED     // unsigned draft PDF uploaded
+  SENT_FOR_APPROVAL  // draft emailed to the client
+  APPROVED           // client approved the draft (recorded by staff)
+  SIGNED             // Indefine-signed PDF uploaded
+  SENT               // signed letter emailed to the client
+  CLIENT_SIGNED      // client's countersigned copy uploaded
 }
 
 model EngagementLetter {
@@ -1350,6 +1355,10 @@ model EngagementLetter {
   data                Json
   status              EngagementLetterStatus @default(DRAFT)
   graphDriveId        String?
+  draftItemId         String?
+  draftWebUrl         String?
+  draftSentAt         DateTime?
+  approvedAt          DateTime?
   signedItemId        String?
   signedWebUrl        String?
   clientSignedItemId  String?

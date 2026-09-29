@@ -1,5 +1,5 @@
 // Engagement letter register: SharePoint layout, file names and the standard email.
-// Files: <GRAPH_EL_ROOT>/<client>/EL_<client>_FY26-27.pdf (+ _Client-signed). The name is
+// Files: <GRAPH_EL_ROOT>/<client>/EL_<client>_FY26-27.pdf (+ _Draft, _Client-signed). The name is
 // fixed per client per FY, so a re-upload replaces the file and SharePoint keeps the
 // earlier ones in its version history.
 import { ensureFolder, getAppOnlyToken, uploadFileContent } from "@/lib/graph";
@@ -7,7 +7,7 @@ import { folderName } from "@/lib/clients/core";
 
 export const MAX_PDF_BYTES = 3 * 1024 * 1024; // sendMail takes the whole message in one 4 MB request
 
-export type FileKind = "signed" | "client";
+export type FileKind = "draft" | "signed" | "client";
 
 export const elRoot = () => (process.env.GRAPH_EL_ROOT || "Engagement Letters").replace(/^\/+|\/+$/g, "");
 const driveId = () => process.env.GRAPH_DRIVE_ID ?? "";
@@ -25,7 +25,7 @@ export const fyLabel = (fy: string) => `20${fy}`;
 
 export function fileName(clientName: string, fy: string, kind: FileKind): string {
   const base = `EL_${folderName(clientName).replace(/\s+/g, "_")}_FY${fy}`;
-  return `${base}${kind === "client" ? "_Client-signed" : ""}.pdf`;
+  return `${base}${{ draft: "_Draft", signed: "", client: "_Client-signed" }[kind]}.pdf`;
 }
 
 /** Upload (create or replace) a letter PDF into Engagement Letters/<client>/. */
@@ -53,25 +53,38 @@ export function defaultRecipients(data: LetterData): string[] {
   return all.filter((e, i) => all.findIndex((x) => x.toLowerCase() === e.toLowerCase()) === i);
 }
 
-/** The standard covering email, same for every client. Editable before sending. */
-export function emailTemplate(data: LetterData, fy: string, senderName: string) {
+/** The standard covering emails (draft for approval / signed letter), same for every client. Editable before sending. */
+export function emailTemplate(data: LetterData, fy: string, senderName: string, kind: "draft" | "signed") {
   // Same default as the letter: "Mr. Ravi Kumar".
   const salute = (data.salutation || [data.sigTitle, (data.sigName ?? "").trim()].filter(Boolean).join(" ") || "Sir/Madam").trim();
+  const sign = `Regards,
+${senderName}
+Indefine (a unit of Streamlining Workflows Consultancy Private Limited)
++91 86609 49078 | info@indefine.in`;
+  if (kind === "draft") {
+    return {
+      subject: `Draft Engagement Letter for your approval - ${data.client ?? ""} - FY ${fyLabel(fy)}`,
+      text: `Dear ${salute},
+
+Greetings from Indefine.
+
+Please find attached the draft of our engagement letter for FY ${fyLabel(fy)}, which sets out the scope of services, our professional fees and the general terms of engagement.
+
+We request you to review the draft and confirm your approval by replying to this email, or let us know any changes you would like. Once approved, we will send you the signed engagement letter for your countersignature.
+
+${sign}`,
+    };
+  }
   return {
     subject: `Engagement Letter - ${data.client ?? ""} - FY ${fyLabel(fy)}`,
     text: `Dear ${salute},
 
-Greetings from Indefine.
+Thank you for approving the draft engagement letter.
 
-Please find attached our engagement letter for FY ${fyLabel(fy)}, which sets out the scope of services, our professional fees and the general terms of engagement.
-
-We request you to review the letter and return a countersigned copy (a signed scan or a DSC-signed PDF) by replying to this email. Please let us know if you would like to discuss any part of it.
+Please find attached our signed engagement letter for FY ${fyLabel(fy)}. We request you to countersign it (a signed scan or a DSC-signed PDF) and return it by replying to this email.
 
 We look forward to working with you.
 
-Regards,
-${senderName}
-Indefine (a unit of Streamlining Workflows Consultancy Private Limited)
-+91 86609 49078 | info@indefine.in`,
+${sign}`,
   };
 }
