@@ -4,7 +4,19 @@ A single HTML file used internally at Indefine. You fill in the form on the left
 
 Built 28 Sep 2026 from the reference letter *Deepa – Srikrish Traders FY 24-25*.
 
-> **In the LMS:** Tools → Document & Tax Tools → *Engagement Letter* (`/tools/office-tools/engagement-letter`, internal-active users only). The route `src/app/tools/office-tools/engagement-letter/route.ts` inlines the letterhead into `src/lib/office-tools/engagement-letter/el-generator.template.html` on each request, so there is no `build.sh` step here: edit the template (PARTNERS, TYPES, ANNEXURE) and deploy. Runs fully in the browser, so no audit row is written.
+> **In the LMS:** Tools → Document & Tax Tools → *Engagement Letter* opens the **register** (`/tools/office-tools/engagement-letter`); *New letter* / *Edit* open the generator (`…/engagement-letter/editor`, route `editor/route.ts`), which inlines the letterhead, the LMS client names and the saved letter into `src/lib/office-tools/engagement-letter/el-generator.template.html` on each request. No `build.sh` step: edit the template (SERVICES, TYPES, PARTNERS, ANNEXURE) and deploy. Sections 1–2 below describe the original stand-alone file; the LMS flow is in the next section.
+
+## Register, SharePoint and email (LMS)
+
+**Flow:** New letter → fill in (client name exactly as in Turia) → *Save to register* → *Print / Save as PDF* → sign (DSC in Acrobat, or by hand and scan) → in the register, *Upload signed PDF* → *Email to client* (standard mail, editable) → when the client replies, *Upload client-signed copy*.
+
+- **One letter per client per FY.** Saving again creates a new version (v1, v2, …) of the same letter; the register's *History* can reopen any earlier version, and saving it makes it the latest. Editing after upload puts the letter back to *Draft* until the new signed PDF is uploaded.
+- **SharePoint:** `Engagement Letters/<client>/EL_<client>_FY26-27.pdf` and `…_Client-signed.pdf`, on the same drive as client onboarding (`GRAPH_DRIVE_ID`; root folder overridable with `GRAPH_EL_ROOT`). The file name is fixed per FY, so re-uploading replaces it and SharePoint's *Version history* keeps the earlier files. Next year's letter lands in the same client folder.
+- **Email** goes from the sender's own Microsoft 365 mailbox (copy in their Sent Items) with the signed PDF attached (max 3 MB). The first time, each sender is sent to `/connect?mail=1` to grant *Mail.Send*.
+- **Reference** defaults to `INDEFINE<>FIRSTWORD` of the client name; type over it to change.
+- **Services** are tick-boxes (`SERVICES` in the template, same names as Turia) plus an *Other services* box. Each client signatory can be marked *Signs with DSC*, which leaves blank space instead of a signature line.
+
+**One-time admin setup (Entra):** in the app registration used for sign-in (`AUTH_MICROSOFT_ENTRA_ID_ID`) → API permissions → Add → Microsoft Graph → **Delegated** → `Mail.Send` → *Grant admin consent*. SharePoint uploads use the existing app-only token (same as client onboarding). The DB migration `20260929100000_engagement_letters` runs automatically on deploy.
 
 ---
 

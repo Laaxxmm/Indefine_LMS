@@ -21,6 +21,10 @@
   input:invalid, textarea:invalid, select:invalid { border-color:#c0392b; }
   .row { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
   .hint { font-size:11px; color:var(--slate); }
+  .svc { max-height:230px; overflow:auto; border:1px solid var(--line); border-radius:4px; padding:4px 8px; }
+  .svc label { margin:3px 0; }
+  #saveMsg { grid-column:1 / -1; font-size:12px; color:var(--slate); }
+  #saveMsg a { color:var(--navy); font-weight:600; }
   .actions { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:16px; position:sticky; bottom:-16px; background:#fff; padding:10px 0; }
   button { font:inherit; padding:8px; border-radius:4px; border:1px solid var(--navy); background:#fff; color:var(--navy); cursor:pointer; }
   button.primary { background:var(--navy); color:#fff; }
@@ -62,22 +66,25 @@
 <body>
 <div class="app">
 <form id="f" autocomplete="off">
-  <a class="hint" href="/tools/office-tools">&larr; Document &amp; Tax Tools</a>
+  <a class="hint" href="/tools/office-tools/engagement-letter">&larr; Engagement letter register</a>
   <h1>Engagement letter generator</h1>
-  <div class="hint">Nothing typed here leaves this browser. Use Chrome or Edge to print.</div>
+  <div class="hint" id="banner">Nothing is stored until you click Save to register. Use Chrome or Edge to print.</div>
 
   <fieldset><legend>Letter</legend>
     <label>Letter type (choose first)</label>
     <select name="type"></select>
     <div class="row">
       <div><label>Letter date</label><input type="date" name="letterDate" required></div>
-      <div><label>Reference no.</label><input name="ref" placeholder="IDF/EL/2026-27/001"></div>
+      <div><label>Reference no.</label><input name="ref" placeholder="INDEFINE<>CLIENT"></div>
     </div>
     <label>Subject</label><input name="subject" required>
   </fieldset>
 
   <fieldset><legend>Client</legend>
-    <label>Client name</label><input name="client" required>
+    <label>Client name (exactly as in Turia)</label>
+    <input name="client" list="clientList" required placeholder="Client name as in Turia">
+    <datalist id="clientList"></datalist>
+    <div class="hint">Also the SharePoint folder name: Engagement Letters/&lt;client name&gt;.</div>
     <label>Address</label><textarea name="address" rows="4" required></textarea>
     <div class="row">
       <div><label>Email ID</label><input type="email" name="email"></div>
@@ -94,6 +101,7 @@
       <div><label>Email ID</label><input type="email" name="sigEmail"></div>
       <div><label>Contact number</label><input type="tel" name="sigPhone"></div>
     </div>
+    <label class="inline"><input type="checkbox" name="sigDsc"> Signs with DSC (leaves blank space instead of a signature line)</label>
     <div id="extraSigs"></div>
     <button type="button" id="btnAddSig" style="margin-top:8px">+ Add another signatory</button>
     <label>Salutation ("Dear …")</label><input name="salutation" placeholder="Defaults to the first signatory's first name">
@@ -108,8 +116,10 @@
   </fieldset>
 
   <fieldset><legend>Scope</legend>
-    <label>Services provided (one per line; a Turia list can be pasted here)</label>
-    <textarea name="services" rows="8" required></textarea>
+    <label>Services provided (tick all that apply)</label>
+    <div class="svc" id="svcList"></div>
+    <label>Other services (one per line; a Turia list can be pasted here)</label>
+    <textarea name="services" rows="4"></textarea>
     <label>Services not included in scope (one per line)</label>
     <textarea name="exclusions" rows="8"></textarea>
   </fieldset>
@@ -141,10 +151,12 @@
     <label>Signature image (optional, PNG/JPG; not saved anywhere)</label>
     <input type="file" id="sigFile" accept="image/png,image/jpeg">
     <label class="inline"><input type="checkbox" name="dsc"> Sign with DSC in Adobe Acrobat Reader</label>
-    <div class="hint" id="dscHelp" hidden>Leaves blank space under "For Indefine" and skips the signature image. After saving the PDF: open it in Adobe Acrobat Reader &rarr; All tools &rarr; Use a certificate &rarr; Digitally sign (older versions: Tools &rarr; Certificates &rarr; Digitally Sign) &rarr; drag a box in the blank space &rarr; pick the DSC certificate (token plugged in) &rarr; Sign &rarr; save as a new file &rarr; enter the token PIN. Sign last: any edit afterwards invalidates the signature.</div>
+    <div class="hint" id="dscHelp" hidden>Leaves blank space under "For Indefine" and skips the signature image. After saving the PDF: open it in Adobe Acrobat Reader &rarr; All tools &rarr; Use a certificate &rarr; Digitally sign (older versions: Tools &rarr; Certificates &rarr; Digitally Sign) &rarr; drag a box in the blank space &rarr; pick the DSC certificate (token plugged in) &rarr; Sign &rarr; save as a new file &rarr; enter the token PIN. Then upload the signed PDF in the register. Sign last: any edit afterwards invalidates the signature.</div>
   </fieldset>
 
   <div class="actions">
+    <button type="button" class="primary" id="btnReg" style="grid-column:1 / -1">Save to register</button>
+    <div id="saveMsg"></div>
     <button type="button" class="primary" id="btnPdf">Print / Save as PDF</button>
     <button type="button" class="primary" id="btnDoc">Download Word (.doc)</button>
     <button type="button" id="btnSave">Save form (.json)</button>
@@ -169,9 +181,23 @@
 // e.g. { name: 'CA A. Kumar', designation: 'Partner', phone: '+91 86609 49078', email: 'info@indefine.in' }
 const PARTNERS = [];
 
+// ===== EDIT HERE: services offered as tick-boxes (same names as in Turia) =====
+const SERVICES = [
+  'Monthly GST Returns', 'Monthly TDS/TCS Payments', 'Quarterly TDS/TCS Returns', 'Tax Audit',
+  'Annual Income Tax Return filing', 'Statutory Audit', 'Annual ROC Compliances', 'Annual PT return',
+  'Monthly Form 10BD', 'Internal Audit', 'GST Annual Returns', 'Monthly PT Returns', 'Monthly PF Returns',
+  'Monthly ESIC Returns', 'Annual (Letter of Undertaking) LUT Application', 'Monthly Visit',
+  'Consultations and Advisory (Minor Matters)', 'Annual Budgeting, Projections & Variance Analysis',
+  'RERA Quarterly Returns', 'Annual FCRA - Returns', 'Form 10B (Audit - Trust)', 'Annual CSR Filing',
+  'GSTR-9 (Annual Return)', 'GSTR-9C (Reconciliation Statement)', 'Monthly Payroll Processing',
+  'Annual XBRL Filing', 'Quarterly Advance Tax payments', 'RERA Annual Returns', 'Monthly Stock Audit',
+  'Fixed Asset Tagging', 'MSME Half Yearly Filings',
+];
+
 // ===== EDIT HERE: the three letter types and their default wording =====
+// svc = ticked SERVICES; services = extra lines for "Other services".
 const COMMON_EXCLUSIONS = [
-  'Statutory audit, tax audit, certifications and any other attest function.',
+  'Certifications and any other attest function not listed under Scope of Services.',
   'Registrations and licences with any government department.',
   'Provisional or projected financial statements.',
   'Notices, assessments and representations before any authority, including those relating to periods before this engagement.',
@@ -186,14 +212,13 @@ const TYPES = {
     subject: 'Engagement letter for monthly retainership',
     frequency: 'pm',
     billing: 'monthly in advance',
+    svc: ['Monthly GST Returns', 'Monthly TDS/TCS Payments', 'Quarterly TDS/TCS Returns', 'Monthly Payroll Processing',
+      'Monthly PF Returns', 'Monthly ESIC Returns', 'Monthly PT Returns', 'Annual PT return', 'Quarterly Advance Tax payments',
+      'Annual Income Tax Return filing', 'GSTR-9 (Annual Return)', 'GSTR-9C (Reconciliation Statement)'],
     services: [
       'Accounting and maintenance of books of accounts.',
       'Books will be maintained in Tally. Subscription charges will be borne by Indefine.',
-      'Payroll processing - salary workings and monthly statutory compliances (ESI, PF, PT and TDS on salaries).',
-      'TDS and GST compliances of the company.',
       'Finalisation of books of accounts and preparation of financial statements.',
-      'Income-tax return of the company.',
-      'GST annual return (GSTR-9 and GSTR-9C) - if applicable.',
     ],
     exclusions: COMMON_EXCLUSIONS,
   },
@@ -202,13 +227,12 @@ const TYPES = {
     subject: 'Engagement letter for annual compliance services',
     frequency: 'pa',
     billing: 'on completion of each deliverable',
+    svc: ['Annual ROC Compliances', 'Annual XBRL Filing', 'Quarterly Advance Tax payments', 'Annual Income Tax Return filing'],
     services: [
       'Preparation of financial statements from the books of accounts maintained by the company.',
-      'Filing of financial statements (AOC-4) and annual return (MGT-7 / MGT-7A) with the Registrar of Companies.',
       'Drafting of notices, agenda and minutes for board meetings and the annual general meeting.',
       'Maintenance of statutory registers under the Companies Act, 2013.',
       'DIR-3 KYC for the directors.',
-      'Computation of advance tax and filing of the income-tax return of the company.',
     ],
     exclusions: ['Monthly bookkeeping, payroll, GST and TDS compliances.', ...COMMON_EXCLUSIONS],
   },
@@ -217,9 +241,9 @@ const TYPES = {
     subject: 'Engagement letter for Virtual CFO services',
     frequency: 'pm',
     billing: 'monthly in advance',
+    svc: ['Annual Budgeting, Projections & Variance Analysis', 'Monthly Visit', 'Consultations and Advisory (Minor Matters)'],
     services: [
       'Monthly MIS reports and review with the management.',
-      'Budgeting and budget-versus-actual analysis.',
       'Cash flow forecasting and working capital monitoring.',
       'Review of books of accounts maintained by the in-house team.',
       'Oversight of the statutory compliance calendar (GST, TDS, ROC and income-tax).',
@@ -317,12 +341,16 @@ function words(n) {
 
 const fy = dt => { if (!dt) return ''; const y = dt.getMonth() >= 3 ? dt.getFullYear() : dt.getFullYear() - 1; return `${String(y % 100).padStart(2, '0')}-${String((y + 1) % 100).padStart(2, '0')}`; };
 
-// Extra client signatories have no `name` attribute, so FormData skips them; they travel as `extraSigs`.
-const SIG_KEYS = ['name', 'desig', 'email', 'phone'];
+// Extra client signatories and the service tick-boxes have no `name` attribute, so FormData
+// skips them; they travel as `extraSigs` and `svc`.
+const SIG_KEYS = ['name', 'desig', 'email', 'phone', 'dsc'];
+const val = el => el.type === 'checkbox' ? el.checked : el.value;
+const ticked = () => [...document.querySelectorAll('#svcList input:checked')].map(i => i.value);
 function state() {
-  const extraSigs = [...document.querySelectorAll('#extraSigs .xsig')].map(row => Object.fromEntries(SIG_KEYS.map(k => [k, row.querySelector(`[data-k=${k}]`).value])));
-  return { ...Object.fromEntries(new FormData(f)), autorenew: f.autorenew.checked, dsc: f.dsc.checked, extraSigs };
+  const extraSigs = [...document.querySelectorAll('#extraSigs .xsig')].map(row => Object.fromEntries(SIG_KEYS.map(k => [k, val(row.querySelector(`[data-k=${k}]`))])));
+  return { ...Object.fromEntries(new FormData(f)), autorenew: f.autorenew.checked, dsc: f.dsc.checked, sigDsc: f.sigDsc.checked, svc: ticked(), extraSigs };
 }
+const allServices = d => [...(d.svc || []), ...lines(d.services)];
 
 // ===== the letter =====
 function render(d, sigSrc) {
@@ -353,7 +381,7 @@ function render(d, sigSrc) {
 <p>Based on our discussion on the above subject, we set out below the services to be rendered by us and the terms on which we will render them.</p>
 
 <h3>Scope of services</h3>
-<ol type="a">${lines(d.services).map(s => `<li>${esc(s)}</li>`).join('')}</ol>
+<ol type="a">${allServices(d).map(s => `<li>${esc(s)}</li>`).join('')}</ol>
 
 <h3>Professional charges</h3>
 <p>Based on the above scope of services, our professional fee is <b>Rs ${amt.toLocaleString('en-IN')}/- ${FREQ[d.frequency]}</b> (Rupees ${words(amt)} only), exclusive of GST, which will be charged at the applicable rate.</p>
@@ -383,8 +411,8 @@ ${d.dsc ? '<p style="height:25mm"></p>' : sigSrc ? `<img class="sig" src="${esc(
 <h2 class="pb">Acceptance / Appointment Confirmation</h2>
 <p>We have read the above engagement letter and the annexure in detail. We are pleased to engage ${FIRM}, a unit of ${ENTITY}, to render the above services to <b>${esc(d.client)}</b> on the terms and conditions set out in this letter and the annexure.</p>
 <p>For <b>${esc(d.client)}</b></p>
-${[{ name: d.sigName, desig: d.sigDesig, email: d.sigEmail, phone: d.sigPhone }, ...(d.extraSigs || [])].map(s => `<div class="keep">
-<p class="l"><br><br><br>______________________________<br>Signature and seal</p>
+${[{ name: d.sigName, desig: d.sigDesig, email: d.sigEmail, phone: d.sigPhone, dsc: d.sigDsc }, ...(d.extraSigs || [])].map(s => `<div class="keep">
+${s.dsc ? '<p style="height:25mm"></p><p class="l">Digital signature (DSC)</p>' : '<p class="l"><br><br><br>______________________________<br>Signature and seal</p>'}
 <p class="l">Name: ${esc(s.name)}<br>${s.desig ? `Designation: ${esc(s.desig)}<br>` : ''}${s.phone ? `Phone: ${esc(s.phone)}<br>` : ''}${s.email ? `Email: ${esc(s.email)}` : ''}</p>
 </div>`).join('')}
 <p class="l keep">Date: <span class="blank">&nbsp;</span><br><br>Place: <span class="blank">&nbsp;</span></p>
@@ -423,6 +451,7 @@ function applyType() {
   f.subject.value = t.subject;
   f.frequency.value = t.frequency;
   f.billing.value = t.billing;
+  setTicked(t.svc);
   f.services.value = t.services.join('\n');
   f.exclusions.value = t.exclusions.join('\n');
   curType = f.type.value;
@@ -430,7 +459,7 @@ function applyType() {
 }
 f.type.onchange = () => {
   const old = TYPES[curType];
-  const edited = f.services.value !== old.services.join('\n') || f.exclusions.value !== old.exclusions.join('\n');
+  const edited = ticked().join('|') !== SERVICES.filter(x => old.svc.includes(x)).join('|') || f.services.value !== old.services.join('\n') || f.exclusions.value !== old.exclusions.join('\n');
   if (edited && !confirm('Replace the services and exclusions you have edited with the defaults for this letter type?')) { f.type.value = curType; return; }
   applyType();
 };
@@ -443,8 +472,12 @@ function download(blob, name) {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
+function validate() {
+  f.services.setCustomValidity(allServices(state()).length ? '' : 'Tick at least one service or type one here.');
+  return f.reportValidity();
+}
 $('btnPdf').onclick = () => {
-  if (!f.reportValidity()) return;
+  if (!validate()) return;
   rememberPartner();
   const t = document.title; document.title = fileBase();   // Chrome uses the title as the PDF file name
   window.print(); document.title = t;
@@ -473,28 +506,58 @@ ${css}
   return `MIME-Version: 1.0\r\nContent-Type: multipart/related; boundary="${B}"; type="text/html"\r\n\r\n` + parts.map(p => `--${B}\r\n${p}\r\n`).join('') + `--${B}--\r\n`;
 }
 $('btnDoc').onclick = () => {
-  if (!f.reportValidity()) return;
+  if (!validate()) return;
   rememberPartner();
   download(new Blob([buildDoc()], { type: 'application/msword' }), fileBase() + '.doc');
 };
 
 $('btnSave').onclick = () => download(new Blob([JSON.stringify(state(), null, 2)], { type: 'application/json' }), fileBase() + '.json');
 $('btnLoad').onclick = () => $('loadFile').click();
+function loadData(d) {
+  $('extraSigs').replaceChildren();
+  (d.extraSigs || []).forEach(addSig);
+  setTicked(d.svc || []);
+  for (const [k, v] of Object.entries(d)) {
+    const el = f.elements[k];
+    if (el && el.type) el.type === 'checkbox' ? (el.checked = !!v) : (el.value = v);
+  }
+  autoRef = f.ref.value;
+  curType = f.type.value;
+  refresh();
+}
 $('loadFile').onchange = async e => {
   const file = e.target.files[0]; if (!file) return;
-  try {
-    const d = JSON.parse(await file.text());
-    $('extraSigs').replaceChildren();
-    (d.extraSigs || []).forEach(addSig);
-    for (const [k, v] of Object.entries(d)) {
-      const el = f.elements[k];
-      if (el) el.type === 'checkbox' ? (el.checked = !!v) : (el.value = v);
-    }
-    curType = f.type.value;
-    refresh();
-  } catch { alert('That file is not a saved engagement letter form.'); }
+  try { loadData(JSON.parse(await file.text())); } catch { alert('That file is not a saved engagement letter form.'); }
   e.target.value = '';
 };
+
+// ===== register (LMS): save the form; the server keeps every saved version =====
+const PRELOAD = __PRELOAD__;   // { id, version, data, restoredFrom? } when editing a saved letter
+let letterId = PRELOAD ? PRELOAD.id : null;
+const REGISTER = '/tools/office-tools/engagement-letter';
+function saveMsg(html) { $('saveMsg').innerHTML = html; }
+async function saveToRegister(overwrite = false) {
+  if (!validate()) return;
+  $('btnReg').disabled = true;
+  try {
+    const res = await fetch('/api/tools/engagement-letters', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: letterId, data: state(), overwrite }),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (res.status === 409 && j.existingId && !letterId) {
+      if (confirm(`${j.error}. Save this as a new version of that letter?`)) return saveToRegister(true);
+      return saveMsg(`${esc(j.error)}. <a href="?id=${encodeURIComponent(j.existingId)}">Open it</a>`);
+    }
+    if (!res.ok) return saveMsg(esc(j.error || 'Save failed'));
+    letterId = j.id;
+    history.replaceState(null, '', `?id=${encodeURIComponent(j.id)}`);
+    $('banner').textContent = `Editing ${j.clientName}, FY 20${j.fy} (v${j.version}).`;
+    saveMsg(`Saved as v${j.version}. Next: Print / Save as PDF, sign it, then upload the signed PDF in the <a href="${REGISTER}">register</a>.`);
+  } catch { saveMsg('Save failed: check your connection and try again.'); }
+  finally { $('btnReg').disabled = false; }
+}
+$('btnReg').onclick = () => saveToRegister();
 
 function addSig(v = {}) {
   const row = document.createElement('div');
@@ -508,8 +571,9 @@ function addSig(v = {}) {
       <div><label>Email ID</label><input type="email" data-k="email"></div>
       <div><label>Contact number</label><input type="tel" data-k="phone"></div>
     </div>
+    <label class="inline"><input type="checkbox" data-k="dsc"> Signs with DSC</label>
     <button type="button" style="margin-top:6px;font-size:12px;padding:4px 8px">Remove this signatory</button>`;
-  for (const k of SIG_KEYS) row.querySelector(`[data-k=${k}]`).value = v[k] || '';
+  for (const k of SIG_KEYS) { const el = row.querySelector(`[data-k=${k}]`); el.type === 'checkbox' ? (el.checked = !!v[k]) : (el.value = v[k] || ''); }
   row.querySelector('button').onclick = () => { row.remove(); refresh(); };
   $('extraSigs').append(row);
 }
@@ -523,12 +587,32 @@ $('sigFile').onchange = e => {
   r.readAsDataURL(file);
 };
 
+// ===== service tick-boxes =====
+$('svcList').append(...SERVICES.map(name => {
+  const l = document.createElement('label'); l.className = 'inline';
+  const i = document.createElement('input'); i.type = 'checkbox'; i.value = name;
+  l.append(i, ' ' + name); return l;
+}));
+function setTicked(list) { for (const i of $('svcList').querySelectorAll('input')) i.checked = list.includes(i.value); }
+
+// ===== reference: INDEFINE<>FIRSTWORD, until the user types their own =====
+let autoRef = '';
+const refFor = client => { const w = (client || '').trim().split(/\s+/)[0].toUpperCase().replace(/[^A-Z0-9&]/g, ''); return w ? `INDEFINE<>${w}` : ''; };
+f.client.addEventListener('input', () => { if (f.ref.value === autoRef) { f.ref.value = autoRef = refFor(f.client.value); } });
+
 // ===== init =====
 f.type.append(...Object.entries(TYPES).map(([k, t]) => new Option(t.label, k)));
+$('clientList').append(...__CLIENTS__.map(n => new Option(n)));
 fillPartnerList();
 f.letterDate.value = new Date().toLocaleDateString('en-CA');
 f.addEventListener('input', refresh);
 applyType();
+if (PRELOAD) {
+  loadData(PRELOAD.data);
+  $('banner').textContent = PRELOAD.restoredFrom
+    ? `Showing ${PRELOAD.restoredFrom} of ${PRELOAD.data.client}. Save to register to make it the latest version (v${PRELOAD.version + 1}).`
+    : `Editing ${PRELOAD.data.client} (v${PRELOAD.version}). Save to register after changes.`;
+}
 
 // Self-check: open the file with #test on the end of the URL; the tab title reads SELF-CHECK PASSED.
 if (location.hash === '#test') {
@@ -545,6 +629,9 @@ if (location.hash === '#test') {
   eq(fy(new Date(2026, 2, 31)), '25-26');
   eq(fy(new Date(2026, 3, 1)), '26-27');
   eq(lines('a. One\n- Two\n\n3) Three\nITR filing').join('|'), 'One|Two|Three|ITR filing');
+  eq(refFor('Brickbee Technologies Pvt Ltd'), 'INDEFINE<>BRICKBEE');
+  eq(refFor('  m/s. abc '), 'INDEFINE<>MS');
+  eq(allServices({ svc: ['Tax Audit'], services: '- Extra' }).join('|'), 'Tax Audit|Extra');
   document.title = 'SELF-CHECK PASSED';
 }
 </script>

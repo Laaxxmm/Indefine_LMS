@@ -11,6 +11,7 @@
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
     "verify:certs": "tsx scripts/verify-certificate-templates.ts",
+    "verify:engagement-letters": "tsx scripts/verify-engagement-letters.ts",
     "verify:clients": "tsx scripts/verify-clients.ts",
     "verify:client-ops": "tsx scripts/verify-client-ops.ts",
     "verify:work": "tsx scripts/verify-work.ts",

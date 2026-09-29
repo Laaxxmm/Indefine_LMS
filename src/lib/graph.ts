@@ -972,3 +972,46 @@ export async function uploadFileContent(
   const item = (await res.json()) as { id: string; webUrl: string };
   return { id: item.id, webUrl: item.webUrl };
 }
+
+/** Download a drive item's bytes (small files — used for email attachments). */
+export async function downloadDriveItem(driveId: string, itemId: string, token: string): Promise<Uint8Array> {
+  const res = await fetch(`${GRAPH}/drives/${driveId}/items/${itemId}/content`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Graph download failed: ${res.status} ${await res.text()}`);
+  return new Uint8Array(await res.arrayBuffer());
+}
+
+export type MailAttachment = { name: string; contentType: string; bytes: Uint8Array };
+
+/**
+ * Send mail as the signed-in user (delegated Mail.Send); the copy lands in their Sent
+ * Items. One request, so the whole message must stay under Graph's 4 MB limit.
+ */
+export async function sendMailAsUser(
+  token: string,
+  msg: { to: string[]; cc: string[]; subject: string; text: string; attachments: MailAttachment[] }
+): Promise<void> {
+  const rcpt = (list: string[]) => list.map((address) => ({ emailAddress: { address } }));
+  const res = await fetch(`${GRAPH}/me/sendMail`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      message: {
+        subject: msg.subject,
+        body: { contentType: "Text", content: msg.text },
+        toRecipients: rcpt(msg.to),
+        ccRecipients: rcpt(msg.cc),
+        attachments: msg.attachments.map((a) => ({
+          "@odata.type": "#microsoft.graph.fileAttachment",
+          name: a.name,
+          contentType: a.contentType,
+          contentBytes: Buffer.from(a.bytes).toString("base64"),
+        })),
+      },
+      saveToSentItems: true,
+    }),
+  });
+  if (!res.ok) throw new Error(`Graph sendMail failed: ${res.status} ${(await res.text()).slice(0, 300)}`);
+}

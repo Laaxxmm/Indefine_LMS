@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth, signIn } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { ELEVATED_SCOPES, LEAD_SCOPES, scopesCover } from "@/lib/graph-scopes";
+import { ELEVATED_SCOPES, LEAD_SCOPES, MAIL_SCOPES, scopesCover } from "@/lib/graph-scopes";
 import { isWorkLead } from "@/lib/work/core";
 import { istLabel } from "@/lib/ist";
 import { LogoMark } from "@/components/Logo";
@@ -17,7 +17,10 @@ export default async function ConnectPage({ searchParams }: { searchParams: Prom
   if (!session?.user) redirect("/");
   const sp = await searchParams;
   const lead = isWorkLead(session.user.email);
-  const wanted = lead ? LEAD_SCOPES : ELEVATED_SCOPES;
+  // ?mail=1: only Mail.Send, for emailing engagement letters. Other tiers keep working
+  // afterwards: the refresh token can still mint any scope this person consented to.
+  const mail = sp.mail === "1";
+  const wanted = mail ? MAIL_SCOPES : lead ? LEAD_SCOPES : ELEVATED_SCOPES;
   const account = await prisma.account.findFirst({
     where: { userId: session.user.id, provider: "microsoft-entra-id" },
     select: { refresh_token: true, scope: true, elevatedAt: true },
@@ -27,7 +30,7 @@ export default async function ConnectPage({ searchParams }: { searchParams: Prom
 
   async function connect() {
     "use server";
-    await signIn("microsoft-entra-id", { redirectTo: "/connect?done=1" }, { scope: wanted, prompt: "consent" });
+    await signIn("microsoft-entra-id", { redirectTo: mail ? "/connect?mail=1&done=1" : "/connect?done=1" }, { scope: wanted, prompt: "consent" });
   }
 
   return (
@@ -36,11 +39,17 @@ export default async function ConnectPage({ searchParams }: { searchParams: Prom
         <LogoMark size={44} />
         <p className="text-[10.5px] font-extrabold tracking-[0.14em] text-ink-faint uppercase mt-5">Microsoft 365</p>
         <h1 className="font-display font-extrabold text-[28px] tracking-[-0.02em] mt-1">Connect your account</h1>
+        {mail ? (
+        <p className="text-ink-mute text-[14.5px] mt-2">
+          Lets the LMS send engagement letters by email from your own mailbox. A copy of each email stays in your Sent Items.
+        </p>
+        ) : (
         <p className="text-ink-mute text-[14.5px] mt-2">
           Needed only if you organise live sessions{lead ? " or send the work-tracker nudges" : ""}. It lets the LMS
           create Teams meetings on your calendar and read your recordings and transcripts
           {lead ? ", and post to the Tech Work chat" : ""}. Ordinary sign-in stays identity-only.
         </p>
+        )}
 
         <div className={`mt-6 rounded-xl border px-4 py-3 text-[13.5px] ${connected ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-border bg-muted/40 text-ink-mute"}`}>
           {sp.done && connected && <span className="font-bold">Connected. </span>}
