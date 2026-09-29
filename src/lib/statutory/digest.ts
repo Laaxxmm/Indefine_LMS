@@ -89,24 +89,25 @@ Document text (start): ${hasText(p.text) ? p.text : "(not available — summaris
 
 let running: Promise<number> | null = null;
 
-/** Summarise unsummarised posts until none are left or `budgetMs` runs out. One run at a time per process. */
+/** Summarise unsummarised posts until none are left or `budgetMs` runs out. One run at a time per process.
+ *  Posts whose last attempt failed are retried (Gemini overloads are temporary), but only once per run. */
 export function summarisePending(budgetMs = 240_000): Promise<number> {
   running ??= (async () => {
     const stopAt = Date.now() + budgetMs;
-    let done = 0;
+    const tried: string[] = [];
     try {
       while (Date.now() < stopAt) {
         const batch = await prisma.statutoryPost.findMany({
-          where: { summarizedAt: null, summaryError: null },
+          where: { summarizedAt: null, id: { notIn: tried } },
           orderBy: { createdAt: "asc" },
           take: 4,
           select: { id: true, portal: true, section: true, docType: true, title: true, issueDate: true, uploadDate: true, text: true },
         });
         if (!batch.length) break;
+        tried.push(...batch.map((p) => p.id));
         await Promise.all(batch.map(summariseOne));
-        done += batch.length;
       }
-      return done;
+      return tried.length;
     } finally {
       running = null;
     }

@@ -78,21 +78,13 @@ export async function callGemini(prompt: string, schema?: object): Promise<strin
   const model = await resolveGeminiModel(apiKey);
   const thinking = isThinkingModel(model);
 
-  const res = await fetch(`${BASE}/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
-    body: JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.3,
-        maxOutputTokens: thinking ? 16384 : 8192,
-        responseMimeType: "application/json",
-        ...(schema ? { responseSchema: schema } : {}),
-        ...(thinking ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
-      },
-    }),
-    signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
-  });
+  // 429 / 5xx ("model is currently experiencing high demand") are usually gone in seconds: retry twice.
+  let res: Response;
+  for (let attempt = 0; ; attempt++) {
+    res = await generate(apiKey, model, thinking, prompt, schema);
+    if (res.ok || attempt === 2 || !(res.status === 429 || res.status >= 500)) break;
+    await new Promise((r) => setTimeout(r, attempt === 0 ? 3_000 : 10_000));
+  }
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");
@@ -109,4 +101,22 @@ export async function callGemini(prompt: string, schema?: object): Promise<strin
   const text = (json.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("").trim();
   if (!text) throw new Error("Gemini returned no content.");
   return text;
+}
+
+function generate(apiKey: string, model: string, thinking: boolean, prompt: string, schema?: object): Promise<Response> {
+  return fetch(`${BASE}/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.3,
+        maxOutputTokens: thinking ? 16384 : 8192,
+        responseMimeType: "application/json",
+        ...(schema ? { responseSchema: schema } : {}),
+        ...(thinking ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+      },
+    }),
+    signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
+  });
 }
