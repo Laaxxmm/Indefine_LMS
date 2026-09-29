@@ -59,7 +59,7 @@ export function emailTemplate(data: LetterData, fy: string, senderName: string, 
   const salute = (data.salutation || [data.sigTitle, (data.sigName ?? "").trim()].filter(Boolean).join(" ") || "Sir/Madam").trim();
   const sign = `Regards,
 ${senderName}
-Indefine (a unit of Streamlining Workflows Consultancy Private Limited)
+Streamlining Workflows Consultancy Private Limited
 +91 86609 49078 | info@indefine.in`;
   if (kind === "draft") {
     return {
