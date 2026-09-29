@@ -65,6 +65,7 @@ export function LetterActions({ id, hasSigned, mail }: { id: string; hasSigned: 
       <button type="button" className={btn} disabled={busy} onClick={() => clientRef.current?.click()}>
         <Upload className="w-3.5 h-3.5" /> Upload client-signed copy
       </button>
+      {!hasSigned && !msg && <span className="text-[12.5px] text-ink-faint">Email unlocks after the signed PDF is uploaded.</span>}
       {msg && (
         <span className="text-[13px] text-ink-mute">
           {msg.text}{" "}

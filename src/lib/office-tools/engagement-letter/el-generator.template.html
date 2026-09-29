@@ -39,7 +39,11 @@
   .letter h2 { font-size:12pt; text-align:center; margin:0 0 10pt; }
   .letter h3 { font-size:11pt; text-decoration:underline; margin:12pt 0 4pt; break-after:avoid; }
   .letter p { margin:0 0 8pt; }
-  .letter ol, .letter ul { margin:0 0 8pt; padding-left:24pt; }
+  /* Lists as paragraphs with a hanging indent: same in Chrome's PDF and in Word (which mangles <ol type="a">).
+     The marker box sets the gap in Chrome; the mso-tab span does it in Word. */
+  .letter .li { margin:0 0 3pt 22pt; text-indent:-22pt; text-align:left; }
+  .letter .mk { display:inline-block; width:22pt; text-indent:0; }
+  .tn { display:grid; grid-template-columns:78px 1fr 1fr; gap:8px; }
   .letter .right { text-align:right; }
   .letter .l { text-align:left; }   /* Word stretches justified lines that end in <br> */
   .letter .pb { break-before:page; page-break-before:always; }
@@ -93,7 +97,8 @@
   </fieldset>
 
   <fieldset><legend>Client signatories</legend>
-    <div class="row">
+    <div class="tn">
+      <div><label>Title</label><select name="sigTitle"><option value=""></option><option>Mr.</option><option>Ms.</option><option>Mrs.</option><option>Dr.</option><option>CA</option><option>CS</option></select></div>
       <div><label>Name</label><input name="sigName" required></div>
       <div><label>Designation</label><input name="sigDesig" placeholder="Director / Proprietor"></div>
     </div>
@@ -104,7 +109,7 @@
     <label class="inline"><input type="checkbox" name="sigDsc"> Signs with DSC (leaves blank space instead of a signature line)</label>
     <div id="extraSigs"></div>
     <button type="button" id="btnAddSig" style="margin-top:8px">+ Add another signatory</button>
-    <label>Salutation ("Dear …")</label><input name="salutation" placeholder="Defaults to the first signatory's first name">
+    <label>Salutation ("Dear …")</label><input name="salutation" placeholder="Defaults to title + name of the first signatory, e.g. Mr. Ravi Kumar">
   </fieldset>
 
   <fieldset><legend>Term</legend>
@@ -343,7 +348,10 @@ const fy = dt => { if (!dt) return ''; const y = dt.getMonth() >= 3 ? dt.getFull
 
 // Extra client signatories and the service tick-boxes have no `name` attribute, so FormData
 // skips them; they travel as `extraSigs` and `svc`.
-const SIG_KEYS = ['name', 'desig', 'email', 'phone', 'dsc'];
+const SIG_KEYS = ['title', 'name', 'desig', 'email', 'phone', 'dsc'];
+const titled = (t, n) => [t, (n || '').trim()].filter(Boolean).join(' ');
+// "a." / "•" marker + text, each item ending in a full stop.
+const listItems = (items, marker) => items.map((s, i) => `<p class="li"><span class="mk">${marker(i)}</span><span style="mso-tab-count:1"></span>${esc(/[.;:!?]$/.test(s) ? s : s + '.')}</p>`).join('');
 const val = el => el.type === 'checkbox' ? el.checked : el.value;
 const ticked = () => [...document.querySelectorAll('#svcList input:checked')].map(i => i.value);
 function state() {
@@ -359,7 +367,7 @@ function render(d, sigSrc) {
   const term = Math.max(1, parseInt(d.term) || 12);
   const end = start && endDate(start, term);
   const amt = Number(d.amount) || 0;
-  const salute = d.salutation || (d.sigName || '').trim().split(/\s+/)[0] || 'Sir/Madam';
+  const salute = d.salutation || titled(d.sigTitle, d.sigName) || 'Sir/Madam';
   const contact = [d.phone && `Phone: ${esc(d.phone)}`, d.email && `Email: ${esc(d.email)}`].filter(Boolean).join('<br>');
   const inc = Number(d.increment) || 0;
 
@@ -381,7 +389,7 @@ function render(d, sigSrc) {
 <p>Based on our discussion on the above subject, we set out below the services to be rendered by us and the terms on which we will render them.</p>
 
 <h3>Scope of services</h3>
-<ol type="a">${allServices(d).map(s => `<li>${esc(s)}</li>`).join('')}</ol>
+<div>${listItems(allServices(d), i => String.fromCharCode(97 + i % 26).repeat(1 + Math.floor(i / 26)) + '.')}</div>
 
 <h3>Professional charges</h3>
 <p>Based on the above scope of services, our professional fee is <b>Rs ${amt.toLocaleString('en-IN')}/- ${FREQ[d.frequency]}</b> (Rupees ${words(amt)} only), exclusive of GST, which will be charged at the applicable rate.</p>
@@ -394,7 +402,7 @@ function render(d, sigSrc) {
 
 ${excl.length ? `<h3>Services not included in the scope</h3>
 <p>The following are outside the scope of this engagement and, where requested, will be billed separately on terms agreed at the time:</p>
-<ul>${excl.map(s => `<li>${esc(s)}</li>`).join('')}</ul>` : ''}
+<div>${listItems(excl, () => '&bull;')}</div>` : ''}
 
 <h3>Terms of payment</h3>
 <p>Our fees will be billed ${esc(d.billing)}. Invoices are payable within <b>${esc(d.payDays)} days</b> of the invoice date. Delayed payments attract interest at 2% per month on the amount outstanding. ${revision}</p>
@@ -411,9 +419,9 @@ ${d.dsc ? '<p style="height:25mm"></p>' : sigSrc ? `<img class="sig" src="${esc(
 <h2 class="pb">Acceptance / Appointment Confirmation</h2>
 <p>We have read the above engagement letter and the annexure in detail. We are pleased to engage ${FIRM}, a unit of ${ENTITY}, to render the above services to <b>${esc(d.client)}</b> on the terms and conditions set out in this letter and the annexure.</p>
 <p>For <b>${esc(d.client)}</b></p>
-${[{ name: d.sigName, desig: d.sigDesig, email: d.sigEmail, phone: d.sigPhone, dsc: d.sigDsc }, ...(d.extraSigs || [])].map(s => `<div class="keep">
+${[{ title: d.sigTitle, name: d.sigName, desig: d.sigDesig, email: d.sigEmail, phone: d.sigPhone, dsc: d.sigDsc }, ...(d.extraSigs || [])].map(s => `<div class="keep">
 ${s.dsc ? '<p style="height:25mm"></p><p class="l">Digital signature (DSC)</p>' : '<p class="l"><br><br><br>______________________________<br>Signature and seal</p>'}
-<p class="l">Name: ${esc(s.name)}<br>${s.desig ? `Designation: ${esc(s.desig)}<br>` : ''}${s.phone ? `Phone: ${esc(s.phone)}<br>` : ''}${s.email ? `Email: ${esc(s.email)}` : ''}</p>
+<p class="l">Name: ${esc(titled(s.title, s.name))}<br>${s.desig ? `Designation: ${esc(s.desig)}<br>` : ''}${s.phone ? `Phone: ${esc(s.phone)}<br>` : ''}${s.email ? `Email: ${esc(s.email)}` : ''}</p>
 </div>`).join('')}
 <p class="l keep">Date: <span class="blank">&nbsp;</span><br><br>Place: <span class="blank">&nbsp;</span></p>
 
@@ -563,7 +571,8 @@ function addSig(v = {}) {
   const row = document.createElement('div');
   row.className = 'xsig';
   row.style.cssText = 'border-top:1px dashed var(--line);margin-top:10px;padding-top:4px';
-  row.innerHTML = `<div class="row">
+  row.innerHTML = `<div class="tn">
+      <div><label>Title</label><select data-k="title"><option value=""></option><option>Mr.</option><option>Ms.</option><option>Mrs.</option><option>Dr.</option><option>CA</option><option>CS</option></select></div>
       <div><label>Name</label><input data-k="name" required></div>
       <div><label>Designation</label><input data-k="desig" placeholder="Director / Proprietor"></div>
     </div>
