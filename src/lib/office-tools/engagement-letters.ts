@@ -41,7 +41,7 @@ export async function uploadLetterPdf(clientName: string, fy: string, kind: File
 }
 
 export type LetterData = Record<string, unknown> & {
-  client?: string; salutation?: string; sigName?: string; email?: string; sigEmail?: string;
+  client?: string; salutation?: string; sigTitle?: string; sigName?: string; email?: string; sigEmail?: string;
   extraSigs?: { email?: string }[];
 };
 
@@ -55,7 +55,8 @@ export function defaultRecipients(data: LetterData): string[] {
 
 /** The standard covering email, same for every client. Editable before sending. */
 export function emailTemplate(data: LetterData, fy: string, senderName: string) {
-  const salute = (data.salutation || (data.sigName ?? "").trim().split(/\s+/)[0] || "Sir/Madam").trim();
+  // Same default as the letter: "Mr. Ravi Kumar".
+  const salute = (data.salutation || [data.sigTitle, (data.sigName ?? "").trim()].filter(Boolean).join(" ") || "Sir/Madam").trim();
   return {
     subject: `Engagement Letter - ${data.client ?? ""} - FY ${fyLabel(fy)}`,
     text: `Dear ${salute},
