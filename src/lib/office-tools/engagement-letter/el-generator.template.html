@@ -78,9 +78,10 @@
     <label>Letter type (choose first)</label>
     <select name="type"></select>
     <div class="row">
-      <div><label>Letter date</label><input type="date" name="letterDate" required></div>
+      <div><label>Letter date (also the date under the signatures)</label><input type="date" name="letterDate" required></div>
       <div><label>Reference no.</label><input name="ref" placeholder="INDEFINE<>CLIENT"></div>
     </div>
+    <label>Place (under the signatures)</label><input name="place" value="Bangalore">
     <label>Subject</label><input name="subject" required>
   </fieldset>
 
@@ -188,7 +189,7 @@ const PARTNERS = [];
 
 // ===== EDIT HERE: services offered as tick-boxes (same names as in Turia) =====
 const SERVICES = [
-  'Monthly GST Returns', 'Monthly TDS/TCS Payments', 'Quarterly TDS/TCS Returns', 'Tax Audit',
+  'Accounting', 'Monthly GST Returns', 'Monthly TDS/TCS Payments', 'Quarterly TDS/TCS Returns', 'Tax Audit',
   'Annual Income Tax Return filing', 'Statutory Audit', 'Annual ROC Compliances', 'Annual PT return',
   'Monthly Form 10BD', 'Internal Audit', 'GST Annual Returns', 'Monthly PT Returns', 'Monthly PF Returns',
   'Monthly ESIC Returns', 'Annual (Letter of Undertaking) LUT Application', 'Monthly Visit',
@@ -217,11 +218,10 @@ const TYPES = {
     subject: 'Engagement letter for monthly retainership',
     frequency: 'pm',
     billing: 'monthly in advance',
-    svc: ['Monthly GST Returns', 'Monthly TDS/TCS Payments', 'Quarterly TDS/TCS Returns', 'Monthly Payroll Processing',
+    svc: ['Accounting', 'Monthly GST Returns', 'Monthly TDS/TCS Payments', 'Quarterly TDS/TCS Returns', 'Monthly Payroll Processing',
       'Monthly PF Returns', 'Monthly ESIC Returns', 'Monthly PT Returns', 'Annual PT return', 'Quarterly Advance Tax payments',
       'Annual Income Tax Return filing', 'GSTR-9 (Annual Return)', 'GSTR-9C (Reconciliation Statement)'],
     services: [
-      'Accounting and maintenance of books of accounts.',
       'Books will be maintained in Tally. Subscription charges will be borne by Indefine.',
       'Finalisation of books of accounts and preparation of financial statements.',
     ],
@@ -259,13 +259,12 @@ const TYPES = {
   },
 };
 
-const FIRM = 'Indefine';
 const ENTITY = 'Streamlining Workflows Consultancy Private Limited';
 const FREQ = { pm: 'per month', pa: 'per annum', once: 'one-time' };
 
 // ===== General terms of engagement (same for all three types) =====
 const ANNEXURE = `
-<p>This engagement is governed by the following terms unless the parties agree otherwise in writing. In these terms, "Indefine", "we" and "us" mean Indefine, a unit of ${ENTITY}, and "Client", "you" and "your" mean the entity named in the engagement letter.</p>
+<p>This engagement is governed by the following terms unless the parties agree otherwise in writing. In these terms, "Indefine", "we" and "us" mean ${ENTITY}, and "Client", "you" and "your" mean the entity named in the engagement letter.</p>
 <h3>Our commitment</h3>
 <p>We will provide the services set out in the engagement letter, or such variations as may subsequently be agreed in writing between us, with reasonable skill and care, in accordance with the professional standards expected of us, and in a timely manner. The nature and content of any advice we provide will necessarily reflect the scope and limitations of our engagement, the amount and accuracy of information provided to us, and the time within which the advice is required. We will not normally seek to verify or check information provided to us by you or by others on your behalf, and you acknowledge that we are entitled to rely on such information in performing our obligations under this engagement. Where general information or advice is provided, its applicability will depend on the particular circumstances in which it is used, of which we may not be aware, and it should be viewed accordingly. For any particular transaction, specific advice should always be sought and all material information relating to it provided to us.</p>
 <h3>Limitation of the scope</h3>
@@ -411,19 +410,19 @@ ${excl.length ? `<h3>Services not included in the scope</h3>
 <p>Assuring you of our best services and prompt attention always.</p>
 
 <div class="keep">
-<p class="l">Thanking you,<br>Yours faithfully,<br>For <b>${FIRM}</b><br>(a unit of ${ENTITY})</p>
+<p class="l">Thanking you,<br>Yours faithfully,<br>For <b>${ENTITY}</b></p>
 ${d.dsc ? '<p style="height:25mm"></p>' : sigSrc ? `<img class="sig" src="${esc(sigSrc)}" height="48" alt="">` : '<p><br><br></p>'}
 <p class="l"><b>${esc(p.name)}</b>${p.designation ? `<br>${esc(p.designation)}` : ''}${p.phone || p.email ? `<br>${[p.phone, p.email].filter(Boolean).map(esc).join(' | ')}` : ''}</p>
 </div>
 
 <h2 class="pb">Acceptance / Appointment Confirmation</h2>
-<p>We have read the above engagement letter and the annexure in detail. We are pleased to engage ${FIRM}, a unit of ${ENTITY}, to render the above services to <b>${esc(d.client)}</b> on the terms and conditions set out in this letter and the annexure.</p>
+<p>We have read the above engagement letter and the annexure in detail. We are pleased to engage ${ENTITY} to render the above services to <b>${esc(d.client)}</b> on the terms and conditions set out in this letter and the annexure.</p>
 <p>For <b>${esc(d.client)}</b></p>
 ${[{ title: d.sigTitle, name: d.sigName, desig: d.sigDesig, email: d.sigEmail, phone: d.sigPhone, dsc: d.sigDsc }, ...(d.extraSigs || [])].map(s => `<div class="keep">
 ${s.dsc ? '<p style="height:25mm"></p><p class="l">Digital signature (DSC)</p>' : '<p class="l"><br><br><br>______________________________<br>Signature and seal</p>'}
 <p class="l">Name: ${esc(titled(s.title, s.name))}<br>${s.desig ? `Designation: ${esc(s.desig)}<br>` : ''}${s.phone ? `Phone: ${esc(s.phone)}<br>` : ''}${s.email ? `Email: ${esc(s.email)}` : ''}</p>
 </div>`).join('')}
-<p class="l keep">Date: <span class="blank">&nbsp;</span><br><br>Place: <span class="blank">&nbsp;</span></p>
+<p class="l keep">Date: ${fmtDate(parseDate(d.letterDate))}<br>Place: ${esc(d.place || 'Bangalore')}</p>
 
 <h2 class="pb">Annexure<br>General Terms of Engagement</h2>
 ${ANNEXURE}`;
