@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FileBadge, ArrowRight, BookText, Wrench, LayoutDashboard, Users, CalendarClock } from "lucide-react";
+import { FileBadge, ArrowRight, BookText, Wrench, LayoutDashboard, Users, CalendarClock, Newspaper } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { canUseNeoCentra } from "@/lib/neo-centra/access";
 
@@ -44,6 +44,15 @@ const TOOLS = [
       "Generate rental agreements, MOUs, partnership, trust and LLP deeds as Word files, and extract GSTR-3B / TDS challan PDFs into Excel. Direct download, full audit trail.",
     icon: Wrench,
     accent: "#e84a8a",
+  },
+  {
+    href: "/tools/statutory-updates",
+    title: "Statutory updates",
+    tag: "Income Tax · GST · MCA · Labour · ICAI",
+    blurb:
+      "Every notification, circular and advisory the statutory portals posted, summarised and tagged Action / For information, one tab per law. Collected daily.",
+    icon: Newspaper,
+    accent: "#f97316",
   },
   {
     href: "/tools/client-ops",

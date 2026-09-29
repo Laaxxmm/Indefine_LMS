@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { font: 13px/1.45 system-ui, sans-serif; width: 320px; margin: 12px; color: #15132b; }
+  h1 { font-size: 14px; margin: 0 0 8px; }
+  label { display: block; font-size: 12px; color: #6c6a82; margin-top: 8px; }
+  input { width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 2px; }
+  button { margin-top: 8px; padding: 6px 12px; border: 0; border-radius: 6px; background: #3d2cb8; color: #fff; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  .muted { color: #6c6a82; font-size: 12px; }
+  ul { padding-left: 16px; margin: 6px 0; }
+  .ok { color: #047857; } .bad { color: #be123c; }
+</style>
+</head>
+<body>
+  <h1>Statutory Updates Collector</h1>
+  <div class="muted">Runs once a day after 07:00 IST while Chrome is open, and pushes Income Tax, CBIC, GSTN, MCA, EPFO and ESIC posts (last 7 days) to lms.indefine.in.</div>
+  <label>Relay token <input id="token" type="password" placeholder="same as STATUTORY_RELAY_TOKEN on the LMS"></label>
+  <button id="save">Save token</button>
+  <button id="run">Run now</button>
+  <div id="state" style="margin-top:10px"></div>
+  <script src="popup.js"></script>
+</body>
+</html>

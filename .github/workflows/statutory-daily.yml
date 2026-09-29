@@ -1,0 +1,23 @@
+# Daily (08:00 IST): collect statutory updates from the portals the server can reach and
+# summarise everything new. The six Indian-IP portals are pushed in by the
+# statutory-extension on an office PC. Uses the same CRON_SECRET as the other cron workflows.
+name: Statutory updates daily
+
+on:
+  schedule:
+    - cron: "30 2 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call statutory cron endpoint
+        run: |
+          if [ -z "${{ secrets.CRON_SECRET }}" ]; then
+            echo "CRON_SECRET repo secret not set — skipping."
+            exit 0
+          fi
+          curl -fsS --max-time 60 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "https://lms.indefine.in/api/cron/statutory"

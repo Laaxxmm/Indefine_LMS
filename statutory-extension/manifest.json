@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Indefine — Statutory Updates Collector",
+  "version": "1.0.0",
+  "description": "Collects the Income Tax, CBIC, GSTN, MCA, EPFO and ESIC portals (which refuse non-Indian IPs) once a day and pushes the posts to the Indefine LMS.",
+  "permissions": ["scripting", "tabs", "alarms", "storage"],
+  "host_permissions": [
+    "https://www.incometaxindia.gov.in/*",
+    "https://taxinformation.cbic.gov.in/*",
+    "https://www.gst.gov.in/*",
+    "https://www.mca.gov.in/*",
+    "https://www.epfo.gov.in/*",
+    "https://esic.gov.in/*",
+    "https://www.esic.gov.in/*",
+    "https://lms.indefine.in/*"
+  ],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "popup.html", "default_title": "Statutory Updates Collector" }
+}

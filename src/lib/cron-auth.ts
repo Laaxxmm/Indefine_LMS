@@ -7,7 +7,11 @@ import { NextRequest, NextResponse } from "next/server";
 
 /** The 401 response to send, or null when the caller holds the secret. */
 export function cronUnauthorized(req: NextRequest): NextResponse | null {
-  const secret = process.env.CRON_SECRET;
+  return bearerUnauthorized(req, process.env.CRON_SECRET);
+}
+
+/** Same check against any shared secret (e.g. a browser-extension relay token). */
+export function bearerUnauthorized(req: NextRequest, secret: string | undefined): NextResponse | null {
   const provided = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
   if (!secret || !safeEqual(provided, secret)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   return null;
