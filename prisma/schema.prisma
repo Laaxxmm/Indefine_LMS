@@ -1380,3 +1380,45 @@ model EngagementLetterEvent {
 
   @@index([letterId, at])
 }
+
+// Statutory updates digest (Tools). One row per post collected from an Indian statutory
+// portal. Six portals are collected on the server; six that refuse non-Indian IPs are
+// collected by the statutory-extension on an office PC and pushed in. Dates are IST
+// calendar days as "YYYY-MM-DD"; postedOn (upload date, else document date) drives ranges.
+model StatutoryPost {
+  id           String    @id @default(cuid())
+  key          String    @unique // portal | url | first 60 chars of title
+  portal       String
+  section      String?
+  docType      String
+  title        String
+  issueDate    String?
+  uploadDate   String?
+  postedOn     String
+  dateBasis    String // "upload" | "issue" | "file-server" | "text"
+  url          String
+  altUrl       String?
+  text         String?   @db.Text // start of the document, input to the summary
+  area         String?
+  tag          String? // "Action" | "Info" | "Internal"
+  summary      String?   @db.Text
+  note         String?
+  summarizedAt DateTime?
+  summaryError String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([postedOn])
+  @@index([summarizedAt])
+}
+
+// Latest collection result per portal (status line at the top of each tab).
+model StatutorySource {
+  portal    String   @id
+  status    String // "ok" | "no posts" | "partial" | "failed"
+  note      String
+  fetched   Int
+  inRange   Int
+  via       String // "server" | "extension"
+  checkedAt DateTime
+}

@@ -67,3 +67,46 @@ export async function resolveGeminiModel(apiKey: string): Promise<string> {
 
   return cached;
 }
+
+// One JSON-mode generateContent call with this key's resolved model. `schema` is a
+// Gemini responseSchema; the caller still validates the parsed result.
+const CALL_TIMEOUT_MS = 45_000;
+
+export async function callGemini(prompt: string, schema?: object): Promise<string> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("GEMINI_API_KEY is not set on the server.");
+  const model = await resolveGeminiModel(apiKey);
+  const thinking = isThinkingModel(model);
+
+  const res = await fetch(`${BASE}/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.3,
+        maxOutputTokens: thinking ? 16384 : 8192,
+        responseMimeType: "application/json",
+        ...(schema ? { responseSchema: schema } : {}),
+        ...(thinking ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+      },
+    }),
+    signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    let detail = body.slice(0, 300);
+    try {
+      detail = JSON.parse(body)?.error?.message ?? detail;
+    } catch {
+      /* keep raw */
+    }
+    throw new Error(`Gemini API error ${res.status}: ${detail || res.statusText}`);
+  }
+  const json = (await res.json()) as { promptFeedback?: { blockReason?: string }; candidates?: { content?: { parts?: { text?: string }[] } }[] };
+  if (json.promptFeedback?.blockReason) throw new Error(`Request was blocked by the model (${json.promptFeedback.blockReason}).`);
+  const text = (json.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("").trim();
+  if (!text) throw new Error("Gemini returned no content.");
+  return text;
+}
