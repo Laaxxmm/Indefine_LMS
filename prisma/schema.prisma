@@ -1330,3 +1330,53 @@ model OpsReminder {
   @@index([subscriptionId])
   @@index([sentAt])
 }
+
+// -------------------- Engagement letters (Office Tools) --------------------
+// One row per client per FY. `data` is the generator form (reloaded to edit and
+// regenerate). The PDFs live in SharePoint under Engagement Letters/<client>/ with a
+// fixed name per FY, so a re-upload replaces the file and SharePoint keeps the
+// version history. Every save/upload/send is appended to EngagementLetterEvent.
+enum EngagementLetterStatus {
+  DRAFT          // form saved, no signed PDF uploaded (or edited since)
+  SIGNED         // Indefine-signed PDF uploaded
+  SENT           // emailed to the client
+  CLIENT_SIGNED  // client's countersigned copy uploaded
+}
+
+model EngagementLetter {
+  id                  String                 @id @default(cuid())
+  clientName          String                 // as in Turia; also the SharePoint folder name
+  fy                  String                 // "26-27"
+  data                Json
+  status              EngagementLetterStatus @default(DRAFT)
+  graphDriveId        String?
+  signedItemId        String?
+  signedWebUrl        String?
+  clientSignedItemId  String?
+  clientSignedWebUrl  String?
+  sentAt              DateTime?
+  sentTo              String?
+  createdById         String
+  createdByName       String
+  updatedByName       String
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+  events              EngagementLetterEvent[]
+
+  @@unique([clientName, fy])
+  @@index([updatedAt])
+}
+
+model EngagementLetterEvent {
+  id       String           @id @default(cuid())
+  letterId String
+  letter   EngagementLetter @relation(fields: [letterId], references: [id], onDelete: Cascade)
+  action   String           // "saved" | "signed-upload" | "sent" | "client-signed-upload"
+  detail   String?
+  data     Json?            // form snapshot for "saved", so any earlier version can be restored
+  byId     String
+  byName   String
+  at       DateTime         @default(now())
+
+  @@index([letterId, at])
+}

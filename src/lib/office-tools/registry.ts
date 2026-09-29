@@ -67,12 +67,11 @@ export const OFFICE_TOOLS: ToolMeta[] = [
     live: true,
   },
   {
-    // Runs entirely in the browser (PDF via print, .doc download) — no server
-    // generation, so no OfficeToolRun audit row.
+    // Has its own register (EngagementLetter + events) instead of OfficeToolRun rows.
     id: "engagement-letter",
     title: "Engagement Letter",
     category: "Legal",
-    blurb: "Client engagement letter on the Indefine letterhead — retainer, annual compliance or Virtual CFO — as PDF or Word.",
+    blurb: "Engagement letters on the Indefine letterhead: create, DSC-sign, store in SharePoint per client with version history, and email to the client.",
     icon: "FileSignature",
     accent: "#5B4BE6",
     format: "pdf",
