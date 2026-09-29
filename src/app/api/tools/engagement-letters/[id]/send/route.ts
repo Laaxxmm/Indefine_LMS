@@ -5,13 +5,15 @@ import { canUseOfficeTools } from "@/lib/office-tools/access";
 import { downloadDriveItem, getAppOnlyToken, getUserGraphToken, sendMailAsUser } from "@/lib/graph";
 import { MAIL_SCOPES } from "@/lib/graph-scopes";
 import { fileName, isEmail } from "@/lib/office-tools/engagement-letters";
+import { WAITING, can } from "@/lib/office-tools/engagement-letter-flow";
 
 export const maxDuration = 60;
 
 const list = (v: unknown) =>
   (Array.isArray(v) ? v : String(v ?? "").split(/[,;\s]+/)).map((s) => String(s).trim()).filter(Boolean);
 
-// Email the uploaded signed PDF to the client from the sender's own mailbox.
+// Email the unsigned draft (kind=draft, for approval) or the signed letter (kind=signed)
+// to the client from the sender's own mailbox.
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -20,11 +22,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params;
   const letter = await prisma.engagementLetter.findUnique({ where: { id } });
   if (!letter) return NextResponse.json({ error: "Letter not found" }, { status: 404 });
-  if (!letter.signedItemId || !letter.graphDriveId) {
-    return NextResponse.json({ error: "Upload the signed PDF before sending" }, { status: 400 });
-  }
 
-  const body = (await req.json().catch(() => null)) as { to?: unknown; cc?: unknown; subject?: string; text?: string } | null;
+  const body = (await req.json().catch(() => null)) as { kind?: string; to?: unknown; cc?: unknown; subject?: string; text?: string } | null;
+  const kind = body?.kind === "draft" ? "draft" : "signed";
+  const step = kind === "draft" ? "sendDraft" : "sendSigned";
+  const itemId = kind === "draft" ? letter.draftItemId : letter.signedItemId;
+  if (!can(step, letter.status) || !itemId || !letter.graphDriveId) return NextResponse.json({ error: WAITING[step] }, { status: 409 });
+
   const to = list(body?.to);
   const cc = list(body?.cc);
   const bad = [...to, ...cc].find((e) => !isEmail(e));
@@ -43,13 +47,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!appToken) return NextResponse.json({ error: "SharePoint is not configured" }, { status: 502 });
 
   try {
-    const bytes = await downloadDriveItem(letter.graphDriveId, letter.signedItemId, appToken);
+    const bytes = await downloadDriveItem(letter.graphDriveId, itemId, appToken);
     await sendMailAsUser(mailToken, {
       to,
       cc,
       subject: body.subject.trim(),
       text: body.text,
-      attachments: [{ name: fileName(letter.clientName, letter.fy, "signed"), contentType: "application/pdf", bytes }],
+      attachments: [{ name: fileName(letter.clientName, letter.fy, kind), contentType: "application/pdf", bytes }],
     });
   } catch (e) {
     console.error("EL send failed:", (e as Error).message);
@@ -60,8 +64,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const sentTo = [...to, ...cc].join(", ");
   await prisma.engagementLetter.update({
     where: { id },
-    data: { sentAt: new Date(), sentTo, updatedByName: byName, ...(letter.status === "CLIENT_SIGNED" ? {} : { status: "SENT" }) },
+    data:
+      kind === "draft"
+        ? { draftSentAt: new Date(), status: "SENT_FOR_APPROVAL", updatedByName: byName }
+        : { sentAt: new Date(), sentTo, status: "SENT", updatedByName: byName },
   });
-  await prisma.engagementLetterEvent.create({ data: { letterId: id, action: "sent", detail: `To ${sentTo}`, byId: session.user.id, byName } });
+  await prisma.engagementLetterEvent.create({
+    data: { letterId: id, action: kind === "draft" ? "draft-sent" : "sent", detail: `To ${sentTo}`, byId: session.user.id, byName },
+  });
   return NextResponse.json({ ok: true });
 }

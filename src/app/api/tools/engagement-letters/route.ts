@@ -7,8 +7,16 @@ import { fyLabel, fyOf } from "@/lib/office-tools/engagement-letters";
 
 // Save the generator form to the register. One letter per client per FY: saving again
 // (with its id) updates it and appends a "saved" event carrying the form snapshot, so
-// any earlier version can be reopened. Editing after a signed PDF was uploaded puts the
-// letter back to DRAFT until the new signed PDF is uploaded.
+// any earlier version can be reopened. Saving restarts the approval flow at DRAFT: the
+// uploaded PDFs no longer match the form, so their links are cleared (the files stay in
+// SharePoint with their version history).
+const RESTART = {
+  status: "DRAFT",
+  draftItemId: null, draftWebUrl: null, draftSentAt: null, approvedAt: null,
+  signedItemId: null, signedWebUrl: null, sentAt: null, sentTo: null,
+  clientSignedItemId: null, clientSignedWebUrl: null,
+} as const;
+
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -41,7 +49,7 @@ export async function POST(req: Request) {
 
   const json = data as Prisma.InputJsonValue;
   const letter = id
-    ? await prisma.engagementLetter.update({ where: { id }, data: { clientName, fy, data: json, status: "DRAFT", updatedByName: byName } })
+    ? await prisma.engagementLetter.update({ where: { id }, data: { clientName, fy, data: json, updatedByName: byName, ...RESTART } })
     : await prisma.engagementLetter.create({
         data: { clientName, fy, data: json, createdById: user.id, createdByName: byName, updatedByName: byName },
       });

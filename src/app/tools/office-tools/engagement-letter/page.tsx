@@ -5,23 +5,30 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canUseOfficeTools } from "@/lib/office-tools/access";
 import { defaultRecipients, elRoot, emailTemplate, fyLabel, type LetterData } from "@/lib/office-tools/engagement-letters";
+import { STATUS_LABEL } from "@/lib/office-tools/engagement-letter-flow";
 import { LetterActions } from "./LetterActions";
 
 export const dynamic = "force-dynamic";
 
 const EDITOR = "/tools/office-tools/engagement-letter/editor";
 
-const STATUS: Record<string, { label: string; cls: string }> = {
-  DRAFT: { label: "Draft", cls: "bg-muted text-ink-mute" },
-  SIGNED: { label: "Signed, not sent", cls: "bg-amber-50 text-amber-700" },
-  SENT: { label: "Sent to client", cls: "bg-brand-50 text-brand-700" },
-  CLIENT_SIGNED: { label: "Client signed", cls: "bg-emerald-50 text-emerald-700" },
+const STATUS_CLS: Record<string, string> = {
+  DRAFT: "bg-muted text-ink-mute",
+  DRAFT_UPLOADED: "bg-muted text-ink-mute",
+  SENT_FOR_APPROVAL: "bg-amber-50 text-amber-700",
+  APPROVED: "bg-brand-50 text-brand-700",
+  SIGNED: "bg-brand-50 text-brand-700",
+  SENT: "bg-brand-50 text-brand-700",
+  CLIENT_SIGNED: "bg-emerald-50 text-emerald-700",
 };
 
 const ACTION: Record<string, string> = {
   saved: "Saved",
+  "draft-upload": "Draft PDF uploaded",
+  "draft-sent": "Draft emailed for approval",
+  approved: "Approved by client",
   "signed-upload": "Signed PDF uploaded",
-  sent: "Emailed",
+  sent: "Signed letter emailed",
   "client-signed-upload": "Client-signed copy uploaded",
 };
 
@@ -48,7 +55,8 @@ export default async function EngagementLetterRegister() {
         <div>
           <h1 className="font-display font-extrabold text-2xl sm:text-[28px] tracking-[-0.02em] mb-1">Engagement letters</h1>
           <p className="text-ink-mute text-[14px] max-w-2xl">
-            Create a letter, save it here, sign the PDF (DSC in Acrobat or by hand), upload it and email it to the client. Files are
+            Save the letter, email the unsigned draft for approval, record the client&apos;s approval, then sign (DSC in Acrobat
+            or by hand), upload and email the signed letter for countersignature. Files are
             stored in SharePoint under <b>{elRoot()}/&lt;client&gt;</b>; re-uploading replaces the file and SharePoint keeps the
             earlier versions.
           </p>
@@ -69,8 +77,8 @@ export default async function EngagementLetterRegister() {
           {letters.map((l) => {
             const data = l.data as LetterData;
             const saves = l.events.filter((e) => e.action === "saved");
-            const st = STATUS[l.status];
-            const mail = emailTemplate(data, l.fy, session.user.name ?? "");
+            const to = defaultRecipients(data).join(", ");
+            const mail = (kind: "draft" | "signed") => ({ to, cc: "", ...emailTemplate(data, l.fy, session.user.name ?? "", kind) });
             return (
               <div key={l.id} className="rounded-2xl bg-card border border-border shadow-lift p-4 sm:p-5">
                 <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -78,16 +86,23 @@ export default async function EngagementLetterRegister() {
                     <div className="font-display font-bold text-lg leading-tight">{l.clientName}</div>
                     <div className="text-[13px] text-ink-mute mt-0.5">
                       FY {fyLabel(l.fy)} · v{saves.length} · updated {fmt(l.updatedAt)} by {l.updatedByName}
-                      {l.sentAt && <> · emailed {fmt(l.sentAt)}</>}
+                      {l.draftSentAt && <> · draft sent {fmt(l.draftSentAt)}</>}
+                      {l.approvedAt && <> · approved {fmt(l.approvedAt)}</>}
+                      {l.sentAt && <> · signed letter sent {fmt(l.sentAt)}</>}
                     </div>
                   </div>
-                  <span className={`text-[11px] font-extrabold tracking-wide uppercase px-2 py-1 rounded-full ${st.cls}`}>{st.label}</span>
+                  <span className={`text-[11px] font-extrabold tracking-wide uppercase px-2 py-1 rounded-full ${STATUS_CLS[l.status]}`}>{STATUS_LABEL[l.status]}</span>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 mt-3">
                   <a href={`${EDITOR}?id=${l.id}`} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border text-sm font-semibold hover:bg-muted transition">
                     <Pencil className="w-3.5 h-3.5" /> Edit / regenerate
                   </a>
+                  {l.draftWebUrl && (
+                    <a href={l.draftWebUrl} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-full border border-border text-sm font-semibold hover:bg-muted transition">
+                      Draft PDF
+                    </a>
+                  )}
                   {l.signedWebUrl && (
                     <a href={l.signedWebUrl} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-full border border-border text-sm font-semibold hover:bg-muted transition">
                       Signed PDF
@@ -98,11 +113,7 @@ export default async function EngagementLetterRegister() {
                       Client-signed PDF
                     </a>
                   )}
-                  <LetterActions
-                    id={l.id}
-                    hasSigned={!!l.signedItemId}
-                    mail={{ to: defaultRecipients(data).join(", "), cc: "", subject: mail.subject, text: mail.text }}
-                  />
+                  <LetterActions id={l.id} status={l.status} mails={{ draft: mail("draft"), signed: mail("signed") }} />
                 </div>
 
                 <details className="mt-3 text-[13px]">

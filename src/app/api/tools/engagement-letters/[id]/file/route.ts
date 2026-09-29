@@ -1,14 +1,19 @@
 import { NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canUseOfficeTools } from "@/lib/office-tools/access";
 import { MAX_PDF_BYTES, fileName, uploadLetterPdf, type FileKind } from "@/lib/office-tools/engagement-letters";
+import { WAITING, can, type Step } from "@/lib/office-tools/engagement-letter-flow";
 
 export const maxDuration = 60;
 
-// Upload the Indefine-signed PDF (kind=signed, usually DSC-signed in Acrobat) or the
-// client's countersigned copy (kind=client) to SharePoint. Same name each time, so
-// SharePoint versions it.
+const STEP: Record<FileKind, Step> = { draft: "uploadDraft", signed: "uploadSigned", client: "uploadClient" };
+const ACTION: Record<FileKind, string> = { draft: "draft-upload", signed: "signed-upload", client: "client-signed-upload" };
+
+// Upload one of the three PDFs to SharePoint: the unsigned draft (for approval), the
+// Indefine-signed letter (only after approval) or the client's countersigned copy.
+// Same name each time per kind, so SharePoint versions it.
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -21,7 +26,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const form = await req.formData().catch(() => null);
   const kind = form?.get("kind") as FileKind | null;
   const file = form?.get("file");
-  if (kind !== "signed" && kind !== "client") return NextResponse.json({ error: "Unknown file kind" }, { status: 400 });
+  if (kind !== "draft" && kind !== "signed" && kind !== "client") return NextResponse.json({ error: "Unknown file kind" }, { status: 400 });
+  if (!can(STEP[kind], letter.status)) return NextResponse.json({ error: WAITING[STEP[kind]] }, { status: 409 });
   if (!(file instanceof File)) return NextResponse.json({ error: "Choose a PDF" }, { status: 400 });
   if (file.size > MAX_PDF_BYTES) return NextResponse.json({ error: "PDF is over 3 MB — too large to email" }, { status: 413 });
   const bytes = new Uint8Array(await file.arrayBuffer());
@@ -36,21 +42,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   const byName = session.user.name ?? "Unknown";
-  await prisma.engagementLetter.update({
-    where: { id },
-    data:
-      kind === "signed"
-        ? { graphDriveId: item.driveId, signedItemId: item.id, signedWebUrl: item.webUrl, status: "SIGNED", updatedByName: byName }
-        : { graphDriveId: item.driveId, clientSignedItemId: item.id, clientSignedWebUrl: item.webUrl, status: "CLIENT_SIGNED", updatedByName: byName },
-  });
+  const data: Prisma.EngagementLetterUpdateInput =
+    kind === "draft"
+      ? { draftItemId: item.id, draftWebUrl: item.webUrl, status: "DRAFT_UPLOADED" }
+      : kind === "signed"
+        ? { signedItemId: item.id, signedWebUrl: item.webUrl, status: "SIGNED" }
+        : { clientSignedItemId: item.id, clientSignedWebUrl: item.webUrl, status: "CLIENT_SIGNED" };
+  await prisma.engagementLetter.update({ where: { id }, data: { ...data, graphDriveId: item.driveId, updatedByName: byName } });
   await prisma.engagementLetterEvent.create({
-    data: {
-      letterId: id,
-      action: kind === "signed" ? "signed-upload" : "client-signed-upload",
-      detail: fileName(letter.clientName, letter.fy, kind),
-      byId: session.user.id,
-      byName,
-    },
+    data: { letterId: id, action: ACTION[kind], detail: fileName(letter.clientName, letter.fy, kind), byId: session.user.id, byName },
   });
   return NextResponse.json({ ok: true, webUrl: item.webUrl });
 }
