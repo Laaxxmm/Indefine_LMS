@@ -29,7 +29,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (kind !== "draft" && kind !== "signed" && kind !== "client") return NextResponse.json({ error: "Unknown file kind" }, { status: 400 });
   if (!can(STEP[kind], letter.status)) return NextResponse.json({ error: WAITING[STEP[kind]] }, { status: 409 });
   if (!(file instanceof File)) return NextResponse.json({ error: "Choose a PDF" }, { status: 400 });
-  if (file.size > MAX_PDF_BYTES) return NextResponse.json({ error: "PDF is over 3 MB — too large to email" }, { status: 413 });
+  if (file.size > MAX_PDF_BYTES) {
+    // A letter saved with Chrome/Edge "Save as PDF" is ~0.2 MB; a big file almost always means
+    // "Microsoft Print to PDF" (every page saved as a picture) or a large signature photo.
+    const mb = (file.size / 1024 / 1024).toFixed(1);
+    return NextResponse.json(
+      { error: `PDF is ${mb} MB (limit 3 MB). Print again and choose Destination "Save as PDF", not "Microsoft Print to PDF"; it should be well under 1 MB.` },
+      { status: 413 }
+    );
+  }
   const bytes = new Uint8Array(await file.arrayBuffer());
   if (new TextDecoder().decode(bytes.slice(0, 5)) !== "%PDF-") return NextResponse.json({ error: "That file is not a PDF" }, { status: 400 });
 

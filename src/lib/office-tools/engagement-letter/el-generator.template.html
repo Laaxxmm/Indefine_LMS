@@ -110,7 +110,6 @@
     <label class="inline"><input type="checkbox" name="sigDsc"> Signs with DSC (leaves blank space instead of a signature line)</label>
     <div id="extraSigs"></div>
     <button type="button" id="btnAddSig" style="margin-top:8px">+ Add another signatory</button>
-    <label>Salutation ("Dear …")</label><input name="salutation" placeholder="Defaults to title + name of the first signatory, e.g. Mr. Ravi Kumar">
   </fieldset>
 
   <fieldset><legend>Term</legend>
@@ -163,6 +162,7 @@
   <div class="actions">
     <button type="button" class="primary" id="btnReg" style="grid-column:1 / -1">Save to register</button>
     <div id="saveMsg"></div>
+    <div class="hint" style="grid-column:1 / -1">Print: choose Destination <b>Save as PDF</b> (not "Microsoft Print to PDF") and turn off Headers and footers. The file should be well under 1 MB.</div>
     <button type="button" class="primary" id="btnPdf">Print / Save as PDF</button>
     <button type="button" class="primary" id="btnDoc">Download Word (.doc)</button>
     <button type="button" id="btnSave">Save form (.json)</button>
@@ -366,7 +366,7 @@ function render(d, sigSrc) {
   const term = Math.max(1, parseInt(d.term) || 12);
   const end = start && endDate(start, term);
   const amt = Number(d.amount) || 0;
-  const salute = d.salutation || titled(d.sigTitle, d.sigName) || 'Sir/Madam';
+  const salute = titled(d.sigTitle, d.sigName) || 'Sir/Madam';   // "Dear Mr. Ravi Kumar"
   const contact = [d.phone && `Phone: ${esc(d.phone)}`, d.email && `Email: ${esc(d.email)}`].filter(Boolean).join('<br>');
   const inc = Number(d.increment) || 0;
 
@@ -587,12 +587,18 @@ function addSig(v = {}) {
 }
 $('btnAddSig').onclick = () => { addSig(); refresh(); };
 
+// Signature photos are often several MB; scale to 600px wide so the PDF stays small.
 $('sigFile').onchange = e => {
   const file = e.target.files[0];
   if (!file) { sigData = ''; refresh(); return; }
-  const r = new FileReader();
-  r.onload = () => { sigData = r.result; refresh(); };
-  r.readAsDataURL(file);
+  const img = new Image();
+  img.onload = () => {
+    const k = Math.min(1, 600 / img.width), c = document.createElement('canvas');
+    c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    sigData = c.toDataURL('image/png'); URL.revokeObjectURL(img.src); refresh();
+  };
+  img.src = URL.createObjectURL(file);
 };
 
 // ===== service tick-boxes =====
