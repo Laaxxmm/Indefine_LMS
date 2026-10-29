@@ -3,6 +3,8 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { canStartAttempt } from "@/lib/quiz";
+import { canAccessVideo } from "@/lib/assignments";
+import { isActive, isAdmin } from "@/lib/access";
 import QuizPlayer from "./QuizPlayer";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +29,10 @@ export default async function QuizPage({
     },
   });
   if (!quiz) notFound();
+  // Same gate as /video/[id] and /api/quiz/[id]/start: only allotted videos' quizzes.
+  if (!isActive(session.user) || !(await canAccessVideo(session.user.id, quiz.videoId, isAdmin(session.user)))) {
+    redirect("/dashboard");
+  }
 
   const gate = await canStartAttempt(session.user.id, id);
   const best = quiz.attempts.reduce<typeof quiz.attempts[number] | null>(
