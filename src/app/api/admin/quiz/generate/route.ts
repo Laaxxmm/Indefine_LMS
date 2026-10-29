@@ -2,13 +2,13 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { generateQuiz, type Difficulty } from "@/lib/quiz-gen";
-import { isAdmin } from "@/lib/access";
+import { isActive, isAdmin } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   const session = await auth();
-  if (!session?.user || !isAdmin(session.user)) {
+  if (!session?.user || !isActive(session.user) || !isAdmin(session.user)) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { computeKraScores, getCourseStatusForUser } from "@/lib/kra";
 import { prisma } from "@/lib/prisma";
-import { isAdmin } from "@/lib/access";
+import { isActive, isAdmin } from "@/lib/access";
 
 function csvEscape(v: unknown): string {
   if (v == null) return "";
@@ -21,13 +21,17 @@ function toCsv(rows: (string | number | null | undefined)[][]): string {
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!isAdmin(session.user)) {
+  if (!isActive(session.user) || !isAdmin(session.user)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const url = new URL(req.url);
   const fromStr = url.searchParams.get("from") ?? "";
   const toStr = url.searchParams.get("to") ?? "";
+  // Both end up in a Date and in the Content-Disposition filename.
+  const DAY = /^\d{4}-\d{2}-\d{2}$/;
+  if ((fromStr && !DAY.test(fromStr)) || (toStr && !DAY.test(toStr)))
+    return NextResponse.json({ error: "from/to must be YYYY-MM-DD" }, { status: 400 });
   const fromD = fromStr ? new Date(fromStr) : undefined;
   const toD = toStr ? new Date(toStr) : undefined;
   const toEnd = toD ? new Date(toD.getTime() + 24 * 60 * 60 * 1000 - 1) : undefined;

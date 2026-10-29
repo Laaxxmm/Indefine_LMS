@@ -118,7 +118,18 @@ export async function loadWorkbookInput(): Promise<WorkbookInput> {
   };
 }
 
-export async function rebuildClientWorkbook(): Promise<{ ok: boolean; error?: string }> {
+// At most one rebuild runs; callers arriving meanwhile share ONE queued follow-up (so
+// they still see their own edits) instead of each re-reading every client and
+// re-uploading the file in parallel.
+type RebuildResult = { ok: boolean; error?: string };
+let running: Promise<RebuildResult> | null = null;
+let queued: Promise<RebuildResult> | null = null;
+export function rebuildClientWorkbook(): Promise<RebuildResult> {
+  if (!running) return (running = doRebuild().finally(() => { running = null; }));
+  return (queued ??= running.then(() => { queued = null; return rebuildClientWorkbook(); }));
+}
+
+async function doRebuild(): Promise<RebuildResult> {
   const d = process.env.GRAPH_DRIVE_ID;
   if (!d) return { ok: false, error: "Graph not configured (GRAPH_DRIVE_ID / MS_* env)" };
   try {

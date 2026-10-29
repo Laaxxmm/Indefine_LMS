@@ -16,17 +16,19 @@ export function normDept(d: string): Department {
 }
 
 // Shape of a (user-confirmed, possibly edited) brief posted from the client.
+// Bounded: every field is fed to Gemini.
+const line = z.string().max(2_000);
 export const incomingBriefZ = z.object({
-  title: z.string().min(1),
-  department: z.string(),
-  workCategory: z.string().default(""),
-  objective: z.string().default(""),
-  scope: z.string().default(""),
-  keySteps: z.array(z.string()).default([]),
-  rolesInvolved: z.array(z.string()).default([]),
-  references: z.array(z.string()).default([]),
+  title: z.string().min(1).max(300),
+  department: z.string().max(40),
+  workCategory: line.default(""),
+  objective: z.string().max(10_000).default(""),
+  scope: z.string().max(10_000).default(""),
+  keySteps: z.array(line).max(200).default([]),
+  rolesInvolved: z.array(line).max(100).default([]),
+  references: z.array(line).max(100).default([]),
 });
-export const createBodyZ = z.object({ brief: incomingBriefZ, rawProcedure: z.string().min(10), purpose: z.string().default("") });
+export const createBodyZ = z.object({ brief: incomingBriefZ, rawProcedure: z.string().min(10).max(50_000), purpose: z.string().max(10_000).default("") });
 
 // The signed-in user as a version author (name + designation from their level).
 export async function resolveCreator(user: Session["user"]): Promise<{ id: string; name: string; designation: string }> {

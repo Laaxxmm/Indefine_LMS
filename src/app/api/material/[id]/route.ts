@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessVideo } from "@/lib/assignments";
 import { getAppOnlyToken, getStreamUrl, getUserGraphToken } from "@/lib/graph";
-import { isAdmin } from "@/lib/access";
+import { isActive, isAdmin } from "@/lib/access";
 
 // Download a video's handout. Same access boundary as streaming the video
 // itself: the learner must have the video (or its module) assigned, so a
@@ -13,7 +13,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session?.user || !isActive(session.user)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const userId = session.user.id;
 
   const { id } = await params;

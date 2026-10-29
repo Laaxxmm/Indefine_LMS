@@ -22,6 +22,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const parsed = createBodyZ.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   const { brief, rawProcedure, purpose } = parsed.data;
+  // The edit may move the SOP to another department; the editor must be allowed there too.
+  if (!(await canEditSop(session.user, normDept(brief.department))))
+    return NextResponse.json({ error: "You can only move SOPs into your own department" }, { status: 403 });
 
   const nextNumber = (sop.versions[0]?.versionNumber ?? 0) + 1;
   const creator = await resolveCreator(session.user);
