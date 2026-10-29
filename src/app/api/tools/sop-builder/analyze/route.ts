@@ -7,11 +7,11 @@ import { analyzeSopRequest } from "@/lib/sop/gemini";
 export const maxDuration = 60;
 
 const Body = z.object({
-  title: z.string().default(""),
-  department: z.string(),
-  workCategory: z.string().default(""),
-  purpose: z.string().default(""),
-  rawProcedure: z.string().min(10),
+  title: z.string().max(300).default(""),
+  department: z.string().max(40),
+  workCategory: z.string().max(2_000).default(""),
+  purpose: z.string().max(10_000).default(""),
+  rawProcedure: z.string().min(10).max(50_000),
 });
 
 export async function POST(req: Request) {

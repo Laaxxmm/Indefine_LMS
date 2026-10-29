@@ -7,6 +7,10 @@ import { recordToolRun } from "@/lib/office-tools/audit";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+// Return PDFs are ~100 KB each; these only stop a crafted upload from tying up the parser.
+const MAX_FILES = 200;
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
+
 // Process uploaded return PDFs into an Excel workbook. No file is stored — the .xlsx
 // streams straight back; the run is logged for audit (tool + file count).
 export async function POST(req: Request, { params }: { params: Promise<{ tool: string }> }) {
@@ -22,6 +26,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ tool: s
   if (!form) return NextResponse.json({ error: "Invalid upload" }, { status: 400 });
   const uploaded = form.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
   if (uploaded.length === 0) return NextResponse.json({ error: "Upload at least one PDF." }, { status: 400 });
+  if (uploaded.length > MAX_FILES) return NextResponse.json({ error: `Upload at most ${MAX_FILES} PDFs at a time.` }, { status: 413 });
+  const big = uploaded.find((f) => f.size > MAX_FILE_BYTES);
+  if (big) return NextResponse.json({ error: `${big.name} is over 10 MB.` }, { status: 413 });
 
   const files: PdfFile[] = [];
   for (const f of uploaded) files.push({ name: f.name, buffer: Buffer.from(await f.arrayBuffer()) });

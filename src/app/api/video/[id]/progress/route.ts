@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { refreshVideoAssignments, canAccessVideo } from "@/lib/assignments";
 import { z } from "zod";
-import { isAdmin } from "@/lib/access";
+import { isActive, isAdmin } from "@/lib/access";
 
 const Body = z.object({
   lastPosition: z.number().int().nonnegative(),
@@ -16,7 +16,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session?.user || !isActive(session.user)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const userId = session.user.id;
   const { id: videoId } = await params;
 

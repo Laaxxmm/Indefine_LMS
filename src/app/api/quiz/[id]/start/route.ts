@@ -2,23 +2,30 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canStartAttempt, loadQuizForAttempt, toPublicQuestions } from "@/lib/quiz";
-import { isAdmin } from "@/lib/access";
+import { isActive, isAdmin } from "@/lib/access";
+import { canAccessVideo } from "@/lib/assignments";
 
 export async function POST(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session?.user || !isActive(session.user)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const userId = session.user.id;
   const { id: quizId } = await params;
 
-  // Block quizzes whose video is in an unpublished course (admins exempt).
+  // Block quizzes whose video is in an unpublished course or not assigned to the
+  // learner (admins exempt) — the same boundary as the video page and stream API.
+  const admin = isAdmin(session.user);
   const access = await prisma.quiz.findUnique({
     where: { id: quizId },
-    select: { video: { select: { module: { select: { course: { select: { published: true } } } } } } },
+    select: { videoId: true, video: { select: { module: { select: { course: { select: { published: true } } } } } } },
   });
-  if (!access || (!isAdmin(session.user) && !access.video?.module?.course?.published)) {
+  if (
+    !access ||
+    (!admin && !access.video?.module?.course?.published) ||
+    !(await canAccessVideo(userId, access.videoId, admin))
+  ) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 

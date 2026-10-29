@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canUseOfficeTools } from "@/lib/office-tools/access";
 import { fyLabel, fyOf } from "@/lib/office-tools/engagement-letters";
+import { folderName } from "@/lib/clients/core";
 
 // Save the generator form to the register. One letter per client per FY: saving again
 // (with its id) updates it and appends a "saved" event carrying the form snapshot, so
@@ -27,6 +28,9 @@ export async function POST(req: Request) {
   const clientName = typeof data?.client === "string" ? data.client.trim().replace(/\s+/g, " ") : "";
   const fy = fyOf(String(data?.start ?? ""));
   if (!data || !clientName || !fy) return NextResponse.json({ error: "Client name and start date are required" }, { status: 400 });
+  // The name becomes a SharePoint folder: "." or ".." would resolve outside the EL root.
+  if (!/[A-Za-z0-9]/.test(folderName(clientName))) return NextResponse.json({ error: "Client name needs at least one letter or digit" }, { status: 400 });
+  if (body?.id !== undefined && typeof body.id !== "string") return NextResponse.json({ error: "Invalid letter id" }, { status: 400 });
   if (JSON.stringify(data).length > 200_000) return NextResponse.json({ error: "Form is too large" }, { status: 413 });
 
   const user = session.user;

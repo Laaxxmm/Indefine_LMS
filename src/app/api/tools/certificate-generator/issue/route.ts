@@ -12,7 +12,7 @@ import { SUGGESTIBLE_FIELD_KEYS } from "@/lib/certificates/suggestible";
 
 const Body = z.object({
   formatId: z.string(),
-  clientName: z.string().min(1),
+  clientName: z.string().min(1).max(300),
   acknowledged: z.boolean(),
   payload: z.record(z.unknown()),
 });
@@ -25,6 +25,7 @@ export async function POST(req: Request) {
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   const { formatId, clientName, acknowledged, payload } = parsed.data;
+  if (JSON.stringify(payload).length > 200_000) return NextResponse.json({ error: "Form is too large" }, { status: 413 });
 
   // §0.8 — the illustrative-format acknowledgment must be ticked.
   if (acknowledged !== true) return NextResponse.json({ error: "Acknowledgment is required" }, { status: 400 });

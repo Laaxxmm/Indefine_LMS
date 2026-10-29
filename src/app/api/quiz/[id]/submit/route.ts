@@ -4,10 +4,12 @@ import { prisma } from "@/lib/prisma";
 import { gradeAttempt } from "@/lib/quiz";
 import { refreshQuizAssignments } from "@/lib/assignments";
 import { z } from "zod";
+import { isActive } from "@/lib/access";
 
 const Body = z.object({
-  attemptId: z.string(),
-  answers: z.record(z.string(), z.string()),
+  attemptId: z.string().max(100),
+  // questionId -> optionId; bounded so a crafted body can't bloat the stored attempt.
+  answers: z.record(z.string().max(100), z.string().max(100)).refine((a) => Object.keys(a).length <= 500, "Too many answers"),
 });
 
 export async function POST(
@@ -15,7 +17,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session?.user || !isActive(session.user)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const userId = session.user.id;
   const { id: quizId } = await params;
 
