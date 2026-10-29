@@ -1,8 +1,9 @@
 // Transcribe a video with Gemini's multimodal File API.
 //
 // Flow (all REST, no SDK):
-//   1. Download the video bytes from the Graph pre-authenticated URL.
-//   2. Resumable-upload them to the Gemini File API.
+//   1. Download the video from the Graph pre-authenticated URL.
+//   2. Resumable-upload it to the Gemini File API (streamed through when the
+//      size is known, so the whole file is never held in memory).
 //   3. Poll the file until it finishes PROCESSING and becomes ACTIVE.
 //   4. Ask Gemini to transcribe the narration verbatim.
 //   5. Best-effort delete the uploaded file.
@@ -43,20 +44,31 @@ export async function transcribeVideo(opts: {
   const mimeType = opts.mimeType || "video/mp4";
   const maxBytes = opts.maxBytes ?? DEFAULT_MAX_BYTES;
 
-  // 1. Download the video bytes.
-  let bytes: ArrayBuffer;
+  // 1. Download the video.
+  let body: ArrayBuffer | ReadableStream<Uint8Array>;
+  let size: number;
   try {
-    const r = await fetch(opts.downloadUrl, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
+    // The download may stream straight into the upload below, so it gets both budgets.
+    const r = await fetch(opts.downloadUrl, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS + UPLOAD_TIMEOUT_MS) });
     if (!r.ok) return { ok: false, error: `Video download failed (${r.status}).` };
     const declared = Number(r.headers.get("content-length") || 0);
     if (declared && declared > maxBytes) {
       return { ok: false, error: `Video is too large (${Math.round(declared / 1e6)} MB, limit ${Math.round(maxBytes / 1e6)} MB).` };
     }
-    bytes = await r.arrayBuffer();
-    if (bytes.byteLength > maxBytes) {
-      return { ok: false, error: `Video is too large (${Math.round(bytes.byteLength / 1e6)} MB).` };
+    if (declared && r.body && !r.headers.get("content-encoding")) {
+      // Known, unencoded length: pipe it to Gemini instead of holding up to
+      // 250 MB in this process.
+      body = r.body;
+      size = declared;
+    } else {
+      const bytes = await r.arrayBuffer();
+      if (bytes.byteLength > maxBytes) {
+        return { ok: false, error: `Video is too large (${Math.round(bytes.byteLength / 1e6)} MB).` };
+      }
+      if (bytes.byteLength === 0) return { ok: false, error: "Downloaded video was empty." };
+      body = bytes;
+      size = bytes.byteLength;
     }
-    if (bytes.byteLength === 0) return { ok: false, error: "Downloaded video was empty." };
   } catch (e) {
     const err = e as Error;
     const msg = err.name === "TimeoutError" ? "timed out" : err.message;
@@ -72,7 +84,7 @@ export async function transcribeVideo(opts: {
         "x-goog-api-key": apiKey,
         "X-Goog-Upload-Protocol": "resumable",
         "X-Goog-Upload-Command": "start",
-        "X-Goog-Upload-Header-Content-Length": String(bytes.byteLength),
+        "X-Goog-Upload-Header-Content-Length": String(size),
         "X-Goog-Upload-Header-Content-Type": mimeType,
         "content-type": "application/json",
       },
@@ -99,11 +111,12 @@ export async function transcribeVideo(opts: {
         "x-goog-api-key": apiKey,
         "X-Goog-Upload-Command": "upload, finalize",
         "X-Goog-Upload-Offset": "0",
-        "content-length": String(bytes.byteLength),
+        "content-length": String(size),
       },
-      body: bytes,
+      body,
+      duplex: "half", // Node's fetch requires this for a streamed request body
       signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
-    });
+    } as RequestInit); // `duplex` is missing from the DOM RequestInit typings
     if (!up.ok) {
       return { ok: false, error: `Gemini upload failed (${up.status}): ${short(await up.text().catch(() => ""))}` };
     }

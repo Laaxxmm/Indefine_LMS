@@ -184,6 +184,7 @@ export async function computeKraScores(
               ? { gte: opts.from, lte: opts.to }
               : undefined,
         },
+        select: { quizId: true, passed: true, percent: true }, // not the answers JSON
       },
     },
   });

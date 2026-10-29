@@ -316,6 +316,7 @@ export default async function AdminVideoPage({
 
   const video = await prisma.video.findUnique({
     where: { id },
+    omit: { sourceText: false }, // the script editor below needs it
     include: {
       quiz: {
         include: {
