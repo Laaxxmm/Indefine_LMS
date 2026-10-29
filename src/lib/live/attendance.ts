@@ -102,23 +102,30 @@ export async function creditLiveAttendees(sessionId: string): Promise<void> {
   const now = new Date();
   const dur = video.durationSeconds ?? 0;
 
-  for (const a of attendees) {
-    await prisma.videoProgress
-      .upsert({
-        where: { userId_videoId: { userId: a.userId, videoId: video.id } },
-        create: {
-          userId: a.userId,
-          videoId: video.id,
-          percent: 100,
-          completed: true,
-          completedAt: now,
-          lastPosition: dur,
-          watchedSeconds: dur,
-        },
-        update: { percent: 100, completed: true, completedAt: now },
-      })
-      .catch(() => {});
-  }
+  // The sweep re-runs this every 15 min for a week. Rows already completed are left
+  // alone, so completedAt (which picks the KRA window) doesn't creep forward and the
+  // sweep stops rewriting the same rows.
+  const userIds = attendees.map((a) => a.userId);
+  await prisma.videoProgress
+    .updateMany({
+      where: { videoId: video.id, userId: { in: userIds }, completed: false },
+      data: { percent: 100, completed: true, completedAt: now },
+    })
+    .catch(() => {});
+  await prisma.videoProgress
+    .createMany({
+      data: userIds.map((userId) => ({
+        userId,
+        videoId: video.id,
+        percent: 100,
+        completed: true,
+        completedAt: now,
+        lastPosition: dur,
+        watchedSeconds: dur,
+      })),
+      skipDuplicates: true,
+    })
+    .catch(() => {});
 
   // Clean up the fabricated "auto-pass" attempts an earlier version created: a
   // passed attempt with no stored answers whose start == submit instant (a real
