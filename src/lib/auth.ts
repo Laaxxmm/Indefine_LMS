@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
 import { PrismaAdapter } from "@auth/prisma-adapter";
+import type { PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { sealGraphToken } from "@/lib/graph";
 import { ELEVATED_SCOPES, SIGNIN_SCOPES, scopesCover } from "@/lib/graph-scopes";
@@ -19,7 +20,9 @@ const tenantPinned = !!issuer && !/\/(common|organizations|consumers)\//i.test(i
 
 // The Prisma adapter writes the first Account row itself (after the signIn callback),
 // so token sealing has to happen inside linkAccount as well as in the callback.
-const baseAdapter = PrismaAdapter(prisma);
+// Cast: the shared client's global `omit` (Video.sourceText) narrows its type; the
+// adapter only touches User/Account/Session, which are unaffected.
+const baseAdapter = PrismaAdapter(prisma as unknown as PrismaClient);
 const adapter: Adapter = {
   ...baseAdapter,
   linkAccount: (account: AdapterAccount) =>
