@@ -11,6 +11,12 @@ const adminEmails = (process.env.ADMIN_EMAILS ?? "")
   .map((e) => e.trim().toLowerCase())
   .filter(Boolean);
 
+// Single-tenant only. A missing or multi-tenant issuer (/common/, /organizations/) would
+// let any Microsoft account in, and allowDangerousEmailAccountLinking below would then
+// hand it the employee row with the same email. Refuse every sign-in instead.
+const issuer = process.env.AUTH_MICROSOFT_ENTRA_ID_ISSUER ?? "";
+const tenantPinned = !!issuer && !/\/(common|organizations|consumers)\//i.test(issuer);
+
 // The Prisma adapter writes the first Account row itself (after the signIn callback),
 // so token sealing has to happen inside linkAccount as well as in the callback.
 const baseAdapter = PrismaAdapter(prisma);
@@ -22,6 +28,13 @@ const adapter: Adapter = {
       access_token: sealGraphToken(account.access_token),
       refresh_token: sealGraphToken(account.refresh_token),
     }),
+  // A deactivated user's live session resolves to no session at all, so every auth()
+  // caller (pages, server actions, routes) treats them as signed out. The org sync also
+  // deletes their sessions; this covers any other way `active` gets flipped.
+  getSessionAndUser: async (sessionToken) => {
+    const found = await baseAdapter.getSessionAndUser!(sessionToken);
+    return found && (found.user as { active?: boolean }).active === false ? null : found;
+  },
 };
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -31,7 +44,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     MicrosoftEntraID({
       clientId: process.env.AUTH_MICROSOFT_ENTRA_ID_ID,
       clientSecret: process.env.AUTH_MICROSOFT_ENTRA_ID_SECRET,
-      issuer: process.env.AUTH_MICROSOFT_ENTRA_ID_ISSUER,
+      issuer: issuer || undefined,
       authorization: {
         params: {
           // Identity only. No offline_access, so an ordinary employee has no refresh
@@ -53,6 +66,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   pages: { signIn: "/" },
   callbacks: {
     async signIn({ user, account }) {
+      if (!tenantPinned) {
+        console.error("[auth] AUTH_MICROSOFT_ENTRA_ID_ISSUER must name the firm's tenant; sign-in refused");
+        return false;
+      }
       // Someone the org sync has deactivated gets no new session, even if Entra
       // still lets them through (sync lag, or a licence removed but not disabled).
       if (user.email) {
