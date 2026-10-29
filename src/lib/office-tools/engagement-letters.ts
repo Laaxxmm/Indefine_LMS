@@ -63,14 +63,14 @@ Streamlining Workflows Consultancy Private Limited
 +91 86609 49078 | info@indefine.in`;
   if (kind === "draft") {
     return {
-      subject: `Draft Engagement Letter for your approval - ${data.client ?? ""} - FY ${fyLabel(fy)}`,
+      subject: `Engagement Letter for your approval - ${data.client ?? ""} - FY ${fyLabel(fy)}`,
       text: `Dear ${salute},
 
 Greetings from Indefine.
 
-Please find attached the draft of our engagement letter for FY ${fyLabel(fy)}, which sets out the scope of services, our professional fees and the general terms of engagement.
+Please find attached engagement letter for FY ${fyLabel(fy)}, which sets out the scope of services, our professional fees and the general terms of engagement.
 
-We request you to review the draft and confirm your approval by replying to this email, or let us know any changes you would like. Once approved, we will send you the signed engagement letter for your countersignature.
+We request you to confirm your approval by replying to this email or let us know any changes you would like. Once approved, we will send you the signed engagement letter for your countersignature.
 
 ${sign}`,
     };
