@@ -13,29 +13,30 @@ import { BoardTable, JobLink, summaryFigures } from "./parts";
 
 export const dynamic = "force-dynamic";
 
-function More({ n, what }: { n: number; what: string }) {
+function More({ n, what }: { n: number; what: (n: number) => string }) {
   if (n === 0) return null;
   return (
     <p className="text-[13px] text-ink-mute mt-2">
-      {n} more {what}, listed under Everything else.
+      {n} more {what(n)}, listed under Everything else.
     </p>
   );
 }
 
+/** The person's own summary: the cycle-time page's figure tiles (label in sectionTitle, 26px value). */
 function MySummary({ s }: { s: SummaryView }) {
   return (
-    <div className={card}>
+    <>
       <p className="text-[13.5px]">{s.message}</p>
-      <dl className="grid grid-cols-2 sm:grid-cols-5 gap-4 mt-4">
+      <dl className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mt-4">
         {summaryFigures(s).map((f) => (
           <div key={f.label}>
-            <dt className="text-[11px] font-bold uppercase tracking-wide text-ink-mute">{f.label}</dt>
-            <dd className="font-display text-[22px] font-extrabold tabular-nums leading-tight mt-1">{f.value}</dd>
+            <dt className={sectionTitle}>{f.label}</dt>
+            <dd className="font-display text-[26px] font-extrabold tabular-nums leading-none">{f.value}</dd>
           </div>
         ))}
       </dl>
-      <p className="text-[12px] text-ink-mute mt-3 tabular-nums">Prepared {s.at}. Visible to you and your manager.</p>
-    </div>
+      <p className="text-[12px] text-ink-mute mt-4 tabular-nums">Prepared {s.at}. Visible to you and your manager.</p>
+    </>
   );
 }
 
@@ -53,7 +54,7 @@ export default async function CoachPage() {
   return (
     <div>
       <div className="mb-6">
-        <p className={eyebrow}>Firm OS · {formatDate(now)}</p>
+        <p className={eyebrow}>Firm OS</p>
         <h1 className={pageTitle}>My day</h1>
         <p className="text-ink-mute text-[15px] mt-1.5 max-w-2xl">
           Your open jobs in the order to take them: anything past due first, then by how near the statutory and internal dates are, the client, whether someone is
@@ -62,7 +63,7 @@ export default async function CoachPage() {
       </div>
 
       {data.notices.length > 0 && (
-        <section aria-labelledby="notices" className="mb-8">
+        <section aria-labelledby="notices" className={`${card} mb-8`}>
           <h2 id="notices" className={sectionTitle}>
             Notices
           </h2>
@@ -79,7 +80,7 @@ export default async function CoachPage() {
         ) : (
           <BoardTable items={board.mustToday} caption="Must today, in the order to take them" />
         )}
-        <More n={board.mustTodayMore} what="must be done today" />
+        <More n={board.mustTodayMore} what={() => "must be done today"} />
       </section>
 
       <section aria-labelledby="this-week" className="mb-8">
@@ -91,7 +92,7 @@ export default async function CoachPage() {
         ) : (
           <BoardTable items={board.thisWeek} caption="Due within the next five working days, in the order to take them" />
         )}
-        <More n={board.thisWeekMore} what="are due this week" />
+        <More n={board.thisWeekMore} what={(k) => (k === 1 ? "is due this week" : "are due this week")} />
       </section>
 
       {rest.length > 0 && (
@@ -145,7 +146,7 @@ export default async function CoachPage() {
         </section>
       )}
 
-      <section aria-labelledby="your-week" className="mb-8">
+      <section aria-labelledby="your-week" className={data.mySummary ? `${card} mb-8` : "mb-8"}>
         <h2 id="your-week" className={sectionTitle}>
           Your week
         </h2>
@@ -180,7 +181,7 @@ export default async function CoachPage() {
                 {data.team.map((t) => {
                   const f = t.summary ? summaryFigures(t.summary) : null;
                   return (
-                    <tr key={t.userId} className="border-t border-border h-11">
+                    <tr key={t.userId} className="border-t border-border hover:bg-muted/40 h-11">
                       <td className={`${td} font-semibold`}>{t.name}</td>
                       {t.summary && f ? (
                         <>
@@ -205,7 +206,7 @@ export default async function CoachPage() {
         </section>
       )}
 
-      <section aria-labelledby="settings">
+      <section aria-labelledby="settings" className={card}>
         <h2 id="settings" className={sectionTitle}>
           Reminders and breaks
         </h2>

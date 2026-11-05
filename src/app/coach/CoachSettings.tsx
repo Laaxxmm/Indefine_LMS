@@ -1,23 +1,28 @@
 "use client";
 
-// The person's own coach settings. Each change saves at once and says so; nothing here is visible
-// to anyone else. Break controls appear only when the firm has turned break reminders on.
-import { useState } from "react";
+// The person's own coach settings, inside the "Reminders and breaks" card on /coach. Each change
+// saves at once and says so; nothing here is visible to anyone else. Break controls appear only
+// when the firm has turned break reminders on.
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
-import { btnGhost, call, card, errorText } from "@/components/ui";
-import { focusRing, sectionTitle } from "@/app/agents/parts";
+import { btnGhost, call, errorText } from "@/components/ui";
+import { focusRing } from "@/app/agents/parts";
 import { formatDateTimeIst } from "@/lib/agents/core/format";
 import type { PreferencesView } from "@/lib/agents/coach/activity";
 
 type Change = { breakNudges?: boolean; morningBoard?: boolean; snoozeMinutes?: number };
 
 const checkbox = `h-4 w-4 accent-brand-500 ${focusRing}`;
-const row = "flex items-start gap-2.5 text-[13.5px]";
+const row = "flex items-start gap-2 text-[13.5px]";
+/** In-card subheading (the OnboardPanel card pattern); the section title sits above it in the card. */
+const subheading = "font-bold text-[14px] mb-2";
 
 export function CoachSettings({ prefs, breakFeature }: { prefs: PreferencesView; breakFeature: boolean }) {
   const router = useRouter();
   const [p, setP] = useState(prefs);
+  // A change made elsewhere (the break nudge) refreshes the page: take the new values.
+  useEffect(() => setP(prefs), [prefs]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -37,8 +42,8 @@ export function CoachSettings({ prefs, breakFeature }: { prefs: PreferencesView;
   const spin = (key: string) => busy === key && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />;
 
   return (
-    <div className={card}>
-      <h3 className={sectionTitle}>Morning board</h3>
+    <div>
+      <h3 className={subheading}>Morning board</h3>
       <label className={row}>
         <input
           type="checkbox"
@@ -53,7 +58,7 @@ export function CoachSettings({ prefs, breakFeature }: { prefs: PreferencesView;
         </span>
       </label>
 
-      <h3 className={`${sectionTitle} mt-6`}>Break reminders</h3>
+      <h3 className={`${subheading} mt-6`}>Break reminders</h3>
       {breakFeature ? (
         <>
           <label className={row}>
@@ -75,8 +80,8 @@ export function CoachSettings({ prefs, breakFeature }: { prefs: PreferencesView;
             <div className="flex flex-wrap items-center gap-2 mt-3 pl-6">
               {p.snoozeUntil ? (
                 <>
-                  <span className="text-[13px] text-ink-soft tabular-nums">Paused until {formatDateTimeIst(new Date(p.snoozeUntil))} IST.</span>
-                  <button type="button" disabled={busy !== null} onClick={() => save("resume", { snoozeMinutes: 0 }, "Break reminders resumed.")} className={`${btnGhost} ${focusRing} inline-flex items-center gap-1.5`}>
+                  <span className="text-[13px] text-ink-soft tabular-nums">Snoozed until {formatDateTimeIst(new Date(p.snoozeUntil))} IST.</span>
+                  <button type="button" disabled={busy !== null} onClick={() => save("resume", { snoozeMinutes: 0 }, "Break reminders are back on.")} className={`${btnGhost} ${focusRing} inline-flex items-center gap-1.5`}>
                     {spin("resume")}
                     Resume now
                   </button>
@@ -87,11 +92,11 @@ export function CoachSettings({ prefs, breakFeature }: { prefs: PreferencesView;
                     key={m}
                     type="button"
                     disabled={busy !== null}
-                    onClick={() => save(`snooze-${m}`, { snoozeMinutes: m }, `Break reminders paused for ${m} minutes.`)}
+                    onClick={() => save(`snooze-${m}`, { snoozeMinutes: m }, `Break reminders snoozed for ${m} minutes.`)}
                     className={`${btnGhost} ${focusRing} inline-flex items-center gap-1.5`}
                   >
                     {spin(`snooze-${m}`)}
-                    Pause for {m} min
+                    Snooze {m} min
                   </button>
                 ))
               )}

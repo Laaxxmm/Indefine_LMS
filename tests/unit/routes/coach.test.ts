@@ -90,12 +90,12 @@ describe("/coach", () => {
     expect(html).not.toContain("Your team");
   });
 
-  it("break controls when the firm turns them on: on/off and pause 30 / 60 min", async () => {
+  it("break controls when the firm turns them on: on/off and snooze 30 / 60 min", async () => {
     vi.stubEnv("FIRM_OS_BREAK_NUDGE", "1");
     const html = await renderHtml(await CoachPage());
     expect(html).toContain("at most 3 a day");
-    expect(html).toContain("Pause for 30 min");
-    expect(html).toContain("Pause for 60 min");
+    expect(html).toContain("Snooze 30 min");
+    expect(html).toContain("Snooze 60 min");
     expect(html).toContain("Only you see it");
   });
 

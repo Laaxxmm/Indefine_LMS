@@ -75,8 +75,9 @@ export function BoardTable({ items, caption }: { items: BoardItem[]; caption: st
 export function summaryFigures(s: SummaryView): { label: string; value: string }[] {
   return [
     { label: "Jobs done", value: String(s.done) },
-    { label: "Median, assigned to done", value: formatDuration(s.medianMs) },
-    { label: "Longest stage", value: s.bottleneck ? s.bottleneck.label : "–" },
+    // "—" for none, as the board writes a missing date.
+    { label: "Median, assigned to done", value: s.medianMs === null ? "—" : formatDuration(s.medianMs) },
+    { label: "Longest stage", value: s.bottleneck ? s.bottleneck.label : "—" },
     { label: "Open", value: String(s.open) },
     { label: "Past internal due", value: String(s.overdue) },
   ];

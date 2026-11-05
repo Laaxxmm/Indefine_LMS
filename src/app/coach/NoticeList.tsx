@@ -1,12 +1,13 @@
 "use client";
 
 // The person's undismissed notices: today's morning board, reminders and escalations (the coach's
-// and the close loop's). Each can be dismissed; the job's own page is one link away.
+// and the close loop's). Each can be dismissed; the job's own page is one link away. Rendered
+// inside the Notices card on /coach.
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
-import { btnGhost, btnSm, call, card, errorText } from "@/components/ui";
+import { btnGhost, call, errorText } from "@/components/ui";
 import { chip, focusRing, linkText } from "@/app/agents/parts";
 import type { NoticeView } from "@/lib/agents/coach/views";
 
@@ -19,52 +20,52 @@ const TONE: Record<string, string> = {
 export function NoticeList({ notices }: { notices: NoticeView[] }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ id: string; text: string } | null>(null);
 
   async function dismiss(id: string) {
     setBusy(id);
     setError(null);
     const r = await call(`/api/firm-os/coach/events/${encodeURIComponent(id)}/dismiss`);
     setBusy(null);
-    if (!r.ok) return setError(r.error);
+    if (!r.ok) return setError({ id, text: r.error ?? "Something went wrong" });
     router.refresh();
   }
 
   return (
-    <div className={`${card} !p-0`}>
-      <ul className="divide-y divide-border">
-        {notices.map((n) => (
-          <li key={n.id} className="px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap mb-1">
-                <span className={`${chip} ${TONE[n.kind] ?? "border-border bg-muted text-ink-soft"}`}>{n.label}</span>
-                <span className="text-[12px] text-ink-mute tabular-nums">{n.at}</span>
-              </div>
-              <p className="text-[13.5px] text-ink">{n.message}</p>
-              {n.link && (
-                <Link href={n.link.href} className={`${linkText} text-[13px]`}>
-                  {n.link.label}
-                </Link>
-              )}
+    <ul className="divide-y divide-border -mx-5 -mb-5">
+      {notices.map((n) => (
+        <li key={n.id} className="px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap mb-1">
+              <span className={`${chip} ${TONE[n.kind] ?? "border-border bg-muted text-ink-soft"}`}>{n.label}</span>
+              <span className="text-[12px] text-ink-mute tabular-nums">{n.at}</span>
             </div>
+            <p className="text-[13.5px] text-ink">{n.message}</p>
+            {n.link && (
+              <Link href={n.link.href} className={`${linkText} text-[13px]`}>
+                {n.link.label}
+              </Link>
+            )}
+          </div>
+          <span className="inline-flex flex-col items-start sm:items-end gap-1 shrink-0">
             <button
               type="button"
               onClick={() => dismiss(n.id)}
               disabled={busy !== null}
               aria-label={`Dismiss ${n.label.toLowerCase()}: ${n.message}`}
-              className={`${btnGhost} ${btnSm} ${focusRing} inline-flex items-center gap-1.5 self-start sm:self-center shrink-0`}
+              className={`${btnGhost} ${focusRing} inline-flex items-center gap-1.5`}
             >
               {busy === n.id && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />}
               Dismiss
             </button>
-          </li>
-        ))}
-      </ul>
-      {error && (
-        <p role="alert" className={`${errorText} px-5 pb-4`}>
-          {error}
-        </p>
-      )}
-    </div>
+            {error?.id === n.id && (
+              <span role="alert" className={errorText}>
+                {error.text}
+              </span>
+            )}
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }
