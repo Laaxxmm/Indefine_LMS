@@ -57,6 +57,9 @@ export function securityHeaders(opts: { dev?: boolean } = {}): Header[] {
     { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()" },
     // Popups we open (Teams meeting join) keep working; nothing else shares our browsing context.
     { key: "Cross-Origin-Opener-Policy", value: "same-origin-allow-popups" },
+    // No other site may embed our responses (an <img>/<script>/no-cors fetch of /api/... from a
+    // foreign page is blocked by the browser): deliverables, exports and JSON stay same-origin.
+    { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
     { key: "X-Permitted-Cross-Domain-Policies", value: "none" },
   ];
 }

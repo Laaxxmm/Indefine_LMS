@@ -203,10 +203,65 @@ async function ptax(): Promise<RawItem[]> {
 // ------------------------------------------------------------ GST Council
 const GSTC = "https://www.gstcouncil.gov.in";
 
-/** Posting date for files on sites that show no date: the server's Last-Modified header, as an IST day. */
-async function lastModified(url: string): Promise<string | null> {
+// ------------------------------------------------------------ which links are fetched
+// Document links come from portal HTML, so they are only fetched when they point at one of the
+// public notification sites this module already reads (security audit #24): http(s), default
+// port, no credentials, host on this list (a "*." entry also covers its subdomains). Every
+// redirect hop is checked again, so a listed site cannot bounce the request to an internal
+// address (cloud metadata, loopback, the office network). GET and HEAD only.
+export const STATUTORY_DOC_HOSTS: readonly string[] = [
+  "www.incometax.gov.in",
+  "www.labour.gov.in",
+  "labour.gov.in",
+  "www.icai.org",
+  "icai.org",
+  "*.icai.org", // announcements and PDFs on resource.cdn.icai.org
+  "cbic-gst.gov.in",
+  "www.cbic-gst.gov.in",
+  "ptax.karnataka.gov.in",
+  "www.gstcouncil.gov.in",
+  "gstcouncil.gov.in",
+  "pib.gov.in",
+  "www.pib.gov.in",
+];
+
+export function isStatutoryDocUrl(value: string): boolean {
+  let u: URL;
   try {
-    const r = await fetch(url, { method: "HEAD", headers: UA, redirect: "follow", signal: AbortSignal.timeout(30_000) });
+    u = new URL(value);
+  } catch {
+    return false;
+  }
+  if ((u.protocol !== "https:" && u.protocol !== "http:") || u.port || u.username || u.password) return false;
+  const host = u.hostname.toLowerCase();
+  return STATUTORY_DOC_HOSTS.some((h) => (h.startsWith("*.") ? host.endsWith(h.slice(1)) : host === h));
+}
+
+const hostOf = (value: string) => {
+  try {
+    return new URL(value).hostname || "that address";
+  } catch {
+    return "that address";
+  }
+};
+
+/** One GET or HEAD of a document link, following at most 3 redirects, every hop on STATUTORY_DOC_HOSTS. */
+async function fetchDoc(url: string, method: "GET" | "HEAD", timeoutMs: number): Promise<Response> {
+  let current = url;
+  for (let hop = 0; ; hop++) {
+    if (!isStatutoryDocUrl(current)) throw new Error(`not fetched: ${hostOf(current)} is not one of the statutory notification sites`);
+    const r = await fetch(current, { method, headers: UA, redirect: "manual", signal: AbortSignal.timeout(timeoutMs) });
+    const next = r.status >= 300 && r.status < 400 ? r.headers.get("location") : null;
+    if (!next) return r;
+    if (hop >= 3) throw new Error("too many redirects");
+    current = new URL(next, current).toString();
+  }
+}
+
+/** Posting date for files on sites that show no date: the server's Last-Modified header, as an IST day. */
+export async function lastModified(url: string): Promise<string | null> {
+  try {
+    const r = await fetchDoc(url, "HEAD", 30_000);
     const lm = r.headers.get("last-modified");
     return lm ? new Date(new Date(lm).getTime() + 330 * 60_000).toISOString().slice(0, 10) : null;
   } catch {
@@ -255,6 +310,20 @@ async function gstcouncil(frm: string, to: string): Promise<RawItem[]> {
 }
 
 // ------------------------------------------------------------ document text
+/** GET of a document link on the allow-list, retried twice on a network or HTTP error (not on a refused host). */
+async function getDoc(url: string): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const r = await fetchDoc(url, "GET", 40_000);
+      if (!r.ok) throw new Error(`HTTP ${r.status} ${url}`);
+      return r;
+    } catch (e) {
+      if (attempt === 2 || String((e as Error).message).startsWith("not fetched")) throw e;
+      await new Promise((res) => setTimeout(res, 2000));
+    }
+  }
+}
+
 /** Start of a document's text (PDF or HTML page); a bracketed marker when it can't be read. */
 export async function docText(url: string, maxc = 1800): Promise<string> {
   try {
@@ -264,7 +333,7 @@ export async function docText(url: string, maxc = 1800): Promise<string> {
       const i = t.indexOf("Ministry of");
       return i >= 0 ? t.slice(i, i + maxc) : t.slice(0, maxc);
     }
-    const r = await get(url);
+    const r = await getDoc(url);
     const buf = new Uint8Array(await r.arrayBuffer());
     if ((r.headers.get("content-type") || "").includes("pdf") || new TextDecoder().decode(buf.slice(0, 5)) === "%PDF-") return pdfTextFromBytes(buf, maxc);
     const html = new TextDecoder().decode(buf).replace(/<(script|style|nav|header|footer)\b.*?<\/\1>/gis, " ");

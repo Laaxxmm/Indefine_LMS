@@ -30,6 +30,12 @@ vi.mock("@/lib/prisma", async () => {
   };
 });
 vi.mock("next/navigation", async () => (await import("./harness")).navigationMock);
+// The comms-draft limiter fails closed without its bucket table (security audit #8); these tests are
+// about drafting, so stand in an allowing limiter (rate-limit behaviour has its own tests).
+vi.mock("@/lib/hardening/rate-limit", async (orig) => ({
+  ...(await orig<typeof import("@/lib/hardening/rate-limit")>()),
+  enforceRateLimit: vi.fn(async () => null),
+}));
 
 const { auth } = await import("@/lib/auth");
 const create = (await import("@/app/api/firm-os/comms/drafts/route")).POST;

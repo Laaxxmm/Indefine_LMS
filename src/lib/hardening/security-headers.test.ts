@@ -53,6 +53,8 @@ describe("next.config.ts headers", () => {
     expect(h["Referrer-Policy"]).toBe("strict-origin-when-cross-origin");
     expect(h["Permissions-Policy"]).toMatch(/^camera=\(\), microphone=\(\), geolocation=\(\), payment=\(\)/);
     expect(h["Cross-Origin-Opener-Policy"]).toBe("same-origin-allow-popups");
+    // Security audit: no Cross-Origin-Resource-Policy was sent; now same-origin on every path.
+    expect(h["Cross-Origin-Resource-Policy"]).toBe("same-origin");
     expect(nextConfig.poweredByHeader).toBe(false);
   });
 

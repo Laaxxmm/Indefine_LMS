@@ -1,6 +1,7 @@
 // LMS regression (Phase 12 §4): Microsoft Entra SSO is unchanged by Firm OS. The sign-in page
 // offers only "Sign in with Microsoft"; src/lib/auth.ts still pins the tenant, uses database
-// sessions, asks for identity scopes only, refuses deactivated people, and puts role / active /
+// sessions, asks for identity scopes only, refuses other tenants (issuer and the token's tid claim,
+// security audit #31), refuses deactivated people, and puts role / active /
 // department / level on the session (Firm OS roles are derived from exactly these fields).
 // NextAuth itself is replaced by a recorder so the real configuration object can be inspected.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -38,7 +39,7 @@ vi.mock("@/lib/prisma", () => ({
 vi.mock("next/navigation", async () => (await import("../unit/routes/harness")).navigationMock);
 
 type Callbacks = {
-  signIn: (a: { user: { email?: string }; account?: unknown }) => Promise<boolean>;
+  signIn: (a: { user: { email?: string }; account?: unknown; profile?: { tid?: string } }) => Promise<boolean>;
   session: (a: { session: { user: Record<string, unknown> }; user: Record<string, unknown> }) => Promise<{ user: Record<string, unknown> }>;
 };
 type Provider = { id: string; options: { authorization: { params: { scope: string } }; allowDangerousEmailAccountLinking: boolean; issuer?: string } };
@@ -56,7 +57,8 @@ async function loadAuth(issuer: string) {
   };
 }
 
-const TENANT_ISSUER = "https://login.microsoftonline.com/00000000-1111-2222-3333-444444444444/v2.0";
+const TENANT_ID = "00000000-1111-2222-3333-444444444444";
+const TENANT_ISSUER = `https://login.microsoftonline.com/${TENANT_ID}/v2.0`;
 
 beforeEach(() => {
   state.userRow = null;
@@ -76,18 +78,32 @@ describe("Entra SSO configuration (src/lib/auth.ts)", () => {
   });
 
   it("refuses every sign-in when the issuer is multi-tenant or missing (tenant pinning)", async () => {
-    for (const issuer of ["https://login.microsoftonline.com/common/v2.0", "https://login.microsoftonline.com/organizations/v2.0", ""]) {
+    for (const issuer of [
+      "https://login.microsoftonline.com/common/v2.0",
+      "https://login.microsoftonline.com/organizations/v2.0",
+      "https://login.microsoftonline.com/organizations",
+      "https://login.microsoftonline.com/common",
+      "",
+    ]) {
       const { callbacks } = await loadAuth(issuer);
-      expect(await callbacks.signIn({ user: { email: "priya@indefine.in" } }), issuer || "(empty)").toBe(false);
+      expect(await callbacks.signIn({ user: { email: "priya@indefine.in" }, profile: { tid: TENANT_ID } }), issuer || "(empty)").toBe(false);
     }
+  });
+
+  it("refuses an account whose id-token tenant (tid) is not the firm's, or carries none", async () => {
+    const { callbacks } = await loadAuth(TENANT_ISSUER);
+    state.userRow = { active: true };
+    expect(await callbacks.signIn({ user: { email: "priya@indefine.in" }, profile: { tid: "99999999-8888-7777-6666-555555555555" } })).toBe(false);
+    expect(await callbacks.signIn({ user: { email: "priya@indefine.in" }, profile: {} })).toBe(false);
+    expect(await callbacks.signIn({ user: { email: "priya@indefine.in" } })).toBe(false);
   });
 
   it("lets an active firm member in and keeps a deactivated one out (sign-in and existing sessions)", async () => {
     const { callbacks, adapter } = await loadAuth(TENANT_ISSUER);
     state.userRow = { active: true };
-    expect(await callbacks.signIn({ user: { email: "priya@indefine.in" } })).toBe(true);
+    expect(await callbacks.signIn({ user: { email: "priya@indefine.in" }, profile: { tid: TENANT_ID } })).toBe(true);
     state.userRow = { active: false };
-    expect(await callbacks.signIn({ user: { email: "gone@indefine.in" } })).toBe(false);
+    expect(await callbacks.signIn({ user: { email: "gone@indefine.in" }, profile: { tid: TENANT_ID } })).toBe(false);
     state.stored = { live: { session: {}, user: { active: true } }, revoked: { session: {}, user: { active: false } } };
     expect(await adapter.getSessionAndUser("live")).toBeTruthy();
     expect(await adapter.getSessionAndUser("revoked")).toBeNull();

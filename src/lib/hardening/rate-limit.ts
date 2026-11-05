@@ -16,9 +16,15 @@
 // to their in-process limiter if the bucket table cannot be reached.
 //
 // The counter is one atomic statement (INSERT … ON CONFLICT DO UPDATE … RETURNING), so concurrent
-// requests cannot both take the last slot. If the bucket table cannot be reached the request is
-// let through and the error logged: the routes behind the limit need the same database, and a
-// rate-limit fault must not become an outage (fail-open, documented in docs/runbooks/breach.md).
+// requests cannot both take the last slot.
+//
+// If the bucket table cannot be reached (Prisma pool timeout P2024 under a burst, database down),
+// every scope here FAILS CLOSED: the request gets 503 "The system is busy — try again in a minute"
+// with Retry-After, and the error is logged. All three scopes guard model-backed, costly work, so
+// letting requests through while the limiter is blind would let the very burst that exhausted the
+// pool run unmetered (security audit #8). A future low-risk scope may set "open" in FAILURE_MODE.
+// Agent runs are also capped per process (src/lib/hardening/concurrency.ts, applied in
+// src/lib/agents/service.ts), so a burst cannot exhaust the 5-connection pool in the first place.
 import { NextResponse } from "next/server";
 
 export const RATE_LIMIT_SCOPES = ["onboard", "agent-run", "comms-draft", "identifier-search", "companion"] as const;
@@ -33,6 +39,24 @@ export const DEFAULT_LIMITS: Readonly<Record<RateLimitScope, RateLimitRule>> = {
   "identifier-search": { limit: 10, windowMs: 10 * 60_000 }, // per person: exact PAN / GSTIN / phone / email lookups (no enumeration)
   companion: { limit: 20, windowMs: 60_000 }, // per pairing token: the side panel polls once a minute
 };
+
+/**
+ * What happens when the bucket store errors. "closed": 503 + Retry-After, the request does not run;
+ * "open": the request runs and the error is logged. Every current scope is model-backed: closed.
+ */
+export const FAILURE_MODE: Readonly<Record<RateLimitScope, "closed" | "open">> = {
+  onboard: "closed",
+  "agent-run": "closed",
+  "comms-draft": "closed",
+  // Module limiters (search, companion) fall back to their in-process limit when the store is down;
+  // with no fallback they refuse rather than run unmetered.
+  "identifier-search": "closed",
+  companion: "closed",
+};
+
+/** Seconds a client is asked to wait after a 503 (blind limiter, full agent-run queue). */
+export const BUSY_RETRY_AFTER_SEC = 60;
+export const BUSY_MESSAGE = "The system is busy — try again in a minute.";
 
 export const envName = (scope: RateLimitScope) => `RATE_LIMIT_${scope.toUpperCase().replace(/-/g, "_")}`;
 
@@ -191,14 +215,28 @@ export function tooManyRequests(d: RateLimitDecision): NextResponse {
   );
 }
 
-/** For route handlers: null when the request may proceed, else the 429 to return. Fails open on a store error. */
+/** The 503 for "try again shortly": a plain message and Retry-After in seconds. */
+export function serviceBusy(retryAfterSec = BUSY_RETRY_AFTER_SEC, message = BUSY_MESSAGE): NextResponse {
+  return NextResponse.json({ error: message, retryAfter: retryAfterSec }, { status: 503, headers: { "Retry-After": String(retryAfterSec) } });
+}
+
+/**
+ * For route handlers: null when the request may proceed, else the response to return — 429 over the
+ * limit, or 503 + Retry-After when the bucket store is unavailable (the scopes fail closed).
+ */
 export async function enforceRateLimit(scope: RateLimitScope, userId: string, opts: RateLimitOptions = {}): Promise<NextResponse | null> {
   let d: RateLimitDecision;
   try {
     d = await checkRateLimit(scope, userId, opts);
   } catch (e) {
-    console.error(`[rate-limit] ${scope}: store unavailable, request allowed: ${(e as Error).message}`);
-    return null;
+    const code = (e as { code?: unknown }).code;
+    const why = `${typeof code === "string" ? `${code} ` : ""}${(e as Error).message}`;
+    if (FAILURE_MODE[scope] === "open") {
+      console.error(`[rate-limit] ${scope}: store unavailable, request allowed (fail open): ${why}`);
+      return null;
+    }
+    console.error(`[rate-limit] ${scope}: store unavailable, request refused with 503 (fail closed): ${why}`);
+    return serviceBusy();
   }
   if (d.allowed) return null;
   console.warn(`[rate-limit] ${scope}: ${userId} over ${d.limit}; retry in ${d.retryAfterSec}s`);
@@ -231,7 +269,10 @@ export function scopedRateLimiter(scope: RateLimitScope, opts: RateLimitOptions 
         return { ok: false, retryAfterSec: d.retryAfterSec, retryAfterSeconds: d.retryAfterSec };
       } catch (e) {
         console.error(`[rate-limit] ${scope}: store unavailable, using the in-process limit: ${(e as Error).message}`);
-        if (!opts.fallback) return { ok: true, remaining: 0 };
+        if (!opts.fallback) {
+          if (FAILURE_MODE[scope] === "open") return { ok: true, remaining: 0 };
+          return { ok: false, retryAfterSec: BUSY_RETRY_AFTER_SEC, retryAfterSeconds: BUSY_RETRY_AFTER_SEC };
+        }
         const f = (await opts.fallback.hit(key, now)) as { ok: boolean; remaining?: number; retryAfterSec?: number; retryAfterSeconds?: number };
         if (f.ok) return { ok: true, remaining: f.remaining ?? 0 };
         const wait = f.retryAfterSec ?? f.retryAfterSeconds ?? 60;

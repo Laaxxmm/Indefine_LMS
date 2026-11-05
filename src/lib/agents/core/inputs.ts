@@ -7,9 +7,12 @@
 // with warning", logged once per gather), and the type allowlist (pdf, xlsx, xls, csv, json, docx).
 // ClientDocs is screened in "warn" mode for type, because the ROC agent reads an optional
 // notes.txt placed there; staff uploads are screened strictly. A rejected file stops the run.
+// ZIP-based files (xlsx, docx) are also inspected for decompression bombs and oversized sheets
+// (src/lib/hardening/xlsx-guard.ts: 64 MB unpacked, 50,000 rows, column IV, 300,000 cells).
 import type { DeliverableStore } from "@/lib/integrations/sharepoint/deliverable-store";
 import type { SharePointClient } from "@/lib/integrations/sharepoint/graph-client";
 import { screenUpload, type ScreenOptions, type UploadLogEntry } from "@/lib/hardening/uploads";
+import { XlsxLimitError, inspectXlsx, isZipBytes } from "@/lib/hardening/xlsx-guard";
 import type { InputFile, InputRequest, InputSource } from "./runner";
 
 /** Inputs larger than this in total stop the run (a register, not a data dump). */
@@ -43,6 +46,16 @@ export function screenedInputSource(inner: InputSource, opts: ScreenOptions & { 
         for (const f of files) {
           const r = await screenUpload({ name: f.name, bytes: f.bytes, type: f.contentType }, { ...opts, log, source: f.source });
           if (!r.ok) throw new InputRejectedError(f.name, r.reason);
+          // A ZIP-based file (xlsx, docx) is walked before any agent parses it: unpacked size,
+          // packing ratio, rows / columns / cells per sheet (src/lib/hardening/xlsx-guard.ts).
+          if (isZipBytes(f.bytes)) {
+            try {
+              await inspectXlsx(f.bytes);
+            } catch (e) {
+              if (e instanceof XlsxLimitError) throw new InputRejectedError(f.name, e.message);
+              throw e;
+            }
+          }
         }
       } finally {
         const flagged = entries.filter((e) => e.verdict !== "clean");

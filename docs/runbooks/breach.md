@@ -31,7 +31,7 @@ Do the steps that fit the incident; each is reversible.
 | A secret may have leaked | Rotate it (table below), redeploy, then check its use in the provider's console |
 | A SharePoint client site is exposed | SharePoint admin: remove the sharing link / external user; Purview audit log for that site |
 | Suspected database exposure | Rotate the Postgres password (Railway → Postgres → Variables → regenerate), update `DATABASE_URL` everywhere, redeploy |
-| Abuse of an API (bulk requests) | Lower the limit at once: `RATE_LIMIT_ONBOARD`, `RATE_LIMIT_AGENT_RUN`, `RATE_LIMIT_COMMS_DRAFT` (e.g. `1/1h`), redeploy. Note: the limiter lets requests through if its table is unreachable (fail-open), so also block the account |
+| Abuse of an API (bulk requests) | Lower the limit at once: `RATE_LIMIT_ONBOARD`, `RATE_LIMIT_AGENT_RUN`, `RATE_LIMIT_COMMS_DRAFT` (e.g. `1/1h`), redeploy. The limiter fails closed: if its table is unreachable, onboarding, agent runs and comms drafting answer 503 "The system is busy" until the database is back. Agent runs are also capped per process (`AGENT_RUN_CONCURRENCY`, default 2; `AGENT_RUN_QUEUE`, default 6 waiting) — set `AGENT_RUN_CONCURRENCY=1` to slow a burst further. Block the account as well |
 
 **Secrets to rotate** (names only; values live in Railway and GitHub secrets): `AUTH_SECRET`,
 `AUTH_MICROSOFT_ENTRA_ID_SECRET`, `MS_CLIENT_SECRET` (Graph app-only), the PnP certificate (SharePoint
@@ -50,8 +50,26 @@ query tab or `psql` against a restored copy where possible):
 SELECT "createdAt", "actorId", action, entity, "entityId", meta
 FROM "AuditEvent" WHERE "createdAt" BETWEEN '<from>' AND '<to>' ORDER BY "createdAt";
 
--- Downloads (exports) of client deliverables in the window
+-- Downloads (exports) of client deliverables, client reports, the client workbook and privacy exports in the window
 SELECT * FROM "AuditEvent" WHERE action = 'export' AND "createdAt" > '<from>';
+
+-- Who looked at client data (reads are audited as action 'view': client detail, agent run review,
+-- deliverable preview, comms draft). One row per person per record per hour, so a row means
+-- "opened at least once in that hour". meta carries ids/codes only (clientCode, jobTaskId, agent).
+SELECT "createdAt", "actorId", entity, "entityId", meta
+FROM "AuditEvent" WHERE action IN ('view', 'export') AND "createdAt" BETWEEN '<from>' AND '<to>'
+ORDER BY "createdAt";
+
+-- Who accessed client X (by its Firm OS code, e.g. ACME01, or its LMS client id)
+SELECT "createdAt", "actorId", action, entity, "entityId"
+FROM "AuditEvent"
+WHERE action IN ('view', 'export')
+  AND (meta->>'clientCode' = '<CODE>' OR (entity = 'Client' AND "entityId" = '<clientId>'))
+ORDER BY "createdAt";
+
+-- Everything one person read or exported in the window
+SELECT "createdAt", action, entity, "entityId", meta FROM "AuditEvent"
+WHERE "actorId" = '<userId>' AND action IN ('view', 'export') AND "createdAt" > '<from>' ORDER BY "createdAt";
 
 -- Model calls in the window (prompts are stored only as hashes of masked text)
 SELECT "createdAt", agent, task, provider, tier, anonymized, status FROM "ModelCall" WHERE "createdAt" > '<from>';
@@ -59,6 +77,11 @@ SELECT "createdAt", agent, task, provider, tier, anonymized, status FROM "ModelC
 -- Sessions active in the window
 SELECT "userId", expires FROM "Session" WHERE expires > '<from>';
 ```
+
+Read auditing (src/lib/audit/reads.ts) is deduplicated in each app process: with several Railway
+instances a person may appear once per instance per hour. Bulk exports (client reports, the client
+workbook) name no single client: treat every client in the export as accessed by that person. Reads
+that happen outside the app (SharePoint opened directly, Graph) are in Microsoft Purview, not here.
 
 Also check: Entra sign-in logs (risky sign-ins, unfamiliar locations), Microsoft Purview audit for the
 affected `CL-{Code}` sites, Railway deploy history (unexpected deploys), GitHub audit log (secrets,
