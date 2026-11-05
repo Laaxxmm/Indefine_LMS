@@ -163,8 +163,10 @@ function gstr3bSheets(a: Analysis, x: GstExtract): SheetSpec[] {
         { nature: "(a) Outward taxable supplies (other than zero rated, nil rated and exempted)", taxable: rupees(a.outward.taxable), ...taxCells(addTax(a.outward.tax, a.outward.carryForward)) },
         { nature: "(b) Outward taxable supplies (zero rated)", taxable: 0, ...taxCells(zero) },
         { nature: "(c) Other outward supplies (nil rated, exempted)", taxable: rupees(a.outward.nilExempt), ...taxCells(zero) },
-        { nature: "(d) Inward supplies (liable to reverse charge)", taxable: rupees(a.rcm.taxable), ...taxCells(a.rcm.tax) },
+        // A negative reverse-charge head (credit notes above the bills) is entered as nil; the excess is the memo row below.
+        { nature: "(d) Inward supplies (liable to reverse charge)", taxable: rupees(a.rcm.taxable), ...taxCells(addTax(a.rcm.tax, a.rcm.carryForward)) },
         { nature: "(e) Non-GST outward supplies", taxable: 0, ...taxCells(zero) },
+        { nature: "Memo: reverse-charge credit-note tax above this period's reverse-charge bills (not in (d); carried forward to a later period)", taxable: 0, ...taxCells(a.rcm.carryForward) },
         { nature: "Memo: credit-note tax above this period's output tax (not in (a); carried forward to a later period, not ITC)", taxable: 0, ...taxCells(a.outward.carryForward) },
       ],
     },
@@ -186,6 +188,7 @@ function gstr3bSheets(a: Analysis, x: GstExtract): SheetSpec[] {
         { details: "Memo: ITC deferred (in books, not in GSTR-2B)", ...taxCells(a.itc.deferred) },
         { details: "Memo: ITC held back (the model could not classify the bill; reviewer question)", ...taxCells(a.itc.heldBack) },
         { details: "Memo: ITC in GSTR-2B not in books (not claimed)", ...taxCells(a.itc.notBooked) },
+        { details: "Memo: reverse-charge credit notes above this period's 4(A)(3) credit (not in (A)(3); carried forward with the 3.1(d) excess)", ...taxCells(a.itc.a3CarryForward) },
         { details: "Memo: credit notes on s.17(5) blocked purchases above this period's blocked ITC (kept out of 4(A); never availed)", ...taxCells(a.itc.blockedNoteExcess) },
       ],
     },
@@ -217,6 +220,17 @@ function gstr3bSheets(a: Analysis, x: GstExtract): SheetSpec[] {
               {
                 topic: "Output tax carried forward",
                 note: `Credit notes exceed this period's invoices for ${taxNote(a.outward.carryForward)} (warn finding gst.negative-outward-tax). Table 3.1(a) cannot be negative, so that head is entered as nil and nothing is set off against it; carry the amount forward and reduce the same head's output tax in a later return. It is not input tax credit and cannot pay another head.`,
+              },
+            ]
+          : []),
+        ...(taxTotal(a.rcm.carryForward) + taxTotal(a.itc.a3CarryForward) > 0
+          ? [
+              {
+                topic: "Reverse charge carried forward",
+                note: `Reverse-charge credit notes exceed this period's reverse-charge bills (warn finding gst.negative-rcm): Table 3.1(d) excess ${taxNote(a.rcm.carryForward)}; Table 4(A)(3) excess ${taxNote(a.itc.a3CarryForward)}. Neither table takes a negative figure, so the head is entered as nil in both (no reverse-charge cash is paid on it and no 4(A)(3) credit is taken on it). Carry the amounts forward to reduce the same head's reverse-charge liability and its 4(A)(3) credit in a later return — partner to verify the treatment. The notes: ${a.purchases
+                  .filter((p) => p.rcm && p.docType === "CRN")
+                  .map((p) => `${p.number} (${p.supplier || "supplier"}, ${p.date})`)
+                  .join("; ")}.`,
               },
             ]
           : []),
