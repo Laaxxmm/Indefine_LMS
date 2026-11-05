@@ -5,26 +5,36 @@ import type { PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { sealGraphToken } from "@/lib/graph";
 import { ELEVATED_SCOPES, SIGNIN_SCOPES, scopesCover } from "@/lib/graph-scopes";
-import type { Adapter, AdapterAccount } from "next-auth/adapters";
+import type { Adapter, AdapterAccount, AdapterUser } from "next-auth/adapters";
+import { checkTenant, isTenantPinned, normalizeEmail } from "@/lib/auth-tenant";
 
 const adminEmails = (process.env.ADMIN_EMAILS ?? "")
   .split(",")
   .map((e) => e.trim().toLowerCase())
   .filter(Boolean);
 
-// Single-tenant only. A missing or multi-tenant issuer (/common/, /organizations/) would
-// let any Microsoft account in, and allowDangerousEmailAccountLinking below would then
-// hand it the employee row with the same email. Refuse every sign-in instead.
+// Single-tenant only. A missing or multi-tenant issuer (/common, /organizations, with or
+// without a trailing path) would let any Microsoft account in, and
+// allowDangerousEmailAccountLinking below would then hand it the employee row with the same
+// email. The issuer must name the firm's tenant GUID, and each sign-in's `tid` claim must be
+// that tenant (src/lib/auth-tenant.ts, security audit #31); otherwise every sign-in is refused.
 const issuer = process.env.AUTH_MICROSOFT_ENTRA_ID_ISSUER ?? "";
-const tenantPinned = !!issuer && !/\/(common|organizations|consumers)\//i.test(issuer);
+const tenantPinned = isTenantPinned(issuer);
 
 // The Prisma adapter writes the first Account row itself (after the signIn callback),
 // so token sealing has to happen inside linkAccount as well as in the callback.
+// E-mails are stored and looked up in lower case (normalizeEmail): the stock adapter does an
+// exact-case findUnique, so "John.Doe@Firm.in" from Entra would miss the org sync's
+// "john.doe@firm.in" row and create a duplicate User.
 // Cast: the shared client's global `omit` (Video.sourceText) narrows its type; the
 // adapter only touches User/Account/Session, which are unaffected.
 const baseAdapter = PrismaAdapter(prisma as unknown as PrismaClient);
 const adapter: Adapter = {
   ...baseAdapter,
+  createUser: (user) => baseAdapter.createUser!({ ...user, email: normalizeEmail(user.email) }),
+  getUserByEmail: async (email) =>
+    (await prisma.user.findFirst({ where: { email: { equals: normalizeEmail(email), mode: "insensitive" } }, orderBy: { createdAt: "asc" } })) as AdapterUser | null,
+  updateUser: (user) => baseAdapter.updateUser!(user.email ? { ...user, email: normalizeEmail(user.email) } : user),
   // In production without GRAPH_TOKEN_KEY sealGraphToken refuses to store a token (null → no column value).
   linkAccount: (account: AdapterAccount) =>
     baseAdapter.linkAccount!({
@@ -69,26 +79,34 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   pages: { signIn: "/" },
   callbacks: {
-    async signIn({ user, account }) {
+    async signIn({ user, account, profile }) {
       if (!tenantPinned) {
         console.error("[auth] AUTH_MICROSOFT_ENTRA_ID_ISSUER must name the firm's tenant; sign-in refused");
         return false;
       }
+      // The id token's tenant must be the firm's, whatever the issuer configuration says.
+      const tenant = checkTenant(issuer, (profile as { tid?: unknown } | undefined)?.tid);
+      if (!tenant.ok) {
+        console.error(`[auth] ${tenant.reason}`);
+        return false;
+      }
+      const email = user.email ? normalizeEmail(user.email) : null;
       // Someone the org sync has deactivated gets no new session, even if Entra
       // still lets them through (sync lag, or a licence removed but not disabled).
-      if (user.email) {
+      if (email) {
         const row = await prisma.user.findFirst({
-          where: { email: { equals: user.email, mode: "insensitive" } },
+          where: { email: { equals: email, mode: "insensitive" } },
           select: { active: true },
         });
         if (row && !row.active) return false;
       }
-      // Promote configured admins on first login
-      if (user.email && adminEmails.includes(user.email.toLowerCase())) {
-        await prisma.user.update({
-          where: { email: user.email },
-          data: { role: "ADMIN" },
-        }).catch(() => {});
+      // Promote configured admins on first login (case-insensitive: the row may predate lower-casing).
+      if (email && adminEmails.includes(email)) {
+        try {
+          await prisma.user.updateMany({ where: { email: { equals: email, mode: "insensitive" } }, data: { role: "ADMIN" } });
+        } catch {
+          /* first sign-in: the adapter creates the row after this callback; the org sync promotes too */
+        }
       }
       // Keep the freshest Microsoft OAuth tokens on the Account row. Auth.js
       // only writes tokens when an account is FIRST linked, so without this a
