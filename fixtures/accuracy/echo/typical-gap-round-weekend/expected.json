@@ -1,5 +1,6 @@
 {
   "description": "Typical gaps: a large round amount (warn) and a Saturday entry (info).",
+  "category": "typical-gap",
   "job": {
     "fy": "2026-27",
     "period": "2026-10"

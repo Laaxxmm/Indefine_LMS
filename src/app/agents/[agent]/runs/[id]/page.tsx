@@ -5,15 +5,17 @@ import { AlertTriangle, ArrowLeft, CheckCircle2, CircleHelp, Info, XCircle } fro
 import { prisma } from "@/lib/prisma";
 import type { FirmDb } from "@/lib/agents/core/runner";
 import { loadRunReview, type ChecklistView } from "@/lib/agents/views";
+import { loadCloseLoopView, type CloseLoopViewDb } from "@/lib/close-loop/review";
 import { card } from "@/components/ui";
 import { PartnerChip, RunStatusChip, StateChip, eyebrow, focusRing, pageTitle, sectionTitle } from "../../../parts";
-import { ActionBar, CommentsPanel, DeliverablesPanel, MistakeForm } from "./ReviewPanels";
+import { ActionBar, CloseLoopStatus, CommentsPanel, DeliverablesPanel, MistakeForm } from "./ReviewPanels";
 
 export const dynamic = "force-dynamic";
 
 // Agent pack review (DESIGN): left = checklist results with evidence, right = deliverables with
 // preview, comments; bottom bar = the one action the person can take now ("Approve pack",
-// "Request changes", "Submit for review", "Run agent"). There is no portal or send action.
+// "Request changes", "Submit for review", "Run agent"; after approval "Mark filed", then "Close in
+// Turia"). The person files on the portal; there is no portal, submit or send action here.
 
 type Tone = { label: string; box: string; icon: typeof XCircle; iconClass: string };
 
@@ -34,6 +36,7 @@ export default async function RunReviewPage({ params }: { params: Promise<{ agen
   const review = await loadRunReview(prisma as unknown as FirmDb, session.user, id, new Date());
   if (!review || review.run.agent !== agent) notFound();
   const { run, job, counts, actions } = review;
+  const closeLoop = await loadCloseLoopView(prisma as unknown as CloseLoopViewDb, session.user, job.id, { isLatest: review.isLatest });
 
   const authorIds = [...new Set(review.comments.map((c) => c.author))];
   const users = authorIds.length ? await prisma.user.findMany({ where: { id: { in: authorIds } }, select: { id: true, name: true, email: true } }) : [];
@@ -148,13 +151,14 @@ export default async function RunReviewPage({ params }: { params: Promise<{ agen
         </section>
 
         <div className="space-y-6">
+          {closeLoop && <CloseLoopStatus view={closeLoop} />}
           <DeliverablesPanel deliverables={review.deliverables} />
           <CommentsPanel runId={run.id} comments={comments} />
           {actions.proposeMistake && <MistakeForm runId={run.id} checks={review.checks} />}
         </div>
       </div>
 
-      <ActionBar agent={agent} runId={run.id} jobId={job.id} jobState={job.state} actions={actions} blockFails={counts.block} />
+      <ActionBar agent={agent} runId={run.id} jobId={job.id} jobState={job.state} actions={actions} blockFails={counts.block} closeLoop={closeLoop} />
     </div>
   );
 }

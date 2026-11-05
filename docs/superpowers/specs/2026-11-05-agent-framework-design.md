@@ -38,7 +38,7 @@ interface AgentDefinition<I, E> {
 1. Preconditions return an error and create **no** AgentRun: job not found, service mismatch, state not ASSIGNED/IN_PREP, no active SopPack.
 2. AgentRun RUNNING (attempt = previous runs + 1, `reviewNotes` = the request-changes note). ASSIGNED → IN_PREP by the agent actor.
 3. Rules = latest active pack (highest major.minor.patch) + APPROVED MistakeLog rules the pack does not already carry.
-4. LLM rules go through the router with `privacy: anonymize-then-cloud`, `difficulty: judgement`, task `<modelAgent>.check:<ruleId>`; the engine re-validates quote + location.
+4. LLM rules go through the router with `privacy: anonymize-then-cloud`, `difficulty: judgement`, task `<modelAgent>.check:<ruleId>`. The engine re-validates every verdict: the location must be non-empty and the quote must occur in the documents text the model was shown for that rule (`agent.llmContext`, default the extraction as JSON; whitespace and letter case normalised, nothing else). A verdict that fails either check — e.g. a fabricated quote or row — is recorded `na` with flag `llm-evidence-missing`, so it can neither raise nor clear a flag. Mistake replay checks recorded verdicts the same way.
 5. Deliverables are built with header `version = attempt` and uploaded create-only to `Working/`; a taken name takes the next `_v{n}`.
 6. Results persist in one transaction; then IN_PREP → AGENT_DONE; then the run is AGENT_DONE. Any failure → run FAILED with the error, job stays IN_PREP; files already in Working stay (never deleted).
 7. `inputsPurgeAt = finishedAt + 30 days` (ADR-006). The purge job itself is a later phase.
@@ -50,6 +50,8 @@ interface AgentDefinition<I, E> {
 - Approve pack: IN_REVIEW → APPROVED (state machine enforces reviewer / no self-approval / partner + note over block failures), run APPROVED, then each Working file is **copied** (bytes, so sha256 matches the Working row) to `Final/` at the next free `_v{n}` (never overwriting an earlier approval) and a Final Deliverable row is written. A copy failure returns 502 with a "Copy to Final" retry; the retry is idempotent (keyed on sha256).
 - Final files keep the blank "Reviewed by" header of the Working file: they are byte copies so the chain Working sha256 = Final sha256 holds. Regenerating with the reviewer name is a later option.
 - Comments are append-only AuditEvents (`action: comment`, `entity: AgentRun`); there is no comments table.
+- Close-loop hook (Phase 8): after each transition it makes (submit, request changes, approve) the service calls `deps.afterTransition` when one is injected. The close loop imports this service, so the service never imports the close loop: the three agents routes wrap their deps with `withCloseLoopHook()` (src/lib/close-loop/defaults.ts), which injects the same `afterTransition` the `/api/firm-os/jobs/[id]/state` route runs. Dependency injection was chosen over a hook registry: no import-order side effects, and tests pass a spy. On approve the hook runs first (`onApproved` copies to Final unless Final rows exist), then `finalizeRun`, which is idempotent and adds nothing after a hook copy. A failing hook is logged and never fails the transition.
+- After approval the review screen shows the human close-loop action (src/lib/close-loop/review.ts read model): "Mark filed" (ack ref required for GST / ROC / IncomeTax / TDS) → `/api/firm-os/jobs/[id]/filed`; in CLOSING "Close in Turia" (task ref + minutes) → `/turia-close`, which tries the close gate; the gate's reasons stay on screen until it passes; DONE shows the chip and the cycle time. Firm OS never files: the person files on the portal and records it.
 
 ## Deviation: the upload verb
 
@@ -60,14 +62,23 @@ Graph has no POST upload for file content: simple upload and upload-session chun
 ```
 fixtures/accuracy/{agent}/{fixtureId}/input/…          files read as InputSource "fixture"
 fixtures/accuracy/{agent}/{fixtureId}/recorded.json    { "<router task>": <model output> }
-fixtures/accuracy/{agent}/{fixtureId}/expected.json    { description?, job?: {fy, period, title},
+fixtures/accuracy/{agent}/{fixtureId}/expected.json    { description?, category?: "clean"|"typical-gap"|"trap",
+                                                         job?: {fy, period, title},
                                                          flags: [{ruleId, severity}],
                                                          figures: { name: integer (paise for amounts) },
                                                          deliverables: [{ name, sheets: [name | {name, columns}] }] }
 fixtures/accuracy/{agent}/_mistakes/*.json             approved mistakes { id, pattern?, ruleProposal, example }
 ```
 
-Scoring: flags compared as sets of (severity, ruleId) on run 1; P/R/F1 per severity (micro-averaged); empty = 1.0. Figures exact. Shape = fixed header block + expected sheets and column headers, no extra sheets or files. Every fixture runs 3× and canonical outcomes must be identical. Approved mistakes are promoted into the fixture pack and their examples replayed.
+Scoring: flags compared as sets of (severity, ruleId) on run 1; P/R/F1 per severity (micro-averaged), printed with support (tp/fp/fn) and `n/a` when nothing was expected or raised. Figures exact. Shape = fixed header block + expected sheets and column headers, no extra sheets or files. Every fixture runs 3× and canonical outcomes must be identical. Approved mistakes are promoted into the fixture pack and their examples replayed.
+
+Hardening after the independent audit (a "pass" could be produced without the agent reading its input):
+
+- **Input is parsed by code.** Figures and deterministic rules must derive from a deterministic parse of `input/` (the agent's `inputSchema` / `extract`), never from a recorded model response. Model calls are for genuine judgement (LLM rules) or for extraction that is then grounded; `recorded.json` holds only such outputs. Recorded responses no run asks for are reported as stale (not gated).
+- **Input sensitivity.** `AgentDefinition.probeMutation?(files: InputFile[]): InputFile[]` returns a copy of the files with one material value changed (e.g. one amount + ₹1). For every fixture the harness re-runs the agent on the mutated files with the same recordings; at least one computed figure or raised flag must differ from run 1, the probe run must succeed, and the files must actually change. Agents that are not `internal` must declare it ("input sensitivity: not declared" fails). Own scoreboard row.
+- **Split by rule kind, mode-aware gating.** block / warn P/R are reported for deterministic rules, LLM rules and all rules. In **recorded** mode (today) only the deterministic split is gated on the thresholds; the LLM split must match the recordings exactly (a code-path check — e.g. a verdict the engine rejects for a quote not in the input is a missed flag); the combined row is informational; the determinism row reads "3× identical (code path)". In **live** mode (Phase 2b, `--provider`) the LLM split and the combined row are gated on the thresholds too. The scoreboard names the mode. Info flags get an unthresholded row.
+- **No thin fixture sets** (production agents; `internal` agents exempt): at least `FIXTURE_MINIMUMS[agent]` fixtures (gst / roc / tax 15, books / audit 10, any other 15), every fixture has `category`, at least one fixture per category, at least one expected block and one expected warn flag across the set. Every fixture (all agents) must have non-empty `figures` when compute returns figures. Expected flags for rules the pack does not have fail the run.
+- **Self-tests** (`tests/fixtures/accuracy-selftest/`): the audit's probes are permanent fixtures that must FAIL (input amount + ₹1 with the recording unchanged; a duplicate ref injected only in the input; `_mistakes` removed; an LLM verdict quoting text absent from the input) or document behaviour (a changed stale extraction recording no longer affects figures).
 
 ## UI decisions
 

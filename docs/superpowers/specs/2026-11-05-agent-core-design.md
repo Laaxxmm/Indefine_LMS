@@ -93,9 +93,10 @@ Decisions:
   params?, origin? }`. For deterministic rules `check` is the registry key of the TS body; for LLM
   rules it is the question. `loadRuleSet` fails closed when a deterministic rule has no body.
 - Order: all deterministic rules, then LLM rules one at a time (deterministic order of calls).
-- LLM verdicts are validated: `{ status, evidence: { quote, location } }` with non-blank quote and
-  location, else status `na` + flag `llm-evidence-missing`. Throws → `na` + `llm-error`; no
-  `llmCheck` → `na` + `llm-unavailable`.
+- LLM verdicts are validated: `{ status, evidence: { quote, location } }` with a non-blank location
+  and a quote that occurs in the documents text the rule was given (`llmContext(rule, input)`,
+  default the input as JSON; whitespace and case normalised, nothing else), else status `na` +
+  flag `llm-evidence-missing`. Throws → `na` + `llm-error`; no `llmCheck` → `na` + `llm-unavailable`.
 - Fail-safe for code: a deterministic body that throws, or a missing body at run time, is recorded
   as `fail` with a flag, so a block rule that could not run stops approval.
 - Mistakes: `rulesFromMistakeLogs` takes only APPROVED rows with a `promotedToVersion` and a valid

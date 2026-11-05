@@ -4,6 +4,8 @@ import {
   createRuleRegistry,
   hasBlockingFailures,
   loadRuleSet,
+  normalizeEvidenceText,
+  quoteInContext,
   rulesFromMistakeLogs,
   runChecklist,
   summarizeChecklist,
@@ -94,6 +96,9 @@ describe("loadRuleSet", () => {
 
 describe("runChecklist", () => {
   const goodVerdict = { status: "fail", message: "RCM on legal fees not booked", evidence: { quote: "Legal fees - Adv. Rao 50,000", location: "purchase register row 14" } };
+  /** The documents text LLM rules are given in these tests; verdict quotes must occur in it. */
+  const DOCS = "purchase register row 14: Legal fees - Adv. Rao 50,000\nnotes p.2: No RCM supplies";
+  const llmContext = () => DOCS;
 
   it("runs deterministic rules first, then LLM rules", async () => {
     const calls: string[] = [];
@@ -101,7 +106,7 @@ describe("runChecklist", () => {
       calls.push(`llm:${rule.id}`);
       return goodVerdict;
     };
-    const results = await runChecklist(ok(loadRuleSet(pack, registry)), cleanInput, { registry, llmCheck: llm });
+    const results = await runChecklist(ok(loadRuleSet(pack, registry)), cleanInput, { registry, llmCheck: llm, llmContext });
     expect(results.map((r) => [r.ruleId, r.source])).toEqual([
       ["gst.gstin-format", "deterministic"],
       ["gst.series", "deterministic"],
@@ -150,7 +155,7 @@ describe("runChecklist", () => {
     });
     const results = await runChecklist(ok(loadRuleSet(pack, registry)), cleanInput, { registry, llmCheck: llm });
     expect(results[2]).toMatchObject({ status: "na", flags: ["llm-error"], message: expect.stringContaining("timeout") });
-    expect(llm).toHaveBeenCalledWith(expect.objectContaining({ id: "gst.rcm-liability" }), cleanInput);
+    expect(llm).toHaveBeenCalledWith(expect.objectContaining({ id: "gst.rcm-liability" }), cleanInput, JSON.stringify(cleanInput, null, 2));
   });
 
   it.each([
@@ -170,6 +175,7 @@ describe("runChecklist", () => {
   it("accepts an LLM pass with quote + location and uses the default message", async () => {
     const results = await runChecklist(ok(loadRuleSet(pack, registry)), cleanInput, {
       registry,
+      llmContext,
       llmCheck: async () => ({ status: "pass", evidence: { quote: "No RCM supplies", location: "notes p.2", link: "https://sp/doc" } }),
     });
     expect(results[2]).toMatchObject({ status: "pass", message: "RCM liability: OK", evidence: { quote: "No RCM supplies", location: "notes p.2", link: "https://sp/doc" } });
@@ -187,9 +193,63 @@ describe("runChecklist", () => {
   it("is deterministic across runs", async () => {
     const llm = async () => goodVerdict;
     const rs = ok(loadRuleSet(pack, registry));
-    const a = await runChecklist(rs, cleanInput, { registry, llmCheck: llm });
-    const b = await runChecklist(rs, cleanInput, { registry, llmCheck: llm });
+    const a = await runChecklist(rs, cleanInput, { registry, llmCheck: llm, llmContext });
+    const b = await runChecklist(rs, cleanInput, { registry, llmCheck: llm, llmContext });
     expect(a).toEqual(b);
+    expect(a[2].status).toBe("fail");
+  });
+
+  describe("LLM evidence must quote the documents the rule was given", () => {
+    const run = (verdict: unknown, ctx: (() => string) | null = llmContext) =>
+      runChecklist(ok(loadRuleSet(pack, registry)), cleanInput, { registry, llmCheck: async () => verdict, ...(ctx ? { llmContext: ctx } : {}) }).then((r) => r[2]);
+
+    it("a fabricated quote (not in the documents) is rejected: na + llm-evidence-missing, so it raises no flag", async () => {
+      const r = await run({ status: "fail", message: "RCM on security services", evidence: { quote: "Security services - Guardwell 1,20,000", location: "purchase register row 9" } });
+      expect(r).toMatchObject({ status: "na", flags: ["llm-evidence-missing"], evidence: null });
+      expect(r.message).toMatch(/quote does not occur in the documents/);
+    });
+
+    it("a fabricated quote cannot clear a rule either (pass is rejected the same way)", async () => {
+      expect(await run({ status: "pass", evidence: { quote: "All RCM liabilities booked", location: "notes p.1" } })).toMatchObject({ status: "na", flags: ["llm-evidence-missing"] });
+    });
+
+    it("only whitespace and letter case are normalised", async () => {
+      expect(await run({ status: "fail", evidence: { quote: "  legal FEES -   adv. rao\n50,000 ", location: "row 14" } })).toMatchObject({ status: "fail", flags: [] });
+      expect(await run({ status: "fail", evidence: { quote: "Legal fees, Adv. Rao 50,000", location: "row 14" } })).toMatchObject({ status: "na", flags: ["llm-evidence-missing"] });
+      expect(await run({ status: "fail", evidence: { quote: "Legal fees - Adv Rao 50000", location: "row 14" } })).toMatchObject({ status: "na", flags: ["llm-evidence-missing"] });
+    });
+
+    it("without an llmContext the quote is checked against the input as JSON", async () => {
+      expect(await run({ status: "pass", evidence: { quote: "29ABCDE1234F1Z5", location: "invoice INV-1" } }, null)).toMatchObject({ status: "pass", flags: [] });
+      expect(await run({ status: "pass", evidence: { quote: "No RCM supplies", location: "notes p.2" } }, null)).toMatchObject({ status: "na", flags: ["llm-evidence-missing"] });
+    });
+
+    it("the llmCheck receives exactly the documents text the quote is checked against", async () => {
+      const seen: string[] = [];
+      await runChecklist(ok(loadRuleSet(pack, registry)), cleanInput, {
+        registry,
+        llmContext: (rule, input) => `${rule.id}: ${input.invoices[0].no}`,
+        llmCheck: async (_rule, _input, context) => {
+          seen.push(context);
+          return goodVerdict;
+        },
+      });
+      expect(seen).toEqual(["gst.rcm-liability: INV-1"]);
+    });
+
+    it("an llmContext that throws gives na + llm-error", async () => {
+      const r = await run(goodVerdict, () => {
+        throw new Error("register unreadable");
+      });
+      expect(r).toMatchObject({ status: "na", flags: ["llm-error"], message: expect.stringContaining("register unreadable") });
+    });
+
+    it("quoteInContext / normalizeEvidenceText", () => {
+      expect(normalizeEvidenceText("  A\t b\n\nC ")).toBe("a b c");
+      expect(quoteInContext("b  C", "a b\nc d")).toBe(true);
+      expect(quoteInContext("   ", "anything")).toBe(false);
+      expect(quoteInContext("x", "")).toBe(false);
+    });
   });
 });
 

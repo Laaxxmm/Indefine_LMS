@@ -1,5 +1,6 @@
 {
   "description": "Clean: an invoice and its credit note (negative amount) - no round-amount or duplicate finding.",
+  "category": "clean",
   "job": {
     "fy": "2026-27",
     "period": "2026-10"

@@ -22,3 +22,6 @@ coverage/
 test-results/
 playwright-report/
 blob-report/
+
+# Independent audit scratch (probe fixtures, reports)
+.audit/

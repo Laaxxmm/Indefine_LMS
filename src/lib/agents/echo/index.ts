@@ -1,8 +1,11 @@
 // "Echo" — a dummy task agent that exercises the whole framework (Phase 4 QA gate). Input is a
-// small register (register.csv: ref,party,date,amount); the model turns it into rows; code adds
-// them up; three deterministic rules (block / warn / info) and one LLM rule check it; one XLSX
-// deliverable is produced. Two parameterised checks (amount-over, party-listed) are registered
-// but not in the default pack: approved MistakeLog rules use them (supervised loop tests).
+// small register (register.csv: ref,party,date,amount). The register is parsed by deterministic
+// code (echoInputSchema → parseEchoRegister); extract() only hands that parse on, compute() adds it
+// up, and three deterministic rules (block / warn / info) read it. The model is used for one thing
+// only: the related-party LLM rule, a genuine judgement over the party names. One XLSX deliverable
+// is produced. Two parameterised checks (amount-over, party-listed) are registered but not in the
+// default pack: approved MistakeLog rules use them (supervised loop tests). `probeMutation` adds
+// ₹1 to the first amount so the accuracy harness can prove the figures follow the input.
 // Hidden from the UI unless FIRM_OS_ECHO_AGENT is on (src/lib/agents/flags.ts).
 import { z } from "zod";
 import { createRuleRegistry, type ChecklistPack, type CheckOutcome } from "@/lib/agents/core/checklist";
@@ -10,7 +13,10 @@ import { formatInr } from "@/lib/agents/core/format";
 import type { AgentDefinition, CheckInput, InputFile } from "@/lib/agents/core/runner";
 
 export const ECHO_KEY = "echo";
-export const ECHO_EXTRACT_TASK = "system.echo-extract" as const;
+export const ECHO_REGISTER_FILE = "register.csv";
+export const ECHO_COLUMNS = ["ref", "party", "date", "amount"] as const;
+/** Router task of the one LLM rule (the only model call echo makes). */
+export const ECHO_RELATED_PARTY_TASK = "system.check:echo.related-party" as const;
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -23,24 +29,132 @@ export const EchoRowSchema = z.object({
 export const EchoExtractSchema = z.object({ rows: z.array(EchoRowSchema).max(5000) });
 export type EchoRow = z.infer<typeof EchoRowSchema>;
 export type EchoExtract = z.infer<typeof EchoExtractSchema>;
-export type EchoInput = { fileName: string; csv: string };
+/** The parsed register: rows come from register.csv by code, never from a model. */
+export type EchoInput = { fileName: string; csv: string; rows: EchoRow[] };
 export type EchoCheckInput = CheckInput<EchoInput, EchoExtract>;
 
+const rowLoc = (i: number) => `register.csv row ${i + 2}`; // +1 header, +1 one-based
+
+// ------------------------------------------------------------------ register parsing (code)
+
+/** One CSV line → trimmed cells. Double-quoted cells may hold commas; "" inside quotes is a quote. */
+export function splitCsvLine(line: string): string[] {
+  const cells: string[] = [];
+  let cur = "";
+  let quoted = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (quoted) {
+      if (ch === '"' && line[i + 1] === '"') {
+        cur += '"';
+        i += 1;
+      } else if (ch === '"') quoted = false;
+      else cur += ch;
+    } else if (ch === '"') quoted = true;
+    else if (ch === ",") {
+      cells.push(cur);
+      cur = "";
+    } else cur += ch;
+  }
+  cells.push(cur);
+  return cells.map((c) => c.trim());
+}
+
+const csvCell = (v: string) => (/[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+
+/** "15,000.50" / "-2000" / "8999.9" → integer paise, by string arithmetic (no floating point). */
+export function rupeesToPaise(text: string): number | null {
+  const t = text.replace(/[\s,]/g, "");
+  const m = /^(-?)(\d+)(?:\.(\d{1,2}))?$/.exec(t);
+  if (!m) return null;
+  const paise = Number(m[2]) * 100 + Number((m[3] ?? "").padEnd(2, "0"));
+  if (!Number.isSafeInteger(paise)) return null;
+  return m[1] === "-" ? -paise : paise;
+}
+
+/** Integer paise → "15000.50" (the register's own format). */
+export function paiseToRupees(paise: number): string {
+  const abs = Math.abs(paise);
+  return `${paise < 0 ? "-" : ""}${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, "0")}`;
+}
+
+const isCalendarDay = (d: string) => DAY.test(d) && !Number.isNaN(Date.parse(`${d}T00:00:00Z`)) && new Date(`${d}T00:00:00Z`).toISOString().slice(0, 10) === d;
+
+export type RegisterParse = { rows: EchoRow[]; errors: string[] };
+
+/** Parse register.csv (header ref,party,date,amount). Every problem is reported with its row. */
+export function parseEchoRegister(csv: string): RegisterParse {
+  const lines = csv.replace(/^﻿/, "").split(/\r?\n/);
+  const header = splitCsvLine(lines[0] ?? "").map((h) => h.toLowerCase());
+  if (header.join(",") !== ECHO_COLUMNS.join(",")) {
+    return { rows: [], errors: [`${ECHO_REGISTER_FILE}: header must be ${ECHO_COLUMNS.join(",")} (found "${lines[0] ?? ""}")`] };
+  }
+  const rows: EchoRow[] = [];
+  const errors: string[] = [];
+  lines.slice(1).forEach((line, i) => {
+    if (!line.trim()) return;
+    const at = rowLoc(i);
+    const cells = splitCsvLine(line);
+    if (cells.length !== ECHO_COLUMNS.length) {
+      errors.push(`${at}: expected ${ECHO_COLUMNS.length} columns, found ${cells.length}`);
+      return;
+    }
+    const [ref, party, date, amount] = cells;
+    const amountPaise = rupeesToPaise(amount);
+    const problems: string[] = [];
+    if (!ref) problems.push("ref is blank");
+    if (!party) problems.push("party is blank");
+    if (!isCalendarDay(date)) problems.push(`date "${date}" is not a YYYY-MM-DD calendar date`);
+    if (amountPaise === null) problems.push(`amount "${amount}" is not a rupee amount`);
+    if (problems.length) {
+      errors.push(`${at}: ${problems.join("; ")}`);
+      return;
+    }
+    const row = EchoRowSchema.safeParse({ ref, party, date, amountPaise });
+    if (row.success) rows.push(row.data);
+    else errors.push(`${at}: ${row.error.issues.map((x) => `${x.path.join(".")} ${x.message}`).join("; ")}`);
+  });
+  if (!errors.length && !rows.length) errors.push(`${ECHO_REGISTER_FILE} has a header but no entries`);
+  return { rows, errors };
+}
+
 const InputFileZ = z.object({ name: z.string(), source: z.string(), bytes: z.instanceof(Buffer) }).passthrough();
+const findRegister = <T extends { name: string }>(files: T[]) => files.find((x) => x.name.toLowerCase() === ECHO_REGISTER_FILE);
 
 export const echoInputSchema = z
   .array(InputFileZ)
   .transform((files, ctx): EchoInput => {
-    const f = files.find((x) => x.name.toLowerCase() === "register.csv");
+    const f = findRegister(files);
     const csv = f?.bytes.toString("utf8").trim() ?? "";
     if (!f) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "register.csv is missing from the client documents" });
     else if (!csv) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "register.csv is empty" });
-    return { fileName: f?.name ?? "register.csv", csv };
+    const parsed = csv ? parseEchoRegister(csv) : { rows: [], errors: [] };
+    for (const message of parsed.errors) ctx.addIssue({ code: z.ZodIssueCode.custom, message });
+    return { fileName: f?.name ?? ECHO_REGISTER_FILE, csv, rows: parsed.rows };
   }) as unknown as z.ZodType<EchoInput, z.ZodTypeDef, InputFile[]>;
+
+/**
+ * Accuracy-harness probe: the same files with ₹1 added to the first entry's amount. Returns new
+ * file objects; the originals are not modified. Files without a parsable first entry come back
+ * unchanged (the harness then reports that the probe changed nothing).
+ */
+export function echoProbeMutation(files: InputFile[]): InputFile[] {
+  const f = findRegister(files);
+  if (!f) return files;
+  const lines = f.bytes.toString("utf8").split(/\r?\n/);
+  const i = lines.findIndex((l, n) => n > 0 && l.trim() !== "");
+  if (i < 0) return files;
+  const cells = splitCsvLine(lines[i]);
+  const paise = cells.length === ECHO_COLUMNS.length ? rupeesToPaise(cells[3]) : null;
+  if (paise === null) return files;
+  cells[3] = paiseToRupees(paise + 100);
+  const next = [...lines];
+  next[i] = cells.map(csvCell).join(",");
+  return files.map((x) => (x === f ? { ...x, bytes: Buffer.from(next.join("\n"), "utf8") } : x));
+}
 
 // ------------------------------------------------------------------ rules
 
-const rowLoc = (i: number) => `register.csv row ${i + 2}`; // +1 header, +1 one-based
 const weekday = (day: string) => new Date(`${day}T00:00:00Z`).getUTCDay();
 const num = (v: unknown, fallback: number) => (typeof v === "number" && Number.isSafeInteger(v) ? v : fallback);
 
@@ -70,7 +184,7 @@ export const echoRegistry = createRuleRegistry<EchoCheckInput>({
     return {
       status: "fail",
       message: `${hits.length} large round amount(s), e.g. ${r.ref} for ₹${formatInr(r.amountPaise / 100)}`,
-      evidence: { quote: `${r.ref},${r.party},${r.date},${(r.amountPaise / 100).toFixed(2)}`, location: rowLoc(i) },
+      evidence: { quote: `${r.ref},${r.party},${r.date},${paiseToRupees(r.amountPaise)}`, location: rowLoc(i) },
     };
   },
   "echo.weekend-dates": ({ extracted }): CheckOutcome => {
@@ -84,7 +198,7 @@ export const echoRegistry = createRuleRegistry<EchoCheckInput>({
     const i = extracted.rows.findIndex((r) => r.amountPaise > limit);
     if (i < 0) return { status: "pass" };
     const r = extracted.rows[i];
-    return { status: "fail", message: `${r.ref} is above ₹${formatInr(limit / 100)}`, evidence: { quote: `${r.ref} ${(r.amountPaise / 100).toFixed(2)}`, location: rowLoc(i) } };
+    return { status: "fail", message: `${r.ref} is above ₹${formatInr(limit / 100)}`, evidence: { quote: `${r.ref} ${paiseToRupees(r.amountPaise)}`, location: rowLoc(i) } };
   },
   "echo.party-listed": ({ extracted }, rule): CheckOutcome => {
     const listed = new Set((Array.isArray(rule.params?.parties) ? rule.params.parties : []).map((p) => String(p).trim().toLowerCase()));
@@ -125,22 +239,12 @@ export const echoAgent: AgentDefinition<EchoInput, EchoExtract> = {
   inputSchema: echoInputSchema,
   defaultChecklist: ECHO_CHECKLIST,
   checklistRegistry: echoRegistry,
+  probeMutation: echoProbeMutation,
 
-  async extract({ input, notes, model }) {
-    return model({
-      task: ECHO_EXTRACT_TASK,
-      privacy: "anonymize-then-cloud",
-      difficulty: "sop",
-      schema: EchoExtractSchema,
-      messages: [
-        {
-          role: "system",
-          content:
-            "Convert the register into rows. Copy ref and party exactly as written. date is YYYY-MM-DD. amountPaise is the amount in paise as an integer (₹1,234.50 → 123450). Do not add up or total anything.",
-        },
-        { role: "user", content: `${notes ? `Reviewer notes: ${notes}\n\n` : ""}${input.fileName}:\n${input.csv}` },
-      ],
-    });
+  // No model call: the rows are the code parse of register.csv (inputSchema). The model only
+  // answers the related-party LLM rule.
+  async extract({ input }) {
+    return EchoExtractSchema.parse({ rows: input.rows });
   },
 
   compute({ rows }) {
@@ -154,7 +258,7 @@ export const echoAgent: AgentDefinition<EchoInput, EchoExtract> = {
   },
 
   llmContext({ extracted }) {
-    return extracted.rows.map((r, i) => `${rowLoc(i)}: ${r.ref} | ${r.party} | ${r.date} | ${(r.amountPaise / 100).toFixed(2)}`).join("\n");
+    return extracted.rows.map((r, i) => `${rowLoc(i)}: ${r.ref} | ${r.party} | ${r.date} | ${paiseToRupees(r.amountPaise)}`).join("\n");
   },
 
   deliverables({ extracted, figures }) {

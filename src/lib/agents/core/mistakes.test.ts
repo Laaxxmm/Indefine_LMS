@@ -2,7 +2,7 @@
 // new SopPack minor version → the next run loads it and catches the case. Plus the guard rails.
 import { Prisma } from "@prisma/client";
 import { describe, expect, it } from "vitest";
-import { ECHO_CHECKLIST, ECHO_EXTRACT_TASK, echoAgent } from "@/lib/agents/echo";
+import { ECHO_CHECKLIST, echoAgent } from "@/lib/agents/echo";
 import { getAgent } from "@/lib/agents/registry";
 import type { RuleDefinition } from "./checklist";
 import { decideMistake, diffPacks, proposeMistake, replayMistake, type HumanActor, type MistakeDeps } from "./mistakes";
@@ -15,6 +15,8 @@ const SHADOW = {
     { ref: "INV-9", party: "Shadow Holdings", date: "2026-10-06", amountPaise: 990000 },
   ],
 };
+/** register.csv whose code parse is SHADOW. */
+const SHADOW_CSV = ["ref,party,date,amount", "INV-1,Acme Traders,2026-10-05,15000.00", "INV-9,Shadow Holdings,2026-10-06,9900.00"].join("\n");
 const PROPOSAL = {
   id: "echo.watch-shadow",
   title: "Watch-list party (Shadow Holdings)",
@@ -29,7 +31,7 @@ const manager: HumanActor = { kind: "human", userId: "u-meera", roles: ["staff",
 const partner: HumanActor = { kind: "human", userId: "u-partner", roles: ["staff", "partner"] };
 
 function world() {
-  const w = echoWorld({ responses: { [ECHO_EXTRACT_TASK]: SHADOW, [RELATED_TASK]: PASS_VERDICT } });
+  const w = echoWorld({ register: SHADOW_CSV, responses: { [RELATED_TASK]: PASS_VERDICT } });
   const mdeps: MistakeDeps = { db: w.db, now: w.deps.now, agent: (k) => getAgent(k) };
   return { ...w, mdeps };
 }
@@ -179,5 +181,8 @@ describe("diffPacks / replayMistake", () => {
     const verdict = { status: "fail", evidence: { quote: "Shadow Holdings", location: "row 3" } };
     expect((await replayMistake(echoAgent, llm, { extracted: SHADOW, llmVerdict: verdict })).caught).toBe(true);
     expect((await replayMistake(echoAgent, llm, { extracted: SHADOW })).caught).toBe(false);
+    // A recorded verdict whose quote is not in the example's documents is rejected, not caught.
+    const fabricated = { status: "fail", evidence: { quote: "Shadow Holdings (director's brother)", location: "row 3" } };
+    expect(await replayMistake(echoAgent, llm, { extracted: SHADOW, llmVerdict: fabricated })).toMatchObject({ caught: false, result: { status: "na", flags: ["llm-evidence-missing"] } });
   });
 });

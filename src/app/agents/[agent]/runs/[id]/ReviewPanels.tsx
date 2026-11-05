@@ -4,9 +4,10 @@ import { useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Download, Eye, Loader2 } from "lucide-react";
 import type { JobTaskState } from "@prisma/client";
-import { btnGhost, btnPrimary, btnWarn, call, card, errorText, field } from "@/components/ui";
+import { btnGhost, btnPrimary, btnWarn, call, card, errorText, field, type CallResult } from "@/components/ui";
 import type { CommentView, DeliverableView, RunReview } from "@/lib/agents/views";
-import { focusRing, sectionTitle } from "../../../parts";
+import type { CloseLoopAction, CloseLoopView } from "@/lib/close-loop/review";
+import { StateChip, focusRing, sectionTitle } from "../../../parts";
 
 type Preview = { sheets: { name: string; rows: string[][]; truncated: boolean }[] };
 
@@ -286,7 +287,245 @@ export function MistakeForm({ runId, checks }: { runId: string; checks: string[]
   );
 }
 
+// ------------------------------------------------------------------ filing and close
+//
+// After approval a person files on the portal; Firm OS never files, submits or sends anything.
+// "Mark filed" records the acknowledgement (/api/firm-os/jobs/[id]/filed); "Close in Turia"
+// records the Turia task ref + minutes (/turia-close), which tries the close gate. DONE is set only
+// by the gate. The form helpers are plain functions so tests can drive them with a mocked call().
+
+type Send = (url: string, body?: unknown) => Promise<CallResult>;
+type Fail = { ok: false; error: string };
+
+export type FilingForm = { ackRef: string; turiaTaskRef: string; minutes: string };
+export type FiledBody = { ackRef: string | null; turiaTaskRef: string | null; minutes: number | null };
+export type TuriaCloseBody = { turiaTaskRef: string; minutes: number };
+
+/** "" → null (when optional); a whole number 1..6000 → that number; anything else → the error to show. */
+export function parseMinutes(value: string, required: boolean): { ok: true; minutes: number | null } | Fail {
+  const s = value.trim();
+  if (!s) return required ? { ok: false, error: "Enter the minutes logged in Turia" } : { ok: true, minutes: null };
+  const n = Number(s);
+  if (!Number.isInteger(n) || n < 1) return { ok: false, error: "Minutes must be a whole number more than 0" };
+  if (n > 6000) return { ok: false, error: "Minutes must be at most 6,000" };
+  return { ok: true, minutes: n };
+}
+
+/** Body for "Mark filed"; the acknowledgement reference is required where the service has one. */
+export function filedBody(ack: CloseLoopView["ack"], f: FilingForm): { ok: true; body: FiledBody } | Fail {
+  const ackRef = f.ackRef.trim();
+  if (ack.required && !ackRef) return { ok: false, error: `Enter the ${ack.label} from the portal acknowledgement` };
+  const m = parseMinutes(f.minutes, false);
+  if (!m.ok) return m;
+  return { ok: true, body: { ackRef: ackRef || null, turiaTaskRef: f.turiaTaskRef.trim() || null, minutes: m.minutes } };
+}
+
+/** Body for "Close in Turia": both the task ref and minutes (> 0) are required. */
+export function turiaCloseBody(f: Pick<FilingForm, "turiaTaskRef" | "minutes">): { ok: true; body: TuriaCloseBody } | Fail {
+  const turiaTaskRef = f.turiaTaskRef.trim();
+  if (!turiaTaskRef) return { ok: false, error: "Enter the Turia task ref" };
+  const m = parseMinutes(f.minutes, true);
+  if (!m.ok) return m;
+  return { ok: true, body: { turiaTaskRef, minutes: m.minutes! } };
+}
+
+const jobUrl = (jobId: string, what: "filed" | "turia-close") => `/api/firm-os/jobs/${encodeURIComponent(jobId)}/${what}`;
+
+/** POST /filed. The job moves to CLOSING (the hook issues the Turia close step). */
+export async function recordFiling(jobId: string, ack: CloseLoopView["ack"], f: FilingForm, send: Send = call): Promise<{ ok: true; state: string } | Fail> {
+  const b = filedBody(ack, f);
+  if (!b.ok) return b;
+  const r = await send(jobUrl(jobId, "filed"), b.body);
+  if (!r.ok) return { ok: false, error: r.error ?? "Something went wrong" };
+  return { ok: true, state: String(r.data.state ?? "") };
+}
+
+export type TuriaCloseOutcome = { ok: true; done: true } | { ok: true; done: false; reasons: string[] } | Fail;
+
+/** POST /turia-close. DONE when the close gate passed; otherwise the gate's reasons (job stays CLOSING). */
+export async function recordTuriaClose(jobId: string, f: Pick<FilingForm, "turiaTaskRef" | "minutes">, send: Send = call): Promise<TuriaCloseOutcome> {
+  const b = turiaCloseBody(f);
+  if (!b.ok) return b;
+  const r = await send(jobUrl(jobId, "turia-close"), b.body);
+  if (!r.ok) return { ok: false, error: r.error ?? "Something went wrong" };
+  const close = (r.data.close ?? {}) as { ok?: boolean; reasons?: unknown };
+  if (close.ok) return { ok: true, done: true };
+  return { ok: true, done: false, reasons: Array.isArray(close.reasons) ? close.reasons.map(String) : [] };
+}
+
+const turiaLine = (t: CloseLoopView["turia"]) =>
+  t.status === "closed" ? `Closed in Turia · ${t.ref} · ${t.minutes} min logged` : t.status === "issued" ? "Close step issued; not recorded as done yet" : "Not recorded yet";
+
+/** Where the job's close loop stands: Final file, filing, Turia close, the gate's reasons, DONE. */
+export function CloseLoopStatus({ view }: { view: CloseLoopView }) {
+  const id = useId();
+  const { ack } = view;
+  return (
+    <section aria-labelledby={`${id}-h`} className={card}>
+      <h2 id={`${id}-h`} className={sectionTitle}>
+        Filing and close
+      </h2>
+      <p className="text-[13px] text-ink-soft mb-3">
+        Firm OS never files anything. You file on the portal, record the acknowledgement here and close the Turia task; the job is done when the close gate finds the Final file in SharePoint and the Turia
+        close.
+      </p>
+      <dl className="grid grid-cols-[minmax(0,10rem)_1fr] gap-x-4 gap-y-2 text-[13px]">
+        <dt className="text-ink-mute">Final file</dt>
+        <dd>{view.hasFinal ? "In the Final folder" : "Not in Final yet"}</dd>
+        <dt className="text-ink-mute">Filed</dt>
+        <dd className="tabular-nums">{view.filedAt ? `Recorded ${view.filedAt}` : "Not recorded yet"}</dd>
+        <dt className="text-ink-mute">{ack.label}</dt>
+        <dd className={view.ackRef ? "font-mono break-all" : ""}>{view.ackRef ?? (ack.required ? "Not recorded yet" : "Not needed for this service")}</dd>
+        <dt className="text-ink-mute">Turia</dt>
+        <dd className="tabular-nums">{turiaLine(view.turia)}</dd>
+      </dl>
+      {view.gate && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-[13px] mt-4" role="status">
+          <p className="font-bold">Still closing: the close gate did not pass</p>
+          <ul className="list-disc pl-5 mt-1 space-y-0.5">
+            {view.gate.reasons.map((r) => (
+              <li key={r}>{r}</li>
+            ))}
+          </ul>
+          <p className="text-[11.5px] mt-1.5 tabular-nums">Checked {view.gate.at}</p>
+        </div>
+      )}
+      {view.done && (
+        <div className="flex items-center gap-2 flex-wrap mt-4">
+          <StateChip state="DONE" />
+          <span className="text-[13px] tabular-nums">
+            Closed {view.done.at} · cycle time {view.done.cycleTime}
+          </span>
+        </div>
+      )}
+    </section>
+  );
+}
+
+const fieldLabel = "flex flex-col gap-1 text-[11px] font-bold text-ink-mute";
+
+/** The bar's content for the close-loop action: Mark filed, Close in Turia, or Check again. */
+export function CloseLoopActions({ view }: { view: CloseLoopView }) {
+  const router = useRouter();
+  const id = useId();
+  const [f, setF] = useState<FilingForm>({ ackRef: "", turiaTaskRef: view.turia.ref ?? view.suggestedTuriaRef ?? "", minutes: view.turia.minutes ? String(view.turia.minutes) : "" });
+  const [busy, setBusy] = useState<CloseLoopAction | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const set = (k: keyof FilingForm) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
+  const { ack } = view;
+
+  async function markFiled() {
+    setBusy("mark-filed");
+    setError(null);
+    setNotice(null);
+    const r = await recordFiling(view.jobId, ack, f);
+    setBusy(null);
+    if (!r.ok) return setError(r.error);
+    router.refresh();
+  }
+
+  async function closeInTuria(input: Pick<FilingForm, "turiaTaskRef" | "minutes">) {
+    setBusy(view.action);
+    setError(null);
+    setNotice(null);
+    const r = await recordTuriaClose(view.jobId, input);
+    setBusy(null);
+    if (!r.ok) return setError(r.error);
+    if (!r.done) setNotice("Turia close recorded. The job stays CLOSING until the close gate passes; what is missing is listed under Filing and close.");
+    router.refresh();
+  }
+
+  const spinner = busy && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />;
+  const primary = `${btnPrimary} ${focusRing} inline-flex items-center gap-1.5 ml-auto`;
+  const refField = (label: string, required: boolean) => (
+    <label htmlFor={`${id}-ref`} className={`${fieldLabel} w-full sm:w-[200px]`}>
+      {label}
+      <input id={`${id}-ref`} value={f.turiaTaskRef} onChange={set("turiaTaskRef")} maxLength={100} required={required} autoComplete="off" className={`${field} ${focusRing}`} />
+    </label>
+  );
+  const minutesField = (label: string, required: boolean) => (
+    <label htmlFor={`${id}-min`} className={`${fieldLabel} w-full sm:w-[160px]`}>
+      {label}
+      <input id={`${id}-min`} type="number" min={1} max={6000} step={1} inputMode="numeric" value={f.minutes} onChange={set("minutes")} required={required} className={`${field} ${focusRing}`} />
+    </label>
+  );
+  const messages = (
+    <>
+      {error && (
+        <p role="alert" className={`${errorText} w-full`}>
+          {error}
+        </p>
+      )}
+      {notice && (
+        <p role="status" className="text-[13px] text-ink-soft w-full">
+          {notice}
+        </p>
+      )}
+    </>
+  );
+
+  if (view.action === "mark-filed") {
+    return (
+      <>
+        <p className="text-[13px] text-ink-soft w-full">
+          <span className="font-bold text-ink">Filed by you on the portal — record the acknowledgement here.</span>{" "}
+          {view.hasFinal ? "Pack approved and in Final." : "Pack approved; no Final file is recorded yet, and the job cannot close without one."} Firm OS never files anything.
+        </p>
+        <label htmlFor={`${id}-ack`} className={`${fieldLabel} w-full sm:w-[240px]`}>
+          {ack.label} {ack.required ? "(required)" : "(optional)"}
+          <input id={`${id}-ack`} value={f.ackRef} onChange={set("ackRef")} maxLength={64} required={ack.required} autoComplete="off" className={`${field} font-mono ${focusRing}`} />
+        </label>
+        {refField("Turia task ref (optional)", false)}
+        {minutesField("Minutes logged in Turia (optional)", false)}
+        <button type="button" disabled={!!busy || (ack.required && !f.ackRef.trim())} onClick={markFiled} className={primary}>
+          {spinner}Mark filed
+        </button>
+        {messages}
+      </>
+    );
+  }
+
+  if (view.action === "retry-close") {
+    return (
+      <>
+        <p className="text-[13px] text-ink-soft">
+          Turia close recorded ({view.turia.ref}, {view.turia.minutes} min). The job closes when every check under Filing and close passes.
+        </p>
+        <button type="button" disabled={!!busy} onClick={() => closeInTuria({ turiaTaskRef: view.turia.ref ?? "", minutes: String(view.turia.minutes ?? "") })} className={primary}>
+          {spinner}Check again
+        </button>
+        {messages}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <p className="text-[13px] text-ink-soft w-full">
+        <span className="font-bold text-ink">Close the task in Turia yourself</span> — log your minutes and mark it complete there — then record the Turia task ref and minutes here.
+        {view.ackRef && ` Filed with ${ack.label} ${view.ackRef}.`}
+      </p>
+      {refField("Turia task ref", true)}
+      {minutesField("Minutes logged in Turia", true)}
+      <button type="button" disabled={!!busy || !f.turiaTaskRef.trim() || !f.minutes.trim()} onClick={() => closeInTuria(f)} className={primary}>
+        {spinner}Close in Turia
+      </button>
+      {messages}
+    </>
+  );
+}
+
 // ------------------------------------------------------------------ bottom bar
+
+/** What the bar says when this person has no action (never a file, submit or send action). */
+const IDLE: Partial<Record<JobTaskState, string>> = {
+  APPROVED: "Pack approved and in Final. A person files it on the portal and records the acknowledgement.",
+  FILED_BY_HUMAN: "Filed by a person on the portal. The job closes when the Final file and the Turia close are confirmed.",
+  CLOSING: "Filed by a person on the portal. The job closes when the Final file and the Turia close are confirmed.",
+  DONE: "Done: filed, Final file in SharePoint and the Turia task closed.",
+};
+const IDLE_APPROVED_NO_FINAL = "Pack approved; no Final file is recorded yet. A person files it on the portal and records the acknowledgement.";
 
 export function ActionBar({
   agent,
@@ -295,6 +534,7 @@ export function ActionBar({
   jobState,
   actions,
   blockFails,
+  closeLoop = null,
 }: {
   agent: string;
   runId: string;
@@ -302,6 +542,7 @@ export function ActionBar({
   jobState: JobTaskState;
   actions: RunReview["actions"];
   blockFails: number;
+  closeLoop?: CloseLoopView | null;
 }) {
   const router = useRouter();
   const id = useId();
@@ -398,12 +639,11 @@ export function ActionBar({
         </button>
       </>
     );
+  } else if (closeLoop?.action) {
+    content = <CloseLoopActions view={closeLoop} />;
   } else {
-    content = (
-      <p className="text-[13px] text-ink-mute">
-        {jobState === "APPROVED" ? "Pack approved and in Final. A person files it on the portal and records the acknowledgement." : "No action for you on this job right now."}
-      </p>
-    );
+    const idle = jobState === "APPROVED" && closeLoop && !closeLoop.hasFinal ? IDLE_APPROVED_NO_FINAL : IDLE[jobState];
+    content = <p className="text-[13px] text-ink-mute">{idle ?? "No action for you on this job right now."}</p>;
   }
 
   return (
