@@ -2,7 +2,12 @@
 // (privacy 'anonymize-then-cloud', difficulty 'sop'). The router masks PII before the model sees
 // it and unmasks the answer; the dictionary built here adds staff names and the client's
 // company name so those are masked too. Everything after the model is deterministic code.
+//
+// ADR-009 (prompt injection): the sentence may be pasted from a client e-mail, so it is untrusted
+// data. It is screened first (a hit is never sent: the person answers the clarifier's questions
+// and is told why) and fenced as data in the message the model receives.
 import type { DictionaryEntry, ModelRequest, RouterResult } from "@/lib/ai/router";
+import { UNTRUSTED_DATA_INSTRUCTION, fenceUntrusted, patternLabel, screenText, visibleExcerpt, type WithheldItem } from "@/lib/agents/core/guardrails/untrusted";
 import { resolvePeople, type Person } from "./people";
 import { ENTITY_TYPES, ExtractedSpec, FIRM_SERVICES, mergeSpec, normalizeExtracted, type PartialSpec } from "./spec";
 
@@ -28,12 +33,15 @@ export interface ExtractResult {
   needsReview: boolean;
   /** Plain-language notes for the person (queued, low confidence…). */
   notes: string[];
+  /** Set when the injection screen kept the sentence away from the model (ADR-009). */
+  withheld?: WithheldItem[];
 }
 
 export const EXTRACT_TASK = "onboarding.extract-spec" as const;
 
 export const EXTRACT_SYSTEM = [
-  "You turn one instruction from a chartered accountant in India into structured onboarding fields for a new client.",
+  "You turn one onboarding request written by a chartered accountant in India into structured onboarding fields for a new client.",
+  UNTRUSTED_DATA_INSTRUCTION,
   "Fill only what the instruction states. Leave a field out when it is not stated; never guess codes, numbers or names.",
   `entityType is one of: ${Object.entries(ENTITY_TYPES).map(([k, v]) => `${k} (${v})`).join(", ")}.`,
   `services[].service is one of: ${FIRM_SERVICES.join(", ")}. "Income tax"/ITR → IncomeTax; "bookkeeping"/"accounts" → Books; "annual filing"/"MCA" → ROC; "GST returns" → GST; "engagement letter" → Engagement.`,
@@ -67,9 +75,19 @@ export function buildDictionary(prompt: string, people: Person[] = []): Dictiona
   return [...out.values()];
 }
 
+/** What the person reads when the screen keeps their sentence away from the model. */
+export const WITHHELD_NOTE =
+  "Part of this sentence reads like an instruction to the AI system rather than a description of the client, so it was not sent for automatic reading. Answer the questions below instead.";
+
 export async function extractSpec(prompt: string, opts: ExtractOptions): Promise<ExtractResult> {
   const people = opts.people ?? [];
   const notes: string[] = [];
+  const patterns = screenText(prompt);
+  if (patterns.length) {
+    const withheld: WithheldItem[] = [{ location: "onboarding request", patterns, excerpt: visibleExcerpt(prompt) }];
+    const { spec, candidates } = resolvePeople(mergeSpec(opts.base ?? {}, {}), people);
+    return { spec, candidates, needsReview: true, notes: [`${WITHHELD_NOTE} (The text ${patternLabel(patterns[0])}.)`], withheld };
+  }
   // A router failure (no API key, provider outage, budget used up) must not stop onboarding:
   // the person answers the clarifier's questions instead. The reason is shown, never hidden.
   const result = await opts.router
@@ -79,7 +97,7 @@ export async function extractSpec(prompt: string, opts: ExtractOptions): Promise
       difficulty: "sop",
       messages: [
         { role: "system", content: EXTRACT_SYSTEM },
-        { role: "user", content: prompt },
+        { role: "user", content: fenceUntrusted(prompt) },
       ],
       schema: ExtractedSpec,
       dictionary: buildDictionary(prompt, people),

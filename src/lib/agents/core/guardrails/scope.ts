@@ -8,6 +8,7 @@ import type { FirmService } from "@prisma/client";
 import type { ZodType, ZodTypeDef } from "zod";
 import type { Difficulty } from "@/lib/ai/router";
 import type { ChecklistPack } from "../checklist";
+import { UNTRUSTED_DATA_INSTRUCTION } from "./untrusted";
 
 /** Files as the runner gathered them (structurally the runner's InputFile). */
 export type SniffFile = { name: string; bytes: Buffer; contentType?: string };
@@ -94,10 +95,14 @@ export const DEPARTMENT_LABELS: Readonly<Record<FirmService, string>> = Object.f
   Engagement: "Engagement letters",
 });
 
-/** First block of every scoped system prompt (ADR-008 §1). Changing it changes every task's prompt-lock hash. */
+/**
+ * First block of every scoped system prompt (ADR-008 §1; ADR-009 adds the untrusted-documents
+ * line). Changing it changes every task's prompt-lock hash.
+ */
 export const FIRM_PREAMBLE = [
   "You are a drafting assistant for a firm of chartered accountants in India. Your output is a draft that a qualified reviewer checks; it is never final.",
   "Use only the documents supplied in this conversation. Do not rely on memory, outside knowledge or assumptions about the client.",
+  UNTRUSTED_DATA_INSTRUCTION,
   "Never add up, total, net off or recompute any amount, tax, interest or fee. Copy numbers exactly as they are written in the documents.",
   "Never give filing, legal or audit-opinion advice.",
   'If the documents do not contain the answer, return "insufficient_evidence" in the field that allows it. Do not guess.',

@@ -30,7 +30,10 @@ export type ResultFlag =
   // ADR-008 guardrails (scoped agents): recorded as na, each one a question for the reviewer.
   | "insufficient-evidence" // the model abstained: the documents do not answer the rule
   | "model-disagreement" // two independent reads of a high-stakes rule disagreed
-  | "out-of-scope"; // LLM rule the agent's scope does not own: no model call
+  | "out-of-scope" // LLM rule the agent's scope does not own: no model call
+  // ADR-009 (framework rows the runner adds, recorded as fail for the reviewer).
+  | "possible-prompt-injection" // document text read like an instruction to the AI: withheld from the model
+  | "input-truncated"; // documents longer than the task's per-call input limit: the rest was not sent
 
 /** Flags that turn an LLM rule into an open question for the reviewer / a client document request. */
 export const QUESTION_FLAGS: readonly ResultFlag[] = ["insufficient-evidence", "model-disagreement", "out-of-scope"];

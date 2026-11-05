@@ -96,7 +96,7 @@ describe("ADR-008 scope", () => {
   it("department Books, one versioned high-stakes task, every rule owned, a closed abstainable schema", () => {
     expect(validateScope(echoAgent)).toEqual([]);
     expect(ECHO_SCOPE).toMatchObject({ department: "Books", ruleIds: ECHO_CHECKLIST.rules.map((r) => r.id) });
-    expect(ECHO_RELATED_PARTY_SPEC).toMatchObject({ name: "echo.check:echo.related-party", version: 1, highStakes: true, difficulty: "judgement" });
+    expect(ECHO_RELATED_PARTY_SPEC).toMatchObject({ name: "echo.check:echo.related-party", version: 2, highStakes: true, difficulty: "judgement" });
     expect(unboundedStrings(ECHO_RELATED_PARTY_SPEC.schema)).toEqual([]);
     expect(ECHO_RELATED_PARTY_SPEC.schema.safeParse({ status: "insufficient_evidence" }).success).toBe(true);
     expect(echoAgent.inputProbes?.map((p) => p.input)).toEqual(["register.csv"]);

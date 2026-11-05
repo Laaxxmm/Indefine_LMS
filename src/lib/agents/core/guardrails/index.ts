@@ -40,5 +40,27 @@ export type { GroundIssue, GroundResult } from "./grounding";
 
 export { AGREEMENT_TIER, needsAgreement, settleAgreement } from "./agreement";
 
-export { GUARDRAIL_RUN_ACTION, createGuardrailSession, emptyGuardrailStats } from "./session";
+export { GUARDRAIL_RUN_ACTION, MAX_RECORDED_INJECTIONS, WITHHELD_QUOTE, createGuardrailSession, emptyGuardrailStats } from "./session";
 export type { GuardrailSession, GuardrailSessionDeps, GuardrailStats, ModelCallRequest } from "./session";
+
+export {
+  INJECTION_FLAG,
+  INJECTION_PATTERNS,
+  INJECTION_RULE_ID,
+  INJECTION_RULE_TITLE,
+  UNTRUSTED_DATA_INSTRUCTION,
+  UNTRUSTED_FENCE,
+  fenceUntrusted,
+  injectionResult,
+  lineLocation,
+  neutraliseMarkers,
+  normaliseForScreen,
+  patternLabel,
+  screenDocumentText,
+  screenForModel,
+  screenItems,
+  screenText,
+  visibleExcerpt,
+  withheldNote,
+} from "./untrusted";
+export type { InjectionPattern, InjectionPatternId, ItemScreen, ScreenOptions, ScreenResult, WithheldItem } from "./untrusted";

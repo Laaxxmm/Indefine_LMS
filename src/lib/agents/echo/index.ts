@@ -266,7 +266,7 @@ export function validateEchoVerdict(v: ScopedVerdict, documents: string): string
 
 export const ECHO_RELATED_PARTY_SPEC: ModelTaskSpec<ScopedVerdict, string> = {
   name: ECHO_RELATED_PARTY_TASK,
-  version: 1,
+  version: 2,
   schema: ScopedVerdictSchema,
   systemPrompt: [
     CHECK_TASK_INSTRUCTIONS,

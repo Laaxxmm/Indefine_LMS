@@ -10,7 +10,13 @@
 // insufficient_evidence answer is a reviewer question (rule gst.model-questions) and a client
 // document request — never a silent default. An HSN printed plainly ("HSN 7318") is read by code
 // and never sent to the model. The model never sees or returns an amount.
+//
+// ADR-009 (prompt injection): every ledger line and description is screened before the call
+// (screenForModel); an item whose text reads like an instruction to the AI is not sent — it
+// becomes insufficient_evidence with a plain note (a reviewer question) and the run carries the
+// `possible-prompt-injection` reviewer flag with its location.
 import type { ModelCaller } from "@/lib/agents/core/runner";
+import { screenForModel, withheldNote } from "@/lib/agents/core/guardrails/untrusted";
 import {
   CLASSIFY_LEDGERS_TASK,
   HsnReadOutputSchema,
@@ -23,6 +29,8 @@ import {
   validateHsnItem,
   validateLedgerItem,
   validateLedgers,
+  hsnLine,
+  ledgerLine,
   type HsnPrompt,
   type LedgerPrompt,
 } from "./tasks";
@@ -62,8 +70,11 @@ export function hsnPrompts(sales: SalesDoc[]): HsnPrompt[] {
 const insufficientLedger = (key: string, note: string): LedgerClass => ({ ledger: key, blockedCategory: INSUFFICIENT, rcmService: INSUFFICIENT, evidence: null, note });
 
 export async function classifyLedgers(purchases: PurchaseDoc[], model: ModelCaller, notes: string | null): Promise<LedgerClass[]> {
-  const prompts = ledgerPrompts(purchases);
-  if (!prompts.length) return [];
+  const all = ledgerPrompts(purchases);
+  if (!all.length) return [];
+  const { clean: prompts, withheld } = screenForModel(model, CLASSIFY_LEDGERS_TASK, all, { text: ledgerLine, location: (p) => p.location });
+  const held = new Map(withheld.map((w) => [w.item.key, insufficientLedger(w.item.key, withheldNote(w))]));
+  if (!prompts.length) return all.map((p) => held.get(p.key) as LedgerClass);
   const out = await model({
     task: CLASSIFY_LEDGERS_TASK,
     privacy: "anonymize-then-cloud",
@@ -80,12 +91,15 @@ export async function classifyLedgers(purchases: PurchaseDoc[], model: ModelCall
     const issues = validateLedgerItem(item, byKey);
     got.set(key, issues.length ? insufficientLedger(key, `ungrounded answer dropped: ${issues[0]}`) : { ledger: key, blockedCategory: item.blockedCategory, rcmService: item.rcmService, evidence: item.evidence, note: item.note ?? "" });
   }
-  return prompts.map((p) => got.get(p.key) ?? insufficientLedger(p.key, "the model gave no answer for this ledger"));
+  return all.map((p) => held.get(p.key) ?? got.get(p.key) ?? insufficientLedger(p.key, "the model gave no answer for this ledger"));
 }
 
 export async function readHsn(sales: SalesDoc[], model: ModelCaller): Promise<HsnRead[]> {
-  const prompts = hsnPrompts(sales);
-  if (!prompts.length) return [];
+  const all = hsnPrompts(sales);
+  if (!all.length) return [];
+  const { clean: prompts, withheld } = screenForModel(model, READ_HSN_TASK, all, { text: hsnLine, location: (p) => p.location });
+  const held = new Map<string, HsnRead>(withheld.map((w) => [w.item.description, { description: w.item.description, location: w.item.location, hsn: null, status: INSUFFICIENT, evidence: null, note: withheldNote(w) }]));
+  if (!prompts.length) return all.map((p) => held.get(p.description) as HsnRead);
   const out = await model({
     task: READ_HSN_TASK,
     privacy: "anonymize-then-cloud",
@@ -104,7 +118,7 @@ export async function readHsn(sales: SalesDoc[], model: ModelCaller): Promise<Hs
     else if (item.hsn === INSUFFICIENT) got.set(p.description, { description: p.description, location: p.location, hsn: null, status: INSUFFICIENT, evidence: item.evidence, note: "no HSN/SAC written in the description" });
     else got.set(p.description, { description: p.description, location: p.location, hsn: item.hsn, status: "read", evidence: item.evidence, note: "" });
   }
-  return prompts.map((p) => got.get(p.description) ?? { description: p.description, location: p.location, hsn: null, status: INSUFFICIENT, evidence: null, note: "the model gave no answer for this description" });
+  return all.map((p) => held.get(p.description) ?? got.get(p.description) ?? { description: p.description, location: p.location, hsn: null, status: INSUFFICIENT, evidence: null, note: "the model gave no answer for this description" });
 }
 
 /** Model classifications on top of parsed data. */

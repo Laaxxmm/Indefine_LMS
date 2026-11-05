@@ -62,8 +62,8 @@ describe("runAgent — happy path", () => {
     // The register is parsed by code: the only model calls are the related-party LLM rule, read
     // twice because echo marks it high-stakes (ADR-008): the second read pinned to HARD.
     expect(w.router.calls.map((c) => [c.task, c.taskVersion, c.runId, c.privacy, c.secondOpinion ?? false, c.forceTier ?? null])).toEqual([
-      [RELATED_TASK, 1, "run-1", "anonymize-then-cloud", false, null],
-      [RELATED_TASK, 1, "run-1", "anonymize-then-cloud", true, "HARD"],
+      [RELATED_TASK, 2, "run-1", "anonymize-then-cloud", false, null],
+      [RELATED_TASK, 2, "run-1", "anonymize-then-cloud", true, "HARD"],
     ]);
     expect(w.router.calls[0].messages[1].content).toContain("register.csv row 2: INV-1 | Acme Traders | 2026-10-05 | 15000.00");
     expect(rows(w.db, "auditEvent")).toEqual([

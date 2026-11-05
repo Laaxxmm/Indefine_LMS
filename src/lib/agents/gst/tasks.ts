@@ -169,7 +169,7 @@ export type GstModelTask = AnyTaskSpec & {
 export const GST_MODEL_TASKS: readonly GstModelTask[] = Object.freeze([
   {
     name: CLASSIFY_LEDGERS_TASK,
-    version: 1,
+    version: 2,
     schema: LedgerClassOutputSchema,
     systemPrompt: LEDGER_SYSTEM,
     system: LEDGER_SYSTEM,
@@ -177,10 +177,10 @@ export const GST_MODEL_TASKS: readonly GstModelTask[] = Object.freeze([
     ruleIds: ["gst.blocked-credit", "gst.rcm-liability", "gst.model-questions"],
     builtBy: "agent",
   },
-  { name: READ_HSN_TASK, version: 1, schema: HsnReadOutputSchema, systemPrompt: HSN_SYSTEM, system: HSN_SYSTEM, difficulty: "sop", ruleIds: ["gst.hsn-digits", "gst.model-questions"], builtBy: "agent" },
+  { name: READ_HSN_TASK, version: 2, schema: HsnReadOutputSchema, systemPrompt: HSN_SYSTEM, system: HSN_SYSTEM, difficulty: "sop", ruleIds: ["gst.hsn-digits", "gst.model-questions"], builtBy: "agent" },
   {
     name: FREE_SUPPLIES_TASK,
-    version: 1,
+    version: 2,
     schema: ScopedVerdictSchema,
     systemPrompt: FREE_SUPPLIES_SYSTEM,
     system: FREE_SUPPLIES_SYSTEM,

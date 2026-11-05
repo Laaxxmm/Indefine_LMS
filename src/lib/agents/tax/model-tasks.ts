@@ -16,6 +16,7 @@ import { z } from "zod";
 import { CHECK_TASK_INSTRUCTIONS, type ModelTaskSpec } from "@/lib/agents/core/guardrails/scope";
 import { INSUFFICIENT_EVIDENCE, ScopedVerdictSchema, type ScopedVerdict } from "@/lib/agents/core/guardrails/schema";
 import { EvidenceSchema, INSUFFICIENT, quoteIn } from "@/lib/agents/core/guardrails/shared";
+import { screenItems } from "@/lib/agents/core/guardrails/untrusted";
 import { AIS_INCOME_CATEGORIES, isAisIncome, type AisMatch } from "./analyse";
 import type { TaxRuleSet } from "./data";
 import type { AisLine, OtherSource, TaxInput } from "./parse";
@@ -49,20 +50,42 @@ export type AisMatchContext = { ais: AisLine[]; books: OtherSource[] };
 const aisLabel = (ais: AisLine[], line: AisLine) => `ais.csv row ${ais.indexOf(line) + 2}`;
 const bookLabel = (books: OtherSource[], b: OtherSource) => `organiser.json otherSources[${books.indexOf(b)}]`;
 
-/** The text the model is shown: labelled AIS income lines and books ledgers, without amounts. */
-export function aisPrompt(ctx: AisMatchContext): { aisLines: Map<string, { label: string; text: string; line: AisLine }>; bookLines: Map<string, { label: string; text: string; book: OtherSource }>; text: string } {
-  const aisLines = new Map<string, { label: string; text: string; line: AisLine }>();
-  for (const l of ctx.ais.filter((x) => isAisIncome(x.category))) {
-    const label = aisLabel(ctx.ais, l);
-    aisLines.set(l.id, { label, text: `${label}: ${l.id} | ${l.category} | ${l.source} | ${l.description}`, line: l });
-  }
-  const bookLines = new Map<string, { label: string; text: string; book: OtherSource }>();
-  for (const b of ctx.books) {
+type PromptLine = { id: string; label: string; text: string };
+
+/** Every AIS income line and books ledger as the model would see it (before the injection screen). */
+export function aisPromptLines(ctx: AisMatchContext): { ais: (PromptLine & { line: AisLine })[]; books: (PromptLine & { book: OtherSource })[] } {
+  const ais = ctx.ais
+    .filter((x) => isAisIncome(x.category))
+    .map((l) => {
+      const label = aisLabel(ctx.ais, l);
+      return { id: l.id, label, text: `${label}: ${l.id} | ${l.category} | ${l.source} | ${l.description}`, line: l };
+    });
+  const books = ctx.books.map((b) => {
     const label = bookLabel(ctx.books, b);
-    bookLines.set(b.id, { label, text: `${label}: ${b.id} | ${b.nature} | ${b.payer}`, book: b });
-  }
+    return { id: b.id, label, text: `${label}: ${b.id} | ${b.nature} | ${b.payer}`, book: b };
+  });
+  return { ais, books };
+}
+export const AIS_SCREEN = { text: (l: PromptLine) => l.text, location: (l: PromptLine) => l.label };
+
+/**
+ * The text the model is shown: labelled AIS income lines and books ledgers, without amounts. A line
+ * that reads like an instruction to the AI is withheld (ADR-009): not sent, never matched from an
+ * answer, a reviewer question instead (`withheldAis`).
+ */
+export function aisPrompt(ctx: AisMatchContext): {
+  aisLines: Map<string, { label: string; text: string; line: AisLine }>;
+  bookLines: Map<string, { label: string; text: string; book: OtherSource }>;
+  text: string;
+  withheldAis: string[];
+} {
+  const all = aisPromptLines(ctx);
+  const ais = screenItems(all.ais, AIS_SCREEN);
+  const books = screenItems(all.books, AIS_SCREEN);
+  const aisLines = new Map(ais.clean.map((v) => [v.id, { label: v.label, text: v.text, line: v.line }]));
+  const bookLines = new Map(books.clean.map((v) => [v.id, { label: v.label, text: v.text, book: v.book }]));
   const text = `AIS income lines:\n${[...aisLines.values()].map((v) => v.text).join("\n")}\n\nBooks ledgers (other sources):\n${[...bookLines.values()].map((v) => v.text).join("\n")}`;
-  return { aisLines, bookLines, text };
+  return { aisLines, bookLines, text, withheldAis: ais.withheld.map((w) => w.item.id) };
 }
 
 function itemIssues(m: AisMatchOutput["matches"][number], p: ReturnType<typeof aisPrompt>): string[] {
@@ -92,12 +115,14 @@ export function validateAisMatches(out: AisMatchOutput, ctx: AisMatchContext): s
   return issues;
 }
 
-/** One validated outcome per AIS income line: invalid → dropped, missing → unanswered. */
+/** One validated outcome per AIS income line: invalid or withheld by the injection screen → dropped, missing → unanswered. */
 export function acceptedAisMatches(out: AisMatchOutput, ctx: AisMatchContext): AisMatch[] {
   const p = aisPrompt(ctx);
   const byId = new Map<string, AisMatchOutput["matches"]>();
   for (const m of out.matches) byId.set(m.aisId, [...(byId.get(m.aisId) ?? []), m]);
-  return [...p.aisLines.keys()].map((id) => {
+  const held = new Set(p.withheldAis);
+  return [...new Set(aisPromptLines(ctx).ais.map((l) => l.id))].map((id): AisMatch => {
+    if (held.has(id) && !p.aisLines.has(id)) return { aisId: id, outcome: "dropped", bookId: null };
     const answers = byId.get(id) ?? [];
     if (!answers.length) return { aisId: id, outcome: "unanswered", bookId: null };
     if (answers.length > 1 || itemIssues(answers[0], p).length) return { aisId: id, outcome: "dropped", bookId: null };
@@ -122,7 +147,7 @@ export function matchAisUserMessage(rules: Pick<TaxRuleSet, "act" | "ay" | "fy">
 
 export const TAX_MATCH_AIS_SPEC: ModelTaskSpec<AisMatchOutput, TaxInput, "tax"> = {
   name: "tax.match-ais",
-  version: 1,
+  version: 2,
   schema: AisMatchSchema,
   systemPrompt: MATCH_AIS_SYSTEM,
   difficulty: "sop",
@@ -136,7 +161,7 @@ export const validateForeignAssetVerdict = (out: ScopedVerdict, context: string)
 
 export const TAX_FOREIGN_ASSET_CHECK_SPEC: ModelTaskSpec<ScopedVerdict, string, "tax"> = {
   name: "tax.check:tax.foreign-asset",
-  version: 1,
+  version: 2,
   schema: ScopedVerdictSchema,
   systemPrompt: [TAX_PREAMBLE, CHECK_TASK_INSTRUCTIONS].join("\n"),
   difficulty: "judgement",
