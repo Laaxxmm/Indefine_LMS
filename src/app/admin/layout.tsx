@@ -28,6 +28,7 @@ const FIRM_OS_ITEMS: AdminNavItem[] = [
   { href: "/admin/firm-os/models", label: "Model usage", icon: "Cpu" },
   { href: "/admin/firm-os/mistakes", label: "Mistake log", icon: "BookCheck" },
   { href: "/admin/firm-os/cycle-time", label: "Cycle time", icon: "Timer" },
+  { href: "/admin/firm-os/workspace", label: "Workspace settings", icon: "Settings" },
 ];
 const SETTINGS_ITEMS: AdminNavItem[] = [{ href: "/admin/settings", label: "Settings", icon: "Settings" }];
 

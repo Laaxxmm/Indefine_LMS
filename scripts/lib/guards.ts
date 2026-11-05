@@ -51,6 +51,12 @@ export const FIRM_OS_DIRS = [
   "src/app/workspace",
   "src/app/focus",
   "firm-os-companion-extension",
+  "src/lib/companion",
+  "src/app/companion",
+  "src/app/comms",
+  "src/lib/agents/comms",
+  "src/lib/integrations/outlook",
+  "src/app/api/firm-os",
 ];
 export const isFirmOs = (p: string) => FIRM_OS_DIRS.some((d) => under(norm(p), d));
 

@@ -5,7 +5,7 @@
 import { ensureFolder, getAppOnlyToken, uploadFileContent } from "@/lib/graph";
 import { folderName } from "@/lib/clients/core";
 
-export const MAX_PDF_BYTES = 3 * 1024 * 1024; // sendMail takes the whole message in one 4 MB request
+export const MAX_PDF_BYTES = 3 * 1024 * 1024; // keeps the Outlook-draft attachment inline (larger ones would need an upload session)
 
 export type FileKind = "draft" | "signed" | "client";
 

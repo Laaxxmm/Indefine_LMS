@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en-IN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Firm OS Companion options</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="bar">
+    <div class="brand">
+      <svg class="brand-mark" width="28" height="28" viewBox="0 0 40 40" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="brand-grad" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse"><stop stop-color="#6D5BF0"></stop><stop offset="1" stop-color="#4B37D8"></stop></linearGradient></defs><rect width="40" height="40" rx="12" fill="url(#brand-grad)"></rect><path d="M10 27 L17.5 18.5 L23 23 L30 12" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="30" cy="12" r="3.2" fill="#FF3B30"></circle></svg>
+      <div>
+        <p class="brand-name">indefine</p>
+        <p class="brand-sub">Firm OS Companion</p>
+      </div>
+    </div>
+  </header>
+  <main class="wrap">
+    <h1>Pair this browser</h1>
+    <p class="help">The companion shows your current Firm OS task beside the page you are working on. Pair it once with a token from the Companion page in Firm OS.</p>
+
+    <section class="card mt-16" aria-labelledby="pair-title">
+      <h2 class="section-title" id="pair-title">Pairing token</h2>
+      <form id="pair-form" novalidate>
+        <div class="field">
+          <label for="token">Paste your pairing token</label>
+          <input id="token" name="token" type="password" autocomplete="off" spellcheck="false" aria-describedby="token-help" />
+          <p id="token-help" class="help">Create one on the <a id="companion-page" target="_blank" rel="noopener noreferrer">Companion page in Firm OS</a>. It is shown there only once and kept here, in this browser only.</p>
+        </div>
+        <div class="actions">
+          <button type="submit" class="btn btn-primary" id="save">Save and test connection</button>
+          <button type="button" class="btn" id="test">Test connection</button>
+          <button type="button" class="btn" id="forget">Forget this pairing</button>
+        </div>
+      </form>
+      <div id="result" class="mt-12" role="status" aria-live="polite"></div>
+    </section>
+
+    <section class="card" aria-labelledby="where-title">
+      <h2 class="section-title" id="where-title">Firm OS address</h2>
+      <p class="message"><code id="origin"></code></p>
+      <p class="help">The only address this extension contacts. It is set when the extension is built; ask your admin for a copy built for another address.</p>
+    </section>
+
+    <section class="card" aria-labelledby="privacy-title">
+      <h2 class="section-title" id="privacy-title">Privacy</h2>
+      <ul class="plain">
+        <li>Stored in this browser: your pairing token, and which steps you ticked for the current job (cleared when the browser closes).</li>
+        <li>Fetched: your current task from Firm OS, about once a minute while the side panel is open.</li>
+        <li>Never: it does not read, fill or submit any web page, has no access to the sites you visit, and never files, signs, pays, enters an OTP or sends anything.</li>
+      </ul>
+    </section>
+  </main>
+  <script type="module" src="options.js"></script>
+</body>
+</html>

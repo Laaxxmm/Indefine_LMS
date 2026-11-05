@@ -1,0 +1,82 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`templates — one snapshot per kind > doc-chase: deterministic text, every fact present, tone rules hold 1`] = `
+"Documents needed: GSTR-3B for October 2026 (Acme Traders Private Limited)
+
+Dear Ravi Kumar,
+
+To complete your GSTR-3B for October 2026, we need the documents listed below.
+
+- Purchase invoice INV-104 dated 03 Oct 2026 from Sharma Steels
+- Bank statement for October 2026
+
+Please send them by 12 Nov 2026.
+
+The due date for filing is 20 Nov 2026.
+
+Regards,
+Priya Sharma
+Indefine"
+`;
+
+exports[`templates — one snapshot per kind > due-reminder: deterministic text, every fact present, tone rules hold 1`] = `
+"Reminder: GSTR-3B for October 2026 is due on 20 Nov 2026 (Acme Traders Private Limited)
+
+Dear Ravi Kumar,
+
+This is a reminder that your GSTR-3B for October 2026 is due on 20 Nov 2026.
+
+Please arrange the payment of ₹1,23,456.00 by 18 Nov 2026.
+
+Regards,
+Priya Sharma
+Indefine"
+`;
+
+exports[`templates — one snapshot per kind > filing-completed: deterministic text, every fact present, tone rules hold 1`] = `
+"GSTR-3B for October 2026 filed (Acme Traders Private Limited)
+
+Dear Ravi Kumar,
+
+Your GSTR-3B for October 2026 was filed on 18 Nov 2026.
+
+The acknowledgement number is AA2911260123456.
+
+The amount paid with this return was ₹1,23,456.00.
+
+Regards,
+Priya Sharma
+Indefine"
+`;
+
+exports[`templates — one snapshot per kind > query-response: deterministic text, every fact present, tone rules hold 1`] = `
+"Your question about GST on office rent (Acme Traders Private Limited)
+
+Dear Ravi Kumar,
+
+Thank you for your question about GST on office rent.
+
+GST at 18% applies to the rent of ₹50,000.00 a month from October 2026.
+
+Your landlord should show it on the invoice.
+
+Regards,
+Priya Sharma
+Indefine"
+`;
+
+exports[`templates — one snapshot per kind > status: deterministic text, every fact present, tone rules hold 1`] = `
+"GSTR-3B for October 2026 (Acme Traders Private Limited): status update
+
+Dear Ravi Kumar,
+
+This is an update on your GSTR-3B for October 2026.
+
+It is prepared and our team is reviewing it.
+
+The due date for filing is 20 Nov 2026.
+
+Regards,
+Priya Sharma
+Indefine"
+`;

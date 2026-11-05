@@ -17,8 +17,8 @@ export default async function ConnectPage({ searchParams }: { searchParams: Prom
   if (!session?.user) redirect("/");
   const sp = await searchParams;
   const lead = isWorkLead(session.user.email);
-  // ?mail=1: only Mail.Send, for emailing engagement letters. Other tiers keep working
-  // afterwards: the refresh token can still mint any scope this person consented to.
+  // ?mail=1: only the mail tier (MAIL_SCOPES), for Outlook drafts of client emails. Other tiers
+  // keep working afterwards: the refresh token can still mint any scope this person consented to.
   const mail = sp.mail === "1";
   const wanted = mail ? MAIL_SCOPES : lead ? LEAD_SCOPES : ELEVATED_SCOPES;
   const account = await prisma.account.findFirst({
@@ -41,7 +41,8 @@ export default async function ConnectPage({ searchParams }: { searchParams: Prom
         <h1 className="font-display font-extrabold text-[28px] tracking-[-0.02em] mt-1">Connect your account</h1>
         {mail ? (
         <p className="text-ink-mute text-[14.5px] mt-2">
-          Lets the LMS send engagement letters by email from your own mailbox. A copy of each email stays in your Sent Items.
+          Lets the LMS put client emails (message drafts, engagement letters) into the Drafts folder of your own
+          Outlook mailbox. You check each draft in Outlook and send it yourself.
         </p>
         ) : (
         <p className="text-ink-mute text-[14.5px] mt-2">
