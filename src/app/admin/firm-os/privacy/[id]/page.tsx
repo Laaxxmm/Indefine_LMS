@@ -10,7 +10,9 @@ import { getRequest } from "@/lib/privacy/register";
 import { buildAccessExport } from "@/lib/privacy/export";
 import { planErasure, publicPlan, type PlanAction } from "@/lib/privacy/erasure";
 import { KIND_SECTIONS, PRINCIPAL_LABELS, RESTRICTIONS, VERIFY_METHODS, WITHDRAWAL_LIMITS, type PrincipalType } from "@/lib/privacy/policy";
-import { CloseForm, ConfirmStep, NominationForm, VerifyForm } from "../PrivacyForms";
+import { activeRestrictionsOf } from "@/lib/privacy/consent";
+import { canLiftRestriction } from "@/lib/rbac/policy";
+import { CloseForm, ConfirmStep, LiftRestrictionForm, NominationForm, VerifyForm } from "../PrivacyForms";
 import { DueDate, OverdueChip, RequestStatusChip } from "../parts";
 
 export const dynamic = "force-dynamic";
@@ -60,6 +62,8 @@ export default async function PrivacyRequestPage({ params }: { params: Promise<{
   const shown = plan ? publicPlan(plan) : null;
   const principalType = (d.principalType in PRINCIPAL_LABELS ? d.principalType : "client-contact") as PrincipalType;
   const completesHere = d.kind === "access" || d.kind === "correction" || d.kind === "grievance";
+  const restricted = d.kind === "consent-withdrawal" || d.kind === "erasure" ? await activeRestrictionsOf(prisma, id) : [];
+  const restrictedLabels = [...new Set(restricted.flatMap((r) => r.labels))];
 
   return (
     <main className="min-h-screen px-6 py-10 max-w-6xl mx-auto">
@@ -240,6 +244,23 @@ export default async function PrivacyRequestPage({ params }: { params: Promise<{
                 <p className="text-[13px] text-ink-mute">{open ? "Verify identity first; the nominee can be recorded after that." : "This request is closed."}</p>
               )}
             </Step>
+          )}
+
+          {restricted.length > 0 && (
+            <section className={card} aria-labelledby="restriction-in-force">
+              <h2 id="restriction-in-force" className={sectionTitle}>
+                Restriction in force
+              </h2>
+              <p className="text-[13.5px] mb-2">
+                {restricted.length} record{restricted.length === 1 ? "" : "s"} of this person {restricted.length === 1 ? "is" : "are"} restricted: {restrictedLabels.join("; ")}. Agent runs, onboarding
+                reading and message drafts for {restricted.length === 1 ? "it" : "them"} are refused until a partner lifts the restriction.
+              </p>
+              {canLiftRestriction(session.user) ? (
+                <LiftRestrictionForm id={d.id} />
+              ) : (
+                <p className="text-[13px] text-ink-mute">Only a partner can lift this restriction. Ask a partner to review this request.</p>
+              )}
+            </section>
           )}
 
           <Step n={d.kind === "grievance" ? 3 : 4} title={d.kind === "grievance" ? "Reply and close" : "Close"} done={!open}>

@@ -41,6 +41,7 @@ import {
 } from "./checklist";
 import { transitionJobTask } from "./state-db";
 import { logAudit } from "@/lib/audit/log";
+import { AI_RESTRICTED_MESSAGE, isAiProcessingRestricted } from "@/lib/privacy/consent";
 import { buildDocx, buildWorkbook, type BuiltDeliverable, type DocBlock, type SheetSpec } from "./templates";
 
 // ------------------------------------------------------------------ dependencies
@@ -193,7 +194,7 @@ export type AnyAgent = AgentDefinition<any, any>;
 
 // ------------------------------------------------------------------ outcome
 
-export type PreconditionCode = "NOT_FOUND" | "WRONG_SERVICE" | "NOT_READY" | "NO_SOP_PACK" | "NO_SCOPE" | "INVALID_SCOPE";
+export type PreconditionCode = "NOT_FOUND" | "WRONG_SERVICE" | "NOT_READY" | "NO_SOP_PACK" | "NO_SCOPE" | "INVALID_SCOPE" | "AI_RESTRICTED";
 
 export type RunOutcome =
   | {
@@ -245,7 +246,7 @@ const JOB_SELECT = {
   state: true,
   assigneeId: true,
   reviewerId: true,
-  firmClient: { select: { clientCode: true, client: { select: { name: true } } } },
+  firmClient: { select: { clientCode: true, lmsClientId: true, client: { select: { name: true } } } },
 } as const;
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e)).slice(0, 2000);
@@ -280,6 +281,9 @@ export async function runAgent<I, E>(def: AgentDefinition<I, E>, jobTaskId: stri
   if (!row) return { ok: false, code: "NOT_FOUND", reason: `JobTask ${jobTaskId} not found` };
   if (row.service !== def.service) return { ok: false, code: "WRONG_SERVICE", reason: `${def.title} prepares ${def.service} jobs; this job is ${row.service}` };
   if (!RUNNABLE.includes(row.state)) return { ok: false, code: "NOT_READY", reason: `The agent runs on ASSIGNED or IN_PREP jobs; this job is ${row.state}` };
+  // DPDP (src/lib/privacy/consent.ts): a client who withdrew consent, or is under an erasure hold,
+  // gets no AI processing. Checked before any write or model call, so a refused run leaves nothing.
+  if (await isAiProcessingRestricted(db, { lmsClientId: row.firmClient.lmsClientId })) return { ok: false, code: "AI_RESTRICTED", reason: AI_RESTRICTED_MESSAGE };
   const pack = await db.sopPack.findFirst({ ...latestPackQuery(def.sopPackKey), select: { version: true, checklist: true } });
   if (!pack) return { ok: false, code: "NO_SOP_PACK", reason: `No active SOP pack "${def.sopPackKey}"; publish one in /admin/firm-os first` };
 

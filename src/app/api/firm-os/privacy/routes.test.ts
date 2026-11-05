@@ -19,6 +19,7 @@ const close = await import("@/app/api/firm-os/privacy/requests/[id]/close/route"
 const consent = await import("@/app/api/firm-os/privacy/requests/[id]/consent-withdrawal/route");
 const nomination = await import("@/app/api/firm-os/privacy/requests/[id]/nomination/route");
 const pcorrection = await import("@/app/api/firm-os/privacy/requests/[id]/correction/route");
+const lift = await import("@/app/api/firm-os/privacy/requests/[id]/lift-restriction/route");
 const breaches = await import("@/app/api/firm-os/privacy/breaches/route");
 const breach = await import("@/app/api/firm-os/privacy/breaches/[id]/route");
 const corrections = await import("@/app/api/firm-os/corrections/route");
@@ -111,6 +112,28 @@ describe("privacy request routes", () => {
     expect(fixed.status).toBe(200);
     const notMine = await pcorrection.POST(post({ entity: "JobTask", id: "j-assigned", field: "title", newValue: "X", reason: "Client moved office" }), params(k));
     expect(notMine.status).toBe(400);
+  });
+
+  it("lift restriction: partner only, with a reason; admins and staff get a sentence, not a lift", async () => {
+    const c = await logRequest("consent-withdrawal", { pan: PAN_PROP });
+    await verify.POST(post({ method: "Photo ID seen in person" }), params(c));
+    expect((await consent.POST(post({}), params(c))).status).toBe(200);
+    const reason = { reason: "Client gave written consent again on 05 Nov 2026" };
+    const byAdmin = await lift.POST(post(reason), params(c));
+    expect(byAdmin.status).toBe(403);
+    expect(await json(byAdmin)).toEqual({ error: "Only a partner can lift a processing restriction. Ask a partner to review this request." });
+    as(USERS.staff);
+    expect((await lift.POST(post(reason), params(c))).status).toBe(403);
+    as(null);
+    expect((await lift.POST(post(reason), params(c))).status).toBe(401);
+    as(USERS.partner);
+    expect((await lift.POST(post({ reason: "ok" }), params(c))).status).toBe(400);
+    const done = await lift.POST(post(reason), params(c));
+    expect(done.status).toBe(200);
+    expect(await json(done)).toMatchObject({ lifted: 1 });
+    expect(db.tables.auditEvent.filter((e) => e.action === "lift-restriction").map((e) => e.actorId)).toEqual([USERS.partner.id, USERS.partner.id]);
+    expect((await lift.POST(post(reason), params(c))).status).toBe(409); // nothing left to lift
+    expect(removalCalls(db.calls)).toEqual([]);
   });
 });
 

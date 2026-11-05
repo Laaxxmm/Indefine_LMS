@@ -20,9 +20,14 @@ import type { JobPlanner } from "./planner";
 import { initialSteps, normalizeSteps, type RunRecord, type RunStatus, type Saga, type SagaStep } from "./saga";
 import { OnboardingSpec, partialSpecZ, type PartialSpec } from "./spec";
 import { gstStateCode, issuesByField, validateSpec, type Issue, type ValidationPorts } from "./validators";
+import type { OnboardingSubject } from "./restriction";
+import { AI_RESTRICTED_MESSAGE } from "@/lib/privacy/consent";
+
+/** Shown when the sentence is about a client whose AI processing is restricted (DPDP, src/lib/privacy/consent.ts). */
+export const ONBOARDING_AI_RESTRICTED = AI_RESTRICTED_MESSAGE;
 
 export class OnboardingError extends Error {
-  constructor(public readonly code: "not-found" | "conflict" | "invalid", message: string) {
+  constructor(public readonly code: "not-found" | "conflict" | "invalid" | "restricted", message: string) {
     super(message);
     this.name = "OnboardingError";
   }
@@ -49,6 +54,11 @@ export interface OnboardingDeps {
   getTuriaSync: (id: string) => Promise<TuriaSyncRecord | null>;
   setTuriaClientRef: (firmClientId: string, ref: string) => Promise<void>;
   audit: (event: { actorId: string; action: string; entity: string; entityId: string | null; meta?: Record<string, unknown> }) => Promise<void>;
+  /**
+   * DPDP: is this onboarding about an existing client whose AI processing is restricted? Asked
+   * before every extractor (model) call; production: isOnboardingAiRestricted (restriction.ts).
+   */
+  aiRestricted: (subject: OnboardingSubject) => Promise<boolean>;
   now?: () => Date;
 }
 
@@ -121,7 +131,13 @@ export function createOnboardingService(deps: OnboardingDeps) {
     if (run.status !== "DRAFT") throw new OnboardingError("conflict", "This onboarding has already been confirmed; it can only be resumed");
   }
 
+  /** DPDP: refuse before the model reads anything about a restricted client (and before any write). */
+  async function refuseIfRestricted(subject: OnboardingSubject): Promise<void> {
+    if (await deps.aiRestricted(subject)) throw new OnboardingError("restricted", ONBOARDING_AI_RESTRICTED);
+  }
+
   async function start(prompt: string, actorId: string): Promise<RunView> {
+    await refuseIfRestricted({ text: prompt });
     const run = await deps.runs.create({ createdById: actorId, prompt, spec: {} });
     const people = await deps.people();
     const x = await extractSpec(prompt, { router: deps.router, runId: run.id, people });
@@ -136,6 +152,12 @@ export function createOnboardingService(deps: OnboardingDeps) {
     const notes: string[] = [];
     let needsReview = false;
     if (input.message?.trim()) {
+      // The run's client, the spec so far and the sentence itself; then identifiers typed in this same turn.
+      await refuseIfRestricted({ firmClientId: run.firmClientId, spec, text: input.message });
+      const typed = (k: string) => [input.answers?.[k] ?? []].flat().map(String);
+      if (typed("pan").length || typed("gstins").length || typed("clientCode").length) {
+        await refuseIfRestricted({ spec: { pan: typed("pan")[0] ?? null, gstins: typed("gstins"), clientCode: typed("clientCode")[0] ?? null } });
+      }
       const x = await extractSpec(input.message, { router: deps.router, runId, people: await deps.people(), base: spec });
       spec = x.spec;
       notes.push(...x.notes);

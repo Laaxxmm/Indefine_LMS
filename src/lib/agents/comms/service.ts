@@ -11,6 +11,7 @@ import type { SessionUser } from "@/lib/access";
 import { canSeeAllRuns, canUseAgents, canViewJob, jobScopeWhere } from "@/lib/agents/access";
 import { canViewCommsDraft, commsDraftScopeWhere } from "@/lib/rbac/policy";
 import { logAudit } from "@/lib/audit/log";
+import { AI_RESTRICTED_MESSAGE, COMMS_RESTRICTED_MESSAGE, isAiProcessingRestricted, isCommsDraftingRestricted } from "@/lib/privacy/consent";
 import { formatDateTimeIst } from "@/lib/agents/core/format";
 import { addDays, istDayKey, istDayStart, parseDayKey } from "@/lib/ist";
 import type { OutlookDraft, OutlookDraftInput } from "@/lib/integrations/outlook/drafts";
@@ -249,6 +250,10 @@ export async function createDraft(db: CommsDb, user: SessionUser, raw: unknown, 
   }
   const department = job?.service ?? body.department;
   if (!department) return fail(400, "Pick the department this answer is about");
+  // DPDP (src/lib/privacy/consent.ts): no model call and no new draft for a client who withdrew
+  // consent or is under an erasure hold. Refused before anything is drafted or stored.
+  if (await isAiProcessingRestricted(db, client.id)) return fail(409, AI_RESTRICTED_MESSAGE);
+  if (await isCommsDraftingRestricted(db, client.id)) return fail(409, COMMS_RESTRICTED_MESSAGE);
 
   const people = { clientName: client.client.name, contactName: client.client.contactName, senderName: user.name ?? user.email ?? "", firmName: FIRM_NAME };
   let input: TemplateInput;

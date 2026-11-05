@@ -48,7 +48,7 @@ export async function parseBody<T>(req: Request, schema: z.ZodType<T>): Promise<
   return { ok: false, res: NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid request" }, { status: 400 }) };
 }
 
-const STATUS: Record<string, number> = { "not-found": 404, conflict: 409, busy: 409, "not-confirmed": 409, invalid: 400 };
+const STATUS: Record<string, number> = { "not-found": 404, conflict: 409, busy: 409, "not-confirmed": 409, invalid: 400, restricted: 409 };
 
 /** Known failures become a JSON error with the right status; anything else is rethrown (500). */
 export function errorResponse(e: unknown): NextResponse {

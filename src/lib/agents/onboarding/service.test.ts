@@ -11,6 +11,7 @@ import { createSaga } from "./saga";
 import { OnboardingError, createOnboardingService } from "./service";
 import type { ExtractedSpec } from "./spec";
 import type { ValidationPorts } from "./validators";
+import type { OnboardingSubject } from "./restriction";
 
 const NOW = new Date("2026-11-05T10:00:00Z");
 
@@ -23,7 +24,7 @@ function routerReturning(...outputs: ExtractedSpec[]): ExtractRouter {
   };
 }
 
-function setup(o: { confirmRequired?: boolean; outputs?: ExtractedSpec[]; ports?: Partial<ValidationPorts> } = {}) {
+function setup(o: { confirmRequired?: boolean; outputs?: ExtractedSpec[]; ports?: Partial<ValidationPorts>; aiRestricted?: (s: OnboardingSubject) => Promise<boolean> } = {}) {
   const store = new MemoryOnboardingStore(PEOPLE);
   const repo = new FakeTuriaRepo();
   const manual = new ManualBridge(repo, () => NOW);
@@ -58,6 +59,7 @@ function setup(o: { confirmRequired?: boolean; outputs?: ExtractedSpec[]; ports?
     getTuriaSync: (id) => repo.get(id),
     setTuriaClientRef: async (fc, ref) => void turiaRefs.set(fc, ref),
     audit: async (e) => void audits.push(e.action),
+    aiRestricted: o.aiRestricted ?? (async () => false),
     now: () => NOW,
   });
   return { service, store, repo, sharepoint, turiaRefs, audits };
@@ -198,5 +200,45 @@ describe("onboarding service — plan, create, resume, Turia confirm", () => {
     expect(v.status).toBe("DONE");
     expect(v.confirmRequired).toBe(false);
     expect(store.firmClients).toHaveLength(1);
+  });
+});
+
+describe("onboarding service — DPDP restriction (no AI processing for a restricted client)", () => {
+  const RESTRICTED_PAN = PAN.individual;
+  const restrictedFor = (pan: string) => {
+    const asked: OnboardingSubject[] = [];
+    return { asked, check: async (s: OnboardingSubject) => (asked.push(s), JSON.stringify(s).includes(pan)) };
+  };
+
+  it("start: a sentence naming a restricted client's PAN is refused before any run is written or any model call", async () => {
+    const r = restrictedFor(RESTRICTED_PAN);
+    const { service, store } = setup({ aiRestricted: r.check, outputs: [{ legalName: "should not be read" }] });
+    await expect(service.start(`Onboard Meena Stores, PAN ${RESTRICTED_PAN}, GST monthly`, "u-partner")).rejects.toMatchObject({
+      code: "restricted",
+      message: "This client has restricted AI processing. Prepare this by hand or ask a partner to lift the restriction.",
+    });
+    expect(store.runs.size).toBe(0);
+    expect(r.asked).toEqual([{ text: `Onboard Meena Stores, PAN ${RESTRICTED_PAN}, GST monthly` }]);
+  });
+
+  it("answer: a follow-up sentence is refused (spec and run unchanged) once the spec names a restricted client; form answers alone never reach a model and are accepted", async () => {
+    const r = restrictedFor(RESTRICTED_PAN);
+    const { service, store } = setup({ aiRestricted: r.check, outputs: [{ legalName: "Meena Stores" }, { clientCode: "MEENA1" }] });
+    const v0 = await service.start("Onboard Meena Stores", "u-partner");
+    const v1 = await service.answer(v0.id, { answers: { pan: RESTRICTED_PAN } }); // typed by hand: no model call, no check
+    expect(v1.spec.pan).toBe(RESTRICTED_PAN);
+    const before = structuredClone(store.runs.get(v0.id));
+    await expect(service.answer(v0.id, { message: "code is meena1" })).rejects.toMatchObject({ code: "restricted" });
+    expect(store.runs.get(v0.id)).toEqual(before);
+    // Identifiers typed in the same turn as a sentence are checked too.
+    const fresh = setup({ aiRestricted: r.check, outputs: [{ legalName: "Xavier Stores" }] });
+    const f0 = await fresh.service.start("Onboard X", "u");
+    await expect(fresh.service.answer(f0.id, { message: "GST monthly", answers: { pan: RESTRICTED_PAN } })).rejects.toMatchObject({ code: "restricted" });
+    expect(fresh.store.runs.get(f0.id)!.spec).not.toHaveProperty("pan");
+  });
+
+  it("a new client (no restriction) is read as before", async () => {
+    const { service } = setup({ aiRestricted: async () => false, outputs: [{ legalName: "Acme" }] });
+    expect((await service.start("Onboard Acme", "u")).spec).toMatchObject({ legalName: "Acme" });
   });
 });

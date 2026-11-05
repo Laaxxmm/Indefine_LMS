@@ -119,6 +119,28 @@ describe("/admin/firm-os/privacy", () => {
     expect(clean(await renderHtml(await PrivacyRequestPage(idp(grievance))))).toContain("Send reply and close");
   });
 
+  it("a restriction in force shows the Lift restriction action to a partner (admin layout), and a sentence to an admin who is not a partner", async () => {
+    const db = privacyWorld();
+    state.db = db;
+    const consent = await request(db, "consent-withdrawal", { pan: PAN_PROP }, { verify: true });
+    const { withdrawConsent, liftRestriction } = await import("@/lib/privacy/consent");
+    await withdrawConsent(USERS.admin, consent, deps(db));
+    const asAdmin = clean(await renderHtml(await PrivacyRequestPage(idp(consent))));
+    expect(asAdmin).toContain("Restriction in force");
+    expect(asAdmin).toContain("1 record of this person is restricted: No new AI processing; No new message drafts; No growth or marketing use.");
+    expect(asAdmin).toContain("Only a partner can lift this restriction.");
+    expect(asAdmin).not.toContain("Lift restriction…");
+    signedIn(activeSession({ role: "ADMIN", level: "PARTNER", id: USERS.partner.id }));
+    const asPartner = clean(await renderHtml(await PrivacyRequestPage(idp(consent))));
+    expect(asPartner).toContain("Lift restriction…");
+    expect(asPartner).toContain("Why can the restriction be lifted?");
+    await liftRestriction(USERS.partner, consent, { reason: "Client gave written consent again" }, deps(db));
+    const lifted = clean(await renderHtml(await PrivacyRequestPage(idp(consent))));
+    expect(lifted).not.toContain("Restriction in force");
+    expect(lifted).toContain("Restriction lifted by a partner");
+    expect(lifted).toContain("Reason: Client gave written consent again");
+  });
+
   it("is admin only, and an unknown request is not found", async () => {
     state.db = createMemoryDb();
     await expect(PrivacyRequestPage(idp("nope"))).rejects.toBeInstanceOf(NotFoundSignal);

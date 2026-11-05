@@ -9,6 +9,7 @@ import { createTuriaAdapter, manualBridge, turiaBridgeMode } from "@/lib/integra
 import { listPeople, loadCalendarPack, prismaRunStore, prismaSagaStore, prismaValidationPorts, setTuriaClientRef } from "./db";
 import { isConfirmRequired } from "./plan";
 import { createCalendarPlanner } from "./planner";
+import { isOnboardingAiRestricted, type OnboardingRestrictionDb } from "./restriction";
 import { createSaga } from "./saga";
 import { createOnboardingService, type OnboardingService } from "./service";
 
@@ -38,5 +39,6 @@ export function onboardingService(opts: { actorIsPartner?: boolean } = {}): Onbo
     getTuriaSync: (id) => repo.get(id),
     setTuriaClientRef: (firmClientId, ref) => setTuriaClientRef(prisma, firmClientId, ref),
     audit: (e) => store.audit(e),
+    aiRestricted: (subject) => isOnboardingAiRestricted(prisma as unknown as OnboardingRestrictionDb, subject),
   });
 }

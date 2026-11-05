@@ -232,6 +232,7 @@ const ACTION_LABELS: Record<string, string> = {
   correct: "Field corrected",
   "erasure-confirmed": "Erasure carried out",
   "restrict-processing": "Processing restricted",
+  "lift-restriction": "Restriction lifted by a partner",
   nominate: "Nominee recorded",
   complete: "Request completed",
   reject: "Request refused",
@@ -246,6 +247,7 @@ function eventDetail(action: string, meta: Prisma.JsonObject): string | null {
   if (action === "complete" || action === "reject") return typeof meta.note === "string" ? meta.note : null;
   if (action === "erasure-confirmed") return `${String(meta.anonymised ?? 0)} anonymised, ${String(meta.held ?? 0)} on legal hold, ${String(meta.kept ?? 0)} kept as they are.`;
   if (action === "nominate") return typeof meta.nominee === "string" ? `Nominee ${meta.nominee}` : null;
+  if (action === "lift-restriction") return typeof meta.reason === "string" ? `Reason: ${meta.reason}` : null;
   return null;
 }
 
