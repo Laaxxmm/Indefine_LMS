@@ -7,7 +7,7 @@ import { join } from "node:path";
 const DIR = __dirname;
 const SCRIPTS = join(DIR, "../../../../scripts");
 /** Scripts that must never write to Graph or the database. */
-const READ_ONLY_SCRIPTS = [join(SCRIPTS, "verify-patha.ts")];
+const READ_ONLY_SCRIPTS = [join(SCRIPTS, "verify-patha.ts"), join(SCRIPTS, "map-legacy-folders.ts")];
 const sources = [...readdirSync(DIR).filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts")).map((f) => join(DIR, f)), ...READ_ONLY_SCRIPTS];
 
 // Built from parts so this guard file does not itself trip repo-wide grep gates.
@@ -25,7 +25,7 @@ describe("Path A sources have no destructive surface", () => {
   });
 
   it("scans every module file", () => {
-    expect(sources.length).toBeGreaterThanOrEqual(9);
+    expect(sources.length).toBeGreaterThanOrEqual(13);
   });
 
   // Read-only scripts: no ensure-*/create* calls, no clfolders import, no Prisma writes.

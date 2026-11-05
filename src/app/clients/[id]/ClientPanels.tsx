@@ -9,7 +9,7 @@ import { DOC_TYPES, JOB_DOC_TYPES, JOB_STATUSES, KYC_DOC_TYPES, keysOf } from "@
 import type { Handler } from "@/lib/clients/services";
 import { card, h2 } from "@/components/ui";
 
-export type JobView = { id: string; fy: string; department: ServiceType["department"]; service: string; handlerId: string; status: JobStatus; dueOn: string; fees: string; notes: string; folderStatus: string; docCount: number };
+export type JobView = { id: string; fy: string; department: ServiceType["department"]; service: string; handlerId: string; status: JobStatus; dueOn: string; fees: string; notes: string; folderStatus: string; docCount: number; folderHref?: string };
 export type DocView = { id: string; jobId: string | null; docType: ClientDocType; name: string; webUrl: string; uploadedBy: string; createdAt: string };
 
 type Props = {
@@ -94,7 +94,7 @@ export function ClientPanels({ clientId, folderStatus, jobs, documents, services
                 <tr key={j.id} className="border-t border-border">
                   <td className="py-2 pr-3 font-semibold">{j.fy}</td>
                   <td className="py-2 pr-3">{departmentLabel(j.department)}</td>
-                  <td className="py-2 pr-3">{j.service}</td>
+                  <td className="py-2 pr-3">{j.service}{j.folderHref && <a href={j.folderHref} target="_blank" rel="noreferrer" title="Open Path A folder" aria-label="Open Path A folder" className="ml-1.5 inline-flex align-middle text-brand-600"><ExternalLink className="w-3.5 h-3.5" /></a>}</td>
                   <td className="py-2 pr-3"><select value={j.handlerId} onChange={(e) => run(j.id, () => call(`/api/clients/jobs/${j.id}`, json({ handlerId: e.target.value }, "PATCH")))} className={field}>{handlers.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}</select></td>
                   <td className="py-2 pr-3"><select value={j.status} onChange={(e) => run(j.id, () => call(`/api/clients/jobs/${j.id}`, json({ status: e.target.value }, "PATCH")))} className={field}>{keysOf(JOB_STATUSES).map((s) => <option key={s} value={s}>{JOB_STATUSES[s]}</option>)}</select></td>
                   <td className="py-2 pr-3"><input type="date" defaultValue={j.dueOn} onBlur={(e) => { if (e.target.value !== j.dueOn) run(j.id, () => call(`/api/clients/jobs/${j.id}`, json({ dueOn: e.target.value }, "PATCH"))); }} className={field} /></td>

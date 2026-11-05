@@ -8,6 +8,8 @@ import { listHandlers, listServiceTypes } from "@/lib/clients/services";
 import { ClientPanels } from "./ClientPanels";
 import { EditClient } from "./EditClient";
 import { istDate } from "@/lib/ist";
+import { isClPathsEnabled } from "@/lib/integrations/sharepoint/flags";
+import { clientSiteLink, jobFolderLink } from "@/lib/integrations/sharepoint/client-links";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +32,10 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
   if (!client) notFound();
   const [services, handlers] = await Promise.all([listServiceTypes(), listHandlers()]);
   const canManage = canManageClients(session.user);
+  // FIRM_OS_CL_PATHS (default off): folder links resolve to the CL-{Code} site. Off, or no code → legacy, unchanged.
+  const clPaths = isClPathsEnabled();
+  const clientCode = clPaths ? (await prisma.firmClient.findUnique({ where: { lmsClientId: id }, select: { clientCode: true } }))?.clientCode ?? null : null;
+  const siteLink = clientSiteLink({ clPaths, clientCode });
 
   const facts: Array<[string, string]> = [
     ["Entity", ENTITY_TYPES[client.entityType]], ["PAN", client.pan ?? "—"], ["GSTIN", client.gstin ?? "—"], ["CIN", client.cin ?? "—"],
@@ -48,7 +54,9 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
           <h1 className="font-display font-extrabold text-3xl tracking-[-0.03em] mt-1">{client.name}</h1>
         </div>
         <div className="flex items-center gap-2">
-          {client.graphFolderId && (
+          {siteLink ? (
+            <a href={siteLink.href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[12.5px] text-brand-600 font-semibold"><FolderOpen className="w-4 h-4" /> SharePoint: {siteLink.label}</a>
+          ) : client.graphFolderId && (
             <span className="inline-flex items-center gap-1.5 text-[12.5px] text-ink-mute"><FolderOpen className="w-4 h-4" /> SharePoint: Clients / {client.folderName}</span>
           )}
           {canManage && (
@@ -73,7 +81,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
       <ClientPanels
         clientId={client.id}
         folderStatus={client.folderStatus}
-        jobs={client.jobs.map((j) => ({ id: j.id, fy: j.fy, department: j.serviceType.department, service: j.serviceType.name, handlerId: j.handlerId, status: j.status, dueOn: ist(j.dueOn), fees: j.fees?.toString() ?? "", notes: j.notes ?? "", folderStatus: j.folderStatus, docCount: j._count.documents }))}
+        jobs={client.jobs.map((j) => ({ id: j.id, fy: j.fy, department: j.serviceType.department, service: j.serviceType.name, handlerId: j.handlerId, status: j.status, dueOn: ist(j.dueOn), fees: j.fees?.toString() ?? "", notes: j.notes ?? "", folderStatus: j.folderStatus, docCount: j._count.documents, folderHref: jobFolderLink({ clPaths, clientCode, fy: j.fy, department: j.serviceType.department, serviceName: j.serviceType.name })?.href }))}
         documents={client.documents.map((d) => ({ id: d.id, jobId: d.jobId, docType: d.docType, name: d.name, webUrl: d.webUrl, uploadedBy: d.uploadedBy.name ?? d.uploadedBy.email, createdAt: ist(d.createdAt) }))}
         services={services}
         handlers={handlers}
