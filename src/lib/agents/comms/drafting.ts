@@ -8,10 +8,12 @@
 import type { FirmService } from "@prisma/client";
 import { BudgetExceededError, NoProviderAvailableError, type DictionaryEntry, type ModelRequest, type RouterResult } from "@/lib/ai/router";
 import { INSUFFICIENT_EVIDENCE, createGuardrailSession, emptyGuardrailStats, type GuardrailStats } from "@/lib/agents/core/guardrails";
-import { factsIn } from "./facts";
-import type { PolishOutput } from "./grounding";
-import { COMMS_SCOPES, polishTaskName } from "./tasks";
+import { factsIn, type Fact } from "./facts";
+import type { PolishOutput, TranslateOutput } from "./grounding";
+import { COMMS_SCOPES, polishTaskName, translateTaskName } from "./tasks";
 import type { Template } from "./templates";
+import { sentences } from "./tone";
+import { LANGUAGE_LABELS, type TranslatedLanguage } from "./types";
 
 /** The part of the ModelRouter a draft needs (the real router, or a recording in tests). */
 export type CommsRouter = { run<T>(req: ModelRequest<T>): Promise<RouterResult<T>> };
@@ -82,3 +84,62 @@ export async function polishTemplate(t: Template, session: CommsSession, departm
 }
 
 export const sessionStats = (s: CommsSession | null): GuardrailStats => (s ? { ...s.stats } : emptyGuardrailStats());
+
+// ------------------------------------------------------------------ translation
+
+/** The translatable parts of a message (the signature stays as written). */
+export type MessageParts = { subject: string; greeting: string; paragraphs: string[]; items: string[]; closing: string };
+
+/** Subject, greeting, each sentence, each list item, closing — and how to put translated segments back. */
+export function toSegments(p: MessageParts): { segments: string[]; fromSegments: (s: readonly string[]) => MessageParts } {
+  const segments = [p.subject, p.greeting];
+  const paragraphAt: number[][] = [];
+  for (const para of p.paragraphs) {
+    const ss = sentences(para);
+    const parts = ss.length ? ss : [para];
+    paragraphAt.push(parts.map((_, k) => segments.length + k));
+    segments.push(...parts);
+  }
+  const itemsFrom = segments.length;
+  segments.push(...p.items);
+  const closingAt = segments.length;
+  segments.push(p.closing);
+  return {
+    segments,
+    fromSegments: (s) => ({
+      subject: s[0],
+      greeting: s[1],
+      paragraphs: paragraphAt.map((ix) => ix.map((i) => s[i].trim()).join(" ")),
+      items: p.items.map((_, k) => s[itemsFrom + k].trim()),
+      closing: s[closingAt],
+    }),
+  };
+}
+
+/** Ask the department's comms.translate task for the message in `language`; null (with a note) on any failure. */
+export async function translateMessage(
+  parts: MessageParts,
+  facts: Fact[],
+  language: TranslatedLanguage,
+  session: CommsSession,
+  department: FirmService,
+  dictionary: DictionaryEntry[],
+): Promise<{ parts: MessageParts | null; note: string | null }> {
+  const { segments, fromSegments } = toSegments(parts);
+  session.setInput({ language, segments, facts });
+  try {
+    const out = await session.model<TranslateOutput>({
+      task: translateTaskName(department),
+      privacy: "anonymize-then-cloud",
+      difficulty: "judgement",
+      dictionary,
+      maxTokens: 4000,
+      messages: [{ role: "user", content: JSON.stringify({ language, segments }) }],
+    });
+    if (out.status === INSUFFICIENT_EVIDENCE) return { parts: null, note: `No translation: the model could not translate this message faithfully into ${LANGUAGE_LABELS[language]}; the English is used on its own.` };
+    return { parts: fromSegments(out.segments), note: null };
+  } catch (e) {
+    if (!(e instanceof NoProviderAvailableError || e instanceof CommsModelRejected || e instanceof BudgetExceededError)) console.error("comms translate failed:", e instanceof Error ? e.message : e);
+    return { parts: null, note: `${fallbackNote("translation", e)} The English is used on its own.` };
+  }
+}

@@ -2,9 +2,12 @@
 // from a template, and the model may only polish the wording within strict limits. The tasks are
 // declared like any agent's scope so the framework's guardrails apply unchanged:
 //
-//   comms.polish.<department>@1   rephrase the template's subject and paragraphs; same facts,
-//                                 same paragraphs, same ask (closed schema, capped strings,
-//                                 insufficient_evidence = keep the template wording)
+//   comms.polish.<department>@1     rephrase the template's subject and paragraphs; same facts,
+//                                   same paragraphs, same ask (closed schema, capped strings,
+//                                   insufficient_evidence = keep the template wording)
+//   comms.translate.<department>@1  the finished English, segment by segment, into Kannada /
+//                                   Tamil / Hindi; facts copied verbatim in English digits
+//                                   (insufficient_evidence = English only)
 //
 // One task per department (GST, ROC, income tax, TDS, books, audit, engagement letters): every
 // system prompt is FIRM_PREAMBLE + the department preamble (core/guardrails) + COMMS_PREAMBLE +
@@ -15,7 +18,7 @@
 import type { FirmService } from "@prisma/client";
 import { z } from "zod";
 import { DEPARTMENT_LABELS, abstainable, note, type ModelTaskSpec, type ScopedAgentLike } from "@/lib/agents/core/guardrails";
-import { validatePolish, type PolishInput, type PolishOutput } from "./grounding";
+import { validatePolish, validateTranslation, type PolishInput, type PolishOutput, type TranslateInput, type TranslateOutput } from "./grounding";
 import { FIRM_SERVICES } from "./types";
 
 export const COMMS_KEY = "comms" as const;
@@ -48,11 +51,36 @@ export const PolishOutputSchema = z.object({
   paragraphs: z.array(note()).min(1).max(6),
 });
 
+const TRANSLATE_PROMPT = [
+  COMMS_PREAMBLE,
+  "",
+  'Task: translate the message from English into the language in "language" (kn = Kannada, ta = Tamil, hi = Hindi) for a client who prefers that language. The English stays beside your translation for the staff member to check.',
+  'You receive JSON with "language" and "segments": the English subject, greeting, sentences, list items and closing, in order.',
+  "Rules:",
+  "- Return exactly one translated segment per English segment, in the same order.",
+  "- Write in the language's own script (Kannada, Tamil or Devanagari), in plain everyday words and the polite form of address.",
+  "- Copy dates, amounts, reference numbers, return and form names (such as GSTR-3B), periods and ⟨…⟩ placeholders exactly as written, in English letters and digits. Do not translate, transliterate or reformat them, and do not use native-script digits.",
+  "- Do not add, drop or explain anything. No emoji, no exclamation marks.",
+  "- Each segment at most 300 characters.",
+  '- If you cannot translate the message faithfully, return status "insufficient_evidence"; the English is then used on its own.',
+  'Answer: { "status": "translated" | "insufficient_evidence", "language": "kn" | "ta" | "hi", "segments": ["..."] }',
+].join("\n");
+
+export const TranslateOutputSchema = z.object({
+  status: abstainable(z.enum(["translated"])),
+  language: z.enum(["kn", "ta", "hi"]),
+  segments: z.array(note()).min(1).max(40),
+});
+
 const SLUG: Readonly<Record<FirmService, string>> = Object.freeze({ GST: "gst", ROC: "roc", IncomeTax: "incometax", TDS: "tds", Books: "books", Audit: "audit", Engagement: "engagement" });
 
 export const polishTaskName = (d: FirmService) => `${COMMS_KEY}.polish.${SLUG[d]}` as const;
+export const translateTaskName = (d: FirmService) => `${COMMS_KEY}.translate.${SLUG[d]}` as const;
 
-export type CommsTaskSpecs = { polish: ModelTaskSpec<PolishOutput, PolishInput, typeof COMMS_KEY> };
+export type CommsTaskSpecs = {
+  polish: ModelTaskSpec<PolishOutput, PolishInput, typeof COMMS_KEY>;
+  translate: ModelTaskSpec<TranslateOutput, TranslateInput, typeof COMMS_KEY>;
+};
 
 function specsFor(d: FirmService): CommsTaskSpecs {
   return {
@@ -63,6 +91,15 @@ function specsFor(d: FirmService): CommsTaskSpecs {
       systemPrompt: POLISH_PROMPT,
       difficulty: "sop",
       validate: validatePolish,
+    },
+    translate: {
+      name: translateTaskName(d),
+      version: 1,
+      schema: TranslateOutputSchema as unknown as ModelTaskSpec<TranslateOutput, TranslateInput>["schema"],
+      systemPrompt: TRANSLATE_PROMPT,
+      // Indian-language quality: the smart tier first, the hard tier on a failed check.
+      difficulty: "judgement",
+      validate: validateTranslation,
     },
   };
 }

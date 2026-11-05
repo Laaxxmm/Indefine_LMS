@@ -123,6 +123,13 @@ describe("draftMessage — English", () => {
     expect(out.notes[0]).toBe("Template wording: the drafting model failed (TypeError).");
   });
 
+  it("English is never translated when the client prefers English", async () => {
+    const r = scriptedRouter([reword]);
+    const out = await draftMessage(req("status"), deps(r.router));
+    expect(out).toMatchObject({ language: "en", requestedLanguage: "en", translated: null, sources: { translation: "none" } });
+    expect(out.stored).toEqual(out.english);
+  });
+
   it("fallback notes name the cause", () => {
     expect(fallbackNote("wording", new BudgetExceededError("day", 1000, 1000))).toMatch(/budget/);
     expect(fallbackNote("translation", new CommsModelRejected("x"))).toBe("No translation: the model's translation did not pass the fact and tone checks.");

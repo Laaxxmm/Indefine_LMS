@@ -13,9 +13,10 @@
 // Messages name the fact so the model can correct itself; the router masks them before any
 // cloud call, like the prompt. Pure.
 import { INSUFFICIENT_EVIDENCE, numbersIn } from "@/lib/agents/core/guardrails";
-import { factTokens, factsIn, residualProblems, type Fact } from "./facts";
+import { factTokens, factsIn, residualProblems, stripFacts, type Fact, type FactKind } from "./facts";
 import { renderBody, type Template } from "./templates";
 import { countAsks, countWords, lintTone, toneKey } from "./tone";
+import type { TranslatedLanguage } from "./types";
 
 export type PolishOutput = { status: "polished" | typeof INSUFFICIENT_EVIDENCE; subject: string; paragraphs: string[] };
 export type PolishInput = { template: Template };
@@ -57,4 +58,35 @@ export function validatePolish(out: PolishOutput, input: PolishInput): string[] 
   const before = new Set(lintTone(renderBody(t), { requireAsk: t.requiresAsk }).map(toneKey));
   for (const i of lintTone(renderBody({ ...t, paragraphs: out.paragraphs }), { requireAsk: t.requiresAsk })) if (!before.has(toneKey(i))) issues.push(`tone: ${i.message}`);
   return issues;
+}
+
+// ------------------------------------------------------------------ translation
+
+export type TranslateOutput = { status: "translated" | typeof INSUFFICIENT_EVIDENCE; language: TranslatedLanguage; segments: string[] };
+export type TranslateInput = { language: TranslatedLanguage; segments: string[]; facts: Fact[] };
+
+/** Unicode block of each language's script (Kannada, Tamil, Devanagari). */
+export const SCRIPT: Readonly<Record<TranslatedLanguage, RegExp>> = Object.freeze({ kn: /[ಀ-೿]/, ta: /[஀-௿]/, hi: /[ऀ-ॿ]/ });
+/** Kannada, Tamil and Devanagari digits: dates and amounts stay in English digits. */
+const NATIVE_DIGITS = /[೦-೯௦-௯०-९]/;
+/** Facts copied verbatim into a translation (a topic or a document line is translated; its numbers are tokens). */
+const VERBATIM: ReadonlySet<FactKind> = new Set(["name", "label", "period", "date", "amount", "ref", "token"]);
+
+/** spec.validate of comms.translate.<department>. */
+export function validateTranslation(out: TranslateOutput, input: TranslateInput): string[] {
+  if (out.status === INSUFFICIENT_EVIDENCE) return [];
+  if (out.language !== input.language) return [`translate into "${input.language}" (got "${out.language}")`];
+  if (out.segments.length !== input.segments.length) return [`return exactly ${input.segments.length} segments, one per English segment, in the same order (got ${out.segments.length})`];
+  const verbatim = input.facts.filter((f) => VERBATIM.has(f.kind));
+  const issues: string[] = [];
+  out.segments.forEach((seg, i) => {
+    const en = input.segments[i];
+    const label = `segment ${i + 1}`;
+    for (const f of factsIn(en, verbatim)) if (!seg.includes(f.value)) issues.push(`${label}: copy ${f.kind === "name" ? "the name" : `the ${f.kind}`} "${f.value}" exactly, in English letters and digits`);
+    if (NATIVE_DIGITS.test(seg)) issues.push(`${label}: write digits as 0-9, not in the native script`);
+    for (const p of residualProblems(seg, input.facts)) issues.push(`${label}: ${p}`);
+    if (/[A-Za-z]{2,}/.test(stripFacts(en, input.facts)) && !SCRIPT[input.language].test(seg)) issues.push(`${label}: not translated into the requested script`);
+    for (const t of lintTone(seg, { english: false })) issues.push(`${label}: ${t.message}`);
+  });
+  return [...new Set(issues)];
 }
