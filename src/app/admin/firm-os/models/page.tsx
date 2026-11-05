@@ -3,15 +3,105 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { isAdmin } from "@/lib/access";
 import { card, h2 } from "@/components/ui";
+import { prisma } from "@/lib/prisma";
 import { loadModelCalls } from "@/lib/ai/db";
-import { formatCount, formatDayKey, formatInr, parseUsageRange, summariseUsage, type UsageBucket } from "@/lib/ai/usage";
+import {
+  GUARDRAIL_METRICS,
+  GUARDRAIL_METRIC_LABELS,
+  formatCount,
+  formatDayKey,
+  formatInr,
+  formatRate,
+  guardrailRates,
+  guardrailThresholdEnv,
+  loadGuardrailThresholds,
+  parseUsageRange,
+  summariseUsage,
+  type GuardrailDay,
+  type GuardrailThresholds,
+  type UsageBucket,
+} from "@/lib/ai/usage";
+import { loadGuardrailSignals, recordGuardrailBreaches } from "@/lib/agents/core/guardrails/drift-db";
 
 export const dynamic = "force-dynamic";
 
 // Firm OS · ModelRouter usage: what the AI layer cost (₹) and how often it escalated or handed
-// work to a human. Reads ModelCall rows only (prompt hashes, never prompt text).
+// work to a human. Reads ModelCall rows only (prompt hashes, never prompt text). The Guardrails
+// section (ADR-008 §9) shows per-agent per-day drift rates against env-overridable thresholds;
+// loading the page records one `guardrail-breach` AuditEvent per agent per day that breaches.
 
 const num = "text-right tabular-nums";
+
+function GuardrailsTable({ days, th }: { days: GuardrailDay[]; th: GuardrailThresholds }) {
+  const breached = days.filter((d) => d.breaches.length > 0).length;
+  return (
+    <section className={card} aria-labelledby="guardrails-heading">
+      <h2 id="guardrails-heading" className={h2}>
+        Guardrails
+      </h2>
+      <p className="text-sm text-ink-mute mb-3">
+        Drift per agent per day (ADR-008). A rate breaches when it is above its limit and has at least {formatCount(th.minSample)} cases; any scope violation
+        breaches. Limits:{" "}
+        {GUARDRAIL_METRICS.map((m) => `${GUARDRAIL_METRIC_LABELS[m]} ${Math.round(th[m] * 1000) / 10}%`).join(" · ")}. Override with{" "}
+        <code className="text-xs">{guardrailThresholdEnv("schemaFail")}</code> and the other <code className="text-xs">GUARDRAIL_*</code> settings.
+      </p>
+      {days.length === 0 ? (
+        <p className="text-sm text-ink-mute">No agent activity in this range.</p>
+      ) : (
+        <>
+          {breached > 0 && (
+            <p className="text-sm font-semibold text-red-700 mb-3" role="status">
+              {formatCount(breached)} agent-day{breached === 1 ? "" : "s"} breached a guardrail limit.
+            </p>
+          )}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-ink-mute">
+                <tr className="border-b border-border">
+                  <th scope="col" className="text-left font-semibold py-2.5 pr-3">Day</th>
+                  <th scope="col" className="text-left font-semibold py-2.5 px-3">Agent</th>
+                  {GUARDRAIL_METRICS.map((m) => (
+                    <th key={m} scope="col" className={`${num} font-semibold py-2.5 px-3`}>
+                      {GUARDRAIL_METRIC_LABELS[m]}
+                    </th>
+                  ))}
+                  <th scope="col" className={`${num} font-semibold py-2.5 px-3`}>Scope violations</th>
+                  <th scope="col" className="text-left font-semibold py-2.5 pl-3">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {days.map((d) => {
+                  const hit = new Set(d.breaches.map((b) => b.metric));
+                  return (
+                    <tr key={`${d.agent}:${d.day}`} className="border-b border-border last:border-0 h-11">
+                      <td className="pr-3 whitespace-nowrap">{formatDayKey(d.day)}</td>
+                      <td className="px-3">{d.agent}</td>
+                      {GUARDRAIL_METRICS.map((m) => (
+                        <td key={m} className={`${num} px-3 ${hit.has(m) ? "font-semibold text-red-700" : ""}`} title={`${formatCount(d.rates[m].n)} of ${formatCount(d.rates[m].d)}`}>
+                          {formatRate(d.rates[m])}
+                        </td>
+                      ))}
+                      <td className={`${num} px-3 ${d.scopeViolations > 0 ? "font-semibold text-red-700" : ""}`}>{formatCount(d.scopeViolations)}</td>
+                      <td className="pl-3">
+                        {d.breaches.length > 0 ? (
+                          <span className="inline-flex items-center rounded-md bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700 ring-1 ring-inset ring-red-200">
+                            Breach: {d.breaches.map((b) => GUARDRAIL_METRIC_LABELS[b.metric]).join(", ")}
+                          </span>
+                        ) : (
+                          <span className="text-ink-mute">Within limits</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
 
 function UsageTable({ title, label, rows, keyLabel }: { title: string; label: string; rows: UsageBucket[]; keyLabel?: (k: string) => string }) {
   return (
@@ -58,8 +148,13 @@ export default async function ModelUsagePage({ searchParams }: { searchParams: P
 
   const sp = await searchParams;
   const range = parseUsageRange(sp.from, sp.to, new Date());
-  const summary = summariseUsage(await loadModelCalls(range.from, range.to));
+  const calls = await loadModelCalls(range.from, range.to);
+  const summary = summariseUsage(calls);
   const t = summary.totals;
+  const thresholds = loadGuardrailThresholds();
+  const signals = await loadGuardrailSignals(range.from, range.to, prisma);
+  const guardrailDays = guardrailRates(calls, signals.runs, signals.reviews, thresholds);
+  await recordGuardrailBreaches(guardrailDays, prisma);
 
   const stats = [
     { label: "Cost", value: formatInr(t.costInr) },
@@ -120,6 +215,7 @@ export default async function ModelUsagePage({ searchParams }: { searchParams: P
           <UsageTable title="By agent" label="Agent" rows={summary.byAgent} />
           <UsageTable title="By provider" label="Provider" rows={summary.byProvider} keyLabel={(k) => PROVIDER_LABEL[k] ?? k} />
         </div>
+        <GuardrailsTable days={guardrailDays} th={thresholds} />
       </div>
     </main>
   );
