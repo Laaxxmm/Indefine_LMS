@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { onboardingService } from "@/lib/agents/onboarding/defaults";
 import { answerBodyZ, errorResponse, guard, parseBody } from "@/lib/agents/onboarding/http";
 import { recordAudit } from "@/lib/audit/record";
+import { enforceRateLimit } from "@/lib/hardening/rate-limit";
 
 export const maxDuration = 60;
 
@@ -12,6 +13,8 @@ export async function POST(req: Request) {
   if (!g.ok) return g.res;
   const body = await parseBody(req, answerBodyZ);
   if (!body.ok) return body.res;
+  const limited = await enforceRateLimit("onboard", g.user.id);
+  if (limited) return limited;
   try {
     const { runId, answers, message } = body.data;
     const run = await onboardingService({ actorIsPartner: g.isPartner }).answer(runId, { answers, message });

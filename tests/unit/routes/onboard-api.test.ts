@@ -13,13 +13,19 @@ const svc = {
 };
 const factory = vi.fn((_opts?: unknown) => svc);
 
-// Route-level AuditEvents (src/lib/audit/record.ts) go through the app's Prisma client.
+// Route-level AuditEvents (src/lib/audit/record.ts) and the rate-limit bucket
+// (src/lib/hardening/rate-limit.ts) go through the app's Prisma client.
 const audits = vi.hoisted(() => [] as { data: Record<string, unknown> }[]);
+const bucket = vi.hoisted(() => ({ count: 1, windowStart: new Date() }));
 
 vi.mock("@/lib/auth", () => ({ auth: vi.fn(), signIn: vi.fn(), signOut: vi.fn(), handlers: {} }));
 vi.mock("@/lib/agents/onboarding/defaults", () => ({ onboardingService: (opts?: unknown) => factory(opts) }));
 vi.mock("@/lib/prisma", () => ({
-  prisma: { auditEvent: { create: async (a: { data: Record<string, unknown> }) => (audits.push(a), { id: `audit-${audits.length}` }) } },
+  prisma: {
+    auditEvent: { create: async (a: { data: Record<string, unknown> }) => (audits.push(a), { id: `audit-${audits.length}` }) },
+    // The bucket upsert: the count after this request (1 unless a test says otherwise).
+    $queryRaw: async () => [{ count: bucket.count, windowStart: bucket.windowStart }],
+  },
 }));
 
 const { auth } = await import("@/lib/auth");
@@ -133,6 +139,21 @@ describe("/api/firm-os/onboard — happy path and errors", () => {
     for (const a of audits) expect(a.data).toMatchObject({ actorId: "u-partner", entity: "OnboardingRun", entityId: "run-1" });
     expect(audits[1].data.meta).toEqual({ fields: ["pan", "services"], message: false });
     expect(JSON.stringify(audits)).not.toContain("AAACA1234F"); // the PAN itself never reaches the audit trail
+  });
+
+  it("rate limit: the 31st onboarding request in the window gets 429 with Retry-After and no service call; Turia confirm is not limited", async () => {
+    bucket.count = 31;
+    bucket.windowStart = new Date(Date.now() - 20 * 60_000); // 20 minutes into the hour
+    const r = await routes.start(req(VALID.start));
+    expect(r.status).toBe(429);
+    expect(Number(r.headers.get("Retry-After"))).toBeGreaterThan(39 * 60);
+    expect(Number(r.headers.get("Retry-After"))).toBeLessThanOrEqual(40 * 60);
+    expect(r.headers.get("RateLimit-Limit")).toBe("30");
+    expect((await r.json()).error).toMatch(/Too many onboarding requests: the limit is 30 per window\. Try again in 40 minutes\./);
+    expect(svc.start).not.toHaveBeenCalled();
+    for (const name of ["answer", "plan", "create", "resume"] as const) expect((await routes[name](req(VALID[name]))).status).toBe(429);
+    expect((await routes["turia-confirm"](req(VALID["turia-confirm"]))).status).toBe(200);
+    bucket.count = 1;
   });
 
   it("writes no AuditEvent when the service call fails", async () => {
