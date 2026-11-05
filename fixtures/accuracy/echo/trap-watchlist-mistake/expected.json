@@ -1,5 +1,6 @@
 {
   "description": "Trap caught only by the promoted mistake rule echo.watch-shadow (warn).",
+  "category": "trap",
   "job": {
     "fy": "2026-27",
     "period": "2026-10"

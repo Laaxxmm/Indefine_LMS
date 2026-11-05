@@ -1,3 +1,4 @@
+import { withCloseLoopHook } from "@/lib/close-loop/defaults";
 import { parseJson, requireAgentUser, toJson } from "@/lib/agents/http";
 import { approveZ } from "@/lib/agents/schemas";
 import { approvePack, defaultAgentDeps } from "@/lib/agents/service";
@@ -10,5 +11,5 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const body = await parseJson(approveZ, req);
   if (body.res) return body.res;
   const { id } = await params;
-  return toJson(await approvePack(g.user, id, body.data.note?.trim() || null, await defaultAgentDeps()));
+  return toJson(await approvePack(g.user, id, body.data.note?.trim() || null, withCloseLoopHook(await defaultAgentDeps())));
 }

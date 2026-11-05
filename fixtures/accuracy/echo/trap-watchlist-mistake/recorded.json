@@ -1,20 +1,4 @@
 {
-  "system.echo-extract": {
-    "rows": [
-      {
-        "ref": "INV-40",
-        "party": "Shadow Holdings",
-        "date": "2026-10-19",
-        "amountPaise": 990000
-      },
-      {
-        "ref": "INV-41",
-        "party": "Juniper Foods",
-        "date": "2026-10-20",
-        "amountPaise": 100000
-      }
-    ]
-  },
   "system.check:echo.related-party": {
     "status": "pass",
     "evidence": {

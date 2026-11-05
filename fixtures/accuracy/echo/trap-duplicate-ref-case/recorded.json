@@ -1,26 +1,4 @@
 {
-  "system.echo-extract": {
-    "rows": [
-      {
-        "ref": "INV-20",
-        "party": "Globe Traders",
-        "date": "2026-10-12",
-        "amountPaise": 1800000
-      },
-      {
-        "ref": "inv-20",
-        "party": "Globe Traders",
-        "date": "2026-10-13",
-        "amountPaise": 1800000
-      },
-      {
-        "ref": "INV-21",
-        "party": "Harbor Tools",
-        "date": "2026-10-14",
-        "amountPaise": 9999999
-      }
-    ]
-  },
   "system.check:echo.related-party": {
     "status": "pass",
     "evidence": {

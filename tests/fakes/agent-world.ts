@@ -5,7 +5,7 @@ import type { Session } from "next-auth";
 import { createMemoryDb, type MemoryDb } from "@/lib/agents/core/memory-db";
 import { clientDocsInputSource } from "@/lib/agents/core/inputs";
 import { createRecordedRouter, type RecordedResponses, type RecordedRouter } from "@/lib/agents/core/recorded-router";
-import { ECHO_CHECKLIST, ECHO_EXTRACT_TASK, type EchoExtract } from "@/lib/agents/echo";
+import { ECHO_CHECKLIST, ECHO_RELATED_PARTY_TASK, type EchoExtract } from "@/lib/agents/echo";
 import { AGENTS } from "@/lib/agents/registry";
 import type { AnyAgent, RunnerDeps } from "@/lib/agents/core/runner";
 import { createDeliverableStore } from "@/lib/integrations/sharepoint/deliverable-store";
@@ -17,7 +17,7 @@ export const PERIOD_PATH = "FY2026-27/Books/2026-10";
 export const WORKING = `${PERIOD_PATH}/Working`;
 export const FINAL = `${PERIOD_PATH}/Final`;
 export const CLIENT_DOCS = `${PERIOD_PATH}/ClientDocs`;
-export const RELATED_TASK = "system.check:echo.related-party";
+export const RELATED_TASK = ECHO_RELATED_PARTY_TASK;
 
 export const REGISTER_CSV = [
   "ref,party,date,amount",
@@ -26,6 +26,7 @@ export const REGISTER_CSV = [
   "INV-3,City Logistics,2026-10-07,8999.99",
 ].join("\n");
 
+/** What echo's code parse of REGISTER_CSV gives (cached on the AgentRun as `extracted`). */
 export const CLEAN_EXTRACT: EchoExtract = {
   rows: [
     { ref: "INV-1", party: "Acme Traders", date: "2026-10-05", amountPaise: 1500000 },
@@ -35,12 +36,7 @@ export const CLEAN_EXTRACT: EchoExtract = {
 };
 
 /** INV-1 twice (block), a ₹2,00,000.00 round amount (warn), a Saturday (info). */
-export const GAP_EXTRACT: EchoExtract = {
-  rows: [
-    { ref: "INV-1", party: "Acme Traders", date: "2026-10-05", amountPaise: 1500000 },
-    { ref: "INV-1", party: "Acme Traders", date: "2026-10-10", amountPaise: 20000000 },
-  ],
-};
+export const GAP_REGISTER_CSV = ["ref,party,date,amount", "INV-1,Acme Traders,2026-10-05,15000.00", "INV-1,Acme Traders,2026-10-10,200000.00"].join("\n");
 
 export const PASS_VERDICT = { status: "pass", evidence: { quote: "Acme Traders", location: "register.csv row 2" } };
 
@@ -99,7 +95,7 @@ export function echoWorld(
   ]);
   if (opts.pack !== false) db.seed("sopPack", [{ key: "echo", version: "1.0.0", major: 1, minor: 0, patch: 0, title: "Echo", checklist: ECHO_CHECKLIST }]);
 
-  const router = createRecordedRouter(opts.responses ?? { [ECHO_EXTRACT_TASK]: CLEAN_EXTRACT, [RELATED_TASK]: PASS_VERDICT });
+  const router = createRecordedRouter(opts.responses ?? { [RELATED_TASK]: PASS_VERDICT });
   let n = 0;
   const deps: AgentServiceDeps = {
     db,

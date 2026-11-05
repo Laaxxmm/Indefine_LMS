@@ -1,3 +1,4 @@
+import { withCloseLoopHook } from "@/lib/close-loop/defaults";
 import { requireAgentUser, toJson } from "@/lib/agents/http";
 import { defaultAgentDeps, submitForReview } from "@/lib/agents/service";
 
@@ -6,5 +7,5 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const g = await requireAgentUser();
   if (g.res) return g.res;
   const { id } = await params;
-  return toJson(await submitForReview(g.user, id, await defaultAgentDeps()));
+  return toJson(await submitForReview(g.user, id, withCloseLoopHook(await defaultAgentDeps())));
 }

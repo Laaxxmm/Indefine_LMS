@@ -1,5 +1,6 @@
 {
   "description": "Trap: the same reference in different letter case (block); 99,999.99 is just under the round-amount floor.",
+  "category": "trap",
   "job": {
     "fy": "2026-27",
     "period": "2026-10"

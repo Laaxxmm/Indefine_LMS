@@ -27,6 +27,7 @@ import {
   type ChecklistResultItem,
   type ChecklistSummary,
   type LlmCheck,
+  type LlmContextFn,
   type RuleRegistry,
 } from "./checklist";
 import { transitionJobTask } from "./state-db";
@@ -133,6 +134,15 @@ export interface AgentDefinition<I = unknown, E = unknown> {
   defaultChecklist: ChecklistPack;
   /** Framework test agents (echo): hidden unless FIRM_OS_ECHO_AGENT is on. */
   internal?: boolean;
+  /**
+   * Accuracy-harness input-sensitivity probe: return a copy of the gathered files with ONE
+   * material input value changed (e.g. one amount + ₹1). The harness re-runs every fixture on the
+   * mutated files with the same recorded model responses and requires at least one computed
+   * figure or raised flag to differ — proof the pipeline reads its input rather than the
+   * recordings. Must not modify `files`. Optional in the type; the harness fails any agent that
+   * is not `internal` and does not declare it.
+   */
+  probeMutation?(files: InputFile[]): InputFile[];
 }
 
 /** Erases the generic parameters for registries and the service layer. */
@@ -177,7 +187,7 @@ export const LLM_CHECK_SYSTEM = [
   "Do not add up, total or recompute any amount.",
 ].join(" ");
 
-/** Model answer for an LLM rule; the checklist engine validates it again. */
+/** Model answer for an LLM rule; the checklist engine validates it again (location given, quote found in the documents shown). */
 export const LlmVerdictOutputSchema = z.object({
   status: z.enum(["pass", "fail", "na"]),
   message: z.string().max(1000).optional(),
@@ -309,7 +319,9 @@ export async function runAgent<I, E>(def: AgentDefinition<I, E>, jobTaskId: stri
       if (!Number.isSafeInteger(v)) throw new AgentRunError(`compute returned a non-integer figure ${k}=${String(v)} (amounts must be integer paise)`);
     }
     const checkInput: CheckInput<I, E> = { input, extracted, figures, job };
-    const llmCheck: LlmCheck<CheckInput<I, E>> = (rule, ci) =>
+    // The documents text an LLM rule sees is also what its quote is verified against (engine).
+    const llmContext: LlmContextFn<CheckInput<I, E>> = (_rule, ci) => (def.llmContext ? def.llmContext(ci) : JSON.stringify(ci.extracted, null, 2));
+    const llmCheck: LlmCheck<CheckInput<I, E>> = (rule, _ci, documents) =>
       model({
         task: `${def.modelAgent}.check:${rule.id}` as AgentTask,
         privacy: "anonymize-then-cloud",
@@ -319,11 +331,11 @@ export async function runAgent<I, E>(def: AgentDefinition<I, E>, jobTaskId: stri
           { role: "system", content: LLM_CHECK_SYSTEM },
           {
             role: "user",
-            content: `Question: ${rule.check}\nEvidence to cite: ${rule.evidence}\n\nDocuments:\n${def.llmContext ? def.llmContext(ci) : JSON.stringify(ci.extracted, null, 2)}`,
+            content: `Question: ${rule.check}\nEvidence to cite: ${rule.evidence}\n\nDocuments:\n${documents}`,
           },
         ],
       });
-    const results = await runChecklist(loaded.ruleSet, checkInput, { registry: def.checklistRegistry, llmCheck });
+    const results = await runChecklist(loaded.ruleSet, checkInput, { registry: def.checklistRegistry, llmCheck, llmContext });
 
     // Deliverables → Working/.
     const generatedAt = deps.now();

@@ -2,15 +2,20 @@
 // Final-file check, the active Turia bridge for issuing steps, the manual bridge for confirmations,
 // and the agents service finalize path for Working → Final copies. Routes and the cron call
 // closeLoopDeps(); tests build the deps from fakes instead.
+//
+// Hook wiring for the agents service (dependency injection, no registry): the agents service
+// cannot import the close loop (this module imports it), so the agents routes that make
+// transitions wrap their deps with withCloseLoopHook(). Approval on the /agents review screen then
+// runs the same afterTransition as /api/firm-os/jobs/[id]/state.
 import type { SessionUser } from "@/lib/access";
-import { defaultAgentDeps, finalizeRun, type AgentServiceDeps } from "@/lib/agents/service";
+import { defaultAgentDeps, finalizeRun, type AgentServiceDeps, type TransitionHook } from "@/lib/agents/service";
 import { prisma } from "@/lib/prisma";
 import { defaultSharePointClient } from "@/lib/integrations/sharepoint/factory";
 import type { SharePointClient } from "@/lib/integrations/sharepoint/graph-client";
 import { prismaTuriaSyncRepo } from "@/lib/integrations/turia/db";
 import { createTuriaAdapter, manualBridge } from "@/lib/integrations/turia/factory";
 import type { CloseLoopDeps } from "./actions";
-import type { CopyToFinal } from "./hooks";
+import { afterTransition, type CopyToFinal, type HookDeps } from "./hooks";
 import { graphDeliverableVerifier } from "./verifier";
 
 type Finalize = (user: SessionUser, runId: string, deps: AgentServiceDeps) => ReturnType<typeof finalizeRun>;
@@ -41,4 +46,17 @@ export function closeLoopDeps(): CloseLoopDeps {
     copyToFinal: agentServiceCopyToFinal(),
     now: () => new Date(),
   };
+}
+
+/**
+ * The close-loop dispatcher as an agents-service hook: afterTransition (APPROVED → onApproved,
+ * FILED_BY_HUMAN → onFiledByHuman, nothing for other edges) with the production deps, built per call.
+ */
+export function closeLoopTransitionHook(deps: () => HookDeps = closeLoopDeps): TransitionHook {
+  return (t, user) => afterTransition(t, user, deps());
+}
+
+/** Agents-service deps with the close-loop hook injected (approve / submit / request-changes routes). */
+export function withCloseLoopHook(d: AgentServiceDeps, hook: TransitionHook = closeLoopTransitionHook()): AgentServiceDeps {
+  return { ...d, afterTransition: hook };
 }

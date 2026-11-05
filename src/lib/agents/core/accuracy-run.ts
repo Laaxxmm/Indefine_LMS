@@ -9,18 +9,34 @@
 //   fixtures/accuracy/{agent}/_mistakes/*.json           approved MistakeLog rules: { id, pattern, ruleProposal, example }
 //
 // Approved mistakes are promoted into the fixture pack (as decideMistake would) and replayed.
+//
+// Input sensitivity: after its N runs, every fixture runs once more on agent.probeMutation(input)
+// with the SAME recorded responses; at least one figure or flag must differ from run 1, or the
+// agent is not reading its input (audit C1). Flags are split by the rule kind from the pack.
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { FirmService } from "@prisma/client";
 import { z } from "zod";
-import { FixtureExpectedSchema, scoreAgent, type AgentScore, type FixtureExpected, type FixtureOutcome, type ReplayOutcome, type Thresholds, ACCURACY_THRESHOLDS } from "./accuracy";
-import { MistakeRuleProposalSchema, withPromotedRule, type ChecklistPack, type RuleDefinition } from "./checklist";
+import {
+  ACCURACY_THRESHOLDS,
+  FixtureExpectedSchema,
+  probeVerdict,
+  scoreAgent,
+  type AgentScore,
+  type FixtureExpected,
+  type FixtureOutcome,
+  type FixtureRuns,
+  type ReplayOutcome,
+  type RunMode,
+  type Thresholds,
+} from "./accuracy";
+import { MistakeRuleProposalSchema, withPromotedRule, type ChecklistPack, type RuleDefinition, type RuleKind } from "./checklist";
 import { staticInputSource } from "./inputs";
 import { createMemoryDb } from "./memory-db";
 import { createMemoryStore } from "./memory-store";
 import { replayMistake } from "./mistakes";
 import { checkWorkbookShape } from "./preview";
-import { createRecordedRouter, type RecordedResponses } from "./recorded-router";
+import { createRecordedRouter, type RecordedResponses, type RecordedRouter } from "./recorded-router";
 import { jobFolder, runAgent, type AnyAgent, type InputFile, type ModelRouterLike } from "./runner";
 
 export const DEFAULT_FIXTURES_ROOT = "fixtures/accuracy";
@@ -97,15 +113,17 @@ export async function runFixtureOnce(def: AnyAgent, fx: FixtureCase, pack: Check
   db.seed("sopPack", [{ key: def.sopPackKey, version: pack.version, major, minor, patch, title: def.title, checklist: pack }]);
 
   let n = 0;
+  const modelRouter = router ?? createRecordedRouter(fx.recorded);
+  const requested = () => ("calls" in modelRouter ? (modelRouter as RecordedRouter).calls.map((c) => c.task) : undefined);
   const out = await runAgent(def, "fixture-job", {
     db,
-    router: router ?? createRecordedRouter(fx.recorded),
+    router: modelRouter,
     store,
     inputs: staticInputSource(fx.inputFiles),
     now: () => FIXTURE_NOW,
     ids: () => `${fx.id}-run-${++n}`,
   });
-  if (!out.ok) return { flags: [], figures: {}, deliverables: [], error: `${out.code}: ${out.reason}` };
+  if (!out.ok) return { flags: [], figures: {}, deliverables: [], error: `${out.code}: ${out.reason}`, requestedTasks: requested() };
 
   const flags = (db.tables.checklistResult as { agentRunId: string; ruleId: string; severity: string; status: string }[])
     .filter((r) => r.agentRunId === out.runId && r.status === "fail")
@@ -132,14 +150,26 @@ export async function runFixtureOnce(def: AnyAgent, fx: FixtureCase, pack: Check
     deliverables.push({ name: want.name, problems });
   }
   for (const f of files.filter((x) => !matched.has(x))) deliverables.push({ name: f, problems: ["unexpected deliverable"] });
-  return { flags, figures: out.figures, deliverables };
+  return { flags, figures: out.figures, deliverables, requestedTasks: requested() };
 }
+
+const sameFiles = (a: InputFile[], b: InputFile[]) => a.length === b.length && a.every((f, i) => f.name === b[i].name && f.bytes.equals(b[i].bytes));
+const copyFiles = (files: InputFile[]): InputFile[] => files.map((f) => ({ ...f, bytes: Buffer.from(f.bytes) }));
+
+/** ruleId → kind for every rule of a pack. */
+export const ruleKindsOf = (pack: ChecklistPack): Record<string, RuleKind> => Object.fromEntries(pack.rules.map((r) => [r.id, r.kind]));
 
 export type AccuracyOptions = {
   root?: string;
   runs?: number;
   thresholds?: Thresholds;
-  /** Replace the recorded router (determinism self-test; Phase 2b live providers). */
+  /**
+   * "recorded" (default): model answers come from recorded.json, LLM flags are gated as code path
+   * only. "live" (Phase 2b): routerFor must supply a live provider; LLM flags are gated on the
+   * thresholds like deterministic ones.
+   */
+  mode?: RunMode;
+  /** Replace the recorded router (determinism self-test; Phase 2b live providers). Run index `runs` is the probe run. */
   routerFor?: (fx: FixtureCase, run: number) => ModelRouterLike;
 };
 
@@ -148,13 +178,28 @@ export async function runAgentAccuracy(def: AnyAgent, opts: AccuracyOptions = {}
   const root = opts.root ?? DEFAULT_FIXTURES_ROOT;
   const t = opts.thresholds ?? ACCURACY_THRESHOLDS;
   const runs = opts.runs ?? t.runs;
+  const mode = opts.mode ?? "recorded";
+  if (mode === "live" && !opts.routerFor) throw new Error("live mode needs routerFor (a live provider per fixture)");
   const mistakes = loadApprovedMistakes(root, def.key);
   const pack = packWithMistakes(def, mistakes);
-  const results = [];
+  const results: FixtureRuns[] = [];
   for (const fx of loadFixtures(root, def.key)) {
     const outcomes: FixtureOutcome[] = [];
     for (let i = 0; i < runs; i++) outcomes.push(await runFixtureOnce(def, fx, pack, opts.routerFor?.(fx, i)));
-    results.push({ id: fx.id, expected: fx.expected, runs: outcomes });
+    const result: FixtureRuns = { id: fx.id, expected: fx.expected, runs: outcomes };
+    if (def.probeMutation) {
+      // Same recordings, one input value changed: something scored must move.
+      const mutated = def.probeMutation(copyFiles(fx.inputFiles));
+      const changedInput = !sameFiles(fx.inputFiles, mutated);
+      const probeRun = changedInput ? await runFixtureOnce(def, { ...fx, inputFiles: mutated }, pack, opts.routerFor?.(fx, runs)) : outcomes[0];
+      result.probe = probeVerdict(outcomes[0], probeRun, changedInput);
+    }
+    if (!opts.routerFor) {
+      const asked = new Set(outcomes.flatMap((o) => o.requestedTasks ?? []));
+      const unused = Object.keys(fx.recorded).filter((task) => !asked.has(task));
+      if (unused.length) result.unusedRecordings = unused.sort();
+    }
+    results.push(result);
   }
   const replay: ReplayOutcome[] = [];
   for (const m of mistakes) {
@@ -162,5 +207,10 @@ export async function runAgentAccuracy(def: AnyAgent, opts: AccuracyOptions = {}
     const r = await replayMistake(def, rule, m.example);
     replay.push({ mistakeId: m.id, ruleId: rule.id, caught: r.caught, reason: r.reason });
   }
-  return scoreAgent(def.key, `${basename(root)}/${def.key}`, results, replay, t);
+  return scoreAgent(def.key, `${basename(root)}/${def.key}`, results, replay, t, {
+    mode,
+    internal: def.internal === true,
+    probeDeclared: typeof def.probeMutation === "function",
+    ruleKinds: ruleKindsOf(pack),
+  });
 }

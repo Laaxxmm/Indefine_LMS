@@ -2,6 +2,13 @@
 // takes the signed-in user, checks access (access.ts + the state machine), and returns a
 // ServiceResult the route maps to JSON. Production dependencies are built lazily by
 // defaultAgentDeps(); tests pass their own (memory db, recorded router, fake SharePoint).
+//
+// Transition hooks: after each JobTask transition this service makes (submit, request changes,
+// approve) it calls `deps.afterTransition` when one is injected. The close loop
+// (src/lib/close-loop) imports this module, so this module never imports the close loop: the
+// routes inject the close-loop dispatcher with withCloseLoopHook() from close-loop/defaults.ts,
+// the same afterTransition the /api/firm-os/jobs/[id]/state route runs. A hook only adds work;
+// its failure never undoes or fails the transition.
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import type { SessionUser } from "@/lib/access";
@@ -9,11 +16,17 @@ import { actorOf, canDecideMistakes, canViewJob, reviewActions } from "@/lib/age
 import { decideMistake, proposeMistake, type Decision } from "@/lib/agents/core/mistakes";
 import { previewWorkbook, type WorkbookPreview } from "@/lib/agents/core/preview";
 import { jobFolder, runAgent, type AnyAgent, type FirmDb, type RunOutcome, type RunnerDeps } from "@/lib/agents/core/runner";
-import { transitionJobTask } from "@/lib/agents/core/state-db";
+import { transitionJobTask, type TransitionResult } from "@/lib/agents/core/state-db";
 import { DOCX_MIME, XLSX_MIME } from "@/lib/agents/core/templates";
 import { AGENTS, getAgent } from "@/lib/agents/registry";
 
-export type AgentServiceDeps = RunnerDeps & { agents: Readonly<Record<string, AnyAgent>> };
+/** A successful transition, as transitionJobTask reports it. */
+export type TransitionDone = Extract<TransitionResult, { ok: true }>;
+
+/** Runs after a transition made by this service succeeded (production: the close-loop afterTransition). */
+export type TransitionHook = (t: TransitionDone, user: SessionUser) => Promise<unknown>;
+
+export type AgentServiceDeps = RunnerDeps & { agents: Readonly<Record<string, AnyAgent>>; afterTransition?: TransitionHook };
 
 export type ServiceResult<T> = { ok: true; data: T } | { ok: false; status: 400 | 403 | 404 | 409 | 502; error: string };
 
@@ -84,6 +97,16 @@ function outcomeResult(out: RunOutcome): ServiceResult<{ runId: string; status: 
   return fail(out.code === "NOT_FOUND" ? 404 : 409, out.reason);
 }
 
+/** Runs the injected hook; a throwing hook is logged and swallowed (the transition stands). */
+async function fireHook(deps: AgentServiceDeps, t: TransitionDone, user: SessionUser): Promise<void> {
+  if (!deps.afterTransition) return;
+  try {
+    await deps.afterTransition(t, user);
+  } catch (e) {
+    console.error(`[agents] afterTransition hook failed for ${t.jobTaskId} ${t.from} → ${t.to}: ${(e as Error).message}`);
+  }
+}
+
 // ------------------------------------------------------------------ actions
 
 /** "Run agent": the assignee (or a manager/partner) starts a run on an ASSIGNED / IN_PREP job. */
@@ -105,6 +128,7 @@ export async function submitForReview(user: SessionUser, runId: string, deps: Ag
   if ((await latestRunId(deps.db, v.data.jobTaskId)) !== runId) return fail(409, "A newer run exists for this job; open the latest run");
   const t = await transitionJobTask(deps.db, v.data.jobTaskId, "IN_REVIEW", actorOf(user)!, { expectedState: "AGENT_DONE", now: deps.now() });
   if (!t.ok) return fail(t.code === "FORBIDDEN" ? 403 : 409, t.reason);
+  await fireHook(deps, t, user);
   return { ok: true, data: { state: "IN_REVIEW" } };
 }
 
@@ -118,10 +142,16 @@ export async function requestChanges(user: SessionUser, runId: string, note: str
   const t = await transitionJobTask(deps.db, v.data.jobTaskId, "IN_PREP", actorOf(user)!, { expectedState: "IN_REVIEW", note, now: deps.now() });
   if (!t.ok) return fail(t.code === "FORBIDDEN" ? 403 : t.code === "NOTE_REQUIRED" ? 400 : 409, t.reason);
   await deps.db.agentRun.update({ where: { id: runId }, data: { status: "CHANGES_REQUESTED", reviewNotes: note.trim() } });
+  await fireHook(deps, t, user);
   return outcomeResult(await runAgent(def, v.data.jobTaskId, deps, { startedById: user?.id ?? null, notes: note }));
 }
 
-/** "Approve pack": IN_REVIEW → APPROVED, then Working → Final copies (version suffix, Final rows). */
+/**
+ * "Approve pack": IN_REVIEW → APPROVED, then Working → Final copies (version suffix, Final rows).
+ * The injected close-loop hook runs first (onApproved copies to Final unless Final rows exist);
+ * finalizeRun runs after it either way. finalizeRun is idempotent: after a hook copy it adds
+ * nothing and reports the Final names; if the hook could not copy, it is the retry (502 + message).
+ */
 export async function approvePack(user: SessionUser, runId: string, note: string | null, deps: AgentServiceDeps): Promise<ServiceResult<{ state: "APPROVED"; final: string[] }>> {
   const v = await visibleRun(user, deps.db, runId);
   if (!v.ok) return v;
@@ -132,6 +162,7 @@ export async function approvePack(user: SessionUser, runId: string, note: string
     return fail(status, t.reason);
   }
   await deps.db.agentRun.update({ where: { id: runId }, data: { status: "APPROVED" } });
+  await fireHook(deps, t, user);
   return finalizeRun(user, runId, deps);
 }
 

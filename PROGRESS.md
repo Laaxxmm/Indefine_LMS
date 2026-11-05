@@ -1,6 +1,6 @@
 # PROGRESS — Indefine Firm OS
-Current phase: 5–8 | Branch: firm-os/phase-0-inventory | Last green: 2026-11-05 21:00 IST
-Tests: unit+integration 1492/1492 (65 files; Firm OS coverage 99.7% lines / 97.4% branches) · e2e 4/4 (smoke, local, no DB) · accuracy: echo P=1.00 R=1.00 (code path only — audit C1, harness fix in progress) | GST – | ROC – | TAX – | BOOKS – | AUDIT –
+Current phase: 5–8 | Branch: firm-os/phase-0-inventory | Last green: 2026-11-05 21:27 IST
+Tests: unit+integration 1561/1561 (70 files; Firm OS coverage 99.7% lines / 97.4% branches) · e2e 4/4 (smoke, local, no DB) · accuracy: echo pass on hardened harness (deterministic block 1/0/0, warn 2/0/0; input sensitivity 6/6) | GST – | ROC – | TAX – | BOOKS – | AUDIT –
 Model mode: CLAUDE_ONLY + LOCAL_STUB(fail-closed) | Turia bridge: MANUAL (ADR-003)
 
 ## Phase checklist (✅ only when QA gate green)
@@ -52,7 +52,7 @@ Phase 8 (merged, 6 commits from worktree branch)
 - [x] 3 reconcile.ts + /api/cron/firm-os/close-loop (Mon–Sat 09:00–19:00 IST) + .github/workflows/firm-os-close-loop.yml (every 30 min); 15-min reminder, 24-h escalation, once per person/job/day; DONE file re-verified — alert, never reopen; DB backstop check on DONE events
 - [x] 4 /api/firm-os/jobs/[id]/{filed,turia-close,state}; state→DONE returns 403 gate-required
 - [x] 5 /admin/firm-os/cycle-time — median / p90 per service, person, client; bottleneck stage
-- [ ] Mark filed / Close in Turia buttons on /agents review screen + approvePack → close-loop hook + tests/e2e-db/golden-path.spec.ts (agent running)
+- [x] Review screen: Mark filed (ack ref required for GST/ROC/IncomeTax/TDS) → Close in Turia (ref + minutes) → gate reasons / DONE chip + cycle time; approve/submit/request-changes fire the close-loop hook via injected afterTransition; tests/e2e-db/golden-path.spec.ts (+ negative case) — runs echo until gst lands (E2E_AGENT=gst)
 - [ ] QA e2e golden path onboard → GST → approve → filed → Turia close → DONE — **Blocked**: staging DB (+ GST agent merge)
 
 Phase 4 (in progress)
@@ -120,6 +120,10 @@ Shared foundation (commit c61d885): additive Prisma section "Firm OS: shared spi
 |---|---|---|---|---|---|---|---|---|---|
 | echo (framework self-test) | accuracy/echo (6) | 1.000/1.000 (n=1) | 1.000/1.000 (n=3) | 6/6 | 6/6 | 1/1 | 6/6 | pass — code path only, see audit | 05 Nov 2026 20:46 IST |
 
+**Hardened harness (21:17 IST):** recorded mode gates deterministic flags on thresholds; LLM flags must match recordings exactly; support (tp/fp/fn) shown; input-sensitivity probe mandatory for production agents; thin sets refused (gst/roc/tax ≥ 15, books/audit ≥ 10, ≥1 block + ≥1 warn expected, clean/typical-gap/trap each present); LLM evidence must quote the rule's context. The five audit probes are permanent self-tests and all FAIL as they should.
+
+| echo (hardened) | accuracy/echo (6) | det. block 1.000/1.000 (1/0/0) | det. warn 1.000/1.000 (2/0/0) | 6/6 | 6/6 | 1/1 | 6/6 code path | pass · input sensitivity 6/6 | 05 Nov 2026 21:17 IST |
+
 **Independent accuracy audit (fable model, 20:46 IST, read-only):** echo figures recomputed independently 6/6 match; flags hand-derived 6/6 agree; thresholds equal the spec; P/R maths correct; self-test fails as it should; mistake replay genuinely depends on the promoted rule. Findings:
 - **C1 CRITICAL** — scored pipeline never read input/: figures + deterministic rules derived from recorded.json; ₹1 input change and an injected duplicate ref still passed. → harness fix in progress (echo parses input in code; mandatory input-sensitivity probe for production agents). Phases 5–7 agents told to parse input in code.
 - **H1 HIGH** — LLM evidence quote/location not checked against the document (a fabricated quote passed). → engine to require the quote verbatim in the rule's context.
@@ -132,6 +136,7 @@ Shared foundation (commit c61d885): additive Prisma section "Firm OS: shared spi
 - ADR-001 Extend LMS · ADR-002 ModelRouter · ADR-003 Turia (ManualBridge default — no documented Turia API) · ADR-004 SharePoint Path A · ADR-005 Close loop for DONE · ADR-006 DPDP data classes (docs/adr/).
 - Guard allowlists (frozen, Firm OS dirs never allowlistable): LEGACY_PORTAL_READONLY = src/lib/statutory/cloud.ts, statutory-extension/{background.js,collectors.js,manifest.json} (public news reads), src/lib/certificates/templates/format-vi.ts (certificate wording only, no network allowed). LEGACY_GEMINI = src/lib/{gemini,quiz-gen,distill,transcribe}.ts.
 - Models (env-overridable): FAST claude-haiku-5-5 · SMART claude-sonnet-5-5 · HARD claude-opus-5-5 · Grok grok-4 (price unverified, configurable). USD_INR 88, ROUTER_MIN_CONF 0.75, AI_DAILY_BUDGET_INR 1000. `judgement` difficulty routes SMART→HARD (spec silent). Local-model calls are not masked (data stays on LAN); ModelCall hash always of masked prompt.
+- ADR-008 Agent guardrails (owner request: stay in the department, never guess): scope contract per agent + scoped model calls, closed outputs with insufficient_evidence, grounding of every extracted value, mandatory validators, agreement on block-level judgements, wrong-input fail-closed, versioned prompts (prompts.lock.json), drift monitoring. Implementation agent running; building agents briefed.
 - ADR-007 (proposed): Graph upload needs PUT — one create-only PUT path with conflictBehavior=fail; versions instead of overwrite; enforced by no-destructive.test.ts. Needs owner confirmation.
 - Review comments stored as AuditEvent (action comment) — no schema change. Mistake decisions also at /agents/mistakes because the /admin layout admits LMS admins only.
 - Onboarding: LMS Client.turnover is required, so turnover is a clarifier question (not defaulted). Existing client with same name/PAN is linked, not duplicated. Turia task issued only for the first period of each series. Firm OS UI keeps the LMS brand theme (violet) instead of the spec's teal fallback — spec says extend the existing theme. `isManager` added to src/lib/access.ts (MANAGER, SENIOR_MANAGER).
@@ -193,3 +198,9 @@ Shared foundation (commit c61d885): additive Prisma section "Firm OS: shared spi
 - 20:52 · 4 · Harness-hardening agent started; Phases 5–7 agents briefed on the findings · –
 - 20:58 · 8 · Merged close loop (gate, hooks, reconciler + workflow, routes, cycle-time page); guard scope + cron/firm-os, rbac, audit · 1492/1492
 - 21:00 · 8 · next build green; agent started for review-screen close actions + golden-path e2e spec · 1492/1492
+- 21:05 · 4 · Fixed two framework tests that assumed echo is the only agent (22cd632, 58589f8) · green
+- 21:08 · ui · UI navigation/flow audit + ui-links verifier agent started (owner request) · –
+- 21:10 · all · ADR-008 agent guardrails written; GST/ROC/Tax/Books/Audit agents briefed · –
+- 21:17 · 4 · Merged hardened accuracy harness (audit C1, H1, H2, M1–M3 fixed; probes as self-tests) · 68 files green · echo pass
+- 21:19 · guardrails · ADR-008 implementation agent started · –
+- 21:27 · 8 · Merged review-screen close actions + approve hook + golden-path e2e spec; resolved agents.test.ts import conflict with the harness fix · 1561/1561 · build green

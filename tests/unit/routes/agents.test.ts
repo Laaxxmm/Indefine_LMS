@@ -3,17 +3,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Session } from "next-auth";
 import { NotFoundSignal, redirectTarget, renderHtml as renderRaw } from "./harness";
-import { echoWorld, user, type World } from "../../fakes/agent-world";
-import { ECHO_EXTRACT_TASK } from "@/lib/agents/echo";
+import { echoWorld, rows, user, type World } from "../../fakes/agent-world";
 import { approvePack, logMistake, requestChanges, startAgentRun, submitForReview } from "@/lib/agents/service";
 
-const state = vi.hoisted(() => ({ world: null as unknown as World }));
+const state = vi.hoisted(() => ({ world: null as unknown as World, turia: [] as Record<string, unknown>[] }));
 
 vi.mock("@/lib/auth", () => ({ auth: vi.fn(), signIn: vi.fn(), signOut: vi.fn(), handlers: {} }));
 vi.mock("next/navigation", async () => (await import("./harness")).navigationMock);
+// The memory db has no TuriaSync table; the review page's close-loop view reads it, so add one.
 vi.mock("@/lib/prisma", () => ({
   get prisma() {
-    return state.world.db;
+    const turiaSync = { findMany: async ({ where }: { where: { jobTaskId: string } }) => state.turia.filter((r) => r.jobTaskId === where.jobTaskId) };
+    return Object.assign(Object.create(state.world.db), { turiaSync });
   },
 }));
 
@@ -33,6 +34,7 @@ const PORTAL_OR_SEND = />\s*(Submit to portal|Send[^<]*|File on portal)\s*</i;
 
 beforeEach(() => {
   state.world = echoWorld();
+  state.turia = [];
   state.world.db.seed("user", [
     { id: "u-ravi", name: "Ravi Kumar", email: "ravi@indefine.test" },
     { id: "u-priya", name: "Priya S", email: "priya@indefine.test" },
@@ -124,7 +126,7 @@ describe("/agents/[agent]/runs/[id] review screen", () => {
   });
 
   it("reviewer on IN_REVIEW: Approve pack (primary) + Request changes; block findings shown in red", async () => {
-    state.world = echoWorld({ responses: { [ECHO_EXTRACT_TASK]: { rows: [{ ref: "A", party: "P", date: "2026-10-05", amountPaise: 100 }, { ref: "A", party: "P", date: "2026-10-06", amountPaise: 100 }] } } });
+    state.world = echoWorld({ register: ["ref,party,date,amount", "A,P,2026-10-05,1.00", "A,P,2026-10-06,1.00"].join("\n"), responses: {} });
     await startAgentRun(user("priya"), "echo", "job-1", state.world.deps);
     await submitForReview(user("priya"), "run-1", state.world.deps);
     as(user("partner"));
@@ -150,9 +152,51 @@ describe("/agents/[agent]/runs/[id] review screen", () => {
     expect(old).not.toContain("Approve pack");
     const done = await review("run-2");
     expect(done).toContain("Reviewer notes for this run");
-    expect(done).toContain("A person files it on the portal");
+    expect(done).toContain("Firm OS never files anything");
     expect(done).toContain("Ravi Kumar");
     expect(done).toContain("Final · v2"); // attempt 2 → Working _v2 → Final _v2
+    // The reviewer may record the filing: Mark filed is the bar's one action; nothing files or sends.
+    expect(done).toContain("Filing and close");
+    expect(done).toContain("Filed by you on the portal — record the acknowledgement here.");
+    expect(done).toMatch(/<button[^>]*>Mark filed<\/button>/);
+    expect(done).not.toMatch(PORTAL_OR_SEND);
+    expect(old).not.toContain("Mark filed"); // superseded run: read-only
+  });
+
+  it("close loop on the review screen: CLOSING shows Close in Turia and the gate's reasons; DONE shows the chip; admin gets no action", async () => {
+    await startAgentRun(user("priya"), "echo", "job-1", state.world.deps);
+    await submitForReview(user("priya"), "run-1", state.world.deps);
+    await approvePack(user("ravi"), "run-1", null, state.world.deps);
+    as(user("admin"));
+    const admin = await review("run-1");
+    expect(admin).toContain("Filing and close");
+    expect(admin).not.toContain("Mark filed");
+    expect(admin).toContain("A person files it on the portal");
+
+    const db = state.world.db;
+    const job = rows(db, "jobTask")[0];
+    await db.jobTaskEvent.create({ data: { jobTaskId: "job-1", fromState: "APPROVED", toState: "FILED_BY_HUMAN", actorId: "u-priya", note: "ack ref BOOKS-1" } });
+    await db.jobTaskEvent.create({ data: { jobTaskId: "job-1", fromState: "FILED_BY_HUMAN", toState: "CLOSING", actorId: "system:close-loop-hook", note: null } });
+    Object.assign(job, { state: "CLOSING", filedAt: new Date(), filedById: "u-priya", ackRef: "BOOKS-1" });
+    await db.auditEvent.create({ data: { actorId: "u-priya", action: "close-refused", entity: "JobTask", entityId: "job-1", meta: { reasons: ["Turia task not closed: enter the Turia task ref and minutes logged"], state: "CLOSING" } } });
+    as(user("priya"));
+    const closing = await review("run-1");
+    expect(closing).toMatch(/<button[^>]*>Close in Turia<\/button>/);
+    expect(closing).toContain("Still closing: the close gate did not pass");
+    expect(closing).toContain("Turia task not closed");
+    expect(closing).toContain("BOOKS-1");
+    expect(closing).not.toMatch(PORTAL_OR_SEND);
+
+    state.turia.push({ jobTaskId: "job-1", operation: "closeTask", status: "CLOSED", turiaRef: "TT-9", minutesLogged: 40, updatedAt: new Date() });
+    expect(await review("run-1")).toMatch(/<button[^>]*>Check again<\/button>/);
+
+    await db.jobTaskEvent.create({ data: { jobTaskId: "job-1", fromState: "CLOSING", toState: "DONE", actorId: "system:close-gate", note: null } });
+    Object.assign(job, { state: "DONE", doneAt: new Date("2026-11-05T09:00:00Z") });
+    const done = await review("run-1");
+    expect(done).toContain("Closed 05 Nov 2026 14:30 IST · cycle time");
+    expect(done).not.toContain("Close in Turia");
+    expect(done).not.toContain("Still closing");
+    expect(done).not.toMatch(PORTAL_OR_SEND);
   });
 
   it("failed run shows the error and Run agent for the assignee; hidden from outsiders; wrong agent segment 404", async () => {

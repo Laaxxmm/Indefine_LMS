@@ -1,5 +1,6 @@
 {
   "description": "Clean: three ordinary invoices, no findings.",
+  "category": "clean",
   "job": {
     "fy": "2026-27",
     "period": "2026-10"
