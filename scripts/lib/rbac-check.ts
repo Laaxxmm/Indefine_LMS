@@ -63,6 +63,7 @@ const COACH_OWN = "every active person, for their own coach data only";
 const COMPANION = "active admins and partners, or someone an admin switched the Companion on for";
 const PRIVACY = "DPDP request register: active admins and partners";
 const SEARCH = "every active person; each result type scoped by the rule of the page that opens it";
+const ONBOARD_RUN = "partners, managers, admins; an existing run only by the person who started it or a partner";
 
 /** What each Firm OS route must check. New routes: add a row here (verify-rbac prints a note until you do). */
 export const EXPECTED_POLICIES: ExpectedPolicy[] = [
@@ -80,12 +81,12 @@ export const EXPECTED_POLICIES: ExpectedPolicy[] = [
   { route: "/api/firm-os/jobs/[id]/filed", method: "POST", policies: ["canActOnJob", "canTransition"], why: `the job's people, managers, partners; ${JOB_EDGE}` },
   { route: "/api/firm-os/jobs/[id]/state", method: "POST", policies: ["canActOnJob", "canTransition"], why: `the job's people, managers, partners; DONE refused; ${JOB_EDGE}` },
   { route: "/api/firm-os/jobs/[id]/turia-close", method: "POST", policies: ["canActOnJob"], why: "the job's people, managers, partners" },
-  { route: "/api/firm-os/onboard/answer", method: "POST", policies: ["canOnboard"], why: "partners, managers, admins" },
-  { route: "/api/firm-os/onboard/create", method: "POST", policies: ["canOnboard"], why: "partners, managers, admins" },
-  { route: "/api/firm-os/onboard/plan", method: "POST", policies: ["canOnboard"], why: "partners, managers, admins" },
-  { route: "/api/firm-os/onboard/resume", method: "POST", policies: ["canOnboard"], why: "partners, managers, admins" },
+  { route: "/api/firm-os/onboard/answer", method: "POST", policies: ["canOnboard", "canOpenOnboardingRun"], why: ONBOARD_RUN },
+  { route: "/api/firm-os/onboard/create", method: "POST", policies: ["canOnboard", "canOpenOnboardingRun"], why: ONBOARD_RUN },
+  { route: "/api/firm-os/onboard/plan", method: "POST", policies: ["canOnboard", "canOpenOnboardingRun"], why: ONBOARD_RUN },
+  { route: "/api/firm-os/onboard/resume", method: "POST", policies: ["canOnboard", "canOpenOnboardingRun"], why: ONBOARD_RUN },
   { route: "/api/firm-os/onboard/start", method: "POST", policies: ["canOnboard"], why: "partners, managers, admins" },
-  { route: "/api/firm-os/onboard/turia-confirm", method: "POST", policies: ["canOnboard"], why: "partners, managers, admins" },
+  { route: "/api/firm-os/onboard/turia-confirm", method: "POST", policies: ["canOnboard", "canOpenOnboardingRun"], why: ONBOARD_RUN },
   { route: "/api/firm-os/spot-checks/[id]", method: "POST", policies: ["canSpotCheck"], why: "Turia spot checks: partner only" },
   // Daily Coach (Phase 9): personal data, the person's own only (ADR-006).
   { route: "/api/firm-os/coach/heartbeat", method: "POST", policies: ["canUseCoach"], why: `${COACH_OWN}; the heartbeat is stored against the session's own id` },

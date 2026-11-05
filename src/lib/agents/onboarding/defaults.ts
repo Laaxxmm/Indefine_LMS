@@ -2,6 +2,7 @@
 // SharePoint Path A and the statutory calendar. Routes call onboardingService(); tests build the
 // service with createOnboardingService() and fakes instead.
 import { prisma } from "@/lib/prisma";
+import type { SessionUser } from "@/lib/access";
 import { run } from "@/lib/ai/router";
 import { defaultClFolders } from "@/lib/integrations/sharepoint/clfolders";
 import { listTuriaSyncs, prismaTuriaSyncRepo } from "@/lib/integrations/turia/db";
@@ -13,7 +14,8 @@ import { isOnboardingAiRestricted, type OnboardingRestrictionDb } from "./restri
 import { createSaga } from "./saga";
 import { createOnboardingService, type OnboardingService } from "./service";
 
-export function onboardingService(opts: { actorIsPartner?: boolean } = {}): OnboardingService {
+/** `viewer`: the signed-in person; steps on an existing run need canOpenOnboardingRun (creator or partner). */
+export function onboardingService(opts: { actorIsPartner?: boolean; viewer: SessionUser | null }): OnboardingService {
   const repo = prismaTuriaSyncRepo(prisma);
   const turia = createTuriaAdapter({ repo, actorIsPartner: opts.actorIsPartner });
   const store = prismaSagaStore(prisma);
@@ -40,5 +42,6 @@ export function onboardingService(opts: { actorIsPartner?: boolean } = {}): Onbo
     setTuriaClientRef: (firmClientId, ref) => setTuriaClientRef(prisma, firmClientId, ref),
     audit: (e) => store.audit(e),
     aiRestricted: (subject) => isOnboardingAiRestricted(prisma as unknown as OnboardingRestrictionDb, subject),
+    viewer: opts.viewer,
   });
 }

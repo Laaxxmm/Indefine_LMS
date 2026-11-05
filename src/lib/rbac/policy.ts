@@ -93,6 +93,16 @@ export function canOnboard(user: SessionUser): boolean {
 }
 
 /**
+ * Open or continue one onboarding run (answer, plan, create, resume, Turia confirm, view): the
+ * person who started it, or a partner (level PARTNER, admin-partners included). Other managers
+ * and admins start their own. Start itself is canOnboard.
+ */
+export function canOpenOnboardingRun(user: SessionUser, run: { createdById: string }): boolean {
+  if (!canOnboard(user) || !user) return false;
+  return user.id === run.createdById || isPartner(user);
+}
+
+/**
  * Close-loop actions on a job (mark filed, record the Turia close, other state edges): the job's
  * assignee or reviewer, a manager or a partner, and only while active. Admin (IT) takes no job edges.
  */

@@ -19,6 +19,7 @@ import {
   canManageOwnCoachPrefs,
   canManageWorkspace,
   canOnboard,
+  canOpenOnboardingRun,
   canPairCompanion,
   canRetractFiling,
   canRevealClientPii,
@@ -262,6 +263,11 @@ describe("Phase 9-17 policies (one place for who may do what)", () => {
     matrix(canDecideErasure, ["partner", "adminPartner", "admin"]);
     matrix(canManageBreaches, ["partner", "adminPartner", "admin"]);
     matrix(canLiftRestriction, ["partner", "adminPartner"]);
+  });
+
+  it("an onboarding run: its creator (if they may onboard) or a partner", () => {
+    matrix((x) => canOpenOnboardingRun(x, { createdById: "u-manager" }), ["manager", "partner", "adminPartner"]);
+    matrix((x) => canOpenOnboardingRun(x, { createdById: "u-assignee" }), ["partner", "adminPartner"]); // staff cannot onboard at all
   });
 
   it("search: every active person; workspace settings: active admins; full client identifiers: management", () => {

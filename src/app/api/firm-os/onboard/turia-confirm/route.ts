@@ -11,7 +11,7 @@ export async function POST(req: Request) {
   if (!body.ok) return body.res;
   try {
     const { runId, syncId, turiaRef, minutes } = body.data;
-    return NextResponse.json({ run: await onboardingService({ actorIsPartner: g.isPartner }).turiaConfirm(runId, { syncId, turiaRef, minutes }, g.user.id) });
+    return NextResponse.json({ run: await onboardingService({ actorIsPartner: g.isPartner, viewer: g.user }).turiaConfirm(runId, { syncId, turiaRef, minutes }, g.user.id) });
   } catch (e) {
     return errorResponse(e);
   }

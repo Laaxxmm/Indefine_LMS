@@ -115,7 +115,7 @@ describe("/api/firm-os/onboard — happy path and errors", () => {
     expect(r.status).toBe(201);
     expect(await r.json()).toEqual({ run: { id: "run-1", status: "DRAFT" } });
     expect(svc.start).toHaveBeenCalledWith("Onboard Acme Pvt Ltd, GST monthly", "u-partner");
-    expect(factory).toHaveBeenCalledWith({ actorIsPartner: true });
+    expect(factory).toHaveBeenCalledWith({ actorIsPartner: true, viewer: expect.objectContaining({ id: expect.any(String) }) }); // the viewer gates every step on an existing run (creator or partner)
 
     r = await routes.answer(req({ runId: "run-1", message: "reviewer Anita" }));
     expect(r.status).toBe(200);
@@ -166,7 +166,7 @@ describe("/api/firm-os/onboard — happy path and errors", () => {
   it("managers and admins may onboard too (not as partner)", async () => {
     signedIn(activeSession({ level: "MANAGER" }));
     expect((await routes.plan(req(VALID.plan))).status).toBe(200);
-    expect(factory).toHaveBeenLastCalledWith({ actorIsPartner: false });
+    expect(factory).toHaveBeenLastCalledWith({ actorIsPartner: false, viewer: expect.objectContaining({ id: expect.any(String) }) });
     signedIn(activeSession({ role: "ADMIN" }));
     expect((await routes.plan(req(VALID.plan))).status).toBe(200);
   });

@@ -17,7 +17,7 @@ export async function POST(req: Request) {
   const limited = await enforceRateLimit("onboard", g.user.id);
   if (limited) return limited;
   try {
-    const run = await onboardingService({ actorIsPartner: g.isPartner }).plan(body.data.runId, g.user.id);
+    const run = await onboardingService({ actorIsPartner: g.isPartner, viewer: g.user }).plan(body.data.runId, g.user.id);
     await recordAudit({ actorId: g.user.id, action: "onboarding.plan", entity: "OnboardingRun", entityId: body.data.runId, meta: { status: run.status } });
     return NextResponse.json({ run });
   } catch (e) {

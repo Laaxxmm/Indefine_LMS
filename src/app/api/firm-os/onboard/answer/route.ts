@@ -17,7 +17,7 @@ export async function POST(req: Request) {
   if (limited) return limited;
   try {
     const { runId, answers, message } = body.data;
-    const run = await onboardingService({ actorIsPartner: g.isPartner }).answer(runId, { answers, message });
+    const run = await onboardingService({ actorIsPartner: g.isPartner, viewer: g.user }).answer(runId, { answers, message });
     // Which fields were answered, never the values (they can be client personal data, ADR-006).
     await recordAudit({ actorId: g.user.id, action: "onboarding.answer", entity: "OnboardingRun", entityId: runId, meta: { fields: Object.keys(answers ?? {}), message: !!message } });
     return NextResponse.json({ run });

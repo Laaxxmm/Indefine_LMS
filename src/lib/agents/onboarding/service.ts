@@ -22,6 +22,8 @@ import { OnboardingSpec, partialSpecZ, type PartialSpec } from "./spec";
 import { gstStateCode, issuesByField, validateSpec, type Issue, type ValidationPorts } from "./validators";
 import type { OnboardingSubject } from "./restriction";
 import { AI_RESTRICTED_MESSAGE } from "@/lib/privacy/consent";
+import type { SessionUser } from "@/lib/access";
+import { canOpenOnboardingRun } from "@/lib/rbac/policy";
 
 /** Shown when the sentence is about a client whose AI processing is restricted (DPDP, src/lib/privacy/consent.ts). */
 export const ONBOARDING_AI_RESTRICTED = AI_RESTRICTED_MESSAGE;
@@ -59,8 +61,17 @@ export interface OnboardingDeps {
    * before every extractor (model) call; production: isOnboardingAiRestricted (restriction.ts).
    */
   aiRestricted: (subject: OnboardingSubject) => Promise<boolean>;
+  /**
+   * Who is acting (security audit finding C): every step on an existing run is refused unless they
+   * started it or are a partner (canOpenOnboardingRun). null only for system callers and tests
+   * that act on a run with no person behind them.
+   */
+  viewer: SessionUser | null;
   now?: () => Date;
 }
+
+/** Shown for a run that does not exist or that the person may not open (the same answer, so nothing leaks). */
+export const RUN_NOT_YOURS = "That onboarding wasn't found, or someone else started it. Only the person who started it or a partner can open it.";
 
 export interface TuriaItem {
   syncId: string;
@@ -95,6 +106,7 @@ export function createOnboardingService(deps: OnboardingDeps) {
   async function load(runId: string): Promise<RunRecord> {
     const run = await deps.runs.get(runId);
     if (!run) throw new OnboardingError("not-found", "Onboarding run not found");
+    if (deps.viewer !== null && !canOpenOnboardingRun(deps.viewer, run)) throw new OnboardingError("not-found", RUN_NOT_YOURS);
     return run;
   }
 

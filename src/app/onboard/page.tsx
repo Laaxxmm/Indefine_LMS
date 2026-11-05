@@ -18,7 +18,7 @@ export default async function OnboardPage({ searchParams }: Props) {
   let initial: RunView | null = null;
   if (run && /^[\w-]{1,64}$/.test(run)) {
     try {
-      initial = await onboardingService().get(run);
+      initial = await onboardingService({ viewer: session.user }).get(run);
     } catch (e) {
       if (!(e instanceof OnboardingError)) throw e;
     }
