@@ -1,12 +1,12 @@
 # PROGRESS — Indefine Firm OS
-Current phase: 1 + 2 (parallel) | Branch: firm-os/phase-0-inventory | Last green: 2026-11-05 19:40 IST
-Tests: unit 56/56 · integration 0/0 · e2e 4/4 (smoke, local, no DB) · accuracy: GST P=– R=– | ROC – | TAX – | BOOKS – | AUDIT –
+Current phase: 3 + 4 (parallel) | Branch: firm-os/phase-0-inventory | Last green: 2026-11-05 20:25 IST
+Tests: unit+integration 648/648 (22 files; Firm OS coverage 99.7% lines / 97.4% branches) · e2e 4/4 (smoke, local, no DB) · accuracy: GST P=– R=– | ROC – | TAX – | BOOKS – | AUDIT –
 Model mode: CLAUDE_ONLY + LOCAL_STUB(fail-closed)
 
 ## Phase checklist (✅ only when QA gate green)
 - [x] 0 Inventory & ADRs ✅ (QA gate green 19:40 IST)
-- [ ] 1 Path A finish + /clients → CL-{Code}
-- [ ] 2 ModelRouter + anonymizer + local stub
+- [x] 1 Path A finish + /clients → CL-{Code} ✅ (20:25 IST; live verify-patha Blocked — creds)
+- [x] 2 ModelRouter + anonymizer + local stub ✅ (20:25 IST; live Claude smoke Blocked — key)
 - [ ] 3 Onboarding Agent
 - [ ] 4 Task-agent framework
 - [ ] 5 GST Prep
@@ -31,6 +31,21 @@ Phase 0
 
 Phase 0 QA gate: `next build` green · verify-* 5/5 pass · 6 ADRs · inventory covers every route in src/app (glob) · existing verify:access|cron-auth|secret-box|graph-scopes|work|clients|office-tools|profit-split pass without secrets.
 
+Phase 1 (merged from worktree branch, commits 6509370…09ae301)
+- [x] 1 docs/folder-contract.md
+- [x] 2 paths.ts — clSiteUrl, deliverablePath, fyLabel (IST), periodLabel, validateClientCode; 100% branches
+- [x] 3 graph-client.ts (GET/POST only, no delete/move/rename; 429/5xx retry w/ Retry-After) · sp-auth.ts (PnP cert RS256 assertion) · clfolders.ts ensureClientSite / ensureFyTree / ensureClientLists / ensureClientUploadGroup — idempotency test: 2nd run = 0 writes
+- [x] 4 scripts/verify-patha.ts (`npm run verify:patha`) — **Blocked** (exit 2): no MS_* / SP_PNP_* creds on this machine
+- [x] 5 FIRM_OS_CL_PATHS on /clients (off = unchanged, FirmClient not queried) · scripts/map-legacy-folders.ts dry-run (`npm run map:legacy-folders`) — Blocked: needs DATABASE_URL
+QA gate: paths 100% branches · Graph mocked · verify-patha Blocked with reason · idempotency test green · verify:no-delete OK · verify:clients OK before/after.
+
+Phase 2 (merged, commits 03466a2…dbc8a0e)
+- [x] 1 providers claude (output_config.format JSON, own backoff, no sampling params — API rejects temperature), grok (fetch, disabled w/o key), local stub (fail-closed)
+- [x] 2 anonymizer — PAN, GSTIN (mod-36), Aadhaar (Verhoeff), CIN/LLPIN, DIN, TAN, IFSC+a/c, phone, email, DOB, PIN, dictionary names; 250 synthetic strings zero leaks + exact round-trip; business strings survive
+- [x] 3 router decideRoute + run, budget guard (per-run + AI_DAILY_BUDGET_INR), ModelCall logging (masked-prompt sha256), /admin/firm-os/models usage page
+- [x] 4 router tests: 18 decideRoute rows + 28 run cases incl. payload leak spy
+QA gate: router + anonymizer green · verify:ai-boundary OK · src/lib/ai 99.5% lines.
+
 Shared foundation (commit c61d885): additive Prisma section "Firm OS: shared spine" — `FirmClient`, `ModelCall`, `AuditEvent` + enums; migration `20261105190000_firm_os_spine` (CREATE only, no ALTER/DROP of LMS columns).
 
 ## Feature test registry   (feature → test file → status)
@@ -40,6 +55,16 @@ Shared foundation (commit c61d885): additive Prisma section "Firm OS: shared spi
 | Guard rules (no-skip, secrets, no-portal, no-delete, ai-boundary) | scripts/lib/guards.test.ts | green (41) |
 | Route smoke /dashboard /clients /work /tools | tests/unit/routes/*.test.ts | green (13) |
 | E2E smoke: signed-out redirect | tests/e2e/smoke.spec.ts | green 4/4 local |
+| SharePoint paths / FY / periods | src/lib/integrations/sharepoint/paths.test.ts | green |
+| Graph client, PnP auth, config | src/lib/integrations/sharepoint/{graph-client,sp-auth,config}.test.ts | green |
+| ensure* idempotency (fake SharePoint) | src/lib/integrations/sharepoint/clfolders.integration.test.ts | green |
+| Path A gap check | src/lib/integrations/sharepoint/patha-check.test.ts | green |
+| /clients CL links + legacy map | client-links.test.ts, legacy-map.test.ts, tests/unit/routes/client-detail.test.ts | green |
+| No destructive ops (Path A) | src/lib/integrations/sharepoint/no-destructive.test.ts | green |
+| Anonymizer (250 synthetic, zero leaks) | src/lib/ai/__tests__/anonymizer.test.ts | green (279) |
+| Router policy + leak spy | src/lib/ai/__tests__/router.test.ts | green |
+| Providers | src/lib/ai/providers/__tests__/*.test.ts | green (23) |
+| Model usage aggregation | src/lib/ai/__tests__/usage.test.ts | green |
 
 ## Accuracy scoreboard     (agent → fixture set → precision → recall → threshold → pass/fail → date)
 _None yet (from Phase 5)._
@@ -49,12 +74,18 @@ _None yet (from Phase 5)._
 - Pages follow the existing flat layout `src/app/<module>/` — the repo has no `(portal)` route group.
 - ADR-001 Extend LMS · ADR-002 ModelRouter · ADR-003 Turia (ManualBridge default — no documented Turia API) · ADR-004 SharePoint Path A · ADR-005 Close loop for DONE · ADR-006 DPDP data classes (docs/adr/).
 - Guard allowlists (frozen, Firm OS dirs never allowlistable): LEGACY_PORTAL_READONLY = src/lib/statutory/cloud.ts, statutory-extension/{background.js,collectors.js,manifest.json} (public news reads), src/lib/certificates/templates/format-vi.ts (certificate wording only, no network allowed). LEGACY_GEMINI = src/lib/{gemini,quiz-gen,distill,transcribe}.ts.
+- Models (env-overridable): FAST claude-haiku-5-5 · SMART claude-sonnet-5-5 · HARD claude-opus-5-5 · Grok grok-4 (price unverified, configurable). USD_INR 88, ROUTER_MIN_CONF 0.75, AI_DAILY_BUDGET_INR 1000. `judgement` difficulty routes SMART→HARD (spec silent). Local-model calls are not masked (data stays on LAN); ModelCall hash always of masked prompt.
+- Path A: SP_SITE_OWNER required for app-only site creation; default period folders GST/Books 12 months, TDS Q1–Q4, others Annual; uploads stay on the legacy layout under the flag.
 - verify:no-delete scope is Firm OS code only; legacy LMS deletes (graph.ts deleteDriveItem/deleteEvent, ~20 Prisma deletes) documented in inventory H-1…H-5.
 
 ## Blocked / needs human   (what · why · exact action · since)
 - Turia API docs/credentials · ADR-003 · ask Turia for a documented API + credentials, and confirm UI automation is permitted · 2026-11-05
 - PnP app 381abf0e-… certificate + SharePoint/Entra admin consent for site creation · Phase 1 ensureClientSite · upload cert, grant consent · 2026-11-05
 - Entra group → role mapping · nothing reads groups today · add groups claim (or GroupMember.Read.All consent) to the Entra app · 2026-11-05
+- Graph app-only creds + consent · verify-patha / ensure* · set MS_TENANT_ID/MS_CLIENT_ID/MS_CLIENT_SECRET in .env.local; grant Graph application Sites.ReadWrite.All + Group.Read.All with admin consent · 2026-11-05
+- SP_SITE_OWNER + hub registration · site creation · set owner UPN; confirm Indefine-Compliance is registered as a hub site (SP admin center → Active sites → Hub) · 2026-11-05
+- ANTHROPIC_API_KEY (and optional XAI_API_KEY) · live router smoke call · put in .env.local / Railway · 2026-11-05
+- Staging DATABASE_URL · map-legacy-folders report, /admin/firm-os/models view, DB e2e · provide Railway staging branch DB · 2026-11-05
 - Push branches / open PRs · no gh CLI on this machine · human approval to push firm-os/* branches · 2026-11-05
 
 ## Known gaps / tech debt
@@ -75,3 +106,7 @@ _None yet (from Phase 5)._
 - 19:25 · 0 · Merged inventory + ADRs (072802e) · –
 - 19:32 · 0 · Merged guards, route smoke, Playwright, CI · unit 56/56, verify 5/5
 - 19:40 · 0 · next build green → Phase 0 QA gate ✅ · unit 56/56 · e2e 4/4
+- 19:45 · 3/4 · Agent started: Phase 4 core (state machine, checklist, templates) + Phase 3 calendar · –
+- 20:15 · 2 · Merged ModelRouter/anonymizer/providers/usage page · 423/423
+- 20:20 · 1 · Merged Path A (paths, graph client, clfolders, verify-patha, /clients flag); .env.example conflict resolved (both sections) · 648/648
+- 20:25 · 1/2 · Coverage 99.7% lines, next build green → Phase 1 ✅, Phase 2 ✅ · 648/648
