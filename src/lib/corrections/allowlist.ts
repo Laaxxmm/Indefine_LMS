@@ -213,8 +213,9 @@ export const ALLOW_LIST: Record<CorrectionEntity, Record<string, FieldSpec>> = {
         return err ? bad(invalid("CIN / LLPIN", err)) : null;
       },
     },
-    industry: { label: "industry", who: "management", input: "text", parse: fromClientSchema(C.industry, "industry") },
-    city: { label: "city", who: "management", input: "text", parse: fromClientSchema(C.city, "city") },
+    // Class A in the inventory (with the name, they place a proprietor): masked in the audit.
+    industry: { label: "industry", who: "management", input: "text", pii: "place", parse: fromClientSchema(C.industry, "industry") },
+    city: { label: "city", who: "management", input: "text", pii: "place", parse: fromClientSchema(C.city, "city") },
     contactName: { label: "contact name", who: "management", input: "text", pii: "name", parse: fromClientSchema(C.contactName, "contact name") },
     contactPhone: { label: "contact phone", who: "management", input: "text", pii: "phone", parse: fromClientSchema(C.contactPhone, "contact phone") },
     contactEmail: { label: "contact email", who: "management", input: "text", pii: "email", parse: fromClientSchema(C.contactEmail, "contact email") },

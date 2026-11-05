@@ -139,7 +139,7 @@ describe("correction routes", () => {
     as(admin);
     const ok = await corrections.POST(post({ entity: "Client", id: "c-prop", field: "city", newValue: "Hubballi", reason: "Typed the wrong city" }));
     expect(ok.status).toBe(200);
-    expect(await json(ok)).toMatchObject({ field: "city", before: "Bengaluru", after: "Hubballi" });
+    expect(await json(ok)).toMatchObject({ field: "city", before: "B…", after: "H…" }); // class A: masked in the audit
     const notAllowed = await corrections.POST(post({ entity: "Client", id: "c-prop", field: "name", newValue: "X", reason: "Typed the wrong name" }));
     expect(notAllowed.status).toBe(400);
 

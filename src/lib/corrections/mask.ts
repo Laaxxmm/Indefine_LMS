@@ -4,16 +4,19 @@
 //
 //   pan / aadhaar / phone / email / gstin   "****" + last 4 characters      ABCDE1234F → ****234F
 //   name                                     initials                        Priya Raman → P. R.
+//   place (city, industry)                   first letter                    Bengaluru → B…
 //   text                                     length and a short fingerprint  [text, 42 characters, #a1b2c3]
 //
-// A fixed "****" prefix (not one star per character) so the mask does not leak the length.
-// Free-text reasons pass through the Phase 2 anonymizer (src/lib/ai/anonymizer.ts), whose token
-// map is thrown away: the audit keeps ⟨PAN_1⟩, never the PAN. Pure module: no I/O.
+// Which fields are which follows the data class of the field in src/lib/privacy/inventory.ts (class
+// A is masked; allowlist.test.ts keeps the two in step). A fixed "****" prefix (not one star per
+// character) so the mask does not leak the length. Free-text reasons pass through the Phase 2
+// anonymizer (src/lib/ai/anonymizer.ts) with the client's names as its dictionary, and the token
+// map is thrown away: the audit keeps ⟨PAN_1⟩ / ⟨NAME_1⟩, never the value. Pure module: no I/O.
 import { createHash } from "node:crypto";
 import { mask as anonymize } from "@/lib/ai/anonymizer";
 import type { DictionaryEntry } from "@/lib/ai/types";
 
-export type PiiKind = "pan" | "aadhaar" | "phone" | "email" | "gstin" | "name" | "text";
+export type PiiKind = "pan" | "aadhaar" | "phone" | "email" | "gstin" | "name" | "place" | "text";
 
 /** What a before / after value looks like in the audit meta and the history view. */
 export type AuditValue = string | number | boolean | null;
@@ -36,6 +39,15 @@ export function maskName(value: string): string {
     .join(" ");
 }
 
+/**
+ * A short value from a small set (city, industry): its first letter only, "Bengaluru" → "B…". No
+ * fingerprint: a hash of a value from a small set is reversed by trying every city.
+ */
+export function maskInitial(value: string): string {
+  const v = value.trim();
+  return v ? `${v[0].toUpperCase()}…` : "";
+}
+
 /** Free text: its length and a 6-character fingerprint, so two different texts look different. */
 export function maskText(value: string): string {
   const digest = createHash("sha256").update(value).digest("hex").slice(0, 6);
@@ -52,6 +64,7 @@ export function maskForAudit(kind: PiiKind | undefined, value: unknown): AuditVa
   if (!kind) return s.length > 200 ? `${s.slice(0, 197)}...` : s;
   if (LAST4_KINDS.has(kind)) return maskLast4(s);
   if (kind === "name") return maskName(s);
+  if (kind === "place") return maskInitial(s);
   return maskText(s);
 }
 
@@ -64,7 +77,7 @@ export function scrubFreeText(text: string, dictionary: readonly DictionaryEntry
   return anonymize(text.trim(), dictionary.length ? { dictionary: [...dictionary] } : {}).masked;
 }
 
-type ClientNames = { name?: string | null; contactName?: string | null; entityType?: string | null };
+export type ClientNames = { name?: string | null; contactName?: string | null; entityType?: string | null };
 
 /** "Kiran Kumar" → ["Kiran", "Kumar"]: parts of three letters or more of a name of two words or more. */
 function nameParts(value: string): string[] {

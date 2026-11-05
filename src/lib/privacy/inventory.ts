@@ -143,7 +143,8 @@ export const DATASETS: readonly DataSet[] = [
       f("pan", "PAN"),
       f("gstin", "GSTIN"),
       f("cin", "CIN / LLPIN", "C"),
-      f("industry", "Industry", "C"),
+      // A (may): with the name and city, an individual's trade identifies them; erasure clears it.
+      f("industry", "Industry"),
       f("city", "City"),
       f("turnover", "Turnover (₹)", "C"),
       f("growthGoal", "Growth goal", "C"),
