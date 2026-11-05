@@ -26,6 +26,7 @@ const { default: ReviewPage } = await import("@/app/agents/[agent]/runs/[id]/pag
 const { default: MistakesPage } = await import("@/app/agents/mistakes/page");
 const { default: AdminMistakesPage } = await import("@/app/admin/firm-os/mistakes/page");
 const { decisionConsequence } = await import("@/app/agents/mistakes/MistakeDecision");
+const { approveConsequence } = await import("@/app/agents/[agent]/runs/[id]/ReviewPanels");
 
 const as = (u: Session["user"] | null) => (auth as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(u ? { user: u, expires: "2099-01-01" } : null);
 const review = async (id: string) => renderHtml(await ReviewPage({ params: Promise.resolve({ agent: "echo", id }) }));
@@ -195,6 +196,26 @@ describe("/agents/[agent]/runs/[id] review screen", () => {
     expect(html).toContain("1 block");
     expect(html).toContain("Check by hand"); // the LLM rule had no recording
     expect(html).not.toMatch(PORTAL_OR_SEND);
+    // Approve pack asks first: the first click shows what approval does, the second sends it.
+    expect(html).not.toContain("Confirm approval");
+    expect(approveConsequence(1)).toBe(
+      "Approving moves the job to APPROVED. It copies the file to Final as a new version (nothing is overwritten). A person then files it on the portal; Firm OS never files anything.",
+    );
+    expect(approveConsequence(0)).toContain("no files to copy");
+    // The bar keeps its own place at the end of the page (sticky), so nothing is hidden under it.
+    expect(html).toMatch(/class="sticky bottom-0[^"]*"[^>]*aria-label="Review actions"/);
+
+    // A reviewer who is not a partner cannot approve over block findings, and the bar says why.
+    as(user("ravi"));
+    const ravi = await review("run-1");
+    expect(ravi).not.toContain("Approve pack");
+    expect(ravi).toContain("Request changes");
+    expect(ravi).toContain("1 block finding: only a partner can approve over it.");
+    // The preparer, waiting on review, is told what happens next rather than "No action".
+    as(user("priya"));
+    const priya = await review("run-1");
+    expect(priya).toContain("Submitted for review. The reviewer approves the pack or requests changes.");
+    expect(priya).not.toContain("Request changes");
   });
 
   it("superseded run is read-only; approved run says a person files it; comments show names", async () => {
@@ -217,6 +238,7 @@ describe("/agents/[agent]/runs/[id] review screen", () => {
     expect(done).toContain("Filing and close");
     expect(done).toContain("Filed by you on the portal — record the acknowledgement here.");
     expect(done).toMatch(/<button[^>]*>Mark filed<\/button>/);
+    expect(done).toContain("Mark filed records the filing against your name and moves the job on to closing; it cannot be undone from this screen.");
     expect(done).not.toMatch(PORTAL_OR_SEND);
     expect(old).not.toContain("Mark filed"); // superseded run: read-only
   });
