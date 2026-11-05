@@ -24,6 +24,7 @@ const { default: AgentPage } = await import("@/app/agents/[agent]/page");
 const { default: ReviewPage } = await import("@/app/agents/[agent]/runs/[id]/page");
 const { default: MistakesPage } = await import("@/app/agents/mistakes/page");
 const { default: AdminMistakesPage } = await import("@/app/admin/firm-os/mistakes/page");
+const { decisionConsequence } = await import("@/app/agents/mistakes/MistakeDecision");
 
 const as = (u: Session["user"] | null) => (auth as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(u ? { user: u, expires: "2099-01-01" } : null);
 const review = async (id: string) => renderHtml(await ReviewPage({ params: Promise.resolve({ agent: "echo", id }) }));
@@ -199,6 +200,9 @@ describe("mistake log pages", () => {
     expect(html).toContain("v1.0.0 → v1.1.0");
     expect(html).toContain("echo.amount-over");
     expect(html).toContain("Approve rule");
+    expect(html).not.toContain("Confirm approval"); // the first click only asks; the second decides
+    expect(decisionConsequence("approve", "1.1.0")).toBe("Adds the rule to SOP pack v1.1.0; every run after this uses it.");
+    expect(decisionConsequence("reject", null)).toContain("not added");
     expect(html).toContain("Ravi Kumar");
     expect(html).toContain("Echo (framework test) · Big invoices"); // the agent's title, not its key
     expect(html).toContain('href="/agents/echo/runs/run-1"');

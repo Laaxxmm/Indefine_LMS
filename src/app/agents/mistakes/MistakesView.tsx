@@ -82,7 +82,7 @@ function Row({ row, canDecide, names }: { row: MistakeRow; canDecide: boolean; n
             {row.status}
             {row.promotedToVersion && ` → v${row.promotedToVersion}`}
           </span>
-          {row.status === "PROPOSED" && canDecide && !row.problem && <MistakeDecision id={row.id} label={row.ruleTitle} />}
+          {row.status === "PROPOSED" && canDecide && !row.problem && <MistakeDecision id={row.id} label={row.ruleTitle} toVersion={row.diff?.to ?? null} />}
         </div>
       </div>
       <Diff row={row} />

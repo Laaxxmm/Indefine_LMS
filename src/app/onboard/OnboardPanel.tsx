@@ -354,8 +354,11 @@ function PlanPreview({ plan, busy, error, onCreate, onEdit }: { plan: Onboarding
       </ol>
 
       <ErrorBox error={error} keys={["create"]} />
-      <div className="mt-6 flex items-center gap-3">
-        <button type="button" onClick={onCreate} disabled={!!busy} className={primary}>
+      <p className="mt-6 text-[12.5px] text-ink-soft" id="create-consequence">
+        Create starts all of the above now: the client record, {plan.turia.mode === "MANUAL" ? "the Turia checklists" : "the Turia client and tasks"}, the SharePoint site and {plan.jobs.length} job{plan.jobs.length === 1 ? "" : "s"}. If a step fails, it stops there and Retry carries on; nothing is deleted.
+      </p>
+      <div className="mt-3 flex items-center gap-3 flex-wrap">
+        <button type="button" onClick={onCreate} disabled={!!busy} aria-describedby="create-consequence" className={primary}>
           <Spin busy={busy} k="create">Create</Spin>
         </button>
         <button type="button" onClick={onEdit} disabled={!!busy} className={ghost}>Change answers</button>
