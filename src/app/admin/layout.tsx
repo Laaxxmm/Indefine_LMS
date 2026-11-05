@@ -61,6 +61,7 @@ export default async function AdminLayout({
               { href: "/admin/checkins", label: "Check-ins", icon: "MessageCircle" },
               { href: "/admin/attendance", label: "Attendance", icon: "Fingerprint" },
               { href: "/admin/kra", label: "KRA Reports", icon: "BarChart3" },
+              { href: "/admin/firm-os/models", label: "Model usage (AI)", icon: "Cpu" },
               { href: "/admin/settings", label: "Settings", icon: "Settings" },
             ]}
           />

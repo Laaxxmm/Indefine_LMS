@@ -16,10 +16,12 @@ import {
   Fingerprint,
   Settings,
   Radio,
+  Cpu,
   type LucideIcon,
 } from "lucide-react";
 
 const ICONS: Record<string, LucideIcon> = {
+  Cpu,
   LayoutDashboard,
   PlayCircle,
   Target,
