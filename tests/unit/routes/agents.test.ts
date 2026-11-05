@@ -163,7 +163,13 @@ describe("/agents", () => {
     expect(html).toContain("Run agent");
     expect(html).toContain("ASSIGNED");
     as(user("ravi"));
-    expect(await renderHtml(await AgentPage({ params: Promise.resolve({ agent: "echo" }) }))).toContain("Nothing to run");
+    const ravi = await renderHtml(await AgentPage({ params: Promise.resolve({ agent: "echo" }) }));
+    expect(ravi).toContain("Nothing to run");
+    expect(ravi).toContain("Books jobs assigned to you appear here when they are ASSIGNED or IN_PREP.");
+    state.world = echoWorld({ jobState: "APPROVED" });
+    as(user("meera")); // a manager's list is every runnable job of the service, not only theirs
+    expect(await renderHtml(await AgentPage({ params: Promise.resolve({ agent: "echo" }) }))).toContain("Books jobs appear here when they are ASSIGNED or IN_PREP.");
+    state.world = echoWorld();
     await expect(AgentPage({ params: Promise.resolve({ agent: "gst" }) })).rejects.toBeInstanceOf(NotFoundSignal);
     vi.stubEnv("FIRM_OS_ECHO_AGENT", "");
     await expect(AgentPage({ params: Promise.resolve({ agent: "echo" }) })).rejects.toBeInstanceOf(NotFoundSignal);
