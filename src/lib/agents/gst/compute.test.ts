@@ -1,0 +1,246 @@
+// Computation tests with hand-computed expected values (rupees in comments, paise in asserts).
+import { describe, expect, it } from "vitest";
+import { GSTIN, R, extract, line, lineTax, matched, payable, purchase, sale, twin } from "./__tests__/kit";
+import { analyse, computeFigures, docsRows, dueDateOf, interestOn, lateFeeFor, rule37Rows, seriesOf } from "./compute";
+import { periodInfo, zeroTax } from "./money";
+import { setOff } from "./setoff";
+
+const T = (igst: number, cgst: number, sgst: number, cess = 0) => ({ igst, cgst, sgst, cess });
+
+describe("set-off (s.49(5), s.49A, rule 88A)", () => {
+  it("IGST credit → IGST first, then CGST/SGST; own credits next; cash is the rest", () => {
+    // L: IGST 9,000 CGST 10,800 SGST 10,800; C: IGST 1,800 CGST 7,650 SGST 7,650 → cash 7,200 / 3,150 / 3,150.
+    const r = setOff(T(900000, 1080000, 1080000), T(180000, 765000, 765000));
+    expect(r.cash).toEqual(T(720000, 315000, 315000));
+    expect(r.used.igst).toEqual(T(180000, 0, 0));
+    expect(r.creditUtilised).toBe(1710000);
+    expect(r.closingCredit).toEqual(zeroTax());
+  });
+
+  it("IGST remainder covers the CGST then SGST deficit first (rule 88A, minimum cash)", () => {
+    // L: IGST 18,000 CGST 36,000 SGST 36,000; C: IGST 54,000 CGST 4,500 SGST 4,500.
+    // IGST→IGST 18,000; →CGST deficit 31,500; →SGST deficit 4,500 (exhausted). CGST 4,500→CGST; SGST 4,500→SGST. Cash SGST 27,000.
+    const r = setOff(T(1800000, 3600000, 3600000), T(5400000, 450000, 450000));
+    expect(r.used.igst).toEqual(T(1800000, 3150000, 450000));
+    expect(r.cash).toEqual(T(0, 0, 2700000));
+  });
+
+  it("leftover IGST after deficits goes to remaining CGST then SGST, the rest carries forward", () => {
+    // L: CGST 1,000 SGST 1,000; C: IGST 5,000 CGST 600 SGST 0. Deficits: CGST 400, SGST 1,000 → IGST 1,400; then CGST 600, SGST 0 → IGST 600 more.
+    const r = setOff(T(0, 100000, 100000), T(500000, 60000, 0));
+    expect(r.used.igst).toEqual(T(0, 100000, 100000));
+    expect(r.cash).toEqual(zeroTax());
+    expect(r.closingCredit).toEqual(T(300000, 60000, 0));
+  });
+
+  it("CGST credit pays IGST before SGST credit does; CGST never pays SGST and vice versa", () => {
+    // L: IGST 27,000; C: CGST 5,400 SGST 5,400 → CGST→IGST 5,400, SGST→IGST 5,400, cash IGST 16,200.
+    const r = setOff(T(2700000, 0, 0), T(0, 540000, 540000));
+    expect(r.used.cgst).toEqual(T(540000, 0, 0));
+    expect(r.used.sgst).toEqual(T(540000, 0, 0));
+    expect(r.cash).toEqual(T(1620000, 0, 0));
+    // CGST credit cannot touch SGST liability.
+    const s = setOff(T(0, 0, 100000), T(0, 100000, 0));
+    expect(s.cash).toEqual(T(0, 0, 100000));
+    expect(s.closingCredit).toEqual(T(0, 100000, 0));
+  });
+
+  it("SGST credit pays IGST only after CGST credit is exhausted", () => {
+    // L: IGST 1,000; C: CGST 1,500 SGST 1,000 → CGST pays all IGST; SGST untouched.
+    const r = setOff(T(100000, 0, 0), T(0, 150000, 100000));
+    expect(r.used.sgst).toEqual(zeroTax());
+    expect(r.closingCredit).toEqual(T(0, 50000, 100000));
+  });
+
+  it("cess only against cess; RCM always cash; negative inputs rejected", () => {
+    const r = setOff(T(0, 0, 0, 5000), T(10000, 0, 0, 2000), T(100, 200, 200, 0));
+    expect(r.cash).toEqual(T(100, 200, 200, 3000));
+    expect(r.closingCredit.igst).toBe(10000);
+    expect(() => setOff(T(-1, 0, 0), zeroTax())).toThrow(RangeError);
+    expect(() => setOff(zeroTax(), T(0.5, 0, 0))).toThrow(RangeError);
+  });
+});
+
+describe("interest u/s 50 and late fee", () => {
+  it("interest per head on cash for days late at 18% / 365", () => {
+    // ₹7,200 × 18% × 10/365 = ₹35.5068 → 3551 paise; ₹3,150 → 15.5342 → 1553.
+    expect(interestOn(T(720000, 315000, 315000), 10)).toEqual(T(3551, 1553, 1553));
+    expect(interestOn(T(720000, 0, 0), 0)).toEqual(zeroTax());
+  });
+  it("late fee ₹50/day capped by AATO slab; nil ₹20/day capped at ₹500", () => {
+    expect(lateFeeFor(10, R(2_00_00_000), false)).toBe(50000);
+    expect(lateFeeFor(60, R(1_00_00_000), false)).toBe(200000); // ₹3,000 capped at ₹2,000 (AATO ≤ ₹1.5 cr)
+    expect(lateFeeFor(200, R(3_00_00_000), false)).toBe(500000); // ₹5,000 cap (≤ ₹5 cr)
+    expect(lateFeeFor(300, R(6_00_00_000), false)).toBe(1000000); // ₹10,000 cap
+    expect(lateFeeFor(30, R(1_00_00_000), true)).toBe(50000); // ₹600 → ₹500 nil cap
+    expect(lateFeeFor(0, R(1), false)).toBe(0);
+  });
+  it("due date: monthly 20th, QRMP 22nd/24th by state, profile override", () => {
+    const x = extract();
+    expect(dueDateOf(x, periodInfo("2026-10", "2026-27"), "29")).toBe("2026-11-20");
+    expect(dueDateOf(x, periodInfo("Q3", "2026-27"), "29")).toBe("2027-01-22");
+    expect(dueDateOf(x, periodInfo("Q3", "2026-27"), "07")).toBe("2027-01-24");
+    expect(dueDateOf(extract({ profile: { ...x.profile, dueDate: "2026-11-25" } }), periodInfo("2026-10", "2026-27"), "29")).toBe("2026-11-25");
+  });
+});
+
+describe("rule 37", () => {
+  it("reverses ITC beyond 180 days, proportionately for part payment; not at exactly 180; not twice", () => {
+    const rows = rule37Rows(
+      [
+        payable({ number: "A", date: "2026-05-03" }), // 181 days → IGST 18,000
+        payable({ number: "B", date: "2026-05-04" }), // 180 days → no
+        payable({ number: "C", date: "2026-04-10", value: R(100000), paid: R(60000), itc: T(R(10000), 0, 0) }), // 40% of 10,000 = 4,000
+        payable({ number: "D", date: "2026-01-01", reversedEarlier: true }),
+        payable({ number: "E", date: "2026-01-01", paid: R(118000) }),
+      ],
+      "2026-10-31",
+    );
+    expect(rows.map((r) => [r.doc.number, r.days, r.reversal.igst])).toEqual([
+      ["A", 181, 1800000],
+      ["C", 204, 400000],
+    ]);
+  });
+});
+
+describe("analysis: GSTR-1 tables, 3.1, 4, set-off", () => {
+  it("classifies B2B / B2CL / B2CS / CDNR with the B2CL boundary (> ₹1,00,000)", () => {
+    const x = extract({
+      sales: [
+        sale({ number: "B1" }),
+        sale({ number: "L1", gstin: null, pos: "33", lines: [lineTax(8474577, { igst: 1525424 })], value: 10000001 }),
+        sale({ number: "S1", gstin: null, pos: "33", lines: [lineTax(8474576, { igst: 1525424 })], value: 10000000 }),
+        sale({ number: "S2", gstin: null, pos: null }),
+        sale({ number: "C1", docType: "CRN", lines: [line(R(1000))], origNumber: "B1" }),
+        sale({ number: "U1", docType: "CRN", gstin: null, pos: "29", lines: [line(R(500))] }),
+      ],
+    });
+    const a = analyse(x);
+    expect(a.sales.map((d) => [d.number, d.table, d.posResolved])).toEqual([
+      ["B1", "B2B", "29"],
+      ["L1", "B2CL", "33"],
+      ["S1", "B2CS", "33"],
+      ["S2", "B2CS", "29"],
+      ["C1", "CDNR", "29"],
+      ["U1", "B2CS", "29"],
+    ]);
+    // B2CS: POS 29 = 1,00,000 − 500 = 99,500; POS 33 = 84,745.76.
+    expect(a.gstr1.b2cs.map((r) => [r.pos, r.taxable])).toEqual([
+      ["29", 9950000],
+      ["33", 8474576],
+    ]);
+    const f = computeFigures(x);
+    expect(f).toMatchObject({ b2bInvoiceCount: 1, b2clInvoiceCount: 1, b2clTaxablePaise: 8474577, cdnrNoteCount: 1, cdnrNetTaxablePaise: -100000 });
+    expect(analyse(x)).toBe(a); // memoised
+  });
+
+  it("3.1(a) nets credit notes, 3.1(c) takes rate-0 lines, RC-outward carries no liability", () => {
+    const x = extract({
+      sales: [
+        sale({ lines: [line(R(100000)), line(R(2000), 0, false, { hsn: "0401" })] }),
+        sale({ docType: "CRN", lines: [line(R(10000))], origNumber: "X" }),
+        sale({ reverseCharge: true, lines: [line(R(5000))] }),
+      ],
+    });
+    const f = computeFigures(x);
+    // 1,00,000 − 10,000 = 90,000; CGST 9,000 − 900 = 8,100.
+    expect(f).toMatchObject({ outwardTaxablePaise: 9000000, outwardCgstPaise: 810000, outwardSgstPaise: 810000, nilExemptPaise: 200000 });
+    expect(analyse(x).gstr1.hsn.map((h) => [h.supply, h.hsn, h.rateBps, h.taxable])).toEqual([
+      ["B2B", "0401", 0, 200000],
+      ["B2B", "7318", 1800, 9500000],
+    ]);
+  });
+
+  it("4(A)(5) is lower of books and 2B; deferred, unavailable, not-booked memos; credit notes reduce", () => {
+    const p1 = purchase({ number: "M1" }); // CGST/SGST 5,400
+    const p2 = purchase({ number: "D1", lines: [lineTax(R(24000), { cgst: R(2250), sgst: R(2250) })] }); // books higher than 2B
+    const p3 = purchase({ number: "N1", gstin: GSTIN.supMh, lines: [line(R(10000), 1800, true)] }); // not in 2B
+    const p4 = purchase({ number: "U1", gstin: GSTIN.supTn, lines: [line(R(5000), 1800, true)] }); // ITC not available
+    const cn = purchase({ number: "SCN1", docType: "CRN", lines: [line(R(1000))] }); // supplier credit note, not in 2B
+    const x = extract({
+      purchases: [p1, p2, p3, p4, cn],
+      gstr2b: [twin(p1), twin(p2, { taxable: R(24000), tax: T(0, R(2160), R(2160)) }), twin(p4, { itcAvailable: false, reason: "POS" }), twin(purchase({ number: "X9", gstin: GSTIN.supTn, lines: [line(R(8000), 1800, true)] }))],
+    });
+    const a = analyse(x);
+    expect(a.recon.map((r) => [r.number, r.status])).toEqual([
+      ["M1", "matched"],
+      ["D1", "value-diff"],
+      ["N1", "missing-in-2b"],
+      ["U1", "itc-unavailable"],
+      ["SCN1", "missing-in-2b"],
+      ["X9", "missing-in-books"],
+    ]);
+    // a5 CGST = 5,400 + 2,160 − 90 = 7,470.
+    expect(a.itc.a5).toEqual(T(0, 747000, 747000));
+    expect(a.itc.deferred).toEqual(T(180000, 0, 0));
+    expect(a.itc.unavailable2b).toEqual(T(90000, 0, 0));
+    expect(a.itc.notBooked).toEqual(T(144000, 0, 0));
+  });
+
+  it("RCM: unmarked legal fees at 18% intra; recorded RCM tax kept; GTA forward charge at 12% is not RCM", () => {
+    const legal = purchase({ number: "L1", gstin: null, ledger: "Legal Fees", lines: [lineTax(R(50000), {}, { rateBps: 0 })] });
+    const marked = purchase({ number: "R1", gstin: null, reverseCharge: true, ledger: "Security", lines: [lineTax(R(10000), { cgst: R(900), sgst: R(900) })] });
+    const gtaFwd = purchase({ number: "G1", gstin: GSTIN.supMh, ledger: "Freight", lines: [line(R(10000), 1200, true)] });
+    const gtaRcm = purchase({ number: "G2", gstin: GSTIN.supMh, pos: "29", ledger: "Freight", lines: [lineTax(R(20000), {}, { rateBps: 0 })] });
+    const x = extract({
+      purchases: [legal, marked, gtaFwd, gtaRcm],
+      gstr2b: [twin(gtaFwd)],
+      ledgers: [
+        { ledger: "Legal Fees", blockedCategory: "none", rcmService: "legal", evidence: null, note: "" },
+        { ledger: "Security", blockedCategory: "none", rcmService: "security", evidence: null, note: "" },
+        { ledger: "Freight", blockedCategory: "none", rcmService: "gta", evidence: null, note: "" },
+      ],
+    });
+    const a = analyse(x);
+    expect(a.purchases.map((p) => [p.number, p.rcm, p.rcmUnmarked])).toEqual([
+      ["L1", true, true],
+      ["R1", true, false],
+      ["G1", false, false],
+      ["G2", true, true],
+    ]);
+    // Legal 4,500 + 4,500; security recorded 900 + 900; GTA G2 5% inter (27 → 29) = IGST 1,000.
+    expect(a.rcm.tax).toEqual(T(100000, 540000, 540000));
+    expect(a.itc.a3).toEqual(a.rcm.tax);
+    // No outward liability: RCM is paid in cash, and all ITC (RCM 1,000 + G1 1,200 IGST; RCM CGST/SGST 5,400) carries forward.
+    expect(a.setoff.cash).toEqual(T(100000, 540000, 540000));
+    expect(a.setoff.closingCredit).toEqual(T(220000, 540000, 540000));
+  });
+
+  it("blocked credit goes to 4(B)(1); reversal beyond ITC becomes liability", () => {
+    const car = purchase({ number: "CAR", ledger: "Motor Car", lines: [line(R(800000))] });
+    const x = extract({ ...matched(car), ledgers: [{ ledger: "Motor Car", blockedCategory: "motor-vehicle", rcmService: "none", evidence: null, note: "" }], payables: [payable()] });
+    const a = analyse(x);
+    expect(a.itc.b1).toEqual(T(0, R(72000), R(72000)));
+    expect(a.itc.net).toEqual(zeroTax());
+    // rule 37 IGST 18,000 with no IGST ITC → IGST liability 18,000.
+    expect(a.liability.igst).toBe(R(18000));
+    expect(computeFigures(x)).toMatchObject({ itcBlockedPaise: R(144000), itcRule37Paise: R(18000), cashIgstPaise: R(18000) });
+  });
+
+  it("opening credit, previous-period gap, lateness and nil-return late fee", () => {
+    const x = extract({
+      sales: [sale({ lines: [line(R(100000))] })],
+      prev: { loc: "prev.json", period: "2026-09", gstr1: T(0, R(12000), R(12000)), gstr3b: T(0, R(10000), R(10000)), closingCredit: T(R(3000), 0, 0), filedOn: null, dueOn: null },
+      profile: { ...extract().profile, expectedFilingDate: "2026-11-25" },
+    });
+    const f = computeFigures(x);
+    expect(f).toMatchObject({ prevLiabilityGapPaise: R(4000), daysLate: 5, lateFeePaise: 25000 });
+    // L 9,000 / 9,000; IGST 3,000 → CGST deficit → cash CGST 6,000, SGST 9,000.
+    expect(f).toMatchObject({ cashCgstPaise: R(6000), cashSgstPaise: R(9000) });
+    const nil = computeFigures(extract({ profile: { ...extract().profile, expectedFilingDate: "2026-11-30" } }));
+    expect(nil).toMatchObject({ daysLate: 10, lateFeePaise: 20000, interestPaise: 0 });
+  });
+});
+
+describe("document series (GSTR-1 Table 13)", () => {
+  it("prefix + number, gaps counted as cancelled, non-numeric numbers on their own row", () => {
+    expect(seriesOf(" inv/26/0101 ")).toEqual({ prefix: "INV/26/", num: 101, width: 4 });
+    expect(seriesOf("ABC")).toEqual({ prefix: "ABC", num: null, width: 0 });
+    const rows = docsRows([sale({ number: "INV/26/1001" }), sale({ number: "INV/26/1004" }), sale({ number: "inv/26/1001 " }), sale({ number: "CASH" }), sale({ number: "CN-1", docType: "CRN" })]);
+    expect(rows.map((r) => [r.nature, r.from, r.to, r.total, r.cancelled, r.net, r.missing])).toEqual([
+      ["Invoices for outward supply", "CASH", "CASH", 1, 0, 1, []],
+      ["Invoices for outward supply", "INV/26/1001", "INV/26/1004", 4, 2, 2, ["INV/26/1002", "INV/26/1003"]],
+      ["Credit Note", "CN-1", "CN-1", 1, 0, 1, []],
+    ]);
+  });
+});
