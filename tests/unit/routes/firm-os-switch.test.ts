@@ -9,6 +9,10 @@ import { readdirSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+// Each case cold-imports a route module (and its whole service graph). Fast alone; under full-suite
+// load beside parallel builds one import exceeded the 20 s default once. Import time, not a race.
+vi.setConfig({ testTimeout: 60_000 });
+
 const touched = vi.hoisted(() => ({ auth: 0, prisma: [] as string[] }));
 vi.mock("@/lib/auth", () => ({
   auth: vi.fn(async () => {
