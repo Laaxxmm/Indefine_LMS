@@ -11,6 +11,7 @@
 import type { AgentScope } from "@/lib/agents/core/guardrails/scope";
 import type { AgentDefinition } from "@/lib/agents/core/runner";
 import { classify } from "./classify";
+import { gstDictionaryTerms } from "./dictionary";
 import { computeFigures } from "./compute";
 import { gstDeliverables } from "./deliverables";
 import { gstInputSchema, gstInputSniff, loadGstData } from "./input";
@@ -64,6 +65,8 @@ export const gstAgent: AgentDefinition<GstInput, GstExtract> = {
   compute(extracted) {
     return computeFigures(extracted);
   },
+
+  dictionaryTerms: (input, { job }) => gstDictionaryTerms(input, job),
 
   llmContext({ extracted }) {
     return gstLlmContext(extracted);

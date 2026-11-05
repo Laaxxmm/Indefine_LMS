@@ -16,6 +16,7 @@ import type { AgentDefinition, InputFile, InputProbe } from "@/lib/agents/core/r
 import { dayNumber, paiseToRupeeString, rupeesToPaise } from "@/lib/agents/core/util";
 import { analyseTax, isAisIncome, type AisMatch, type TaxExtract } from "./analyse";
 import { ruleSetFor } from "./data";
+import { taxDictionaryTerms } from "./dictionary";
 import { taxDeliverables } from "./deliverables";
 import { AIS_SCREEN, TAX_MATCH_AIS_SPEC, TAX_MODEL_TASKS, acceptedAisMatches, aisPromptLines, matchAisUserMessage } from "./model-tasks";
 import { screenForModel } from "@/lib/agents/core/guardrails/untrusted";
@@ -178,6 +179,8 @@ export const taxAgent: AgentDefinition<TaxInput, TaxExtract> = {
   },
 
   compute: (extracted) => taxFigures(extracted),
+
+  dictionaryTerms: (input) => taxDictionaryTerms(input),
 
   llmContext({ extracted: x }) {
     const lines: string[] = [];

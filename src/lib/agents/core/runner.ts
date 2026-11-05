@@ -19,9 +19,16 @@
 // department preambles, outputs are grounded, LLM rules may abstain and high-stakes rules are read
 // twice; a `guardrail-run` AuditEvent records the counts. Agents that are not `internal` must
 // declare a scope (precondition NO_SCOPE).
+//
+// ADR-006 (DPDP): before any model call the runner builds the run's masking dictionary — the job's
+// client name, client-master and staff names (deps.names) and the names the agent harvests from
+// its parsed inputs (agent.dictionaryTerms) — and every ctx.model and LLM-rule call carries it to
+// the anonymizer. A non-internal agent's cloud call with an empty or unbuildable dictionary is
+// refused and the run FAILS with a plain message.
 import type { FirmService, JobTaskState, PrismaClient } from "@prisma/client";
 import { z, type ZodType, type ZodTypeDef } from "zod";
-import type { AgentName, AgentTask, ModelRequest, RouterResult } from "@/lib/ai/router";
+import type { AgentName, AgentTask, DictionaryEntry, ModelRequest, RouterResult } from "@/lib/ai/router";
+import { dedupeDictionary, partyEntry, type NameDirectory } from "@/lib/ai/names";
 import { validateScope, type AgentScope } from "./guardrails/scope";
 import { createGuardrailSession, type GuardrailSession, type ModelCallRequest } from "./guardrails/session";
 import type { ItemScreen } from "./guardrails/untrusted";
@@ -84,6 +91,12 @@ export type RunnerDeps = {
   now: () => Date;
   /** Id for each new AgentRun (deliverable headers carry it, so tests pin it). */
   ids: () => string;
+  /**
+   * ADR-006: client-master and staff names for the run's masking dictionary (production:
+   * src/lib/ai/name-directory.ts). The job's client name is always in it; without a directory the
+   * dictionary is the client name plus what the agent harvests from its inputs.
+   */
+  names?: NameDirectory;
 };
 
 // ------------------------------------------------------------------ agent definition
@@ -148,6 +161,14 @@ export interface AgentDefinition<I = unknown, E = unknown> {
   checklistRegistry: RuleRegistry<CheckInput<I, E>>;
   /** Text shown to the model for LLM rules. Default: the extracted data as JSON. */
   llmContext?(input: CheckInput<I, E>): string;
+  /**
+   * ADR-006 (DPDP): names in this run's inputs the anonymizer must mask — harvested
+   * deterministically from parsed party / supplier / customer / employer / holder / narration
+   * columns. Merged with the client master and staff names into the run's dictionary before any
+   * model call. A throw is not fatal by itself, but every anonymize-then-cloud call of the run is
+   * then refused (fail closed).
+   */
+  dictionaryTerms?(input: I, ctx: { files: InputFile[]; job: JobContext }): DictionaryEntry[] | Promise<DictionaryEntry[]>;
   deliverables(ctx: DeliverableContext<I, E>): DeliverableDraft[];
   /** Seed checklist (SopPack v1.0.0) for a fresh database or the accuracy harness. */
   defaultChecklist: ChecklistPack;
@@ -260,6 +281,39 @@ function legacyRequest<T>({ source, ...rest }: ModelCallRequest<T>): Omit<ModelR
   return rest as Omit<ModelRequest<T>, "runId">;
 }
 
+/**
+ * ADR-006: the run's masking dictionary — the job's client name, the client-master and staff names
+ * (deps.names) and the names the agent harvests from its inputs (dictionaryTerms). `problem` names
+ * the part that could not be built; the guardrail session then refuses every cloud call.
+ */
+export async function buildRunDictionary<I>(
+  def: Pick<AgentDefinition<I, unknown>, "dictionaryTerms">,
+  input: I,
+  files: InputFile[],
+  job: JobContext,
+  names: NameDirectory | undefined,
+): Promise<{ entries: DictionaryEntry[]; problem: string | null }> {
+  const entries: (DictionaryEntry | null)[] = [];
+  const client = job.clientName.trim();
+  if (client.length >= 2) entries.push(partyEntry(client) ?? { value: client, kind: "ORG" });
+  let problem: string | null = null;
+  if (names) {
+    try {
+      entries.push(...(await names.forJob(job)));
+    } catch {
+      problem = "the client-master and staff names could not be read";
+    }
+  }
+  if (def.dictionaryTerms) {
+    try {
+      entries.push(...(await def.dictionaryTerms(input, { files, job })));
+    } catch {
+      problem ??= "the names in the input files could not be read";
+    }
+  }
+  return { entries: dedupeDictionary(entries), problem };
+}
+
 /** Path A folder of a job: CL-{Code}/Compliance/FY…/{Service}/{Period}/{Kind}. Throws PathError on bad parts. */
 export function jobFolder(job: { clientCode: string; fy: string; service: FirmService; period: string }, kind: DeliverableKind): DeliverablePath {
   return deliverablePath(job.clientCode, job.fy, job.service, parsePeriod(job.period), kind);
@@ -351,11 +405,18 @@ export async function runAgent<I, E>(def: AgentDefinition<I, E>, jobTaskId: stri
       throw new AgentRunError(res.status === "queued" ? `Model call queued for a human: ${res.reason}` : `Model output not usable: ${res.issues.join("; ")}`);
     };
     const route = <T>(req: Omit<ModelRequest<T>, "runId">) => deps.router.run<T>({ ...req, runId } as ModelRequest<T>);
-    guard = def.scope ? createGuardrailSession({ agent: def, scope: def.scope, route, unwrap }) : null;
+    guard = def.scope ? createGuardrailSession({ agent: def, scope: def.scope, route, unwrap, requireDictionary: !def.internal }) : null;
     const session = guard;
+    // ADR-006: the run's masking dictionary (filled once the inputs are parsed, before any model call).
+    let runDictionary: DictionaryEntry[] = [];
+    const withDictionary = <T>(req: Omit<ModelRequest<T>, "runId">): Omit<ModelRequest<T>, "runId"> => {
+      const own = req.dictionary ?? [];
+      const merged = dedupeDictionary([...runDictionary, ...own]);
+      return merged.length ? { ...req, dictionary: merged } : req;
+    };
     const model: ModelCaller = session
       ? Object.assign(<T>(req: ModelCallRequest<T>) => session.model<T>(req), { screen: session.screen })
-      : async <T>(req: ModelCallRequest<T>): Promise<T> => unwrap(await route<T>(legacyRequest(req)));
+      : async <T>(req: ModelCallRequest<T>): Promise<T> => unwrap(await route<T>(withDictionary(legacyRequest(req))));
 
     // Rules: the pack, plus approved mistake rules the pack does not already carry.
     const mistakes = await db.mistakeLog.findMany({
@@ -384,6 +445,9 @@ export async function runAgent<I, E>(def: AgentDefinition<I, E>, jobTaskId: stri
     if (!parsed.success) throw new AgentRunError(`Inputs incomplete: ${parsed.error.issues.map((i) => i.message).join("; ")}`);
     const input = parsed.data;
     session?.setInput(input);
+    const dictionary = await buildRunDictionary(def, input, files, job, deps.names);
+    runDictionary = dictionary.entries;
+    session?.setDictionary(dictionary.entries, dictionary.problem);
 
     // Extract (model), compute (code), check (engine).
     const extracted = await def.extract({ input, files, job, runId, notes, model });

@@ -9,6 +9,7 @@ import { bumpAmountText, mutateCsvCell } from "@/lib/agents/core/probes";
 import type { AgentDefinition, InputFile, InputProbe } from "@/lib/agents/core/runner";
 import { sniffDepartment, wrongDepartmentMessage } from "@/lib/agents/books/department";
 import { analyzeAudit, normalizeAuditExtract } from "./analysis";
+import { auditDictionaryTerms } from "./dictionary";
 import { auditInputSchema, classifyAuditFile, parseAuditFiles, type AuditExtract, type AuditInput } from "./inputs";
 import { TB_PROBE, probeCsvAmount, type ProbeTarget } from "@/lib/agents/books/probe";
 import { auditPack } from "./pack";
@@ -110,6 +111,8 @@ export const auditAgent: AgentDefinition<AuditInput, AuditExtract> = {
   async extract({ input, job }) {
     return parseAuditFiles(input, job);
   },
+
+  dictionaryTerms: (input, { job }) => auditDictionaryTerms(input, job),
 
   compute(extracted) {
     return computeAuditFigures(extracted);

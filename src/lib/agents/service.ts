@@ -37,12 +37,13 @@ let cached: AgentServiceDeps | null = null;
 /** Prisma + ModelRouter + SharePoint (app-only Graph) + ClientDocs inputs. Built on first use. */
 export async function defaultAgentDeps(): Promise<AgentServiceDeps> {
   if (cached) return cached;
-  const [{ prisma }, { run }, { defaultSharePointClient }, { createDeliverableStore }, { defaultInputSource }] = await Promise.all([
+  const [{ prisma }, { run }, { defaultSharePointClient }, { createDeliverableStore }, { defaultInputSource }, { prismaNameDirectory }] = await Promise.all([
     import("@/lib/prisma"),
     import("@/lib/ai/router"),
     import("@/lib/integrations/sharepoint/factory"),
     import("@/lib/integrations/sharepoint/deliverable-store"),
     import("@/lib/agents/core/inputs"),
+    import("@/lib/ai/name-directory"),
   ]);
   const client = defaultSharePointClient();
   const store = createDeliverableStore(client);
@@ -53,6 +54,8 @@ export async function defaultAgentDeps(): Promise<AgentServiceDeps> {
     inputs: defaultInputSource(client, store),
     now: () => new Date(),
     ids: () => randomUUID(),
+    // ADR-006: client-master and staff names for every run's masking dictionary.
+    names: prismaNameDirectory(prisma as unknown as Parameters<typeof prismaNameDirectory>[0]),
     agents: AGENTS,
   };
   return cached;

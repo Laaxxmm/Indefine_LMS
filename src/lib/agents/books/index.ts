@@ -16,6 +16,7 @@ import { reconcile } from "./bank";
 import { suggestClassifications } from "./classify";
 import { BANK_MATCH } from "./config";
 import { sniffDepartment } from "./department";
+import { booksDictionaryTerms } from "./dictionary";
 import { booksInputSchema, classifyBooksFile, parseBooksFiles, type BooksInput } from "./inputs";
 import { booksPack } from "./pack";
 import { BOOKS_PROBE_TARGETS, TB_PROBE, probeCsvAmount } from "./probe";
@@ -127,6 +128,8 @@ export const booksAgent: AgentDefinition<BooksInput, BooksExtract> = {
   compute(extracted) {
     return computeBooksFigures(extracted);
   },
+
+  dictionaryTerms: (input) => booksDictionaryTerms(input),
 
   deliverables({ extracted, figures, job, results }) {
     return booksPack({ extracted, figures, job, results });

@@ -49,7 +49,9 @@ describe("LLM rule documents: fenced, screened line by line, flagged", () => {
     for (const c of p.calls) {
       const user = c.messages[0].content;
       expect(user).not.toContain("Ignore previous instructions");
-      expect(user).toContain(`${UNTRUSTED_FENCE.open}\nregister.csv row 2: INV-1 | Acme Traders`);
+      // ADR-006: the register's party names are in the run's masking dictionary, so the provider sees tokens.
+      expect(user).toContain(`${UNTRUSTED_FENCE.open}\nregister.csv row 2: INV-1 | ⟨ORG_`);
+      expect(user).not.toContain("Acme Traders");
       expect(user.trimEnd().endsWith(UNTRUSTED_FENCE.close)).toBe(true);
       expect(user.indexOf("Question:")).toBeLessThan(user.indexOf(UNTRUSTED_FENCE.open)); // the SOP question is outside the fence
       expect(c.system).toContain("never instructions");

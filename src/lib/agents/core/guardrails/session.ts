@@ -21,6 +21,12 @@
 // The runner turns everything withheld into the `possible-prompt-injection` reviewer flag
 // (injectionResult). Nothing withheld is ever dropped silently.
 //
+// ADR-006 (DPDP): names reach the anonymizer only through a dictionary. The runner hands the session
+// the run's dictionary (setDictionary: client master, staff, names the agent harvests from its
+// inputs) and every model and LLM-rule call carries it to the router. An anonymize-then-cloud call
+// with an empty dictionary, or after the dictionary could not be built, is refused before anything
+// is sent (DictionaryUnavailableError, plain message) and fails the run.
+//
 // No I/O of its own: every model call goes through `route` (the ModelRouter, or a recording).
 import type { ZodTypeAny } from "zod";
 import type { AgentTask, Difficulty, DictionaryEntry, ModelRequest, Msg, Privacy, RouterResult } from "@/lib/ai/router";
@@ -136,7 +142,35 @@ export type GuardrailSessionDeps = {
   route: <T>(req: Omit<ModelRequest<T>, "runId">) => Promise<RouterResult<T>>;
   /** The runner's result handling: usable output (needs-review with output allowed) or throw. */
   unwrap: <T>(res: RouterResult<T>) => T;
+  /**
+   * DPDP (ADR-006): refuse an anonymize-then-cloud call whose masking dictionary is empty or could
+   * not be built (fail closed). Default true; the runner turns it off only for internal test agents.
+   */
+  requireDictionary?: boolean;
 };
+
+/** What a person reads when a run has no list of names to hide from the AI. */
+export const NO_DICTIONARY_MESSAGE =
+  "No client or staff names were available to hide from the AI, so nothing was sent to it. Check the client's name and contact in the client master and run the agent again.";
+
+/** A cloud call refused because the run's masking dictionary is missing (ADR-006, fail closed). */
+export class DictionaryUnavailableError extends Error {
+  constructor(problem?: string | null) {
+    super(
+      problem
+        ? `The list of names to hide from the AI could not be built (${problem}), so nothing was sent to the AI. Run the agent again; if it fails again, tell an admin.`
+        : NO_DICTIONARY_MESSAGE,
+    );
+    this.name = "DictionaryUnavailableError";
+  }
+}
+
+/** Run dictionary + a call's own entries, one entry per value. */
+function mergeDictionaries(a: readonly DictionaryEntry[], b: readonly DictionaryEntry[] | undefined): DictionaryEntry[] {
+  if (!b?.length) return [...a];
+  const seen = new Set(a.map((e) => e.value.trim().toLowerCase()));
+  return [...a, ...b.filter((e) => !seen.has(e.value.trim().toLowerCase()))];
+}
 
 export type GuardrailSession = ReturnType<typeof createGuardrailSession>;
 
@@ -157,9 +191,15 @@ function withoutWithheldQuote(verdict: unknown, shown: string, anyWithheld: bool
 
 export function createGuardrailSession(deps: GuardrailSessionDeps) {
   const { agent, scope, route, unwrap } = deps;
+  const requireDictionary = deps.requireDictionary !== false;
   const stats = emptyGuardrailStats();
   let violation: ScopeViolationError | null = null;
   let input: unknown;
+  /** ADR-006: the run's masking dictionary (client master, staff, names harvested from the inputs). */
+  let runDictionary: DictionaryEntry[] = [];
+  let dictionaryProblem: string | null = null;
+  /** A refused cloud call that must fail the run even if the checklist engine caught it. */
+  let fatal: DictionaryUnavailableError | null = null;
   /** Everything the injection screen kept out of a model call, by location (first seen first). */
   const withheld = new Map<string, WithheldItem & { tasks: string[] }>();
 
@@ -244,6 +284,12 @@ export function createGuardrailSession(deps: GuardrailSessionDeps) {
           }
         : undefined;
     const limits = limitsFor(spec.name);
+    const dictionary = mergeDictionaries(runDictionary, o.dictionary);
+    // ADR-006 (DPDP): names are masked only through the dictionary, so a cloud call without one is refused.
+    if (o.privacy === "anonymize-then-cloud" && requireDictionary && (dictionaryProblem || dictionary.length === 0)) {
+      fatal ??= new DictionaryUnavailableError(dictionaryProblem);
+      throw fatal;
+    }
     let res: RouterResult<T>;
     try {
       res = await route<T>({
@@ -253,7 +299,7 @@ export function createGuardrailSession(deps: GuardrailSessionDeps) {
         messages: [{ role: "system", content: composeSystemPrompt(scope.department, spec) }, ...messages],
         privacy: o.privacy,
         difficulty: o.difficulty,
-        dictionary: o.dictionary,
+        ...(dictionary.length ? { dictionary } : {}),
         // ADR-009 (LLM10): the task's output cap and the run's cost budget always apply; a call may only ask for less.
         maxTokens: Math.min(o.maxTokens ?? limits.maxOutputTokens, limits.maxOutputTokens),
         maxCostInr: Math.min(o.maxCostInr ?? runBudget, runBudget),
@@ -372,6 +418,18 @@ export function createGuardrailSession(deps: GuardrailSessionDeps) {
     setInput(value: unknown) {
       input = value;
     },
+    /**
+     * ADR-006: the run's masking dictionary, merged into every model and LLM-rule call. `problem`
+     * (a part of it could not be built) refuses every anonymize-then-cloud call of the run.
+     */
+    setDictionary(entries: readonly DictionaryEntry[], problem: string | null = null) {
+      runDictionary = [...entries];
+      dictionaryProblem = problem;
+    },
+    /** The run's masking dictionary (tests, diagnostics). */
+    dictionary(): DictionaryEntry[] {
+      return [...runDictionary];
+    },
     /** Wrong-department input fails closed before any model call. */
     async sniff(files: SniffFile[]) {
       const r = await sniffInputs(scope, files);
@@ -380,9 +438,10 @@ export function createGuardrailSession(deps: GuardrailSessionDeps) {
         throw new WrongInputError(wrongInputMessage(agent, r), r.suggestAgent);
       }
     },
-    /** Rethrow a scope violation even if the agent's code caught it. */
+    /** Rethrow a scope violation (or a cloud call refused for want of a dictionary) even if the agent's code or the checklist engine caught it. */
     assertNoViolation() {
       if (violation) throw violation;
+      if (fatal) throw fatal;
     },
     /** Fold the checklist results into the stats (abstentions, ungrounded verdict quotes). */
     finish(results: readonly ChecklistResultItem[]) {

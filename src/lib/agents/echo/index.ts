@@ -14,6 +14,7 @@
 // register.csv without the register header (naming the right agent when it is a GST register or a
 // trial balance) before any model call.
 import { z } from "zod";
+import { partyEntries } from "@/lib/ai/names";
 import { createRuleRegistry, type ChecklistPack, type CheckOutcome } from "@/lib/agents/core/checklist";
 import { formatInr } from "@/lib/agents/core/format";
 import { CHECK_TASK_INSTRUCTIONS, type AgentScope, type InputSniffResult, type ModelTaskSpec, type SniffFile } from "@/lib/agents/core/guardrails/scope";
@@ -309,6 +310,9 @@ export const echoAgent: AgentDefinition<EchoInput, EchoExtract> = {
   async extract({ input }) {
     return EchoExtractSchema.parse({ rows: input.rows });
   },
+
+  // ADR-006: the register's party names join the run's masking dictionary.
+  dictionaryTerms: (input) => partyEntries(input.rows.map((r) => r.party)),
 
   compute({ rows }) {
     let total = 0;

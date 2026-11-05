@@ -12,6 +12,7 @@ import { bumpAmountText, bumpJsonAmount, mutateCsvCell, mutateJsonInput, mutateX
 import type { AgentDefinition, InputFile, InputProbe } from "@/lib/agents/core/runner";
 import { analyseRoc, columnFromTrialBalance, type RocExtract, type RocFinancials } from "./analyse";
 import { rocDeliverables } from "./deliverables";
+import { rocDictionaryTerms } from "./dictionary";
 import { ROC_MAP_TASK_SPEC, ROC_MODEL_TASKS, TB_SCREEN, acceptedMappings, mapLedgersUserMessage, tbPromptLines } from "./model-tasks";
 import { screenForModel } from "@/lib/agents/core/guardrails/untrusted";
 import { parseFinancialsXlsx, rocInputSchema, type RocInput } from "./parse";
@@ -204,6 +205,8 @@ export const rocAgent: AgentDefinition<RocInput, RocExtract> = {
   },
 
   compute: (extracted) => rocFigures(extracted),
+
+  dictionaryTerms: (input) => rocDictionaryTerms(input),
 
   llmContext({ extracted }) {
     if (!extracted.notes) return "notes.txt: (no notes to accounts were provided)";
