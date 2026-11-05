@@ -13,6 +13,7 @@ The repository inventory these decisions rest on is in [`docs/inventory.md`](../
 | [ADR-005](ADR-005-close-loop-done.md) | DONE requires Turia close and SharePoint presence | Accepted | 2026-11-05 | `JobTask` state machine; `DONE` only via `closeLoop.gate()`, enforced below the UI. |
 | [ADR-006](ADR-006-dpdp-data-classes.md) | DPDP data classes and anonymization | Accepted | 2026-11-05 | Client PII reaches a cloud model only masked; token map never sent; inputs ≤ 30 days; break-nudge heartbeats 7 days, no manager report. |
 | [ADR-007](ADR-007-graph-upload-put.md) | Graph file upload via create-only PUT | Proposed | 2026-11-05 | One PUT path with conflictBehavior=fail so deliverables can be written; never overwrites; versions instead. Needs owner confirmation. |
+| [ADR-008](ADR-008-agent-guardrails.md) | Agent guardrails: stay in the department, never guess | Accepted | 2026-11-05 | Scope contract per agent, closed outputs with insufficient_evidence, grounding of every extracted value, mandatory validators, agreement on block-level judgements, wrong-input fail-closed, versioned prompts, drift monitoring. |
 
 ## Open items raised by these ADRs
 

@@ -89,8 +89,9 @@ describe("registry and flags", () => {
   it("echo is hidden unless FIRM_OS_ECHO_AGENT is on", () => {
     expect(isEchoAgentEnabled({})).toBe(false);
     expect(isEchoAgentEnabled({ FIRM_OS_ECHO_AGENT: "Yes" })).toBe(true);
-    expect(visibleAgents({}).map((a) => a.key)).toEqual([]);
-    expect(visibleAgents({ FIRM_OS_ECHO_AGENT: "1" }).map((a) => a.key)).toEqual(["echo"]);
+    // Internal agents (echo) are flag-gated; production agents registered later stay visible.
+    expect(visibleAgents({}).filter((a) => a.internal).map((a) => a.key)).toEqual([]);
+    expect(visibleAgents({ FIRM_OS_ECHO_AGENT: "1" }).map((a) => a.key)).toContain("echo");
     expect(getAgent("echo")?.key).toBe("echo");
     expect(getAgent("toString")).toBeUndefined();
   });
