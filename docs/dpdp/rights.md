@@ -31,6 +31,17 @@ data breach is recorded. Code: `src/lib/privacy/`. Screens: **Admin → Firm OS 
 | Partner (level PARTNER) | Everything an admin can through the API; decides erasure. The admin pages sit behind the admin layout, so a partner who is not an LMS admin needs the admin role to use the screens |
 | Everyone else | Nothing here. Staff who learn of a breach tell an admin or partner at once |
 
+**Separation of duties** (`src/lib/privacy/duties.ts`): no one carries a request alone.
+
+| Step | Rule |
+|---|---|
+| Verify identity | Not the person who logged the request. An "Other" check needs a note of at least 20 characters saying what was checked |
+| Confirm an erasure | A partner, or an admin, who did **not** verify the identity (so one person checks who is asking, another decides what is erased) |
+
+The erasure rule is enforced in `confirmErasure()`. The two verify rules are enforced once
+`register.ts verifyIdentity()` calls `verificationNoteProblem()` and `assertNotCreator()` (owned by
+the security-integration work; see the open points).
+
 ## Response timelines (data, verify)
 
 Stored on the request as `dueAt` (end of the IST day). The list shows the firm target; the detail
@@ -53,7 +64,8 @@ page also shows the outer limit.
    person), contact email / phone on the client master, and LMS user email for staff. A company's
    contact person is a `client-contact`; an individual client is a `client-person`.
 2. **Verify identity** (`…/[id]/verify`): reply from the email on record, call back to the phone on
-   record, photo ID in person, signed letter, or other (with a note).
+   record, photo ID in person, signed letter, or other (with a note of at least 20 characters). Done
+   by someone other than the person who logged the request.
 3. **Act**, by kind:
    - **Access** — download the export (`GET …/[id]/export`): a JSON file with a plain-English
      summary, every inventoried field of the person's records, the purpose of each, who the data is
@@ -75,15 +87,41 @@ page also shows the outer limit.
 ## Erasure: anonymise or hold
 
 The plan (`GET …/[id]/erasure`) walks the data inventory (`src/lib/privacy/inventory.ts`) item by
-item. A partner or admin confirms the plan they saw (`POST`, with its fingerprint); if anything
-changed in between, the confirmation is refused and the new plan is shown.
+item. A partner or admin **other than the person who verified the identity** confirms the plan they
+saw (`POST`, with its fingerprint); if anything changed in between, the confirmation is refused and
+the new plan is shown.
+
+It walks two lists:
+
+- **The person's records** (`DATASETS`): one item per row — the client master, contact details,
+  jobs' ack refs, legacy job notes, message drafts (with or without a job), onboarding runs,
+  cached agent inputs, certificates, engagement letters, SharePoint files.
+- **Copies of their identifiers inside other records** (`RESIDUE_DATASETS`, see the
+  [inventory](data-inventory.md#what-erasure-walks)): one item per dataset listing its rows — audit
+  comments and notes, agent figures / review notes / errors, checklist findings, job history notes,
+  deliverable names, Turia checklists, mistake examples, coach nudges, model errors, onboarding runs
+  that never reached a client record, and the notes of the person's privacy requests. Their names,
+  PAN (also inside a GSTIN), GSTIN, CIN, email, phone, city and filing ack refs become `[erased]` in
+  place; numbers, row ids, JSON keys, record ids and hashes stay, so figures and audit rows still
+  make sense. Each residue dataset has its own hold basis: engagement records (review trail,
+  findings, figures, notes, deliverable pointers) are held under the client's duties; derived
+  copies are cleaned even while the client's own records are held.
+
+An onboarding run that failed before the client record existed is found by the person's PAN,
+GSTIN, email or phone in its prompt or details (never by a name alone); when the request matched no
+client at all, by the keyed hash of the identifiers the request was logged with.
 
 | Outcome | When | What happens |
 |---|---|---|
-| Legal hold | A retention duty is still in force | Nothing changes; `AuditEvent "legal-hold"` with the basis and the hold-until date; the request goes **On legal hold** with the bases listed; processing of the held client is restricted (no new AI processing, drafts or marketing use) |
-| Anonymise | No duty applies | `UPDATE` in place: names and identifiers become `[erased]` or empty; row ids, entity type, turnover, fees and computed figures stay; the client is marked inactive |
+| Legal hold | A retention duty is still in force | Nothing changes; `AuditEvent "legal-hold"` per row with the basis and the hold-until date; the request goes **On legal hold** with the bases listed; processing of the held client is restricted (no new AI processing, drafts or marketing use) |
+| Anonymise | No duty applies | `UPDATE` in place: names and identifiers become `[erased]` or empty; row ids, entity type, turnover, fees and computed figures stay; the client is marked inactive. `AuditEvent "anonymise"` per row (columns changed, never values) |
 | Kept as is | Not personal on its own, or purged on a schedule (heartbeats after 7 days) | Nothing; the reason is shown |
 | Manual step | Turia and SharePoint | Firm OS never changes or deletes there; a partner asks the Turia admin / IT after the hold date |
+
+What erasure cannot find: a nickname or a misspelling, a name in a record not linked to the person's
+client record (only their identifiers find those), and anything outside Postgres (SharePoint files,
+Turia, mailboxes). Comments and
+notes are masked when written, which keeps most new text free of names in the first place.
 
 ### Retention duties (data in `RETENTION_DUTIES`, each with a verify note)
 
@@ -138,5 +176,7 @@ clock (late notices are marked late). An incident closes only after both notices
 
 - Confirm every period in the two tables above and the response periods the firm will publish.
 - Decide whether erasure requests from active clients end the engagement.
-- Confirm the identity-verification methods are enough for each kind of request.
-- Reconcile `src/lib/privacy/inventory.ts` with `docs/dpdp/data-inventory.md` after both merge.
+- Confirm the identity-verification methods are enough for each kind of request, and the 20-character minimum for an "Other" note.
+- Confirm the hold basis per residue dataset (inventory "What erasure walks"): review trail, findings, figures and job notes held as working papers (SA 230); Turia checklists, mistake examples, nudges, model errors and privacy notes cleaned at once as copies.
+- Engineering: wire the two verify checks into `register.ts verifyIdentity()` — `verificationNoteProblem()` before its step and `assertNotCreator(tx, id, user)` right after `loadOpen(tx, id)` (`src/lib/privacy/duties.ts`).
+- `src/lib/privacy/inventory.ts` and `docs/dpdp/data-inventory.md` are reconciled (2026-11-06); keep them changing together.

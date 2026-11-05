@@ -26,15 +26,18 @@ Nothing is ever removed. A correction can itself be corrected; the history keeps
 
 ## Masking in the audit
 
-`AuditEvent` keeps no raw client personal data (ADR-006):
+`AuditEvent` keeps no raw client personal data (ADR-006). What is masked follows the field's data
+class in the [inventory](data-inventory.md) (`src/lib/privacy/inventory.ts`): every class A client
+field on the allow-list is masked, and a test keeps the two in step.
 
 | Data | Stored as |
 |---|---|
 | PAN, Aadhaar, phone, email, GSTIN | `****` + last four characters |
 | Names | Initials (`Kiran Kumar` → `K. K.`) |
+| City, industry | First letter only (`Bengaluru` → `B…`): no fingerprint, because a hash of a value from a small set is reversed by trying every city |
 | Free text (growth note, referral source, draft subject and body) | `[text, 42 characters, #a1b2c3]` |
-| Reason | Typed text with identifiers replaced by anonymizer tokens (`⟨PAN_1⟩`) |
-| Other values | As they are (dates as ISO, people as user ids, shown as names) |
+| Reason | Typed text with identifiers replaced by anonymizer tokens (`⟨PAN_1⟩`) and the client's names too (`⟨NAME_1⟩`, `⟨ORG_1⟩`): the name and contact name of the record's client, and the old and new value when a name is corrected |
+| Other values | As they are (entity type, turnover, dates as ISO, people as user ids, shown as names) |
 
 ## The allow-list
 
