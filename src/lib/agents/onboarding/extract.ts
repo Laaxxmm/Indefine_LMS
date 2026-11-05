@@ -8,6 +8,7 @@
 // and is told why) and fenced as data in the message the model receives.
 import type { DictionaryEntry, ModelRequest, RouterResult } from "@/lib/ai/router";
 import { UNTRUSTED_DATA_INSTRUCTION, fenceUntrusted, patternLabel, screenText, visibleExcerpt, type WithheldItem } from "@/lib/agents/core/guardrails/untrusted";
+import { limitsFor } from "@/lib/agents/core/guardrails/limits";
 import { resolvePeople, type Person } from "./people";
 import { ENTITY_TYPES, ExtractedSpec, FIRM_SERVICES, mergeSpec, normalizeExtracted, type PartialSpec } from "./spec";
 
@@ -75,6 +76,9 @@ export function buildDictionary(prompt: string, people: Person[] = []): Dictiona
   return [...out.values()];
 }
 
+/** What the person reads when the text is longer than the AI may read in one call. */
+export const TOO_LONG_NOTE = "This text is longer than the AI may read at once, so only its first part was read. Check every field below, and add anything that is missing.";
+
 /** What the person reads when the screen keeps their sentence away from the model. */
 export const WITHHELD_NOTE =
   "Part of this sentence reads like an instruction to the AI system rather than a description of the client, so it was not sent for automatic reading. Answer the questions below instead.";
@@ -88,6 +92,11 @@ export async function extractSpec(prompt: string, opts: ExtractOptions): Promise
     const { spec, candidates } = resolvePeople(mergeSpec(opts.base ?? {}, {}), people);
     return { spec, candidates, needsReview: true, notes: [`${WITHHELD_NOTE} (The text ${patternLabel(patterns[0])}.)`], withheld };
   }
+  // ADR-009 (LLM10): the task's input and output limits apply; a longer text is cut and the person is told.
+  const limits = limitsFor(EXTRACT_TASK);
+  const maxChars = limits.maxInputTokens * 4;
+  const sent = prompt.length > maxChars ? prompt.slice(0, maxChars) : prompt;
+  if (sent !== prompt) notes.push(TOO_LONG_NOTE);
   // A router failure (no API key, provider outage, budget used up) must not stop onboarding:
   // the person answers the clarifier's questions instead. The reason is shown, never hidden.
   const result = await opts.router
@@ -95,9 +104,10 @@ export async function extractSpec(prompt: string, opts: ExtractOptions): Promise
       task: EXTRACT_TASK,
       privacy: "anonymize-then-cloud",
       difficulty: "sop",
+      maxTokens: limits.maxOutputTokens,
       messages: [
         { role: "system", content: EXTRACT_SYSTEM },
-        { role: "user", content: fenceUntrusted(prompt) },
+        { role: "user", content: fenceUntrusted(sent) },
       ],
       schema: ExtractedSpec,
       dictionary: buildDictionary(prompt, people),

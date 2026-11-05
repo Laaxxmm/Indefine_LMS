@@ -29,8 +29,11 @@ import { ABSTAIN_STATUS, isGuardrailOutcome, quoteInContext } from "../checklist
 import { AGREEMENT_TIER, needsAgreement, settleAgreement } from "./agreement";
 import { GroundingError, groundCheck } from "./grounding";
 import { shapeFingerprint, unboundedStrings } from "./schema";
+import { BudgetExceededError } from "@/lib/ai/errors";
+import { estimateTokens } from "@/lib/ai/pricing";
+import { limitsFor, runBudgetFor, truncateToLimit, truncationResult, type Truncation } from "./limits";
 import { supplyChainMeta } from "./supply-chain";
-import { fenceUntrusted, injectionResult, screenDocumentText, screenItems, type ItemScreen, type ScreenOptions, type WithheldItem } from "./untrusted";
+import { fenceUntrusted, injectionResult, lineLocation, screenDocumentText, screenItems, type ItemScreen, type ScreenOptions, type WithheldItem } from "./untrusted";
 import {
   ScopeViolationError,
   WrongInputError,
@@ -70,6 +73,8 @@ export type GuardrailStats = {
   screened: number;
   /** Distinct locations the injection screen withheld from the model (ADR-009). */
   injections: number;
+  /** Calls whose documents were cut at the task's input limit (ADR-009, flagged input-truncated). */
+  truncatedCalls: number;
 };
 
 export const emptyGuardrailStats = (): GuardrailStats => ({
@@ -85,7 +90,17 @@ export const emptyGuardrailStats = (): GuardrailStats => ({
   wrongInput: 0,
   screened: 0,
   injections: 0,
+  truncatedCalls: 0,
 });
+
+const rupees = (n: number) => `₹${n.toFixed(2)}`;
+
+/** What a person reads when the router refuses a call over budget (the ModelCall row keeps the code). */
+export function budgetMessage(e: BudgetExceededError): string {
+  return e.scope === "run"
+    ? `This run has used its AI budget (${rupees(e.spentInr)} of ${rupees(e.limitInr)}), so it stopped before finishing. Run it again, or ask an admin to raise the per-run AI budget for this agent.`
+    : `Today's AI budget for the firm is used up (${rupees(e.spentInr)} of ${rupees(e.limitInr)}), so this run stopped. Run it again tomorrow, or ask an admin to raise the daily AI budget.`;
+}
 
 /** Most withheld locations kept in one run's AuditEvent meta. */
 export const MAX_RECORDED_INJECTIONS = 50;
@@ -175,23 +190,45 @@ export function createGuardrailSession(deps: GuardrailSessionDeps) {
     return r;
   };
 
+  /** Documents cut at a task's input limit (ADR-009, LLM10): one warn row for the run, never silent. */
+  const truncations: Truncation[] = [];
+  /** Cut `text` to what is left of the call's input budget; record what was not sent. */
+  const withinLimit = (task: string, text: string, budget: { tokens: number }, fallback: string): string => {
+    const t = truncateToLimit(text, Math.max(0, budget.tokens), (line, i) => lineLocation(line, i, fallback));
+    budget.tokens -= estimateTokens(t.kept);
+    if (t.cut) truncations.push({ task, linesNotSent: t.cut.lines, firstLocation: t.cut.firstLocation });
+    return t.kept;
+  };
+
   /**
    * Backstop over what is actually sent: every line of every user / assistant message is screened;
-   * withheld lines are left out, the rest is fenced. Returns the messages to send and the screened
-   * text quotes are grounded against.
+   * withheld lines are left out, the rest is cut to the task's input limit and fenced. Returns the
+   * messages to send and the text quotes are grounded against (exactly what was sent).
    */
-  const screenMessages = (task: string, messages: Msg[]): { messages: Msg[]; source: string } => {
+  const screenMessages = (task: string, name: string, messages: Msg[]): { messages: Msg[]; source: string } => {
     const sent: Msg[] = [];
     const kept: string[] = [];
+    const budget = { tokens: limitsFor(name).maxInputTokens };
     messages.forEach((m, i) => {
-      const s = screenDocumentText(m.content, `${task} message ${i + 1}`);
+      const fallback = `${task} message ${i + 1}`;
+      const s = screenDocumentText(m.content, fallback);
       stats.screened += s.lines;
       noteWithheld(task, s.withheld);
-      if (m.role === "user") kept.push(s.kept);
-      sent.push({ role: m.role, content: fenceUntrusted(s.kept) });
+      const text = withinLimit(task, s.kept, budget, fallback);
+      if (m.role === "user") kept.push(text);
+      sent.push({ role: m.role, content: fenceUntrusted(text) });
     });
     return { messages: sent, source: kept.join("\n\n") };
   };
+
+  /** Per task: model items checked against the documents and how many were not grounded (hallucination budget, LLM09). */
+  const taskStats: Record<string, { checked: number; ungrounded: number }> = {};
+  const countTask = (label: string, checked: number, ungrounded: number) => {
+    const t = (taskStats[label] ??= { checked: 0, ungrounded: 0 });
+    t.checked += checked;
+    t.ungrounded += ungrounded;
+  };
+  const runBudget = runBudgetFor(agent.key);
 
   async function callSpec<T>(spec: AnyTaskSpec, messages: Msg[], o: CallOpts<T>, extra: Pick<ModelRequest<T>, "forceTier" | "secondOpinion"> = {}): Promise<T> {
     stats.modelCalls += 1;
@@ -206,19 +243,26 @@ export function createGuardrailSession(deps: GuardrailSessionDeps) {
             return issues;
           }
         : undefined;
-    const res = await route<T>({
-      task: spec.name as AgentTask,
-      taskVersion: spec.version,
-      schema: (o.schema ?? spec.schema) as ModelRequest<T>["schema"],
-      messages: [{ role: "system", content: composeSystemPrompt(scope.department, spec) }, ...messages],
-      privacy: o.privacy,
-      difficulty: o.difficulty,
-      dictionary: o.dictionary,
-      maxTokens: o.maxTokens,
-      maxCostInr: o.maxCostInr,
-      contradictions,
-      ...extra,
-    });
+    const limits = limitsFor(spec.name);
+    let res: RouterResult<T>;
+    try {
+      res = await route<T>({
+        task: spec.name as AgentTask,
+        taskVersion: spec.version,
+        schema: (o.schema ?? spec.schema) as ModelRequest<T>["schema"],
+        messages: [{ role: "system", content: composeSystemPrompt(scope.department, spec) }, ...messages],
+        privacy: o.privacy,
+        difficulty: o.difficulty,
+        dictionary: o.dictionary,
+        // ADR-009 (LLM10): the task's output cap and the run's cost budget always apply; a call may only ask for less.
+        maxTokens: Math.min(o.maxTokens ?? limits.maxOutputTokens, limits.maxOutputTokens),
+        maxCostInr: Math.min(o.maxCostInr ?? runBudget, runBudget),
+        contradictions,
+        ...extra,
+      });
+    } catch (e) {
+      throw e instanceof BudgetExceededError ? new Error(budgetMessage(e)) : e;
+    }
     return unwrap(res);
   }
 
@@ -245,7 +289,7 @@ export function createGuardrailSession(deps: GuardrailSessionDeps) {
     if (req.messages.some((m) => m.role === "system")) throw violate(`task ${label}: the system prompt comes from the task registry; pass user / assistant messages only`);
     if (spec.difficulty && req.difficulty !== spec.difficulty) throw violate(`task ${label} declares difficulty "${spec.difficulty}"; the call asked for "${req.difficulty}"`);
     if (spec.privacy && req.privacy !== spec.privacy) throw violate(`task ${label} declares privacy "${spec.privacy}"; the call asked for "${req.privacy}"`);
-    const screened = screenMessages(label, req.messages);
+    const screened = screenMessages(label, spec.name, req.messages);
     const out = await callSpec<T>(spec, screened.messages, {
       privacy: req.privacy,
       difficulty: spec.difficulty ?? req.difficulty,
@@ -261,11 +305,14 @@ export function createGuardrailSession(deps: GuardrailSessionDeps) {
     const g = groundCheck(out, source, { schema: (schema ?? spec.schema) as ZodTypeAny });
     stats.groundChecked += g.checked;
     stats.ungrounded += g.ungrounded;
+    countTask(label, g.checked, g.ungrounded);
     if (g.rootUngrounded) throw new GroundingError(label, g.issues);
     return g.output;
   }
 
   let verdicts = 0;
+  /** ruleId → task label of the verdicts asked of the model (per-task hallucination counts in finish). */
+  const verdictTask = new Map<string, string>();
   /** llmCheck for the checklist engine (documents = the text the verdict's quote is checked against). */
   const llmCheck: LlmCheck<unknown> = async (rule: RuleDefinition, _input, documents) => {
     if (!scope.ruleIds.includes(rule.id)) {
@@ -276,13 +323,16 @@ export function createGuardrailSession(deps: GuardrailSessionDeps) {
     if (!spec) throw violate(`LLM rule ${rule.id} has no declared model task (declare "${checkTaskName(agent.key, rule.id)}" or "${genericCheckTaskName(agent.key)}")`);
     const label = taskLabel(spec);
     // The rule's question and evidence come from the partner-approved SOP pack; only the documents are untrusted.
-    const docs = screenDocumentText(documents, `${rule.id} documents`);
+    const fallback = `${rule.id} documents`;
+    const docs = screenDocumentText(documents, fallback);
     stats.screened += docs.lines;
     noteWithheld(label, docs.withheld);
-    const messages: Msg[] = [{ role: "user", content: `Question: ${rule.check}\nEvidence to cite: ${rule.evidence}\n\nDocuments:\n${fenceUntrusted(docs.kept)}` }];
+    const question = `Question: ${rule.check}\nEvidence to cite: ${rule.evidence}`;
+    const shown = withinLimit(label, docs.kept, { tokens: limitsFor(spec.name).maxInputTokens - estimateTokens(question) }, fallback);
+    const messages: Msg[] = [{ role: "user", content: `${question}\n\nDocuments:\n${fenceUntrusted(shown)}` }];
     // Checklist documents are client data: masked before any cloud call, or local-only when the task says so.
     const privacy: Privacy = spec.privacy === "local-only" ? "local-only" : "anonymize-then-cloud";
-    const o: CallOpts<unknown> = { privacy, difficulty: spec.difficulty ?? "judgement", validateWith: docs.kept };
+    const o: CallOpts<unknown> = { privacy, difficulty: spec.difficulty ?? "judgement", validateWith: shown };
     stats.judgements += 1;
     const first = await callSpec<unknown>(spec, messages, o);
     let verdict: unknown = first;
@@ -293,8 +343,11 @@ export function createGuardrailSession(deps: GuardrailSessionDeps) {
       if (!settled.agreed) stats.disagreements += 1;
       verdict = settled.verdict;
     }
-    verdict = withoutWithheldQuote(verdict, docs.kept, docs.withheld.length > 0);
-    if (!isGuardrailOutcome(verdict) && (verdict as { status?: unknown } | null)?.status !== ABSTAIN_STATUS) verdicts += 1;
+    verdict = withoutWithheldQuote(verdict, shown, shown !== documents);
+    if (!isGuardrailOutcome(verdict) && (verdict as { status?: unknown } | null)?.status !== ABSTAIN_STATUS) {
+      verdicts += 1;
+      verdictTask.set(rule.id, label);
+    }
     return verdict;
   };
 
@@ -311,6 +364,10 @@ export function createGuardrailSession(deps: GuardrailSessionDeps) {
     /** Withheld locations with the tasks they were kept out of (first seen first). */
     withheld(): (WithheldItem & { tasks: string[] })[] {
       return [...withheld.values()].map((w) => ({ ...w, patterns: [...w.patterns], tasks: [...w.tasks] }));
+    },
+    /** The `input-truncated` warn row for this run, or null when every call fitted its task's input limit. */
+    truncationResult(): ChecklistResultItem | null {
+      return truncationResult(truncations);
     },
     setInput(value: unknown) {
       input = value;
@@ -332,6 +389,11 @@ export function createGuardrailSession(deps: GuardrailSessionDeps) {
       stats.abstained = results.filter((r) => r.flags.includes("insufficient-evidence")).length;
       stats.groundChecked += verdicts;
       stats.ungrounded += results.filter((r) => r.flags.includes("llm-evidence-missing")).length;
+      stats.truncatedCalls = truncations.length;
+      for (const r of results) {
+        const label = verdictTask.get(r.ruleId);
+        if (label) countTask(label, 1, r.flags.includes("llm-evidence-missing") ? 1 : 0);
+      }
     },
     /** prisma.auditEvent.create args for this run's guardrail record. */
     auditEvent(runId: string, outcome: "ok" | "failed") {
@@ -347,6 +409,8 @@ export function createGuardrailSession(deps: GuardrailSessionDeps) {
             outcome,
             ...stats,
             injectionLocations: [...withheld.keys()].slice(0, MAX_RECORDED_INJECTIONS),
+            // ADR-009 (LLM09): per-task grounding counts for the hallucination budget on the drift rows.
+            tasks: Object.fromEntries(Object.entries(taskStats).map(([k, v]) => [k, { ...v }])),
             // ADR-009 (LLM03): which SDK and model ids produced this run.
             supplyChain: supplyChainMeta(),
           },

@@ -415,6 +415,9 @@ export async function runAgent<I, E>(def: AgentDefinition<I, E>, jobTaskId: stri
     // ADR-009: text the injection screen kept out of any model call is a block-severity reviewer flag.
     const injection = session?.injectionResult();
     if (injection) results.push(injection);
+    // ADR-009: documents cut at a task's input limit are a warn row naming what was not sent.
+    const truncated = session?.truncationResult();
+    if (truncated) results.push(truncated);
     session?.finish(results);
 
     // Deliverables → Working/.
