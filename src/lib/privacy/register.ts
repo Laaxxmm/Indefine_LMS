@@ -16,7 +16,8 @@ import { Refusal, fail, ok, type ServiceResult } from "@/lib/corrections/result"
 import { istDayKey, parseDayKey, DAY_MS } from "@/lib/ist";
 import { PRIVACY_NOT_ALLOWED, SIGN_IN, canUsePrivacyRegister } from "./access";
 import type { PrivacyDb } from "./inventory";
-import { IDENTIFIER_HINTS, IDENTIFIER_KINDS, identifierHash, normaliseIdentifier, prismaPrincipalLocator, type Identifier, type PrincipalLocator } from "./locator";
+import { IDENTIFIER_HINTS, IDENTIFIER_KINDS, identifierHash, identifierPrincipalLocator, normaliseIdentifier, type Identifier, type PrincipalLocator } from "./locator";
+import { memoryRateLimiter, type SearchRateLimiter } from "@/lib/search/rate-limit";
 import {
   KIND_LABELS,
   OPEN_STATUSES,
@@ -37,7 +38,10 @@ import type { MatchRef } from "./scope";
 export interface PrivacyDeps {
   db: PrivacyDb;
   now: () => Date;
+  /** Default: identifierPrincipalLocator (findByIdentifier, purpose "privacy-request") for the acting person. */
   locator?: PrincipalLocator;
+  /** Identifier-search limiter for the default locator (production: the shared database limiter; tests: in memory). */
+  searchLimiter?: SearchRateLimiter;
   /** HMAC key for identifierHash (production: AUTH_SECRET). */
   hashKey?: string;
 }
@@ -98,8 +102,14 @@ export async function createRequest(user: SessionUser, input: CreateRequestInput
   }
   const typed = PRINCIPAL_TYPES.find((t) => t === input.principalType) ?? null;
 
-  const locator = deps.locator ?? prismaPrincipalLocator(deps.db);
-  const located = identifiers.length ? await locator.locate(identifiers) : { matches: [], notes: [] };
+  const locator = deps.locator ?? identifierPrincipalLocator(user, { db: deps.db, limiter: deps.searchLimiter ?? memoryRateLimiter(), now: deps.now });
+  let located: Awaited<ReturnType<PrincipalLocator["locate"]>>;
+  try {
+    located = identifiers.length ? await locator.locate(identifiers) : { matches: [], notes: [] };
+  } catch (e) {
+    if (e instanceof Refusal) return fail(e.status, e.message); // e.g. too many identifier searches: nothing is logged
+    throw e;
+  }
   const first = located.matches[0];
   const principalType: PrincipalType = first?.principalType ?? typed ?? "client-contact";
   const label = located.matches.length
