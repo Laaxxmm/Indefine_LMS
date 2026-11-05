@@ -1,6 +1,6 @@
 # PROGRESS — Indefine Firm OS
-Current phase: 3 + 4 (parallel) | Branch: firm-os/phase-0-inventory | Last green: 2026-11-05 20:25 IST
-Tests: unit+integration 648/648 (22 files; Firm OS coverage 99.7% lines / 97.4% branches) · e2e 4/4 (smoke, local, no DB) · accuracy: GST P=– R=– | ROC – | TAX – | BOOKS – | AUDIT –
+Current phase: 3 + 4 (parallel) | Branch: firm-os/phase-0-inventory | Last green: 2026-11-05 20:40 IST
+Tests: unit+integration 974/974 (29 files; Firm OS coverage 99.7% lines / 97.4% branches) · e2e 4/4 (smoke, local, no DB) · accuracy: GST P=– R=– | ROC – | TAX – | BOOKS – | AUDIT –
 Model mode: CLAUDE_ONLY + LOCAL_STUB(fail-closed)
 
 ## Phase checklist (✅ only when QA gate green)
@@ -46,6 +46,15 @@ Phase 2 (merged, commits 03466a2…dbc8a0e)
 - [x] 4 router tests: 18 decideRoute rows + 28 run cases incl. payload leak spy
 QA gate: router + anonymizer green · verify:ai-boundary OK · src/lib/ai 99.5% lines.
 
+Phase 4 (in progress)
+- [x] 2 checklist.ts — rules as data, deterministic registry, LLM rules need quote+location, MistakeLog-promoted rules (source 'mistake')
+- [x] 3 templates.ts — XLSX/DOCX fixed header block, Indian grouping, draft label, sha256; deterministic output
+- [x] state.ts + state-db.ts — JobTask state machine (81-pair table test), single-transaction transition + JobTaskEvent, optimistic concurrency; DONE only with a single-use CloseGateToken minted by close-loop/gate.ts (Phase 8)
+- [ ] 1 runner.ts · 4 mistakes.ts · 5 review UI /agents · 6 scripts/accuracy.ts (agent running)
+Phase 3 (in progress)
+- [x] 6 calendar.ts + calendar-defaults.ts — rules as data; GSTR-1/3B (QRMP state groups), GSTR-9/9C, TDS, advance tax, ITR, AOC-4, MGT-7, DIR-3 KYC, ADT-1, MSME-1; internal due = statutory − buffer, rolled back past weekends
+- [ ] 1–5, 7 onboarding (agent running)
+
 Shared foundation (commit c61d885): additive Prisma section "Firm OS: shared spine" — `FirmClient`, `ModelCall`, `AuditEvent` + enums; migration `20261105190000_firm_os_spine` (CREATE only, no ALTER/DROP of LMS columns).
 
 ## Feature test registry   (feature → test file → status)
@@ -65,6 +74,10 @@ Shared foundation (commit c61d885): additive Prisma section "Firm OS: shared spi
 | Router policy + leak spy | src/lib/ai/__tests__/router.test.ts | green |
 | Providers | src/lib/ai/providers/__tests__/*.test.ts | green (23) |
 | Model usage aggregation | src/lib/ai/__tests__/usage.test.ts | green |
+| JobTask state machine + transition service | src/lib/agents/core/state.test.ts, state-db.test.ts | green (171) |
+| Checklist engine | src/lib/agents/core/checklist.test.ts | green (30) |
+| Deliverable templates + INR format | src/lib/agents/core/templates.test.ts, format.test.ts | green (54) |
+| Statutory calendar | src/lib/agents/core/calendar.test.ts | green (69) |
 
 ## Accuracy scoreboard     (agent → fixture set → precision → recall → threshold → pass/fail → date)
 _None yet (from Phase 5)._
@@ -75,6 +88,8 @@ _None yet (from Phase 5)._
 - ADR-001 Extend LMS · ADR-002 ModelRouter · ADR-003 Turia (ManualBridge default — no documented Turia API) · ADR-004 SharePoint Path A · ADR-005 Close loop for DONE · ADR-006 DPDP data classes (docs/adr/).
 - Guard allowlists (frozen, Firm OS dirs never allowlistable): LEGACY_PORTAL_READONLY = src/lib/statutory/cloud.ts, statutory-extension/{background.js,collectors.js,manifest.json} (public news reads), src/lib/certificates/templates/format-vi.ts (certificate wording only, no network allowed). LEGACY_GEMINI = src/lib/{gemini,quiz-gen,distill,transcribe}.ts.
 - Models (env-overridable): FAST claude-haiku-5-5 · SMART claude-sonnet-5-5 · HARD claude-opus-5-5 · Grok grok-4 (price unverified, configurable). USD_INR 88, ROUTER_MIN_CONF 0.75, AI_DAILY_BUDGET_INR 1000. `judgement` difficulty routes SMART→HARD (spec silent). Local-model calls are not masked (data stays on LAN); ModelCall hash always of masked prompt.
+- JobTask edges added beyond spec: IN_PREP→IN_REVIEW (manual prep, no agent); FILED_BY_HUMAN/CLOSING→APPROVED retract-filing (manager/partner, note). No CLOSING→FILED_BY_HUMAN, nothing out of DONE. Ack ref required for GST/ROC/IncomeTax/TDS.
+- Calendar: AGM-relative forms count AGM day as day 1 (configurable `countAgmDay`); statutory dates never moved, only flagged on non-working days.
 - Path A: SP_SITE_OWNER required for app-only site creation; default period folders GST/Books 12 months, TDS Q1–Q4, others Annual; uploads stay on the legacy layout under the flag.
 - verify:no-delete scope is Firm OS code only; legacy LMS deletes (graph.ts deleteDriveItem/deleteEvent, ~20 Prisma deletes) documented in inventory H-1…H-5.
 
@@ -86,6 +101,7 @@ _None yet (from Phase 5)._
 - SP_SITE_OWNER + hub registration · site creation · set owner UPN; confirm Indefine-Compliance is registered as a hub site (SP admin center → Active sites → Hub) · 2026-11-05
 - ANTHROPIC_API_KEY (and optional XAI_API_KEY) · live router smoke call · put in .env.local / Railway · 2026-11-05
 - Staging DATABASE_URL · map-legacy-folders report, /admin/firm-os/models view, DB e2e · provide Railway staging branch DB · 2026-11-05
+- **Partner verification of calendar defaults** · CA judgement · confirm: QRMP 3B 22nd/24th state groups vs current CBIC notification; AGM day-counting convention; ITR non-audit due date under Income-tax Act 2025 / Finance Act 2026 (kept 31 Jul); DIR-3 KYC frequency (kept annual 30 Sep); 2025-Act form names for TDS/advance tax · 2026-11-05
 - Push branches / open PRs · no gh CLI on this machine · human approval to push firm-os/* branches · 2026-11-05
 
 ## Known gaps / tech debt
@@ -110,3 +126,6 @@ _None yet (from Phase 5)._
 - 20:15 · 2 · Merged ModelRouter/anonymizer/providers/usage page · 423/423
 - 20:20 · 1 · Merged Path A (paths, graph client, clfolders, verify-patha, /clients flag); .env.example conflict resolved (both sections) · 648/648
 - 20:25 · 1/2 · Coverage 99.7% lines, next build green → Phase 1 ✅, Phase 2 ✅ · 648/648
+- 20:28 · 3 · Agent started: Phase 3 onboarding (rbac, Turia ManualBridge, extractor, saga, /onboard) · –
+- 20:38 · 3/4 · Merged agent core (state machine, checklist, templates, calendar) · 974/974
+- 20:40 · 4 · Agent started: Phase 4 runner, echo agent, mistakes, accuracy harness, /agents review UI · –
