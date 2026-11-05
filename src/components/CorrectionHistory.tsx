@@ -19,7 +19,10 @@ type Entry = { id: string; atLabel: string; actorName: string; label: string; be
 type Editable = { field: string; label: string; input: "text" | "textarea" | "date" | "number" | "select" | "user"; options?: { value: string; label: string }[] };
 type View = { noun: string; entries: Entry[]; editable: Editable[]; people: { id: string; name: string }[] };
 
+// Same strings as focusRing / sectionTitle in src/app/agents/parts.tsx; repeated here because a
+// shared component should not import from an app route folder. Move both into ui.ts when it next changes.
 const focusRing = "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2";
+const sectionTitle = "text-[10.5px] font-extrabold tracking-[0.12em] text-ink-mute uppercase";
 const labelText = "text-[11px] font-bold text-ink-mute";
 
 export function HistoryLink({
@@ -69,10 +72,11 @@ export function HistoryLink({
     setFieldName((f) => f || v.editable[0]?.field || "");
   }
 
+  // Opens once the history has loaded (or failed), like the deliverable preview: no empty panel.
   async function toggle() {
     if (open) return setOpen(false);
-    setOpen(true);
     await load();
+    setOpen(true);
   }
 
   async function save() {
@@ -117,7 +121,7 @@ export function HistoryLink({
 
   return (
     <div className="inline-block w-full max-w-2xl align-top">
-      <button type="button" onClick={toggle} aria-expanded={open} aria-controls={panelId} className={`${btnGhost} ${focusRing} inline-flex items-center gap-1.5`}>
+      <button type="button" onClick={toggle} disabled={loading} aria-busy={loading} aria-expanded={open} aria-controls={panelId} className={`${btnGhost} ${focusRing} inline-flex items-center gap-1.5`}>
         {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <History className="w-3.5 h-3.5" aria-hidden="true" />}
         {label}
       </button>
@@ -130,7 +134,7 @@ export function HistoryLink({
           )}
           {view && (
             <>
-              <h2 className="text-[10.5px] font-extrabold tracking-[0.12em] text-ink-mute uppercase mb-3">Corrections</h2>
+              <h3 className={`${sectionTitle} mb-3`}>Corrections</h3>
               {view.entries.length === 0 ? (
                 <p className="text-[13px] text-ink-mute">No corrections to this {view.noun} yet.</p>
               ) : (
@@ -158,7 +162,7 @@ export function HistoryLink({
                     void save();
                   }}
                 >
-                  <h3 className="text-[10.5px] font-extrabold tracking-[0.12em] text-ink-mute uppercase">Correct a wrong entry</h3>
+                  <h4 className={sectionTitle}>Correct a wrong entry</h4>
                   <div>
                     <label htmlFor={`${uid}-field`} className={labelText}>
                       Field
