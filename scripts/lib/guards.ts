@@ -4,6 +4,8 @@
 // These files must not trip their own rules, so every forbidden literal below is assembled
 // from pieces ("gst" + ".gov.in" style). Keep it that way when editing.
 
+import ts from "typescript";
+
 export type SourceFile = { path: string; content: string };
 export type Violation = { path: string; line: number; rule: string; snippet: string };
 
@@ -358,8 +360,35 @@ export function checkNoDelete(files: SourceFile[], exemptions: readonly NoDelete
 }
 
 // ------------------------------------------------------------------ ai-boundary
+//
+// NON-NEGOTIABLE 3 (ADR-002): only src/lib/ai/providers/ talks to model hosts; the four legacy
+// Gemini egress files (LEGACY_GEMINI) talk to Gemini only, and only the allow-listed callers
+// (LEGACY_GEMINI_CALLERS) may import them, each reaching the mask gate (src/lib/ai/legacy-gate.ts).
+//
+// Two layers (security audit #19: the line grep alone had 12 bypasses):
+//   line rules   (every code file, tests included — unchanged)  sdk-import / provider-host /
+//                gemini-rest on single literals
+//   AST rules    (TypeScript compiler API; every code file except tests and this guard)
+//     ai-boundary:sdk-import        an AI SDK imported, required or dynamically imported — the
+//                                   specifier is constant-folded ("a" + "b", consts, templates)
+//     ai-boundary:provider-host     a string that folds (concatenation, consts, templates,
+//                                   [..].join, "".concat, String.fromCharCode, Buffer.from(…,
+//                                   "base64"), atob, or a base64 literal) to a known model host
+//     ai-boundary:gemini-rest       the same for the Gemini REST host outside LEGACY_GEMINI
+//     ai-boundary:egress-env        fetch() whose URL is built from an AI-ish environment variable
+//                                   or whose options carry an AI key from the environment
+//     ai-boundary:provider-import   a module under src/lib/ai/providers/ imported by anything but
+//                                   the router (type-only imports are fine)
+//     ai-boundary:legacy-import     a legacy Gemini egress module imported by a file not on
+//                                   LEGACY_GEMINI_CALLERS, or by Firm OS code
+//     ai-boundary:gate-missing      an allow-listed caller that no longer reaches the mask gate
+//     ai-boundary:firm-os-reaches-gemini  Firm OS code whose import closure reaches legacy Gemini
+//
+// This file must not trip its own rules: hosts and SDK names are assembled from pieces, and the
+// guard files are exempt from the AST rules.
 
 export const AI_PROVIDERS_DIR = "src/lib/ai/providers/";
+const AI_ROUTER = "src/lib/ai/router.ts";
 const AI_SDKS = ["@anthropic-ai/sdk", "openai", "@google/generative-ai", "@google/genai"];
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
 const AI_IMPORT_RE = new RegExp(
@@ -369,21 +398,356 @@ const AI_HOSTS = ["api.anthropic" + ".com", "api.x" + ".ai"];
 const AI_HOST_RE = new RegExp("[\"'`][^\"'`]*(?:" + AI_HOSTS.map(esc).join("|") + ")");
 const GEMINI_REST_RE = new RegExp(esc("generativelanguage" + ".googleapis.com"));
 
+/** Every AI SDK package (and its sub-paths); scoped families by prefix. */
+const AI_SDK_PACKAGES = [
+  ...AI_SDKS,
+  "@anthropic-ai/bedrock-sdk",
+  "@anthropic-ai/vertex-sdk",
+  "@google-cloud/vertexai",
+  "@google-cloud/aiplatform",
+  "@aws-sdk/client-bedrock-runtime",
+  "@aws-sdk/client-bedrock",
+  "@azure/openai",
+  "@mistralai/mistralai",
+  "cohere-ai",
+  "groq-sdk",
+  "together-ai",
+  "ai",
+  "langchain",
+];
+const AI_SDK_SCOPES = ["@ai-sdk/", "@langchain/"];
+export const isAiSdk = (spec: string) => AI_SDK_PACKAGES.some((p) => spec === p || spec.startsWith(p + "/")) || AI_SDK_SCOPES.some((s) => spec.startsWith(s));
+
+/** Model hosts other than Gemini (regex sources, assembled so this file never contains them). */
+const PROVIDER_HOSTS = [
+  esc("api.anthropic" + ".com"),
+  esc("api.x" + ".ai"),
+  esc("api.openai" + ".com"),
+  "[a-z0-9-]+" + esc(".openai.azure" + ".com"),
+  esc("openrouter" + ".ai"),
+  esc("aiplatform.googleapis" + ".com"),
+  "bedrock(?:-runtime|-agent-runtime)?" + esc(".") + "[a-z0-9-]+" + esc(".amazonaws" + ".com"),
+  esc("api.groq" + ".com"),
+  esc("api.together") + "\\.(?:xyz|ai)",
+  esc("api.mistral" + ".ai"),
+  esc("api.cohere") + "\\.(?:ai|com)",
+  esc("api.deepseek" + ".com"),
+  esc("api.perplexity" + ".ai"),
+  esc("api.fireworks" + ".ai"),
+];
+const PROVIDER_HOST_ANY = new RegExp(PROVIDER_HOSTS.join("|"), "i");
+const GEMINI_HOST_ANY = new RegExp(esc("generativelanguage" + ".googleapis.com"), "i");
+/** Environment variables that point at a model endpoint or hold a model key. */
+const AI_ENV_NAME = /(?:ANTHROPIC|OPENAI|GEMINI|GOOGLE_AI|GENAI|XAI|GROK|OPENROUTER|MISTRAL|COHERE|GROQ|TOGETHER|DEEPSEEK|PERPLEXITY|BEDROCK|VERTEX|LLM|(?:^|_)AI(?:_|$)|MODEL)/i;
+const AI_KEY_ENV = /(?:ANTHROPIC|OPENAI|GEMINI|GOOGLE_AI|XAI|GROK|OPENROUTER|MISTRAL|COHERE|GROQ|TOGETHER|DEEPSEEK|PERPLEXITY)[A-Z0-9_]*(?:KEY|TOKEN|SECRET)/i;
+
 /** Legacy LMS files that call the Gemini REST API directly (pre-ModelRouter). No additions. */
 export const LEGACY_GEMINI = ["src/lib/distill.ts", "src/lib/gemini.ts", "src/lib/quiz-gen.ts", "src/lib/transcribe.ts"];
 
-export function checkAiBoundary(files: SourceFile[], legacyGemini: string[] = LEGACY_GEMINI): Violation[] {
+/** A file allowed to import a legacy Gemini egress module: why, and the evidence that it reaches the mask gate. */
+export type LegacyAiCaller = { path: string; why: string; gate: RegExp; gateNote: string };
+
+/** The legacy Gemini callers (security audit #7 / #11 / #19). Exact paths; an addition needs a reason and a gate. */
+export const LEGACY_GEMINI_CALLERS: readonly LegacyAiCaller[] = [
+  {
+    path: "src/lib/sop/gemini.ts",
+    why: "SOP Builder: staff free text (≤ 50 KB) for analyze / generate.",
+    gate: /callGemini\([^;]*\bdictionary\b/,
+    gateNote: "passes the firm name dictionary to callGemini, which masks and gates every prompt",
+  },
+  {
+    path: "src/lib/statutory/digest.ts",
+    why: "Statutory digests of public portal text (class C).",
+    gate: /callGemini\(/,
+    gateNote: "callGemini masks and gates every prompt",
+  },
+  {
+    path: "src/lib/auto-quiz.ts",
+    why: "Quiz from a training video or a live-session transcript.",
+    gate: /transcriptGate\(/,
+    gateNote: "live recordings are never uploaded; transcripts pass transcriptGate or the session is parked",
+  },
+  {
+    path: "src/lib/live/ingest.ts",
+    why: "15-minute cron: Teams transcripts → auto-quiz.",
+    gate: /transcriptGate\(/,
+    gateNote: "transcripts masking cannot cover park the session for an admin before any Gemini call",
+  },
+  {
+    path: "src/app/admin/video/[id]/page.tsx",
+    why: "Admin pastes training notes for a video quiz.",
+    gate: /generateQuiz\(/,
+    gateNote: "generateQuiz masks and gates its own prompt",
+  },
+  {
+    path: "src/app/api/admin/quiz/generate/route.ts",
+    why: "Admin quiz generation API (same as the video page).",
+    gate: /generateQuiz\(/,
+    gateNote: "generateQuiz masks and gates its own prompt",
+  },
+];
+
+const isTestFile = (p: string) => /\.test\.[cm]?[jt]sx?$/.test(p) || /(^|\/)(tests|__tests__|__fixtures__)\//.test(p);
+const AI_GUARD_FILES = new Set(["scripts/lib/guards.ts", "scripts/verify-ai-boundary.ts"]);
+
+const scriptKind = (p: string) => (p.endsWith(".tsx") ? ts.ScriptKind.TSX : p.endsWith(".jsx") ? ts.ScriptKind.JSX : /\.[cm]?js$/.test(p) ? ts.ScriptKind.JS : ts.ScriptKind.TS);
+
+/** `const x = <expr>` initialisers by name (first declaration wins), for constant folding. */
+function constTable(sf: ts.SourceFile): Map<string, ts.Expression> {
+  const m = new Map<string, ts.Expression>();
+  const visit = (n: ts.Node) => {
+    if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.initializer && ts.getCombinedNodeFlags(n) & ts.NodeFlags.Const && !m.has(n.name.text)) m.set(n.name.text, n.initializer);
+    ts.forEachChild(n, visit);
+  };
+  visit(sf);
+  return m;
+}
+
+const b64 = (s: string) => Buffer.from(s, "base64").toString("utf8");
+
+/** The string an expression evaluates to when it is built only from constants; null otherwise. */
+function fold(e: ts.Expression, consts: Map<string, ts.Expression>, depth = 0): string | null {
+  if (depth > 16) return null;
+  const f = (x: ts.Expression) => fold(x, consts, depth + 1);
+  if (ts.isStringLiteralLike(e) || ts.isNumericLiteral(e)) return e.text;
+  if (ts.isTemplateExpression(e)) {
+    let s = e.head.text;
+    for (const sp of e.templateSpans) {
+      const v = f(sp.expression);
+      if (v === null) return null;
+      s += v + sp.literal.text;
+    }
+    return s;
+  }
+  if (ts.isParenthesizedExpression(e) || ts.isAsExpression(e) || ts.isSatisfiesExpression(e) || ts.isNonNullExpression(e)) return f(e.expression);
+  if (ts.isBinaryExpression(e) && e.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+    const a = f(e.left);
+    const b = f(e.right);
+    return a === null || b === null ? null : a + b;
+  }
+  if (ts.isIdentifier(e)) {
+    const init = consts.get(e.text);
+    return init ? f(init) : null;
+  }
+  if (ts.isCallExpression(e)) {
+    const c = e.expression;
+    const args = e.arguments.map((a) => f(a));
+    if (ts.isPropertyAccessExpression(c)) {
+      const name = c.name.text;
+      if (name === "join" && ts.isArrayLiteralExpression(c.expression)) {
+        const parts = c.expression.elements.map((x) => (ts.isSpreadElement(x) ? null : f(x)));
+        const sep = e.arguments.length ? args[0] : ",";
+        return parts.some((p) => p === null) || sep === null ? null : parts.join(sep);
+      }
+      if (name === "concat") {
+        const base = f(c.expression);
+        return base === null || args.some((a) => a === null) ? null : base + args.join("");
+      }
+      if (name === "fromCharCode" && ts.isIdentifier(c.expression) && c.expression.text === "String") {
+        const codes = e.arguments.map((a) => (ts.isNumericLiteral(a) ? Number(a.text) : NaN));
+        return codes.some((n) => Number.isNaN(n)) ? null : String.fromCharCode(...codes);
+      }
+      if (name === "toString" && ts.isCallExpression(c.expression)) {
+        const inner = c.expression;
+        if (ts.isPropertyAccessExpression(inner.expression) && inner.expression.name.text === "from" && ts.isIdentifier(inner.expression.expression) && inner.expression.expression.text === "Buffer") {
+          const data = inner.arguments[0] ? f(inner.arguments[0]) : null;
+          const enc = inner.arguments[1] ? f(inner.arguments[1]) : "utf8";
+          return data === null ? null : enc === "base64" || enc === "base64url" ? b64(data) : data;
+        }
+      }
+    }
+    if (ts.isIdentifier(c) && c.text === "atob" && args[0] !== undefined && args[0] !== null) return b64(args[0]);
+  }
+  return null;
+}
+
+/** process.env names an expression reads (following consts). */
+function envNamesIn(n: ts.Node, consts: Map<string, ts.Expression>, depth = 0): string[] {
+  const out: string[] = [];
+  const isProcessEnv = (x: ts.Expression) => ts.isPropertyAccessExpression(x) && x.name.text === "env" && ts.isIdentifier(x.expression) && x.expression.text === "process";
+  const visit = (x: ts.Node) => {
+    if (ts.isPropertyAccessExpression(x) && isProcessEnv(x.expression)) out.push(x.name.text);
+    else if (ts.isElementAccessExpression(x) && isProcessEnv(x.expression) && ts.isStringLiteralLike(x.argumentExpression)) out.push(x.argumentExpression.text);
+    else if (ts.isIdentifier(x) && depth < 4) {
+      const init = consts.get(x.text);
+      if (init) out.push(...envNamesIn(init, consts, depth + 1));
+    }
+    ts.forEachChild(x, visit);
+  };
+  visit(n);
+  return out;
+}
+
+type ModuleRef = { spec: string; line: number; typeOnly: boolean };
+type ParsedAi = { path: string; refs: ModuleRef[]; violations: Violation[] };
+
+/** Module specifiers a file imports (static, re-export, dynamic import, require / createRequire), folded. */
+function moduleRefs(sf: ts.SourceFile, consts: Map<string, ts.Expression>): ModuleRef[] {
+  const out: ModuleRef[] = [];
+  const lineOf = (n: ts.Node) => sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1;
+  const isRequireLike = (callee: ts.Expression): boolean => {
+    if (ts.isIdentifier(callee)) {
+      if (callee.text === "require") return true;
+      const init = consts.get(callee.text);
+      return !!init && ts.isCallExpression(init) && ts.isIdentifier(init.expression) && init.expression.text === "createRequire";
+    }
+    return ts.isCallExpression(callee) && ts.isIdentifier(callee.expression) && callee.expression.text === "createRequire";
+  };
+  const visit = (n: ts.Node) => {
+    if (ts.isImportDeclaration(n) && ts.isStringLiteralLike(n.moduleSpecifier)) {
+      const clause = n.importClause;
+      const typeOnly = !!clause && (clause.isTypeOnly || (!clause.name && !!clause.namedBindings && ts.isNamedImports(clause.namedBindings) && clause.namedBindings.elements.length > 0 && clause.namedBindings.elements.every((el) => el.isTypeOnly)));
+      out.push({ spec: n.moduleSpecifier.text, line: lineOf(n), typeOnly });
+    } else if (ts.isExportDeclaration(n) && n.moduleSpecifier && ts.isStringLiteralLike(n.moduleSpecifier)) {
+      out.push({ spec: n.moduleSpecifier.text, line: lineOf(n), typeOnly: n.isTypeOnly });
+    } else if (ts.isImportEqualsDeclaration(n) && ts.isExternalModuleReference(n.moduleReference) && ts.isStringLiteralLike(n.moduleReference.expression)) {
+      out.push({ spec: n.moduleReference.expression.text, line: lineOf(n), typeOnly: n.isTypeOnly });
+    } else if (ts.isCallExpression(n) && n.arguments.length && (n.expression.kind === ts.SyntaxKind.ImportKeyword || isRequireLike(n.expression))) {
+      const spec = fold(n.arguments[0], consts);
+      if (spec !== null) out.push({ spec, line: lineOf(n), typeOnly: false });
+    }
+    ts.forEachChild(n, visit);
+  };
+  visit(sf);
+  return out;
+}
+
+const STRINGISH_CALLS = new Set(["join", "concat", "fromCharCode", "toString", "atob"]);
+const BASE64_LITERAL = /^[A-Za-z0-9+/_-]{16,}={0,2}$/;
+
+/** The per-file AST rules: SDK imports, model hosts (folded), env-built model egress. */
+function parseAiFile(f: SourceFile, legacy: Set<string>): ParsedAi {
+  const p = norm(f.path);
+  const sf = ts.createSourceFile(p, f.content, ts.ScriptTarget.Latest, true, scriptKind(p));
+  const consts = constTable(sf);
+  const violations: Violation[] = [];
+  const lines = f.content.split(/\r?\n/);
+  const add = (n: ts.Node | number, rule: string) => {
+    const line = typeof n === "number" ? n : sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1;
+    violations.push({ path: p, line, rule, snippet: snip(lines[line - 1] ?? "") });
+  };
+  const refs = moduleRefs(sf, consts);
+  for (const r of refs) if (isAiSdk(r.spec)) add(r.line, "ai-boundary:sdk-import");
+  const isLegacy = legacy.has(p) && !isFirmOs(p);
+  const testHosts = (n: ts.Node, text: string | null) => {
+    if (!text) return;
+    if (PROVIDER_HOST_ANY.test(text)) add(n, "ai-boundary:provider-host");
+    if (!isLegacy && GEMINI_HOST_ANY.test(text)) add(n, "ai-boundary:gemini-rest");
+  };
+  const visit = (n: ts.Node) => {
+    if (ts.isStringLiteralLike(n)) {
+      testHosts(n, n.text);
+      if (BASE64_LITERAL.test(n.text) && n.text.length % 4 !== 1) testHosts(n, b64(n.text));
+    } else if (ts.isTemplateExpression(n)) {
+      testHosts(n, [n.head.text, ...n.templateSpans.map((s) => s.literal.text)].join("\u0000"));
+      testHosts(n, fold(n, consts));
+    } else if (ts.isBinaryExpression(n) && n.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+      testHosts(n, fold(n, consts));
+    } else if (ts.isCallExpression(n)) {
+      const c = n.expression;
+      const callee = ts.isPropertyAccessExpression(c) ? c.name.text : ts.isIdentifier(c) ? c.text : "";
+      if (STRINGISH_CALLS.has(callee)) testHosts(n, fold(n, consts));
+      const isFetch = callee === "fetch" && (ts.isIdentifier(c) || ts.isPropertyAccessExpression(c));
+      if (isFetch && !isLegacy) {
+        const [url, init] = n.arguments;
+        if (url) testHosts(url, fold(url, consts));
+        if ((url && envNamesIn(url, consts).some((e) => AI_ENV_NAME.test(e))) || (init && envNamesIn(init, consts).some((e) => AI_KEY_ENV.test(e)))) add(n, "ai-boundary:egress-env");
+      }
+    } else if (ts.isIdentifier(n) && consts.has(n.text) && !(ts.isVariableDeclaration(n.parent) && n.parent.name === n) && !(ts.isPropertyAccessExpression(n.parent) && n.parent.name === n)) {
+      // An identifier whose constant value is a model URL, used anywhere (e.g. passed to a wrapper).
+      const init = consts.get(n.text) as ts.Expression;
+      if (!ts.isStringLiteralLike(init)) testHosts(n, fold(n, consts));
+    }
+    ts.forEachChild(n, visit);
+  };
+  visit(sf);
+  return { path: p, refs, violations };
+}
+
+/** Repo path an import specifier points at ("@/x" → src/x, relative paths), or null for a package. */
+function resolveModule(from: string, spec: string, known: Set<string>): string | null {
+  let base: string | null = null;
+  if (spec.startsWith("@/")) base = "src/" + spec.slice(2);
+  else if (spec.startsWith("./") || spec.startsWith("../")) {
+    const parts = from.split("/").slice(0, -1);
+    for (const seg of spec.split("/")) {
+      if (seg === "..") parts.pop();
+      else if (seg !== ".") parts.push(seg);
+    }
+    base = parts.join("/");
+  }
+  if (base === null) return null;
+  const candidates = [base, `${base}.ts`, `${base}.tsx`, `${base}.js`, `${base}.mjs`, `${base}.cjs`, `${base}/index.ts`, `${base}/index.tsx`, `${base}/index.js`];
+  for (const c of candidates) if (known.has(c)) return c;
+  return /\.[cm]?[jt]sx?$/.test(base) ? base : `${base}.ts`; // best effort for files outside the scanned set
+}
+
+export function checkAiBoundary(files: SourceFile[], legacyGemini: string[] = LEGACY_GEMINI, callers: readonly LegacyAiCaller[] = LEGACY_GEMINI_CALLERS): Violation[] {
   const out: Violation[] = [];
   const legacy = new Set(legacyGemini.map(norm));
-  for (const f of files) {
+  const callerByPath = new Map(callers.map((c) => [norm(c.path), c]));
+  const code = files.filter((f) => CODE_EXT.has(ext(norm(f.path))) && !norm(f.path).split("/").includes("node_modules"));
+  const known = new Set(code.map((f) => norm(f.path)));
+  const graph = new Map<string, string[]>();
+
+  for (const f of code) {
     const p = norm(f.path);
-    if (!CODE_EXT.has(ext(p)) || p.split("/").includes("node_modules")) continue;
     if (under(p, AI_PROVIDERS_DIR)) continue;
+    // Line rules (unchanged; tests included).
     scanLines(f, "ai-boundary:sdk-import", AI_IMPORT_RE, out);
     scanLines(f, "ai-boundary:provider-host", AI_HOST_RE, out);
     if (!legacy.has(p) || isFirmOs(p)) scanLines(f, "ai-boundary:gemini-rest", GEMINI_REST_RE, out);
+    if (isTestFile(p) || AI_GUARD_FILES.has(p)) continue;
+
+    // AST rules.
+    const parsed = parseAiFile(f, legacy);
+    out.push(...parsed.violations);
+    const targets: string[] = [];
+    for (const r of parsed.refs) {
+      const target = resolveModule(p, r.spec, known);
+      if (!target || r.typeOnly) continue;
+      targets.push(target);
+      if (under(target, AI_PROVIDERS_DIR) && p !== AI_ROUTER) {
+        out.push({ path: p, line: r.line, rule: "ai-boundary:provider-import", snippet: `imports ${r.spec} (model providers are reached through src/lib/ai/router.ts only)` });
+      }
+      if (legacy.has(target) && (isFirmOs(p) || (!legacy.has(p) && !callerByPath.has(p)))) {
+        out.push({ path: p, line: r.line, rule: "ai-boundary:legacy-import", snippet: `imports ${r.spec}: a legacy Gemini egress module (allowed only for LEGACY_GEMINI_CALLERS, never Firm OS)` });
+      }
+    }
+    graph.set(p, targets);
+    const caller = callerByPath.get(p);
+    if (caller && !caller.gate.test(f.content)) {
+      out.push({ path: p, line: 1, rule: "ai-boundary:gate-missing", snippet: `allow-listed legacy Gemini caller no longer reaches the mask gate (${caller.gateNote})` });
+    }
   }
-  return out;
+
+  // Firm OS code must not reach legacy Gemini through any chain of imports.
+  const reaches = new Map<string, boolean>();
+  const reachesGemini = (p: string, stack: Set<string>): boolean => {
+    if (legacy.has(p)) return true;
+    const memo = reaches.get(p);
+    if (memo !== undefined) return memo;
+    if (stack.has(p)) return false;
+    stack.add(p);
+    const r = (graph.get(p) ?? []).some((t) => reachesGemini(t, stack));
+    stack.delete(p);
+    reaches.set(p, r);
+    return r;
+  };
+  for (const p of graph.keys()) {
+    if (!isFirmOs(p)) continue;
+    const direct = (graph.get(p) ?? []).some((t) => legacy.has(t));
+    if (!direct && reachesGemini(p, new Set())) out.push({ path: p, line: 1, rule: "ai-boundary:firm-os-reaches-gemini", snippet: "Firm OS code reaches a legacy Gemini egress module through its imports" });
+  }
+
+  // One violation per file, line and rule (the line and AST layers often see the same thing).
+  const seen = new Set<string>();
+  return out.filter((v) => {
+    const k = `${v.path}\u0000${v.line}\u0000${v.rule}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
 }
 
 export function formatViolation(v: Violation): string {

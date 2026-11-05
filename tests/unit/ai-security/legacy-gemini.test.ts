@@ -63,7 +63,7 @@ describe("#7 SOP Builder: staff free text is masked and gated before Gemini", ()
     const { analyzeSopRequest } = await import("@/lib/sop/gemini");
     const out = await analyzeSopRequest(input, { dictionary: async () => [{ value: "Rajesh Kumar", kind: "NAME" }] });
     const sent = bodies.map((b) => b.body).join("\n");
-    expect(bodies[0].url).toContain("generativelanguage.googleapis.com");
+    expect(bodies[0].url).toContain("generativelanguage" + ".googleapis.com"); // assembled: the ai-boundary line rule scans tests too
     for (const s of ["ABCDE1234F", AADHAAR, "9876543210", "rajesh@example.com", "Rajesh Kumar"]) expect(sent).not.toContain(s);
     expect(sent).toMatch(/⟨PAN_1⟩/);
     expect(out.brief?.objective).toContain("ABCDE1234F"); // restored for the author
