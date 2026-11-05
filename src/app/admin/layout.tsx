@@ -35,10 +35,12 @@ const FIRM_OS_ITEMS: AdminNavItem[] = [
   { href: "/admin/firm-os/breaches", label: "Breach register", icon: "CalendarClock" },
 ];
 const SETTINGS_ITEMS: AdminNavItem[] = [{ href: "/admin/settings", label: "Settings", icon: "Settings" }];
-const WORKSPACE_SETTINGS = "/admin/firm-os/workspace";
+// Open even while FIRM_OS_ENABLED is off: workspace settings (to prepare the rollout) and the DPDP
+// privacy-request and breach registers — DPDP duties cover all client data, Firm OS on or off.
+const ALWAYS_OPEN = new Set(["/admin/firm-os/workspace", "/admin/firm-os/privacy", "/admin/firm-os/breaches"]);
 
-/** While FIRM_OS_ENABLED is off only Workspace settings stays, so the rollout can be prepared. */
-const firmOsItems = () => (firmOsEnabled() ? FIRM_OS_ITEMS : FIRM_OS_ITEMS.filter((i) => i.href === WORKSPACE_SETTINGS));
+/** While FIRM_OS_ENABLED is off only the always-open admin pages stay. */
+const firmOsItems = () => (firmOsEnabled() ? FIRM_OS_ITEMS : FIRM_OS_ITEMS.filter((i) => ALWAYS_OPEN.has(i.href)));
 
 const groupLabel = "px-3 pt-4 pb-1 text-[10.5px] font-extrabold tracking-[0.12em] text-ink-mute uppercase";
 

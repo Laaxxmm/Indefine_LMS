@@ -1,7 +1,8 @@
-import { firmOsLayout } from "@/app/workspace/ModuleLayout";
-
 export const dynamic = "force-dynamic";
 
-// /admin/firm-os/breaches is a Firm OS page: closed while FIRM_OS_ENABLED is off (the dashboard says
-// why). Workspace settings stays open so the rollout can be prepared before the switch goes on.
-export default firmOsLayout();
+// /admin/firm-os/breaches stays open while FIRM_OS_ENABLED is off: DPDP data-principal rights and breach
+// handling apply to all the firm's client data, not only Firm OS. Access is still admin-only (the
+// /admin layout) and each page/route keeps its own policy check.
+export default function Layout({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
+}

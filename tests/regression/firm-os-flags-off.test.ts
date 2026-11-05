@@ -117,11 +117,16 @@ describe("Firm OS surface on LMS pages with every FIRM_OS_* flag off", () => {
     expect(firmOsQueries()).toEqual([]);
   });
 
-  it("/admin: the Firm OS group keeps only Workspace settings (to prepare the rollout); the other admin Firm OS pages are closed", async () => {
+  it("/admin: the Firm OS group keeps Workspace settings (rollout prep) and the DPDP privacy/breach registers (owner decision 2026-11-06: DPDP covers all client data); the other admin Firm OS pages are closed", async () => {
     signedIn(PEOPLE.admin);
     const html = await renderPage(await import("@/app/admin/page"), {}, await import("@/app/admin/layout"));
-    expect(firmOsHrefs(html)).toEqual(["/admin/firm-os/workspace"]);
-    for (const page of ["models", "mistakes", "cycle-time", "privacy", "breaches"]) {
+    expect(firmOsHrefs(html).sort()).toEqual(["/admin/firm-os/breaches", "/admin/firm-os/privacy", "/admin/firm-os/workspace"]);
+    for (const page of ["privacy", "breaches"]) {
+      const layout = await import(`@/app/admin/firm-os/${page}/layout`);
+      // Renders (no redirect): the admin layout still limits these pages to admins.
+      await expect(Promise.resolve(layout.default({ children: null })), page).resolves.toBeDefined();
+    }
+    for (const page of ["models", "mistakes", "cycle-time"]) {
       const layout = await import(`@/app/admin/firm-os/${page}/layout`);
       expect(await redirectTarget(() => layout.default({ children: null })), page).toBe("/dashboard?module-off=firm-os");
     }
