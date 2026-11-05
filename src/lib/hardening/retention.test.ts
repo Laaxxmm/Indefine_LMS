@@ -14,7 +14,8 @@ import {
   ONBOARDING_COPY_DAYS,
   clearExpiredAgentRunInputs,
   clearStaleOnboardingCopies,
-  purgeExpiredHeartbeats,
+  purgeExpiredRows,
+  rateLimitBucketCutoff,
   runRetention,
   sweepFreeText,
   type RetentionDb,
@@ -42,6 +43,13 @@ function seeded() {
   beat("b-7d", ago(HEARTBEAT_DAYS));
   beat("b-6d", ago(6));
   beat("b-now", NOW);
+  // Rate-limit buckets: the longest default window is an hour, so a bucket goes once its window
+  // started more than 1 h + 1 day ago.
+  const bucket = (key: string, windowStart: Date) => w.buckets.push({ key, windowStart, count: 3 });
+  bucket("companion:old-token", ago(3));
+  bucket("onboard:u-priya", ago(1, -60 * 60_000 - 1000)); // window ended 1 day + 1 s ago
+  bucket("agent-run:u-ravi", ago(1, -60 * 60_000 + 1000)); // window ended 1 s less than a day ago
+  bucket("companion:live-token", NOW);
   w.calls.push({ id: "mc-1", runId: "run-1", agent: "gst", task: "gst.extract", provider: "claude", tier: "SMART", escalationLevel: 1, status: "OK", escalated: true, createdAt: ago(1) });
   w.calls.push({ id: "mc-err", runId: "run-2", agent: "gst", task: "gst.extract", provider: "claude", tier: "SMART", escalationLevel: 0, status: "PROVIDER_ERROR", escalated: false, createdAt: ago(2), error: "Provider rejected: PAN ABCPK1234F for kiran@kumar.test" });
   const ob = (id: string, over: Partial<RetentionWorld["onboarding"][number]>) =>
@@ -72,12 +80,18 @@ describe("AgentRun.inputs (≤ 30 days)", () => {
   });
 });
 
-describe("ActivityHeartbeat (7 days)", () => {
-  it("removes only heartbeats older than 7 days", async () => {
+describe("ActivityHeartbeat (7 days) and RateLimitBucket (a day after the window ends)", () => {
+  it("removes only heartbeats older than 7 days, and only buckets whose window ended more than a day ago", async () => {
     const w = seeded();
-    expect(await purgeExpiredHeartbeats(w.db, NOW)).toBe(2);
+    expect(await purgeExpiredRows(w.db, NOW)).toEqual({ heartbeats: 2, rateLimitBuckets: 2 });
     expect(w.beats.map((b) => b.id)).toEqual(["b-7d", "b-6d", "b-now"]);
-    expect(await purgeExpiredHeartbeats(w.db, NOW)).toBe(0);
+    expect(w.buckets.map((b) => b.key)).toEqual(["agent-run:u-ravi", "companion:live-token"]);
+    expect(await purgeExpiredRows(w.db, NOW)).toEqual({ heartbeats: 0, rateLimitBuckets: 0 });
+  });
+
+  it("the bucket cutoff follows the longest window in force (an env override of any scope)", () => {
+    expect(rateLimitBucketCutoff(NOW, {})).toEqual(new Date(NOW.getTime() - 60 * 60_000 - DAY));
+    expect(rateLimitBucketCutoff(NOW, { RATE_LIMIT_COMPANION: "100/6h" })).toEqual(new Date(NOW.getTime() - 6 * 60 * 60_000 - DAY));
   });
 });
 
@@ -138,6 +152,7 @@ describe("runRetention", () => {
       auditNotesMasked: 2,
       modelErrorsMasked: 1,
       heartbeatsDeleted: 2,
+      rateLimitBucketsDeleted: 2,
       escalationsAudited: 1,
     });
     expect(w.audits.map((a) => a.action).slice(-2)).toEqual(["model-escalation", "retention"]);
@@ -145,13 +160,13 @@ describe("runRetention", () => {
       actorId: "system:retention",
       entity: "AgentRun",
       entityId: null,
-      meta: { ...s, cursors: { auditFreeText: NOW.toISOString(), modelCallErrors: NOW.toISOString() }, windows: { agentRunInputsDays: 30, onboardingCopyDays: 30, heartbeatDays: 7 } },
+      meta: { ...s, cursors: { auditFreeText: NOW.toISOString(), modelCallErrors: NOW.toISOString() }, windows: { agentRunInputsDays: 30, onboardingCopyDays: 30, heartbeatDays: 7, rateLimitBucketGraceDays: 1 } },
     });
     // A second run the same night changes nothing but still records that it ran.
-    expect(await runRetention(w.db, NOW)).toMatchObject({ agentRunInputsCleared: 0, onboardingCopiesCleared: 0, auditNotesMasked: 0, modelErrorsMasked: 0, heartbeatsDeleted: 0, escalationsAudited: 0 });
+    expect(await runRetention(w.db, NOW)).toMatchObject({ agentRunInputsCleared: 0, onboardingCopiesCleared: 0, auditNotesMasked: 0, modelErrorsMasked: 0, heartbeatsDeleted: 0, rateLimitBucketsDeleted: 0, escalationsAudited: 0 });
     expect(w.audits.filter((a) => a.action === "retention")).toHaveLength(2);
-    // The only delete is the heartbeat purge (scripts/lib/guards.ts NO_DELETE_EXEMPTIONS).
-    expect(w.log.filter((l) => /delete/i.test(l))).toEqual(["activityHeartbeat.deleteMany", "activityHeartbeat.deleteMany"]);
+    // The only deletes are the heartbeat and rate-limit bucket purges (scripts/lib/guards.ts NO_DELETE_EXEMPTIONS).
+    expect(w.log.filter((l) => /delete/i.test(l))).toEqual(["activityHeartbeat.deleteMany", "rateLimitBucket.deleteMany", "activityHeartbeat.deleteMany", "rateLimitBucket.deleteMany"]);
   });
 
   it("the class-A copies the docs promise to clear are cleared (audit PoC retention-gaps, finding #20)", async () => {
@@ -206,6 +221,7 @@ describe("GET /api/cron/firm-os/retention", () => {
       auditNotesMasked: 2,
       modelErrorsMasked: 1,
       heartbeatsDeleted: 2,
+      rateLimitBucketsDeleted: 2,
       escalationsAudited: 1,
     });
     expect(state.world.beats).toHaveLength(3);

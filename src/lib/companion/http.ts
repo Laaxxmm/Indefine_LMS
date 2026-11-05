@@ -5,8 +5,10 @@
 //            when set — config.ts), never with Access-Control-Allow-Credentials. A request from any other browser origin
 //            is refused with 403; one with no Origin header (not a browser page) is treated like
 //            the extension, because the token is the gate.
-//   limit    per token (by its hash), before any database work.
-//   order    origin → token present → rate limit → token valid → person active → companion access
+//   limit    per token (by its hash), counted only once the token is known and live (a malformed
+//            token never reaches the database; an unknown one costs one indexed lookup and adds
+//            no RateLimitBucket row).
+//   order    origin → token present → token valid → rate limit → person active → companion access
 //            → provider.nextTask. Every refusal is one plain sentence in { error }.
 //
 // CORS lives here, in the route handler, not in next.config.ts (which belongs to hardening).
@@ -18,7 +20,7 @@ import { hasCompanionAccess, type CompanionUser } from "./access";
 import { MSG } from "./messages";
 import type { CompanionProvider } from "./provider";
 import type { RateLimiter } from "./rate-limit";
-import { hashToken, isTokenShape, readBearer, verifyPairing, type VerifyFailure } from "./tokens";
+import { hashToken, readBearer, verifyPairing, type VerifyFailure } from "./tokens";
 
 // ------------------------------------------------------------------ CORS
 
@@ -88,14 +90,14 @@ export async function handleNextTask(req: Request, deps: NextTaskDeps): Promise<
 
   const raw = readBearer(req.headers.get("authorization"));
   if (!raw) return send({ error: MSG.tokenMissing }, 401, { "www-authenticate": "Bearer" });
-  // Malformed tokens never reach the database (verifyPairing refuses them without a query).
-  if (isTokenShape(raw)) {
-    const decision = await deps.limiter.hit(`companion:${hashToken(raw)}`, now);
-    if (!decision.ok) return send({ error: MSG.rateLimited }, 429, { "retry-after": String(decision.retryAfterSec) });
-  }
   try {
+    // Malformed tokens never reach the database (verifyPairing refuses them on shape, without a
+    // query); a well-formed one costs one indexed lookup by hash. Only a known, live token is then
+    // counted in the rate-limit table, so random tokens add no RateLimitBucket rows.
     const verified = await verifyPairing(deps.db, raw, now);
     if (!verified.ok) return send({ error: REFUSED[verified.reason] }, 401, { "www-authenticate": "Bearer" });
+    const decision = await deps.limiter.hit(`companion:${hashToken(raw)}`, now);
+    if (!decision.ok) return send({ error: MSG.rateLimited }, 429, { "retry-after": String(decision.retryAfterSec) });
     const user = await loadCompanionUser(deps.db, verified.userId);
     if (!user || !isActive(user)) return send({ error: MSG.accountInactive }, 403);
     if (!(await hasCompanionAccess(deps.db, user))) return send({ error: MSG.noAccess }, 403);

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-05T23:06:26.621Z",
+  "generatedAt": "2026-11-05T23:36:23.822Z",
   "label": "after",
   "agents": {
     "echo": {
@@ -695,10 +695,11 @@
       "auditEvent.findFirst": 1,
       "auditEvent.findMany": 2,
       "modelCall.findMany": 2,
-      "onboardingRun.updateMany": 1
+      "onboardingRun.updateMany": 1,
+      "rateLimitBucket.deleteMany": 1
     },
-    "total": 309,
-    "sql": 309,
+    "total": 310,
+    "sql": 310,
     "note": "2,700 runs, 57,600 heartbeats (8 days), 300 escalated model calls in the 7-day window, none audited yet"
   },
   "storage": [

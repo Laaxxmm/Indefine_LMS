@@ -204,8 +204,9 @@ describe("rate limit (429)", () => {
     expect(await limited.json()).toEqual({ error: MSG.rateLimited });
     expect(Number(limited.headers.get("retry-after"))).toBeGreaterThan(0);
     expect(limited.headers.get("access-control-expose-headers")).toBe("Retry-After, ETag");
-    const lookups = db.calls.filter((c) => c.method === "findUnique" && c.model === "companionToken").length;
-    expect(lookups).toBe(3); // the limited request never reached the database
+    // The limited request made only the token lookup (needed before counting): no person, access or task read.
+    expect(db.calls.filter((c) => c.method === "findUnique" && c.model === "companionToken")).toHaveLength(4);
+    expect(db.calls.filter((c) => c.model === "user")).toHaveLength(3);
 
     const other = fakeToken("o");
     db.tokens.push({ id: "tok-2", userId: "u-partner", tokenHash: sha(other), label: "Laptop", createdAt: NOW, lastUsedAt: null, revokedAt: null });
@@ -213,6 +214,20 @@ describe("rate limit (429)", () => {
 
     const later = { ...deps, now: () => new Date(NOW.getTime() + 60_000) };
     expect((await handleNextTask(bearer(t), later)).status).toBe(200);
+  });
+
+  it("only a known, live token is counted: malformed, unknown, revoked or expired tokens never touch the limiter", async () => {
+    const { t, deps } = setup({ token: { revokedAt: new Date(NOW.getTime() - DAY) } });
+    const hit = vi.fn(deps.limiter.hit);
+    const counted = { ...deps, limiter: { hit } };
+    for (const raw of ["not-a-token", fakeToken("random-1"), fakeToken("random-2"), t]) {
+      expect((await handleNextTask(bearer(raw), counted)).status).toBe(401);
+    }
+    expect(hit).not.toHaveBeenCalled();
+    const live = setup();
+    const liveHit = vi.fn(live.deps.limiter.hit);
+    expect((await handleNextTask(bearer(live.t), { ...live.deps, limiter: { hit: liveHit } })).status).toBe(200);
+    expect(liveHit).toHaveBeenCalledWith(`companion:${sha(live.t)}`, NOW);
   });
 
   it("the in-memory limiter bounds its table without removing keys one by one", () => {
