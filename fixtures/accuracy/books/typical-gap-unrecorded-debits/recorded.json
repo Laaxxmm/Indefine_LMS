@@ -3,21 +3,23 @@
     "suggestions": [
       {
         "lineId": "S8",
-        "ledger": "Courier Charges",
-        "confidence": 0.9,
-        "reason": "UPI payment to a courier company"
+        "ledger": "insufficient_evidence",
+        "confidence": 0.4,
+        "evidence": {
+          "quote": "UPI-SWIFT COURIERS-DOCS",
+          "location": "S8"
+        },
+        "note": "No courier or postage ledger in the client's chart"
       },
       {
         "lineId": "S9",
         "ledger": "Bank Charges",
         "confidence": 0.88,
-        "reason": "GST levied on bank charges"
-      },
-      {
-        "lineId": "S99",
-        "ledger": "Rent",
-        "confidence": 0.99,
-        "reason": "unknown line, must be dropped"
+        "evidence": {
+          "quote": "GST ON CHARGES",
+          "location": "S9"
+        },
+        "note": "GST levied on bank charges"
       }
     ]
   }

@@ -8,7 +8,19 @@ import { gstTieOut, remindersFor, tdsCheck, type GstTie, type ScheduleItem, type
 import { daysBetween, monthEnd, type ParseIssue } from "./table";
 import { matchRows, netPaise, tbTotals, type TbData, type TbRow, type TbTotals } from "./tb";
 
-export type Suggestion = { lineId: string; ledger: string; confidence: number; reason: string; inChart: boolean };
+/**
+ * One bank debit's classification. status "suggested" = a grounded pick from the client's ledgers;
+ * "insufficient_evidence" (the model abstained, or no ledger list) and "ungrounded" (the answer did
+ * not quote the line) are reviewer questions — never defaults (ADR-008 §3).
+ */
+export type Suggestion = {
+  lineId: string;
+  ledger: string;
+  confidence: number;
+  reason: string;
+  status: "suggested" | "insufficient_evidence" | "ungrounded";
+  evidence: { quote: string; location: string } | null;
+};
 
 export type BooksExtract = ParsedBooks & {
   /** Expense-classification suggestions for bank debits not in the books (model, validated). Never posted. */

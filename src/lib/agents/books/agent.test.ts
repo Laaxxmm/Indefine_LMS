@@ -6,10 +6,11 @@ import { createRecordedRouter } from "@/lib/agents/core/recorded-router";
 import type { JobContext, ModelCaller } from "@/lib/agents/core/runner";
 import { getAgent } from "@/lib/agents/registry";
 import { BOOKS_CLASSIFY_TASK, booksAgent, computeBooksFigures } from "./index";
-import { chartHeads, classifyPrompt, suggestClassifications, validateSuggestions } from "./classify";
+import { CLASSIFY_SYSTEM, INSUFFICIENT, chartHeads, classifyPrompt, classifySchema, groundingIssue, lineText, suggestClassifications, toSuggestions, validateClassification } from "./classify";
+import { WrongDepartmentError, sniffCsv, sniffRows } from "./department";
 import { classifyBooksFile, booksInputSchema, parseBooksFiles } from "./inputs";
 import { booksPack } from "./pack";
-import { DEFAULT_EXPENSE_HEADS } from "./config";
+import { BOOKS_MODEL_TASKS, booksTaskIds } from "./tasks";
 import { parseTb } from "./tb";
 import { parseCsv } from "./table";
 
@@ -62,43 +63,128 @@ describe("books agent definition", () => {
   });
 });
 
-describe("expense classification (the only model call)", () => {
+describe("expense classification (the only model task, ADR-008)", () => {
   const lines = [
     { id: "S8", row: 9, date: "2026-10-30", narration: "UPI COURIER", ref: "U1", amountPaise: -118000 },
     { id: "S9", row: 10, date: "2026-10-31", narration: "GST ON CHARGES", ref: "", amountPaise: -22500 },
   ];
-  it("no candidates → no model call", async () => {
+  const TB = parseTb("tb.csv", parseCsv("Ledger,Group,Debit\nBank Charges,Indirect Expenses,1\nRent,Indirect Expenses,1\nTrading Goods,Purchase Accounts,1\nSales,Sales Accounts,1")).tb;
+  const ans = (lineId: string, ledger: string, quote: string, location = lineId, confidence = 0.9) => ({ lineId, ledger, confidence, evidence: { quote, location } });
+  const viaRouter = (output: unknown) => {
+    const router = createRecordedRouter({ [BOOKS_CLASSIFY_TASK]: output });
+    const model: ModelCaller = async (req) => {
+      const r = await router.run({ ...req, runId: "r1" } as never);
+      if (r.status !== "ok") throw new Error(`not ok: ${r.status === "needs-review" ? r.issues.join("; ") : r.status}`);
+      return r.output as never;
+    };
+    return { router, model };
+  };
+
+  it("registry: one versioned task, department prompt, closed schema, rule ids, validator", () => {
+    expect(booksTaskIds()).toEqual(["books.classify-expenses@1"]);
+    const t = BOOKS_MODEL_TASKS[0];
+    expect(t.rules).toEqual(["books.suggestions-low-confidence", "books.classification-questions"]);
+    expect(t.systemPrompt).toBe(CLASSIFY_SYSTEM);
+    expect(CLASSIFY_SYSTEM).toMatch(/ONLY on month-end bookkeeping close/);
+    expect(CLASSIFY_SYSTEM).toMatch(/Never compute/);
+    expect(CLASSIFY_SYSTEM).toContain(`"${INSUFFICIENT}"`);
+    expect(CLASSIFY_SYSTEM).toMatch(/JSON only/);
+    for (const r of t.rules) expect(booksAgent.defaultChecklist.rules.some((x) => x.id === r)).toBe(true);
+  });
+
+  it("heads are the client's own expense/purchase ledgers; else every TB ledger; none without a TB", () => {
+    expect(chartHeads(TB)).toEqual(["Bank Charges", "Rent", "Trading Goods"]);
+    expect(chartHeads(parseTb("tb.csv", parseCsv("Ledger,Group,Debit\nZeta,Misc,1\nAlpha,Misc,1")).tb)).toEqual(["Alpha", "Zeta"]);
+    expect(chartHeads(null)).toEqual([]);
+  });
+
+  it("closed enums: an invented ledger or an unknown line id fails the schema", () => {
+    const schema = classifySchema(lines, ["Rent"]);
+    expect(schema.safeParse({ suggestions: [ans("S8", "Courier Charges", "UPI COURIER")] }).success).toBe(false);
+    expect(schema.safeParse({ suggestions: [ans("S99", "Rent", "UPI COURIER")] }).success).toBe(false);
+    expect(schema.safeParse({ suggestions: [ans("S8", INSUFFICIENT, "UPI COURIER")] }).success).toBe(true);
+    expect(schema.safeParse({ suggestions: [{ ...ans("S8", "Rent", "x"), note: "n".repeat(301) }] }).success).toBe(false);
+  });
+
+  it("grounding: quote must be in the line text, location must name the line, numbers must be the line's", () => {
+    expect(groundingIssue(ans("S8", "Rent", "upi  courier"), lines[0])).toBeNull();
+    expect(groundingIssue(ans("S8", "Rent", "1180.00"), lines[0])).toBeNull();
+    expect(groundingIssue(ans("S8", "Rent", "PAYTM"), lines[0])).toMatch(/not in the line text/);
+    expect(groundingIssue(ans("S8", "Rent", "UPI COURIER", "S9"), lines[0])).toMatch(/does not name the line/);
+    expect(groundingIssue(ans("S8", "Rent", "| 1180.0"), lines[0])).toMatch(/number 1180.0/);
+    expect(groundingIssue(ans("S8", "Rent", "x"), undefined)).toMatch(/unknown line/);
+    expect(validateClassification({ suggestions: [ans("S8", "Rent", "UPI COURIER"), ans("S8", "Rent", "UPI COURIER")] }, lines)).toEqual(["S8: answered twice"]);
+    expect(lineText(lines[1])).toBe("S9 | 2026-10-31 | GST ON CHARGES |  | 225.00");
+  });
+
+  it("no candidates → no model call; no ledger list → every line is a reviewer question, no model call", async () => {
     let calls = 0;
     const model = (async () => {
       calls++;
       return { suggestions: [] };
     }) as unknown as ModelCaller;
-    expect(await suggestClassifications(model, [], null, null)).toEqual({ suggestions: [], heads: [...DEFAULT_EXPENSE_HEADS] });
+    expect(await suggestClassifications(model, [], TB, null)).toEqual({ suggestions: [], heads: ["Bank Charges", "Rent", "Trading Goods"] });
+    const noTb = await suggestClassifications(model, lines, null, null);
     expect(calls).toBe(0);
+    expect(noTb.suggestions.map((s) => s.status)).toEqual(["insufficient_evidence", "insufficient_evidence"]);
   });
-  it("calls the router fast tier (sop), anonymised, with the books task and validates the answer", async () => {
-    const router = createRecordedRouter({ [BOOKS_CLASSIFY_TASK]: { suggestions: [{ lineId: "S9", ledger: "bank charges", confidence: 0.9, reason: "gst" }, { lineId: "S9", ledger: "Rent", confidence: 1 }, { lineId: "S1", ledger: "Rent", confidence: 1 }, { lineId: "S8", ledger: "Courier", confidence: 0.5 }] } });
-    const model: ModelCaller = async (req) => {
-      const r = await router.run({ ...req, runId: "r1" } as never);
-      if (r.status !== "ok") throw new Error("not ok");
-      return r.output as never;
-    };
-    const tb = parseTb("tb.csv", parseCsv("Ledger,Group,Debit\nBank Charges,Indirect Expenses,1\nRent,Indirect Expenses,1\nSales,Sales Accounts,1")).tb;
-    const out = await suggestClassifications(model, lines, tb, "check courier");
-    expect(router.calls[0]).toMatchObject({ task: "books.classify-expenses", privacy: "anonymize-then-cloud", difficulty: "sop" });
-    expect(router.calls[0].messages[1].content).toContain("Reviewer notes: check courier");
-    expect(out.heads).toEqual(["Bank Charges", "Rent"]);
+
+  it("calls the router fast tier (sop), anonymised, with the books task, contradictions wired; abstain and ungrounded become questions", async () => {
+    const { router, model } = viaRouter({ suggestions: [ans("S9", "Bank Charges", "GST ON CHARGES"), ans("S8", INSUFFICIENT, "UPI COURIER", "S8", 0.3)] });
+    const out = await suggestClassifications(model, lines, TB, "check courier");
+    const call = router.calls[0];
+    expect(call).toMatchObject({ task: "books.classify-expenses", privacy: "anonymize-then-cloud", difficulty: "sop" });
+    expect(call.messages[0].content).toBe(CLASSIFY_SYSTEM);
+    expect(call.messages[1].content).toContain("Reviewer notes: check courier");
+    expect(call.messages[1].content).toContain("Allowed ledgers: Bank Charges; Rent; Trading Goods");
+    expect(typeof call.contradictions).toBe("function");
+    expect(await call.contradictions!({ suggestions: [ans("S9", "Rent", "NOT THERE")] })).toEqual(['S9: quote "NOT THERE" is not in the line text']);
     expect(out.suggestions).toEqual([
-      { lineId: "S8", ledger: "Courier", confidence: 0.5, reason: "", inChart: false },
-      { lineId: "S9", ledger: "bank charges", confidence: 0.9, reason: "gst", inChart: true },
+      { lineId: "S8", ledger: INSUFFICIENT, confidence: 0.3, reason: "", status: "insufficient_evidence", evidence: { quote: "UPI COURIER", location: "S8" } },
+      { lineId: "S9", ledger: "Bank Charges", confidence: 0.9, reason: "", status: "suggested", evidence: { quote: "GST ON CHARGES", location: "S9" } },
+    ]);
+    const bad = toSuggestions({ suggestions: [ans("S8", "Rent", "INVENTED TEXT"), ans("S8", "Bank Charges", "UPI COURIER")] }, lines);
+    expect(bad.map((s) => [s.lineId, s.status, s.ledger])).toEqual([
+      ["S8", "ungrounded", INSUFFICIENT],
+      ["S9", "insufficient_evidence", INSUFFICIENT],
     ]);
   });
-  it("prompt never asks the model for totals and lists each line once", () => {
+
+  it("a recorded answer naming a ledger the client does not have is refused (schema), so the run cannot use it", async () => {
+    const { model } = viaRouter({ suggestions: [ans("S8", "Courier Charges", "UPI COURIER")] });
+    await expect(suggestClassifications(model, lines, TB, null)).rejects.toThrow(/suggestions.0.ledger: Invalid enum value/);
+  });
+
+  it("prompt lists each line once and never asks for totals", () => {
     const p = classifyPrompt(lines, ["Rent"], null);
     expect(p).toContain("S8 | 2026-10-30 | UPI COURIER | U1 | 1180.00");
-    expect(p).not.toMatch(/Reviewer notes/);
-    expect(validateSuggestions({ suggestions: [] }, lines, [])).toEqual([]);
-    expect(chartHeads(null)).toEqual([...DEFAULT_EXPENSE_HEADS]);
+    expect(p).not.toMatch(/Reviewer notes|total/i);
+  });
+});
+
+describe("wrong department fails closed before any model call (ADR-008 §7)", () => {
+  const GST_REGISTER = "GSTIN of Recipient,Invoice No,Invoice Date,Taxable Value,IGST Amount\n29AAACE1234F1Z2,INV-1,05/10/2026,1000,180";
+  it("sniffs GST, Tax and ROC documents; a TB is not mistaken for any of them", () => {
+    expect(sniffCsv("sales-register.csv", Buffer.from(GST_REGISTER))).toEqual({ agent: "gst", label: "GST Prep" });
+    expect(sniffRows(parseCsv("Name of Deductor,TAN of Deductor,Assessment Year,Amount\nX,BLRX12345A,2026-27,10"))).toEqual({ agent: "tax", label: "Tax Prep" });
+    expect(sniffRows(parseCsv("Folio,Name,No. of Shares,DIN\n1,X,100,01234567"))).toEqual({ agent: "roc", label: "ROC Prep" });
+    expect(sniffRows(parseCsv("Particulars,Group,Debit,Credit\nCash,Cash-in-Hand,1,"))).toBeNull();
+    expect(sniffCsv("tb.xlsx", Buffer.from("PK"))).toBeNull();
+  });
+  it("input schema: GST registers instead of a TB → message naming the GST Prep agent", () => {
+    const r = booksInputSchema.safeParse([{ name: "sales-register.csv", source: "fixture", bytes: Buffer.from(GST_REGISTER) }]);
+    expect(r.success).toBe(false);
+    if (!r.success) expect(r.error.issues[0].message).toBe("Wrong department: sales-register.csv looks like a GST Prep document, not Books Close input. Run the GST Prep agent (/agents/gst) instead.");
+  });
+  it("a 'trial balance' file that is really a GST register stops the run in extract, before the classifier", async () => {
+    let calls = 0;
+    const model = (async () => {
+      calls++;
+      return { suggestions: [] };
+    }) as unknown as ModelCaller;
+    const input = { files: [{ name: "trial-balance.csv", kind: "tb" as const, bytes: Buffer.from(GST_REGISTER) }] };
+    await expect(booksAgent.extract({ input, files: [], job: JOB, runId: "r", notes: null, model })).rejects.toBeInstanceOf(WrongDepartmentError);
+    expect(calls).toBe(0);
   });
 });
 
@@ -143,14 +229,17 @@ describe("pipeline on fixtures", () => {
   it("month-end pack: fixed sheets, suggestions labelled, never 'posted'", async () => {
     const fx = byId("typical-gap-unrecorded-debits");
     const parsed = await parseBooksFiles({ files: fx.inputFiles.map((f) => ({ name: f.name, kind: classifyBooksFile(f.name), bytes: f.bytes })) });
-    const extracted = { ...parsed, suggestions: [{ lineId: "S8", ledger: "Courier Charges", confidence: 0.9, reason: "UPI", inChart: false }, { lineId: "S9", ledger: "Bank Charges", confidence: 0.5, reason: "", inChart: true }, { lineId: "S77", ledger: "Rent", confidence: 0.9, reason: "", inChart: true }], chartHeads: [] };
+    const ev = (quote: string, location: string) => ({ quote, location });
+    const extracted = { ...parsed, chartHeads: [], suggestions: [ { lineId: "S8", ledger: INSUFFICIENT, confidence: 0.3, reason: "No courier ledger", status: "insufficient_evidence" as const, evidence: ev("UPI-SWIFT COURIERS-DOCS", "S8") }, { lineId: "S9", ledger: "Bank Charges", confidence: 0.5, reason: "", status: "suggested" as const, evidence: ev("GST ON CHARGES", "S9") }, { lineId: "S77", ledger: "Rent", confidence: 0.9, reason: "r", status: "suggested" as const, evidence: null }, { lineId: "S1", ledger: INSUFFICIENT, confidence: 0, reason: "x", status: "ungrounded" as const, evidence: null } ] };
     const drafts = booksPack({ extracted, figures: computeBooksFigures(extracted), job: JOB, results: [] });
     expect(drafts).toHaveLength(1);
     const d = drafts[0];
     if (d.type !== "xlsx") throw new Error("xlsx expected");
     expect(d.title).toBe("Month-end pack");
     const sug = d.sheets.find((s) => s.name === "Expense suggestions")!;
-    expect(sug.rows.map((r) => r.status)).toEqual(["Suggestion — not posted; head not in chart", "Suggestion — not posted; low confidence", "Suggestion — not posted"]);
+    expect(sug.rows.map((r) => r.status)).toEqual(["Reviewer question — documents insufficient; ask the client what this payment was for", "Suggestion — not posted; low confidence", "Suggestion — not posted", "Reviewer question — model answer not grounded; classify manually"]);
+    expect(sug.rows.map((r) => r.ledger)).toEqual(["", "Bank Charges", "Rent", ""]);
+    expect(sug.rows[1].reason).toBe("quote: \"GST ON CHARGES\"");
     const empty = booksPack({ extracted: { ...parsed, statement: null, tdsDeducted: null, gstLedger: null, schedules: null, tb: null, suggestions: [], chartHeads: [] }, figures: {}, job: JOB, results: [] })[0];
     if (empty.type !== "xlsx") throw new Error("xlsx expected");
     expect(empty.sheets.find((s) => s.name === "Bank reconciliation")!.rows[0].item).toBe("Bank statement and bank ledger not provided");

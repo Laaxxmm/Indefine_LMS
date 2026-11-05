@@ -21,13 +21,18 @@ import { netPaise, tbTotals } from "./tb";
 
 export { BOOKS_CHECKLIST, BOOKS_KEY, booksRegistry } from "./rules";
 export { BOOKS_CLASSIFY_TASK } from "./classify";
+export { BOOKS_MODEL_TASKS } from "./tasks";
 export type { BooksExtract } from "./analysis";
 export type { BooksInput } from "./inputs";
 
 /** Integer figures (paise for amounts). Keys are present only when their input was provided. */
 export function computeBooksFigures(raw: Partial<BooksExtract>): Record<string, number> {
   const e = normalizeExtract(raw);
-  const f: Record<string, number> = { parseIssueCount: e.issues.length, suggestionCount: e.suggestions.length };
+  const f: Record<string, number> = {
+    parseIssueCount: e.issues.length,
+    suggestionCount: e.suggestions.filter((s) => s.status === "suggested").length,
+    classificationQuestionCount: e.suggestions.filter((s) => s.status !== "suggested").length,
+  };
   if (e.tb) {
     const t = tbTotals(e.tb);
     f.tbDebitPaise = t.debitPaise;

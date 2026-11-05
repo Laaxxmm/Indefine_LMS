@@ -195,11 +195,22 @@ describe("info rules", () => {
     expect(run("books.schedule-reminders", extract({ schedules: s("2026-11", "2027-03") })).status).toBe("pass");
     expect(run("books.schedule-reminders", extract({})).status).toBe("na");
   });
-  it("low-confidence suggestions: 0.75 passes, 0.74 fails, not-in-chart fails", () => {
-    const sg = (confidence: number, inChart = true): Suggestion => ({ lineId: "S1", ledger: "Rent", confidence, reason: "r", inChart });
+  const sg = (confidence: number, status: Suggestion["status"] = "suggested", evidence: Suggestion["evidence"] = { quote: "RENT", location: "S1" }): Suggestion => ({ lineId: "S1", ledger: "Rent", confidence, reason: "r", status, evidence });
+  it("low-confidence suggestions: 0.75 passes, 0.74 fails; abstentions are not 'low confidence'", () => {
     expect(run("books.suggestions-low-confidence", extract({}, { suggestions: [sg(0.75)] })).status).toBe("pass");
-    expect(run("books.suggestions-low-confidence", extract({}, { suggestions: [sg(0.74)] })).status).toBe("fail");
-    expect(run("books.suggestions-low-confidence", extract({}, { suggestions: [sg(0.99, false)] })).status).toBe("fail");
+    const f = run("books.suggestions-low-confidence", extract({}, { suggestions: [sg(0.74)] }));
+    expect(f.status).toBe("fail");
+    expect(f.evidence).toEqual({ quote: "RENT", location: "S1" });
+    expect(run("books.suggestions-low-confidence", extract({}, { suggestions: [sg(0.74, "suggested", null)] })).evidence?.location).toBe("Expense suggestions S1");
+    expect(run("books.suggestions-low-confidence", extract({}, { suggestions: [sg(0.1, "insufficient_evidence")] })).status).toBe("pass");
+  });
+  it("classification questions: insufficient_evidence and ungrounded answers become reviewer questions", () => {
+    expect(run("books.classification-questions", extract({}, { suggestions: [sg(0.9)] })).status).toBe("pass");
+    const withLine = extract({ statement: "Date,Narration,Withdrawal,Deposit\n02/10/2026,TRF 88231,500.00," }, { suggestions: [sg(0, "insufficient_evidence", null)] });
+    const q = run("books.classification-questions", withLine);
+    expect(q.status).toBe("fail");
+    expect(q.evidence).toEqual({ quote: "TRF 88231", location: "bank-statement.csv row 2" });
+    expect(run("books.classification-questions", extract({}, { suggestions: [sg(0, "ungrounded", null)] })).evidence?.location).toBe("Expense suggestions S1");
   });
 });
 

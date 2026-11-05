@@ -4,6 +4,7 @@
 import { z } from "zod";
 import type { InputFile } from "@/lib/agents/core/runner";
 import { LEDGER_ALIASES, STATEMENT_ALIASES, parseBank, type BankData, type BankField } from "./bank";
+import { WrongDepartmentError, sniffCsv, sniffRows, wrongDepartmentMessage } from "./department";
 import { parseGstSummary, parseSchedules, parseTdsChallans, parseTdsDeducted, type GstHead, type ScheduleItem, type TdsChallan, type TdsDeduction } from "./statutory";
 import { readTable, type ParseIssue } from "./table";
 import { parseTb, type TbData, type TbField } from "./tb";
@@ -57,6 +58,14 @@ const InputFileZ = z.object({ name: z.string(), source: z.string(), bytes: z.ins
 export const booksInputSchema = z.array(InputFileZ).transform((files, ctx): BooksInput => {
   const out = files.map((f) => ({ name: f.name, kind: classifyBooksFile(f.name), bytes: f.bytes }));
   if (!out.some((f) => f.kind === "tb")) {
+    // Wrong department? Say which agent the documents belong to (ADR-008 §7), before any model call.
+    for (const f of out) {
+      const d = sniffCsv(f.name, f.bytes);
+      if (d) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: wrongDepartmentMessage(f.name, d, "Books Close") });
+        return { files: out };
+      }
+    }
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "A month-end trial balance export (file name containing 'trial-balance' or 'tb', CSV or XLSX) is required" });
   }
   return { files: out };
@@ -125,6 +134,10 @@ export async function parseBooksFiles(input: BooksInput): Promise<ParsedBooks> {
     switch (f.kind) {
       case "tb":
         out.tb = take(parseTb(f.name, table.rows, o as Partial<Record<TbField, string>>)).tb;
+        if (!out.tb) {
+          const d = sniffRows(table.rows);
+          if (d) throw new WrongDepartmentError(f.name, d, "Books Close");
+        }
         break;
       case "tb-prior":
         out.priorTb = take(parseTb(f.name, table.rows, o as Partial<Record<TbField, string>>)).tb;

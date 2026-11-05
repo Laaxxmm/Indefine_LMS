@@ -200,10 +200,27 @@ export const booksRegistry = createRuleRegistry<BooksCheckInput>(withFullExtract
 
   "books.suggestions-low-confidence": (ci, rule) => {
     const min = num(rule.params?.minConfidence, BOOKS_THRESHOLDS.lowConfidence);
-    const low = ci.extracted.suggestions.filter((s) => s.confidence < min || !s.inChart);
+    const low = ci.extracted.suggestions.filter((s) => s.status === "suggested" && s.confidence < min);
     if (!low.length) return pass();
     const s = low[0];
-    return { status: "fail", message: `${low.length} classification suggestion(s) are low-confidence or name a head not in the chart; first: ${s.lineId} → ${s.ledger} (${Math.round(s.confidence * 100)}%)`, evidence: { quote: s.reason || s.ledger, location: `Expense suggestions ${s.lineId}` } };
+    return {
+      status: "fail",
+      message: `${low.length} classification suggestion(s) below ${Math.round(min * 100)}% confidence; first: ${s.lineId} → ${s.ledger} (${Math.round(s.confidence * 100)}%)`,
+      evidence: { quote: s.evidence?.quote ?? s.ledger, location: s.evidence?.location ?? `Expense suggestions ${s.lineId}` },
+    };
+  },
+
+  "books.classification-questions": (ci) => {
+    const qs = ci.extracted.suggestions.filter((s) => s.status !== "suggested");
+    if (!qs.length) return pass();
+    const s = qs[0];
+    const st = ci.extracted.statement;
+    const line = st?.lines.find((l) => l.id === s.lineId);
+    return {
+      status: "fail",
+      message: `${qs.length} bank debit(s) need the reviewer to say what they were for (the documents were insufficient or the answer was not grounded); first: ${s.lineId}${line ? ` ${line.narration}` : ""}`,
+      evidence: { quote: line ? line.narration || line.ref || line.id : s.lineId, location: line && st ? at(st.file, line.row) : `Expense suggestions ${s.lineId}` },
+    };
   },
 
   // ---------------------------------------------------------------- parameterised checks (promoted mistakes)
@@ -316,6 +333,14 @@ export const BOOKS_CHECKLIST: ChecklistPack = {
       check: "books.suggestions-low-confidence",
       evidence: "statement line and suggested head",
       params: { minConfidence: BOOKS_THRESHOLDS.lowConfidence, verify: BOOKS_THRESHOLDS.lowConfidenceVerify },
+    }),
+    rule({
+      id: "books.classification-questions",
+      title: "Bank debits the agent could not classify (reviewer questions)",
+      severity: "info",
+      kind: "deterministic",
+      check: "books.classification-questions",
+      evidence: "bank line the documents do not explain",
     }),
   ],
 };

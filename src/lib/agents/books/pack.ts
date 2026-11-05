@@ -163,10 +163,15 @@ export function booksPack(ctx: { extracted: BooksExtract; figures: Figures; job:
         date: l?.date ?? null,
         narration: l?.narration ?? "",
         amount: l ? rupees(Math.abs(l.amountPaise)) : null,
-        ledger: sg.ledger,
-        confidence: sg.confidence,
-        reason: sg.reason,
-        status: `Suggestion — not posted${!sg.inChart ? "; head not in chart" : sg.confidence < BOOKS_THRESHOLDS.lowConfidence ? "; low confidence" : ""}`,
+        ledger: sg.status === "suggested" ? sg.ledger : "",
+        confidence: sg.status === "suggested" ? sg.confidence : null,
+        reason: sg.status === "suggested" ? [sg.reason, sg.evidence ? `quote: "${sg.evidence.quote}"` : ""].filter(Boolean).join(" — ") : sg.reason,
+        status:
+          sg.status === "suggested"
+            ? `Suggestion — not posted${sg.confidence < BOOKS_THRESHOLDS.lowConfidence ? "; low confidence" : ""}`
+            : sg.status === "ungrounded"
+              ? "Reviewer question — model answer not grounded; classify manually"
+              : "Reviewer question — documents insufficient; ask the client what this payment was for",
       };
     }),
   });

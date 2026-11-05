@@ -49,22 +49,3 @@ export const BOOKS_NAMES = {
   expense: { group: ["indirect expenses", "direct expenses", "^expenses?$", "operating expenses", "administrative expenses", "other expenses", "cost of goods sold"] },
   verify: "Suspense, cash and expense ledgers are recognised by name/group patterns (Tally primary groups and Zoho account types). Partner to add client-specific ledger names.",
 } as const;
-
-/** Default chart heads offered to the classifier when the trial balance has no expense ledgers. */
-export const DEFAULT_EXPENSE_HEADS = [
-  "Bank Charges",
-  "Rent",
-  "Salaries and Wages",
-  "Professional Fees",
-  "Telephone and Internet",
-  "Electricity",
-  "Travelling and Conveyance",
-  "Printing and Stationery",
-  "Repairs and Maintenance",
-  "Insurance",
-  "Office Expenses",
-  "Purchases",
-  "Freight and Cartage",
-  "Advertisement",
-  "Interest",
-] as const;

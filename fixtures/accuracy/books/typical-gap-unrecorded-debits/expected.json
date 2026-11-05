@@ -6,7 +6,7 @@
       "severity": "warn"
     },
     {
-      "ruleId": "books.suggestions-low-confidence",
+      "ruleId": "books.classification-questions",
       "severity": "info"
     }
   ],
@@ -27,7 +27,8 @@
     "gstAbsDifferencePaise": 0,
     "suspensePaise": 0,
     "cashBalancePaise": 1825000,
-    "suggestionCount": 2,
+    "suggestionCount": 1,
+    "classificationQuestionCount": 1,
     "parseIssueCount": 1
   },
   "deliverables": [

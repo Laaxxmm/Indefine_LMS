@@ -28,6 +28,7 @@
     "suspensePaise": 0,
     "cashBalancePaise": 1825000,
     "suggestionCount": 1,
+    "classificationQuestionCount": 0,
     "parseIssueCount": 0
   },
   "deliverables": [
