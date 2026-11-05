@@ -1,5 +1,5 @@
 {
-  "system.check:echo.related-party": {
+  "echo.check:echo.related-party": {
     "status": "fail",
     "message": "Mehta Holdings is described as the director's company",
     "evidence": {

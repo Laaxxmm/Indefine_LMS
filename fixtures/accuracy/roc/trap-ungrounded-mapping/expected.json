@@ -1,6 +1,7 @@
 {
   "description": "Trap (grounding): the model maps 'GST Input Credit' but its evidence quote ('Input tax credit ledger') is not copied from the input line, so the validator drops the mapping; the ledger is reported unmapped (block roc.financials-tie). Assets 65L - 5L = 60L (600000000 paise), difference -50000000 paise; other figures as the clean case.",
   "category": "trap",
+  "guardrails": { "ungrounded": 1 },
   "job": {
     "fy": "2025-26",
     "period": "Annual",

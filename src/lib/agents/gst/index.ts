@@ -8,14 +8,24 @@
 //              payables, e-invoice) + classify (model: ledger → s.17(5)/RCM, description → HSN)
 //   compute  → computeFigures (integer paise; GSTR-1 tables, 3B, set-off, interest, late fee)
 //   checks   → GST_CHECKLIST (SopPack "gst" 1.0.0) with gstRegistry; one LLM rule (free supplies)
+import type { AgentScope } from "@/lib/agents/core/guardrails/scope";
 import type { AgentDefinition } from "@/lib/agents/core/runner";
 import { classify } from "./classify";
 import { computeFigures } from "./compute";
 import { gstDeliverables } from "./deliverables";
-import { gstInputSchema, loadGstData } from "./input";
-import { gstProbeMutation } from "./probe";
+import { gstInputSchema, gstInputSniff, loadGstData } from "./input";
+import { GST_INPUT_PROBES, GST_REQUIRED_INPUTS, gstProbeMutation } from "./probe";
 import { GST_CHECKLIST, GST_KEY, gstRegistry } from "./rules";
+import { GST_MODEL_TASKS } from "./tasks";
 import type { GstExtract, GstInput } from "./types";
+
+/** GST Prep's ADR-008 scope: the task registry (tasks.ts), every checklist rule, the register sniff (sniff.ts). */
+export const GST_SCOPE: AgentScope = {
+  department: "GST",
+  tasks: [...GST_MODEL_TASKS],
+  ruleIds: GST_CHECKLIST.rules.map((r) => r.id),
+  inputSniff: gstInputSniff,
+};
 
 export { GST_CHECKLIST, GST_KEY, gstRegistry } from "./rules";
 export { CLASSIFY_LEDGERS_TASK, READ_HSN_TASK } from "./classify";
@@ -61,4 +71,11 @@ export const gstAgent: AgentDefinition<GstInput, GstExtract> = {
 
   deliverables: gstDeliverables,
   probeMutation: gstProbeMutation,
+  inputProbes: GST_INPUT_PROBES,
+  requiredInputs: GST_REQUIRED_INPUTS,
+  scope: GST_SCOPE,
+  coverageExemptions: {
+    "gst.pack-config":
+      "compares the active SOP pack's parameters with the GST computation; the harness always runs the agent's own default pack (plus promoted mistakes), so the rule cannot fail in a fixture. Its failing case is unit-tested in gst/rules.test.ts.",
+  },
 };

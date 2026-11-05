@@ -1,0 +1,6 @@
+{
+  "echo.check:echo.related-party": {
+    "status": "insufficient_evidence",
+    "message": "Note 4 is not in the documents: ask the client whether R. Shah is a director, partner or relative."
+  }
+}

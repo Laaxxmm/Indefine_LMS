@@ -78,7 +78,8 @@ describe("review flow", () => {
     expect(r1).toMatchObject({ status: "CHANGES_REQUESTED", reviewNotes: "INV-2 looks doubled" });
     expect(r2).toMatchObject({ attempt: 2, status: "AGENT_DONE", reviewNotes: "INV-2 looks doubled", startedById: "u-ravi" });
     // Echo makes no extraction call (the register is parsed by code); the notes ride on the run.
-    expect(w.router.calls.map((c) => c.runId)).toEqual(["run-1", "run-2"]);
+    // Echo reads its high-stakes related-party rule twice per run (ADR-008 agreement).
+    expect(w.router.calls.map((c) => c.runId)).toEqual(["run-1", "run-1", "run-2", "run-2"]);
     expect(w.fake.filesIn(w.drive, WORKING)).toEqual(["ACME01_Echo-register_2026-10_v1.xlsx", "ACME01_Echo-register_2026-10_v2.xlsx"]);
     expect(job(w).state).toBe("AGENT_DONE");
     expect(rows(w.db, "jobTaskEvent").map((e) => e.toState)).toEqual(["IN_PREP", "AGENT_DONE", "IN_REVIEW", "IN_PREP", "AGENT_DONE"]);
@@ -149,7 +150,7 @@ describe("comments, mistakes and files", () => {
     await startAgentRun(user("priya"), "echo", "job-1", w.deps);
     expect(await addComment(user("ravi"), "run-1", "  ", w.deps)).toMatchObject({ ok: false, status: 400 });
     expect(await addComment(user("ravi"), "run-1", "Check INV-3", w.deps)).toMatchObject({ ok: true });
-    expect(rows(w.db, "auditEvent")[0]).toMatchObject({ actorId: "u-ravi", action: "comment", entity: "AgentRun", entityId: "run-1", meta: { text: "Check INV-3" } });
+    expect(rows(w.db, "auditEvent").find((e) => e.action === "comment")).toMatchObject({ actorId: "u-ravi", action: "comment", entity: "AgentRun", entityId: "run-1", meta: { text: "Check INV-3" } });
   });
 
   it("logs a mistake and lets only a partner / manager decide it", async () => {

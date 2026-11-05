@@ -21,7 +21,7 @@ import {
   inForceVerified,
 } from "./data";
 import { BS_ASSETS, BS_LIABILITIES, DEBIT_HEADS, FIN_HEADS, type Auditor, type Company, type Director, type FinColumn, type FinHead, type Holding, type MsmeDue, type TbLine } from "./parse";
-import { addDays, addMonthsClamped, addYears, daysBetween, divRoundHalfUp, fyEndKey, fyStart } from "./util";
+import { addDays, addMonthsClamped, addYears, daysBetween, divRoundHalfUp, fyEndKey, fyStart } from "@/lib/agents/core/util";
 
 // ------------------------------------------------------------------ extracted shape
 

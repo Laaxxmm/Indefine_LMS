@@ -2,7 +2,7 @@
 // product could pass 2^53). Slab tax, special-rate capital gains, basic-exemption shortfall,
 // s.87A rebate, surcharge with marginal relief, cess; capital-gains classification and set-off;
 // presumptive income; s.43B(h); interest u/s 234A/B/C and fee u/s 234F. No model, no clock.
-import { addMonthsClamped, daysBetween, divRoundHalfUp, roundToRupee } from "@/lib/agents/roc/util";
+import { addMonthsClamped, daysBetween, divRoundHalfUp, roundToRupee } from "@/lib/agents/core/util";
 import type { Slab, SurchargeStep, TaxRuleSet } from "./data";
 import type { CgRow, MsmeRow } from "./parse";
 

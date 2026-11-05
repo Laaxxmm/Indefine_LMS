@@ -112,7 +112,7 @@ describe("scoreAgent", () => {
     expect(s.pass).toBe(true);
     expect(s.severity.block).toMatchObject({ precision: 1, recall: 1 });
     expect(s.severity.warn).toMatchObject({ precision: 1, recall: 1 });
-    expect(s.sensitivity).toEqual({ declared: true, changed: 1, total: 1, ok: true, failures: [] });
+    expect(s.sensitivity).toEqual({ declared: true, changed: 1, total: 1, ok: true, failures: [], inputs: [], missingRequired: [] });
     expect(s.mode).toBe("recorded");
     expect(s.reasons).toEqual([]);
   });
@@ -240,12 +240,12 @@ describe("scoreAgent", () => {
   });
 
   describe("thin fixture sets (production agents)", () => {
-    const PROD: ScoreContext = { internal: false, probeDeclared: true };
+    const PROD: ScoreContext = { internal: false, probeDeclared: true, scopeDeclared: true, probeInputs: ["input"], requiredInputs: ["input"] };
     const full = (n: number) =>
       Array.from({ length: n }, (_, i) => {
         const category = (["clean", "typical-gap", "trap"] as const)[i % 3];
         const flags = category === "trap" ? [B("b")] : category === "typical-gap" ? [W("w")] : [];
-        return fx(`f${i}`, expected(flags, { totalPaise: 100 }, { category }), thrice(outcome(flags)));
+        return fx(`f${i}`, expected(flags, { totalPaise: 100 }, { category }), thrice(outcome(flags)), { probes: [{ input: "input", applied: true, changed: true }] });
       });
 
     it("a full set passes (books: 10)", () => {

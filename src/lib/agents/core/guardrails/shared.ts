@@ -1,39 +1,22 @@
-// Guardrail helpers for model tasks (ADR-008) until the framework enforces them centrally:
-// a task registry entry type, the firm preamble, closed-output helpers, and grounding checks
-// (a quote must occur in the text actually sent to the model; numbers in an extracted value must
-// appear in its quote). Pure; used by the ROC and Tax agents.
-import { z, type ZodType } from "zod";
-import type { AgentTask } from "@/lib/ai/router";
+// Shared helpers for agents' model tasks (ADR-008), moved here from src/lib/agents/roc so that ROC
+// and Tax both read them from core: a strict evidence schema, quote / number checks on strings,
+// and the ROC ↔ Tax ↔ GST input-name sniff behind their AgentScope.inputSniff. The task spec type
+// and the firm preamble these agents used to carry are now the framework's (scope.ts). Pure.
+import { z } from "zod";
+import { quoteInContext } from "../checklist";
+import { INSUFFICIENT_EVIDENCE } from "./schema";
 
-export const INSUFFICIENT = "insufficient_evidence" as const;
+export const INSUFFICIENT = INSUFFICIENT_EVIDENCE;
 
-/** Evidence every extracted value / verdict carries: a verbatim quote and where it is. */
+/** Evidence every extracted value / verdict carries: a verbatim quote and where it is (both required, capped). */
 export const EvidenceSchema = z.object({
   quote: z.string().trim().min(1).max(300),
   location: z.string().trim().min(1).max(120),
 });
 
-export type ModelTaskSpec<T, C> = {
-  /** `<agent>.<task>`; recorded on every ModelCall. */
-  name: AgentTask;
-  version: number;
-  schema: ZodType<T>;
-  system: string;
-  /** Checklist rule ids whose result depends on this task. */
-  rules: string[];
-  /** Deterministic validator: returns issues (empty = valid). Wired as the router's `contradictions`. */
-  validate?: (output: T, ctx: C) => string[];
-};
-
-export const FIRM_PREAMBLE =
-  "You assist a firm of chartered accountants in Bangalore, India, by preparing drafts that a qualified person reviews. Use only the documents supplied in this message. Never compute totals, tax, interest, fees or any other amount. Give no filing, legal or audit-opinion advice. If the documents do not contain the answer, return insufficient_evidence for that item instead of guessing. Output JSON only.";
-
-const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
-
-/** Quote occurs in the source text (whitespace- and case-normalised). */
+/** Quote occurs in the source text (whitespace- and case-normalised): the checklist engine's quoteInContext, source first. */
 export function quoteIn(source: string, quote: string): boolean {
-  const q = norm(quote);
-  return q.length > 0 && norm(source).includes(q);
+  return quoteInContext(quote, source);
 }
 
 /** Digit groups in a text, commas removed ("1,20,000.50" → "120000.50"). */

@@ -12,8 +12,8 @@
 // Statements are downloaded by staff; nothing here contacts any portal. Amounts → integer paise.
 import { z } from "zod";
 import type { InputFile } from "@/lib/agents/core/runner";
-import { wrongDepartment } from "@/lib/agents/roc/grounding";
-import { isDayKey, optPaise, parseCsv, rupeesToPaise, yes } from "@/lib/agents/roc/util";
+import { wrongDepartment } from "@/lib/agents/core/guardrails/shared";
+import { isDayKey, optPaise, parseCsv, rupeesToPaise, yes } from "@/lib/agents/core/util";
 
 const Day = z.string().refine(isDayKey, "date must be YYYY-MM-DD");
 const Amount = z.union([z.string(), z.number()]);

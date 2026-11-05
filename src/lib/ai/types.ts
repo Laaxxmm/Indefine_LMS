@@ -33,6 +33,18 @@ export interface ModelRequest<T = unknown> {
   dictionary?: DictionaryEntry[];
   /** Per-call output token cap (default 4096). */
   maxTokens?: number;
+  /** Version of a registered prompt (ADR-008): ModelCall.task records `<task>@<taskVersion>`. */
+  taskVersion?: number;
+  /**
+   * Pin the cloud tier (ADR-008 agreement re-ask on a different tier). No escalation follows; a
+   * `local-only` request ignores it (local or queue, never cloud).
+   */
+  forceTier?: Exclude<Tier, "LOCAL">;
+  /**
+   * The second, independent read of a high-stakes judgement (ADR-008). Logged as `<task>…#2`;
+   * recorded routers answer it from the `<task>#2` recording when one exists.
+   */
+  secondOpinion?: boolean;
 }
 
 export interface ModelResponse<T> {

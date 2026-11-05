@@ -134,9 +134,11 @@ describe("expense classification (the only model task, ADR-008)", () => {
     const out = await suggestClassifications(model, lines, TB, "check courier");
     const call = router.calls[0];
     expect(call).toMatchObject({ task: "books.classify-expenses", privacy: "anonymize-then-cloud", difficulty: "sop" });
-    expect(call.messages[0].content).toBe(CLASSIFY_SYSTEM);
-    expect(call.messages[1].content).toContain("Reviewer notes: check courier");
-    expect(call.messages[1].content).toContain("Allowed ledgers: Bank Charges; Rent; Trading Goods");
+    // Scoped call (ADR-008): the agent sends the user message; the framework adds CLASSIFY_SYSTEM after its preambles.
+    expect(call.messages.map((m) => m.role)).toEqual(["user"]);
+    expect(BOOKS_MODEL_TASKS[0].systemPrompt).toBe(CLASSIFY_SYSTEM);
+    expect(call.messages[0].content).toContain("Reviewer notes: check courier");
+    expect(call.messages[0].content).toContain("Allowed ledgers: Bank Charges; Rent; Trading Goods");
     expect(typeof call.contradictions).toBe("function");
     expect(await call.contradictions!({ suggestions: [ans("S9", "Rent", "NOT THERE")] })).toEqual(['S9: quote "NOT THERE" is not in the line text']);
     expect(out.suggestions).toEqual([

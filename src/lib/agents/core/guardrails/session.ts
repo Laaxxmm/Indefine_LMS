@@ -1,0 +1,253 @@
+// The runner's guardrail layer for one run of a scoped agent (ADR-008). Built once per run; the
+// runner hands it the bound router call and its own unwrap, and uses:
+//
+//   sniff(files)   wrong-department input → WrongInputError, before any model call
+//   model(req)     ctx.model: declared tasks only (ScopeViolationError otherwise), system prompt =
+//                  FIRM_PREAMBLE + department + task prompt, the task's validators plus the call's
+//                  own `contradictions` as router contradictions (an issue escalates; after the
+//                  last escalation the router returns the output as needs-review and the run is
+//                  marked needsPartnerReview — agents keep only the items their validators accept),
+//                  output grounded (groundCheck: ungrounded array items dropped)
+//   llmCheck       LLM rules: owned rules only, `<key>.check:<ruleId>` task, abstainable verdict,
+//                  two reads on block / highStakes (disagreement → na + model-disagreement)
+//   stats          counts for the run's `guardrail-run` AuditEvent (drift monitoring, harness)
+//
+// No I/O of its own: every model call goes through `route` (the ModelRouter, or a recording).
+import type { ZodTypeAny } from "zod";
+import type { AgentTask, Difficulty, DictionaryEntry, ModelRequest, Msg, Privacy, RouterResult } from "@/lib/ai/router";
+import type { ChecklistResultItem, LlmCheck, RuleDefinition } from "../checklist";
+import { ABSTAIN_STATUS, isGuardrailOutcome } from "../checklist";
+import { AGREEMENT_TIER, needsAgreement, settleAgreement } from "./agreement";
+import { GroundingError, groundCheck } from "./grounding";
+import { shapeFingerprint, unboundedStrings } from "./schema";
+import {
+  ScopeViolationError,
+  WrongInputError,
+  checkTaskFor,
+  checkTaskName,
+  composeSystemPrompt,
+  genericCheckTaskName,
+  resolveTask,
+  sniffInputs,
+  taskLabel,
+  wrongInputMessage,
+  type AgentScope,
+  type AnyTaskSpec,
+  type ScopedAgentLike,
+  type SniffFile,
+} from "./scope";
+
+export type GuardrailStats = {
+  /** Scoped model calls made (second reads included). */
+  modelCalls: number;
+  /** LLM rule verdicts asked of the model. */
+  judgements: number;
+  /** LLM rules answered insufficient_evidence (→ reviewer questions). */
+  abstained: number;
+  /** Evidence quotes / grounded numbers checked. */
+  groundChecked: number;
+  /** Ungrounded items dropped + LLM verdicts whose quote is not in the documents. */
+  ungrounded: number;
+  agreementChecks: number;
+  disagreements: number;
+  scopeViolations: number;
+  /** LLM rules the scope does not own (no model call; na + out-of-scope). */
+  outOfScopeRules: number;
+  /** 1 when inputSniff stopped the run. */
+  wrongInput: number;
+};
+
+export const emptyGuardrailStats = (): GuardrailStats => ({
+  modelCalls: 0,
+  judgements: 0,
+  abstained: 0,
+  groundChecked: 0,
+  ungrounded: 0,
+  agreementChecks: 0,
+  disagreements: 0,
+  scopeViolations: 0,
+  outOfScopeRules: 0,
+  wrongInput: 0,
+});
+
+/** AuditEvent.action of the per-run guardrail record. */
+export const GUARDRAIL_RUN_ACTION = "guardrail-run";
+
+/** What an agent passes to ctx.model. The framework owns taskVersion / forceTier / secondOpinion. */
+export type ModelCallRequest<T> = Omit<ModelRequest<T>, "runId" | "task" | "taskVersion" | "forceTier" | "secondOpinion"> & {
+  task: AgentTask;
+  /** Documents text quotes must come from (default: the user messages). Scoped agents only. */
+  source?: string;
+};
+
+type CallOpts<T> = {
+  privacy: Privacy;
+  difficulty: Difficulty;
+  dictionary?: DictionaryEntry[];
+  maxTokens?: number;
+  maxCostInr?: number;
+  /** Per-call schema (spec.schemaPerCall). */
+  schema?: ModelRequest<T>["schema"];
+  /** Second argument of spec.validate (agent input, or the documents text for a checklist task). */
+  validateWith: unknown;
+  /** The call's own validators. */
+  contradictions?: ModelRequest<T>["contradictions"];
+};
+
+export type GuardrailSessionDeps = {
+  agent: ScopedAgentLike;
+  scope: AgentScope;
+  /** The router call bound to the run (runId added by the runner). */
+  route: <T>(req: Omit<ModelRequest<T>, "runId">) => Promise<RouterResult<T>>;
+  /** The runner's result handling: usable output (needs-review with output allowed) or throw. */
+  unwrap: <T>(res: RouterResult<T>) => T;
+};
+
+export type GuardrailSession = ReturnType<typeof createGuardrailSession>;
+
+export function createGuardrailSession(deps: GuardrailSessionDeps) {
+  const { agent, scope, route, unwrap } = deps;
+  const stats = emptyGuardrailStats();
+  let violation: ScopeViolationError | null = null;
+  let input: unknown;
+
+  const record = (e: ScopeViolationError) => {
+    stats.scopeViolations += 1;
+    violation ??= e;
+    return e;
+  };
+  const violate = (message: string) => record(new ScopeViolationError(message));
+
+  async function callSpec<T>(spec: AnyTaskSpec, messages: Msg[], o: CallOpts<T>, extra: Pick<ModelRequest<T>, "forceTier" | "secondOpinion"> = {}): Promise<T> {
+    stats.modelCalls += 1;
+    const validate = spec.validate;
+    const own = o.contradictions;
+    const contradictions =
+      validate || own
+        ? async (out: T) => {
+            const issues: string[] = [];
+            if (validate) issues.push(...validate(out, o.validateWith));
+            if (own) issues.push(...(await own(out)));
+            return issues;
+          }
+        : undefined;
+    const res = await route<T>({
+      task: spec.name as AgentTask,
+      taskVersion: spec.version,
+      schema: (o.schema ?? spec.schema) as ModelRequest<T>["schema"],
+      messages: [{ role: "system", content: composeSystemPrompt(scope.department, spec) }, ...messages],
+      privacy: o.privacy,
+      difficulty: o.difficulty,
+      dictionary: o.dictionary,
+      maxTokens: o.maxTokens,
+      maxCostInr: o.maxCostInr,
+      contradictions,
+      ...extra,
+    });
+    return unwrap(res);
+  }
+
+  /** The call's schema: the task's own, or (schemaPerCall) a closed schema of the same shape. */
+  function schemaFor<T>(spec: AnyTaskSpec, label: string, s: ModelRequest<T>["schema"] | undefined): ModelRequest<T>["schema"] | undefined {
+    if (!s || s === spec.schema) return undefined;
+    if (!spec.schemaPerCall) throw violate(`task ${label} must use its declared schema (pass spec.schema or nothing)`);
+    if (shapeFingerprint(s as ZodTypeAny) !== shapeFingerprint(spec.schema as ZodTypeAny)) throw violate(`task ${label}: the per-call schema does not have the declared shape`);
+    const open = unboundedStrings(s as ZodTypeAny);
+    if (open.length) throw violate(`task ${label}: the per-call schema has free-form strings (${open.join("; ")})`);
+    return s;
+  }
+
+  /** ctx.model for a scoped agent. */
+  async function model<T>(req: ModelCallRequest<T>): Promise<T> {
+    let spec: AnyTaskSpec;
+    try {
+      spec = resolveTask(agent.key, scope, String(req.task));
+    } catch (e) {
+      throw e instanceof ScopeViolationError ? record(e) : e;
+    }
+    const label = taskLabel(spec);
+    const schema = schemaFor(spec, label, req.schema);
+    if (req.messages.some((m) => m.role === "system")) throw violate(`task ${label}: the system prompt comes from the task registry; pass user / assistant messages only`);
+    if (spec.difficulty && req.difficulty !== spec.difficulty) throw violate(`task ${label} declares difficulty "${spec.difficulty}"; the call asked for "${req.difficulty}"`);
+    const out = await callSpec<T>(spec, req.messages, {
+      privacy: req.privacy,
+      difficulty: spec.difficulty ?? req.difficulty,
+      dictionary: req.dictionary,
+      maxTokens: req.maxTokens,
+      maxCostInr: req.maxCostInr,
+      schema,
+      validateWith: input,
+      contradictions: req.contradictions,
+    });
+    const source = req.source ?? req.messages.filter((m) => m.role === "user").map((m) => m.content).join("\n\n");
+    const g = groundCheck(out, source, { schema: (schema ?? spec.schema) as ZodTypeAny });
+    stats.groundChecked += g.checked;
+    stats.ungrounded += g.ungrounded;
+    if (g.rootUngrounded) throw new GroundingError(label, g.issues);
+    return g.output;
+  }
+
+  let verdicts = 0;
+  /** llmCheck for the checklist engine (documents = the text the verdict's quote is checked against). */
+  const llmCheck: LlmCheck<unknown> = async (rule: RuleDefinition, _input, documents) => {
+    if (!scope.ruleIds.includes(rule.id)) {
+      stats.outOfScopeRules += 1;
+      return { guardrail: "out-of-scope", message: `${rule.title}: rule ${rule.id} is not owned by the ${agent.key} agent's scope; no model was asked — review manually` };
+    }
+    const spec = checkTaskFor(agent.key, scope, rule.id);
+    if (!spec) throw violate(`LLM rule ${rule.id} has no declared model task (declare "${checkTaskName(agent.key, rule.id)}" or "${genericCheckTaskName(agent.key)}")`);
+    const messages: Msg[] = [{ role: "user", content: `Question: ${rule.check}\nEvidence to cite: ${rule.evidence}\n\nDocuments:\n${documents}` }];
+    const o: CallOpts<unknown> = { privacy: "anonymize-then-cloud", difficulty: spec.difficulty ?? "judgement", validateWith: documents };
+    stats.judgements += 1;
+    const first = await callSpec<unknown>(spec, messages, o);
+    let verdict: unknown = first;
+    if (needsAgreement(rule, spec)) {
+      stats.agreementChecks += 1;
+      const second = await callSpec<unknown>(spec, messages, o, { forceTier: AGREEMENT_TIER, secondOpinion: true });
+      const settled = settleAgreement(rule, first, second);
+      if (!settled.agreed) stats.disagreements += 1;
+      verdict = settled.verdict;
+    }
+    if (!isGuardrailOutcome(verdict) && (verdict as { status?: unknown } | null)?.status !== ABSTAIN_STATUS) verdicts += 1;
+    return verdict;
+  };
+
+  return {
+    stats,
+    model,
+    llmCheck,
+    setInput(value: unknown) {
+      input = value;
+    },
+    /** Wrong-department input fails closed before any model call. */
+    async sniff(files: SniffFile[]) {
+      const r = await sniffInputs(scope, files);
+      if (!r.ok) {
+        stats.wrongInput = 1;
+        throw new WrongInputError(wrongInputMessage(agent, r), r.suggestAgent);
+      }
+    },
+    /** Rethrow a scope violation even if the agent's code caught it. */
+    assertNoViolation() {
+      if (violation) throw violation;
+    },
+    /** Fold the checklist results into the stats (abstentions, ungrounded verdict quotes). */
+    finish(results: readonly ChecklistResultItem[]) {
+      stats.abstained = results.filter((r) => r.flags.includes("insufficient-evidence")).length;
+      stats.groundChecked += verdicts;
+      stats.ungrounded += results.filter((r) => r.flags.includes("llm-evidence-missing")).length;
+    },
+    /** prisma.auditEvent.create args for this run's guardrail record. */
+    auditEvent(runId: string, outcome: "ok" | "failed") {
+      return {
+        data: {
+          actorId: `agent:${runId}`,
+          action: GUARDRAIL_RUN_ACTION,
+          entity: "AgentRun",
+          entityId: runId,
+          meta: { agent: agent.key, department: scope.department, outcome, ...stats },
+        },
+      };
+    },
+  };
+}

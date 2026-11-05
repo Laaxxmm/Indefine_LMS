@@ -6,13 +6,16 @@
 // Model use: only to map trial-balance ledger names to Schedule III heads (when staff give a TB
 // instead of a summary) and for the one LLM rule (related-party contracts → AOC-2). Every total,
 // threshold, date and fee is deterministic TypeScript in integer paise (analyse.ts, data.ts).
-import type { AgentDefinition, InputFile } from "@/lib/agents/core/runner";
+import type { AgentScope } from "@/lib/agents/core/guardrails/scope";
+import { wrongDepartment } from "@/lib/agents/core/guardrails/shared";
+import { bumpAmountText, bumpJsonAmount, mutateCsvCell, mutateJsonInput, mutateXlsxCell } from "@/lib/agents/core/probes";
+import type { AgentDefinition, InputFile, InputProbe } from "@/lib/agents/core/runner";
 import { analyseRoc, columnFromTrialBalance, type RocExtract, type RocFinancials } from "./analyse";
 import { rocDeliverables } from "./deliverables";
-import { ROC_MAP_TASK_SPEC, acceptedMappings, mapLedgersUserMessage } from "./model-tasks";
+import { ROC_MAP_TASK_SPEC, ROC_MODEL_TASKS, acceptedMappings, mapLedgersUserMessage } from "./model-tasks";
 import { parseFinancialsXlsx, rocInputSchema, type RocInput } from "./parse";
 import { ROC_CHECKLIST, ROC_KEY, rocRegistry } from "./rules";
-import { dayNumber, paiseToRupeeString, rupeesToPaise } from "./util";
+import { dayNumber, paiseToRupeeString, rupeesToPaise } from "@/lib/agents/core/util";
 
 export { ROC_CHECKLIST, ROC_KEY, rocRegistry } from "./rules";
 export { ROC_MODEL_TASKS, LedgerMappingSchema } from "./model-tasks";
@@ -35,6 +38,64 @@ export function rocProbeMutation(files: InputFile[]): InputFile[] {
   return files.map((x) => (x === f ? { ...x, bytes: Buffer.from(JSON.stringify(company, null, 2), "utf8") } : { ...x }));
 }
 
+/**
+ * Per-input probes (second audit, M2): one material value in each required file. Shareholding:
+ * the first holder's shares + 1. Auditor: the term starts one FY earlier (term year + 1).
+ * Directors: the first director's KYC date blanked (or filled when blank). Financials: cash and
+ * bank + ₹1 (summary JSON / XLSX) or the first trial-balance credit + ₹1.
+ */
+export const ROC_INPUT_PROBES: readonly InputProbe[] = Object.freeze([
+  { input: "company.json", mutate: rocProbeMutation },
+  { input: "directors.csv", mutate: (files: InputFile[]) => mutateCsvCell(files, "directors.csv", "kyc_completed_on", (v) => (v.trim() ? "" : "2026-09-15")) },
+  { input: "shareholding.csv", mutate: (files: InputFile[]) => mutateCsvCell(files, "shareholding.csv", "shares", (v) => bumpAmountText(v)) },
+  {
+    input: "auditor.json",
+    mutate: (files: InputFile[]) =>
+      mutateJsonInput(files, "auditor.json", (a) => {
+        const m = typeof a.termStartFy === "string" ? /^(\d{4})-(\d{2})$/.exec(a.termStartFy) : null;
+        if (!m) return false;
+        const y = Number(m[1]) - 1;
+        a.termStartFy = `${y}-${String((y + 1) % 100).padStart(2, "0")}`;
+        return true;
+      }),
+  },
+  {
+    input: "financials",
+    mutate: async (files: InputFile[]) => {
+      const viaJson = mutateJsonInput(files, "financials.json", (doc) => {
+        const current = doc.current as Record<string, unknown> | undefined;
+        if (current && current.cashAndBank !== undefined) {
+          const v = bumpJsonAmount(current.cashAndBank);
+          if (v === null) return false;
+          current.cashAndBank = v;
+          return true;
+        }
+        const tb = doc.trialBalance as Record<string, unknown>[] | undefined;
+        const line = tb?.find((l) => bumpJsonAmount(l.credit) !== null && String(l.credit) !== "0");
+        if (!line) return false;
+        line.credit = bumpJsonAmount(line.credit);
+        return true;
+      });
+      if (viaJson !== files) return viaJson;
+      return mutateXlsxCell(files, "financials.xlsx", (value, { col, rowValues }) => {
+        if (col !== 2 || String(rowValues[0] ?? "").trim() !== "cashAndBank") return undefined;
+        return typeof value === "number" ? value + 1 : typeof value === "string" ? (bumpAmountText(value) ?? undefined) : undefined;
+      });
+    },
+  },
+]);
+
+/** ROC's ADR-008 scope: its task registry, every checklist rule, and the shared ROC / Tax / GST input sniff. */
+export const ROC_SCOPE: AgentScope = {
+  department: "ROC",
+  tasks: [...ROC_MODEL_TASKS],
+  ruleIds: ROC_CHECKLIST.rules.map((r) => r.id),
+  inputSniff(files) {
+    const elsewhere = wrongDepartment(files, "roc");
+    return elsewhere ? { ok: false, reason: elsewhere } : { ok: true };
+  },
+};
+
 type ModelFn = Parameters<AgentDefinition<RocInput, RocExtract>["extract"]>[0]["model"];
 
 async function financialsFrom(input: RocInput, model: ModelFn, notes: string | null): Promise<RocFinancials> {
@@ -45,19 +106,17 @@ async function financialsFrom(input: RocInput, model: ModelFn, notes: string | n
     return { source: "xlsx", ...cols, unmappedLedgers: [], ledgerQuestions: [] };
   }
   const tb = f.trialBalance;
+  // Scoped call (ADR-008): the framework supplies the system prompt (firm + ROC preambles + task
+  // prompt) and runs the task's validator as the router's contradictions.
   const out = await model({
     task: ROC_MAP_TASK_SPEC.name,
     privacy: "anonymize-then-cloud",
     difficulty: "sop",
     schema: ROC_MAP_TASK_SPEC.schema,
-    contradictions: (o) => ROC_MAP_TASK_SPEC.validate!(o, tb),
-    messages: [
-      { role: "system", content: ROC_MAP_TASK_SPEC.system },
-      { role: "user", content: mapLedgersUserMessage(tb, notes) },
-    ],
+    messages: [{ role: "user", content: mapLedgersUserMessage(tb, notes) }],
   });
-  // The recorded router does not run contradictions, so validation is applied here too: only
-  // grounded, decided mappings are used; abstentions become reviewer questions.
+  // After a final validator failure the router still returns its last output (needs review), so
+  // only the items the validator accepts are used; abstentions become reviewer questions.
   const { mappings, questions } = acceptedMappings(out, tb);
   const { column, unmapped } = columnFromTrialBalance(tb, mappings);
   const asked = new Set(questions.map((q) => q.trim().toLowerCase()));
@@ -117,6 +176,9 @@ export const rocAgent: AgentDefinition<RocInput, RocExtract> = {
   defaultChecklist: ROC_CHECKLIST,
   checklistRegistry: rocRegistry,
   probeMutation: rocProbeMutation,
+  inputProbes: ROC_INPUT_PROBES,
+  requiredInputs: ["company.json", "directors.csv", "shareholding.csv", "auditor.json", "financials"],
+  scope: ROC_SCOPE,
 
   async extract({ input, job, model, notes }) {
     return {

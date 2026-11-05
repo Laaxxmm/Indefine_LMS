@@ -206,8 +206,8 @@ export function auditLlmContext(ci: AuditCheckInput): string {
   return lines.join("\n");
 }
 
+/** The rule question only: the department preamble is the task's system prompt (tasks.ts, ADR-008). */
 export const RELATED_PARTY_QUESTION = [
-  "Statutory audit working papers only; never give an audit opinion; use only the documents below and do not compute anything.",
   "Is there a trial-balance ledger for a related party (a director or a director's relative, key managerial personnel, or a holding, subsidiary, associate or group company) that the disclosure notes do not name as a related party?",
   "status fail = such a ledger exists and is not disclosed (quote the ledger line); pass = every related-party ledger is disclosed, or there is none (quote the disclosure line or a ledger line);",
   'na with message "insufficient_evidence" = the documents do not let you tell, e.g. no disclosure notes were supplied (quote the line that shows this).',

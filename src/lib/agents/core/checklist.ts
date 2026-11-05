@@ -26,7 +26,28 @@ export type ResultFlag =
   | "missing-implementation" // no registry entry for a deterministic rule: recorded as fail
   | "llm-unavailable" // no llmCheck supplied
   | "llm-error" // llmCheck threw
-  | "llm-evidence-missing"; // verdict lacked a location or a quote found in the documents given: recorded as na
+  | "llm-evidence-missing" // verdict lacked a location or a quote found in the documents given: recorded as na
+  // ADR-008 guardrails (scoped agents): recorded as na, each one a question for the reviewer.
+  | "insufficient-evidence" // the model abstained: the documents do not answer the rule
+  | "model-disagreement" // two independent reads of a high-stakes rule disagreed
+  | "out-of-scope"; // LLM rule the agent's scope does not own: no model call
+
+/** Flags that turn an LLM rule into an open question for the reviewer / a client document request. */
+export const QUESTION_FLAGS: readonly ResultFlag[] = ["insufficient-evidence", "model-disagreement", "out-of-scope"];
+
+/**
+ * What the framework (not the model) settles for an LLM rule: recorded `na` with this flag. An
+ * `llmCheck` may return it instead of a verdict (out-of-scope rule, model disagreement).
+ */
+export type LlmGuardrailOutcome = { guardrail: "insufficient-evidence" | "model-disagreement" | "out-of-scope"; message: string; evidence?: Evidence };
+
+export function isGuardrailOutcome(v: unknown): v is LlmGuardrailOutcome {
+  const g = (v as { guardrail?: unknown } | null)?.guardrail;
+  return typeof v === "object" && v !== null && (g === "insufficient-evidence" || g === "model-disagreement" || g === "out-of-scope") && typeof (v as { message?: unknown }).message === "string";
+}
+
+/** The model's abstain status (ADR-008 closed outputs). */
+export const ABSTAIN_STATUS = "insufficient_evidence";
 
 const SEMVER = /^\d+\.\d+\.\d+$/;
 const RULE_ID = /^[a-z0-9][a-z0-9._-]{1,79}$/;
@@ -240,6 +261,16 @@ async function runLlm<I>(rule: RuleDefinition, input: I, llmCheck: LlmCheck<I> |
     raw = await llmCheck(rule, input, context);
   } catch (e) {
     return item(rule, "na", `${rule.title}: model check failed (${errText(e)}); review manually`, null, ["llm-error"]);
+  }
+  if (isGuardrailOutcome(raw)) return item(rule, "na", raw.message, raw.evidence ?? null, [raw.guardrail]);
+  if ((raw as { status?: unknown } | null)?.status === ABSTAIN_STATUS) {
+    // Abstain is a scored outcome, never a silent default: na + a question for the reviewer.
+    const a = raw as { message?: unknown; evidence?: { quote?: unknown; location?: unknown } };
+    const question = typeof a.message === "string" && a.message.trim() ? a.message.trim().slice(0, 300) : "the documents do not show the answer";
+    const q = typeof a.evidence?.quote === "string" ? a.evidence.quote : "";
+    const loc = typeof a.evidence?.location === "string" ? a.evidence.location : "";
+    const ev = q.trim() && loc.trim() && quoteInContext(q, context) ? { quote: q, location: loc } : null;
+    return item(rule, "na", `${rule.title}: insufficient evidence — ${question}`, ev, ["insufficient-evidence"]);
   }
   const v = LlmVerdictSchema.safeParse(raw);
   if (!v.success) {

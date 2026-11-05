@@ -7,7 +7,8 @@ import { loadFixtures, runAgentAccuracy, runFixtureOnce } from "@/lib/agents/cor
 import { createRecordedRouter } from "@/lib/agents/core/recorded-router";
 import { getAgent } from "@/lib/agents/registry";
 import { baseExtract, JOB } from "./__fixtures__/base";
-import { checklistSheet, rocDeliverables } from "./deliverables";
+import { checklistSheet } from "@/lib/agents/core/checklist-sheet";
+import { rocDeliverables } from "./deliverables";
 import { ROC_CHECKLIST, ROC_MAP_TASK, rocAgent, rocFigures } from "./index";
 import { parseRocFiles } from "./parse";
 

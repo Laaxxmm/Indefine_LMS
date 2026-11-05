@@ -8,8 +8,13 @@
 // Closed outputs: every classification enum includes "insufficient_evidence"; free text is limited
 // to evidence quotes and notes of at most 300 characters. Grounding: each answer carries
 // { quote, location } copied from the text we send; any number it extracts must appear in the quote.
+//
+// The registry below IS GST Prep's ADR-008 scope (index.ts): the framework prefixes every system
+// prompt with its firm and GST department preambles, refuses any task not listed, runs each call's
+// validators as the router's contradictions, grounds the output and locks name@version.
 import { z } from "zod";
-import { LLM_CHECK_SYSTEM, LlmVerdictOutputSchema } from "@/lib/agents/core/runner";
+import { CHECK_TASK_INSTRUCTIONS, type AnyTaskSpec } from "@/lib/agents/core/guardrails/scope";
+import { INSUFFICIENT_EVIDENCE, ScopedVerdictSchema, type ScopedVerdict } from "@/lib/agents/core/guardrails/schema";
 import { BLOCKED_CATEGORIES, BLOCKED_CATEGORY_KEYS, RCM_SERVICES, RCM_SERVICE_KEYS } from "./config";
 
 export const INSUFFICIENT = "insufficient_evidence" as const;
@@ -95,7 +100,7 @@ export const HsnReadOutputSchema = z.object({
     .array(
       z.object({
         description: z.string().min(1).max(TEXT_CAP),
-        hsn: z.union([z.string().regex(HSN_RE, "HSN/SAC must be 4, 6 or 8 digits"), z.literal(INSUFFICIENT)]),
+        hsn: z.union([z.string().max(8).regex(HSN_RE, "HSN/SAC must be 4, 6 or 8 digits"), z.literal(INSUFFICIENT)]),
         evidence: EvidenceZ,
       }),
     )
@@ -135,33 +140,55 @@ export function validateHsn(out: HsnReadOutput, prompts: HsnPrompt[]): string[] 
 // ------------------------------------------------------------------ gst.check:gst.free-supplies (LLM rule)
 
 export const FREE_SUPPLIES_TASK = "gst.check:gst.free-supplies" as const;
-export type Verdict = z.infer<typeof LlmVerdictOutputSchema>;
+export type Verdict = ScopedVerdict;
 
-/** The runner builds this call (framework prompt + rule question); `na` is the insufficient-evidence answer. */
+/** The framework builds this call (rule question + documents); the verdict must quote and locate a row it was shown. */
 export function validateVerdict(v: Verdict, context: string): string[] {
+  if (v.status === INSUFFICIENT_EVIDENCE || !v.evidence) return [];
   const issues: string[] = [];
   if (!normText(context).includes(normText(v.evidence.quote))) issues.push("verdict quote is not in the documents");
   if (!normText(context).includes(normText(v.evidence.location))) issues.push("verdict location is not a row shown in the documents");
   return issues;
 }
 
+/** GST specifics for the free-supplies LLM rule (the framework adds the firm and GST department preambles). */
+export const FREE_SUPPLIES_SYSTEM = [GST_PREAMBLE, CHECK_TASK_INSTRUCTIONS, 'When the documents do not show it either way, answer "na".'].join("\n");
+
 // ------------------------------------------------------------------ registry
 
-export type GstModelTask = {
+/** One GST model task: the framework's ModelTaskSpec plus who builds the call. */
+export type GstModelTask = AnyTaskSpec & {
   name: `gst.${string}`;
-  version: number;
-  schema: z.ZodTypeAny;
+  /** Back-compat alias of systemPrompt. */
   system: string;
-  /** Checklist rules whose outcome depends on this task. */
-  ruleIds: string[];
+  ruleIds: readonly string[];
   /** Built by the framework runner (LLM rules) rather than by this agent. */
   builtBy: "agent" | "runner";
 };
 
 export const GST_MODEL_TASKS: readonly GstModelTask[] = Object.freeze([
-  { name: CLASSIFY_LEDGERS_TASK, version: 1, schema: LedgerClassOutputSchema, system: LEDGER_SYSTEM, ruleIds: ["gst.blocked-credit", "gst.rcm-liability", "gst.model-questions"], builtBy: "agent" },
-  { name: READ_HSN_TASK, version: 1, schema: HsnReadOutputSchema, system: HSN_SYSTEM, ruleIds: ["gst.hsn-digits", "gst.model-questions"], builtBy: "agent" },
-  { name: FREE_SUPPLIES_TASK, version: 1, schema: LlmVerdictOutputSchema, system: LLM_CHECK_SYSTEM, ruleIds: ["gst.free-supplies"], builtBy: "runner" },
+  {
+    name: CLASSIFY_LEDGERS_TASK,
+    version: 1,
+    schema: LedgerClassOutputSchema,
+    systemPrompt: LEDGER_SYSTEM,
+    system: LEDGER_SYSTEM,
+    difficulty: "judgement",
+    ruleIds: ["gst.blocked-credit", "gst.rcm-liability", "gst.model-questions"],
+    builtBy: "agent",
+  },
+  { name: READ_HSN_TASK, version: 1, schema: HsnReadOutputSchema, systemPrompt: HSN_SYSTEM, system: HSN_SYSTEM, difficulty: "sop", ruleIds: ["gst.hsn-digits", "gst.model-questions"], builtBy: "agent" },
+  {
+    name: FREE_SUPPLIES_TASK,
+    version: 1,
+    schema: ScopedVerdictSchema,
+    systemPrompt: FREE_SUPPLIES_SYSTEM,
+    system: FREE_SUPPLIES_SYSTEM,
+    difficulty: "judgement",
+    ruleIds: ["gst.free-supplies"],
+    builtBy: "runner",
+    validate: (v: Verdict, context: string) => validateVerdict(v, context),
+  },
 ]);
 
 export function gstTask(name: string): GstModelTask {

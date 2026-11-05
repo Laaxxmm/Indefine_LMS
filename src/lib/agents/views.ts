@@ -6,6 +6,7 @@ import type { SessionUser } from "@/lib/access";
 import { canDecideMistakes, canUseAgents, canViewJob, jobScopeWhere, reviewActions, runScopeWhere, type ReviewActions } from "@/lib/agents/access";
 import { ChecklistPackSchema, withPromotedRule, type ChecklistPack } from "@/lib/agents/core/checklist";
 import { formatDate, formatDateTimeIst, formatInr } from "@/lib/agents/core/format";
+import { openQuestions, type OpenQuestion } from "@/lib/agents/core/guardrails/review";
 import { diffPacks, type PackDiff } from "@/lib/agents/core/mistakes";
 import { latestPackQuery, type AnyAgent, type FirmDb } from "@/lib/agents/core/runner";
 import { getAgent } from "@/lib/agents/registry";
@@ -180,6 +181,8 @@ export type RunReview = {
   actions: ReviewActions & { finalize: boolean };
   /** Registered deterministic checks (for the "log a missed finding" form). */
   checks: string[];
+  /** ADR-008: rules the model could not answer / two reads disagreed on / not owned — questions for the reviewer (abstentions are client document requests). */
+  openQuestions: OpenQuestion[];
 };
 
 const SEV_ORDER = { block: 0, warn: 1, info: 2 } as const;
@@ -278,6 +281,7 @@ export async function loadRunReview(db: FirmDb, user: SessionUser, runId: string
     comments: comments.map((c) => ({ id: c.id, author: c.actorId ?? "—", at: istTime(c.createdAt), text: String((c.meta as { text?: unknown } | null)?.text ?? "") })),
     actions: { ...base, finalize: isLatest && run.jobTask.state === "APPROVED" && run.status === "APPROVED" && !hasFinal && run.deliverables.length > 0 && canViewJob(user, run.jobTask) },
     checks: def ? [...def.checklistRegistry.keys()] : [],
+    openQuestions: openQuestions(checklist),
   };
 }
 

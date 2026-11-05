@@ -35,15 +35,34 @@ describe("accuracy harness self-test", () => {
     expect(s.split.block.deterministic).toMatchObject({ tp: 1, fp: 0, fn: 0 });
     expect(s.split.warn.deterministic).toMatchObject({ tp: 2, fp: 0, fn: 0 });
     expect(s.split.warn.llm).toMatchObject({ tp: 1, fp: 0, fn: 0 });
-    expect(s.sensitivity).toEqual({ declared: true, changed: s.fixtures, total: s.fixtures, ok: true, failures: [] });
-    expect(s.support.categories).toEqual({ clean: 2, "typical-gap": 1, trap: 3 });
-    expect(s.notes).toEqual([]); // recorded.json holds only responses the runs asked for
+    // One fixture expects the run to fail (wrong-department input): it is not probed.
+    expect(s.sensitivity).toMatchObject({ declared: true, changed: s.fixtures - 1, total: s.fixtures - 1, ok: true, failures: [], missingRequired: [] });
+    expect(s.sensitivity.inputs).toEqual([{ input: "register.csv", required: true, applied: s.fixtures - 1, changed: s.fixtures - 1, notApplied: 0, ok: true, failures: [] }]);
+    expect(s.support.categories).toEqual({ clean: 2, "typical-gap": 2, trap: 5 });
+    expect(s.coverage).toMatchObject({ total: 5, covered: 5, neverFail: [], neverPass: [], ok: true });
+    // recorded.json holds only responses the runs asked for; the only note is the single-answer agreement one.
+    expect(s.notes).toHaveLength(1);
+    expect(s.notes[0]).toMatch(/^agreement: recorded single answer on 7 fixture\(s\)/);
+    expect(s.guardrails).toMatchObject({
+      scope: { declared: true, problems: [], violations: 0, outOfScope: 0, ok: true },
+      closedOutputs: { tasks: 1, unbounded: [], ok: true },
+      ungrounded: { actual: 0, expected: 0, ok: true },
+      insufficientEvidence: { actual: 1, expected: 1, ok: true },
+      agreement: { checks: 8, disagreements: 1, expected: 1, ok: true },
+      expectedFailures: 1,
+    });
     expect(s.mode).toBe("recorded");
     expect(s.reasons).toEqual([]);
     expect(s.pass).toBe(true);
     const md = scoreboardMarkdown([s], new Date("2026-11-05T14:40:00Z"));
-    expect(md).toContain("| **echo** | accuracy/echo (6) | **overall** | – | – | – | all of the above | **pass** |");
-    expect(md).toContain("| echo | accuracy/echo (6) | input sensitivity | – | – | – | 6/6 changed · need all | pass |");
+    expect(md).toContain("| **echo** | accuracy/echo (9) | **overall** | – | – | – | all of the above | **pass** |");
+    expect(md).toContain("| echo | accuracy/echo (9) | input sensitivity · register.csv (required) | – | – | – | 8/8 changed · need all | pass |");
+    expect(md).toContain("| echo | accuracy/echo (9) | scope violations | – | – | – | 0 · need 0 | pass |");
+    expect(md).toContain("| echo | accuracy/echo (9) | closed outputs (unbounded strings) | – | – | – | 0 in 1 task schema(s) · need 0 | pass |");
+    expect(md).toContain("| echo | accuracy/echo (9) | ungrounded output | – | – | – | 0 (expected 0) · need 0 unexpected | pass |");
+    expect(md).toContain("| echo | accuracy/echo (9) | insufficient_evidence (recorded: code path) | – | – | – | 1 (expected 1) · match fixtures exactly | pass |");
+    expect(md).toContain("| echo | accuracy/echo (9) | agreement (high-stakes rules) | – | – | – | 8 check(s), 1 disagreement(s) (expected 1); recorded single answer on 7 · reported | info |");
+    expect(md).toContain("| echo | accuracy/echo (9) | rule coverage (fails and passes somewhere) | – | – | – | 5/5 rules · need all (internal: reported) | pass |");
   });
 
   it("corrupted fixture (expected flags altered, a figure off by ₹1) → detected, fail", async () => {
@@ -61,15 +80,19 @@ describe("accuracy harness self-test", () => {
     const s = await runAgentAccuracy(echoAgent, {
       routerFor: (fx, run) =>
         createRecordedRouter((req) => {
-          const out = structuredClone(fx.recorded[req.task]) as { status: string };
-          // The third run's "model" gives the opposite related-party verdict.
-          if (req.task === ECHO_RELATED_PARTY_TASK && run === 2) out.status = out.status === "fail" ? "pass" : "fail";
+          const key = req.secondOpinion && `${req.task}#2` in fx.recorded ? `${req.task}#2` : req.task;
+          const out = structuredClone(fx.recorded[key]) as { status: string };
+          // The third run's "model" gives the opposite related-party verdict (both reads).
+          if ((req.task as string) === ECHO_RELATED_PARTY_TASK && run === 2) out.status = out.status === "fail" ? "pass" : "fail";
           return out;
         }),
     });
     expect(s.pass).toBe(false);
     expect(s.determinism.ok).toBe(false);
-    expect(s.determinism.failures.length).toBe(s.fixtures);
+    // Not caught where nothing changes: the wrong-department fixture (no model call) and the
+    // disagreement fixture (both reads flipped still disagree).
+    expect(s.determinism.failures.length).toBe(s.fixtures - 2);
+    expect(s.determinism.failures).not.toContain("trap-wrong-department");
     expect(s.reasons.some((r) => r.startsWith("not identical across 3 runs"))).toBe(true);
     // Run 1 is still the scored run, so P/R and figures are unaffected.
     expect(s.severity.block.recall).toBe(1);

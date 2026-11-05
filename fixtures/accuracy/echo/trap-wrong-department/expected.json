@@ -1,0 +1,9 @@
+{
+  "description": "Trap: register.csv is a GST sales register (GSTIN, taxable value, IGST). The input sniff stops the run before any model call and names the GST agent.",
+  "category": "trap",
+  "job": { "fy": "2026-27", "period": "2026-10" },
+  "flags": [],
+  "figures": {},
+  "deliverables": [],
+  "error": "it looks like a GST register. Run the gst agent on these documents instead."
+}

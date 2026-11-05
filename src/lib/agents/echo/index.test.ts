@@ -2,7 +2,9 @@
 // row; the accuracy probe adds exactly ₹1 to the first entry and leaves the originals alone.
 import { describe, expect, it } from "vitest";
 import type { InputFile } from "@/lib/agents/core/runner";
-import { echoAgent, echoInputSchema, echoProbeMutation, paiseToRupees, parseEchoRegister, rupeesToPaise, splitCsvLine } from "./index";
+import { validateScope } from "@/lib/agents/core/guardrails/scope";
+import { unboundedStrings } from "@/lib/agents/core/guardrails/schema";
+import { ECHO_CHECKLIST, ECHO_RELATED_PARTY_SPEC, ECHO_SCOPE, echoAgent, echoInputSchema, echoInputSniff, echoProbeMutation, paiseToRupees, parseEchoRegister, rupeesToPaise, splitCsvLine, validateEchoVerdict } from "./index";
 
 const file = (csv: string, name = "register.csv"): InputFile => ({ name, source: "fixture", bytes: Buffer.from(csv) });
 
@@ -87,5 +89,31 @@ describe("probeMutation", () => {
     expect(echoProbeMutation(headerOnly)).toBe(headerOnly);
     const unparsable = [file("ref,party,date,amount\nINV-1,A,2026-10-05,abc")];
     expect(echoProbeMutation(unparsable)).toBe(unparsable);
+  });
+});
+
+describe("ADR-008 scope", () => {
+  it("department Books, one versioned high-stakes task, every rule owned, a closed abstainable schema", () => {
+    expect(validateScope(echoAgent)).toEqual([]);
+    expect(ECHO_SCOPE).toMatchObject({ department: "Books", ruleIds: ECHO_CHECKLIST.rules.map((r) => r.id) });
+    expect(ECHO_RELATED_PARTY_SPEC).toMatchObject({ name: "echo.check:echo.related-party", version: 1, highStakes: true, difficulty: "judgement" });
+    expect(unboundedStrings(ECHO_RELATED_PARTY_SPEC.schema)).toEqual([]);
+    expect(ECHO_RELATED_PARTY_SPEC.schema.safeParse({ status: "insufficient_evidence" }).success).toBe(true);
+    expect(echoAgent.inputProbes?.map((p) => p.input)).toEqual(["register.csv"]);
+  });
+  it("the sniff rejects a register.csv without the register header, naming the right agent", () => {
+    expect(echoInputSniff([file("ref,party,date,amount\nINV-1,A,2026-10-05,1.00")])).toEqual({ ok: true });
+    expect(echoInputSniff([file("﻿Ref,Party,Date,Amount\n")])).toEqual({ ok: true });
+    expect(echoInputSniff([])).toEqual({ ok: true }); // missing: the input schema says so
+    expect(echoInputSniff([file("   ")])).toEqual({ ok: true });
+    expect(echoInputSniff([file("invoice_no,gstin,taxable_value\nS1,29X,1")])).toMatchObject({ ok: false, suggestAgent: "gst", reason: expect.stringMatching(/looks like a GST register$/) });
+    expect(echoInputSniff([file("ledger,debit,credit\nCash,1,")])).toMatchObject({ ok: false, suggestAgent: "books", reason: expect.stringMatching(/looks like a trial balance$/) });
+    expect(echoInputSniff([file("invoice,customer,amount")])).toEqual({ ok: false, reason: 'register.csv header must be ref,party,date,amount (found "invoice,customer,amount")', suggestAgent: undefined });
+  });
+  it("the verdict validator: the cited row must be a row the model was shown", () => {
+    const docs = "register.csv row 2: INV-1 | Acme | 2026-10-05 | 1.00";
+    expect(validateEchoVerdict({ status: "pass", evidence: { quote: "Acme", location: "register.csv row 2" } }, docs)).toEqual([]);
+    expect(validateEchoVerdict({ status: "fail", evidence: { quote: "Acme", location: "register.csv row 7" } }, docs)).toEqual(['location "register.csv row 7" is not a register row shown']);
+    expect(validateEchoVerdict({ status: "insufficient_evidence" }, docs)).toEqual([]);
   });
 });

@@ -4,12 +4,46 @@
 // 2020 applicability checklist. Every deliverable is a "Draft for engagement partner"; the agent
 // never expresses an audit opinion (opinion.ts guard). All arithmetic is deterministic code in
 // integer paise; the only model call is the related-party LLM rule (tasks.ts).
-import type { AgentDefinition } from "@/lib/agents/core/runner";
+import type { AgentScope } from "@/lib/agents/core/guardrails/scope";
+import { bumpAmountText, mutateCsvCell } from "@/lib/agents/core/probes";
+import type { AgentDefinition, InputFile, InputProbe } from "@/lib/agents/core/runner";
+import { sniffDepartment, wrongDepartmentMessage } from "@/lib/agents/books/department";
 import { analyzeAudit, normalizeAuditExtract } from "./analysis";
-import { auditInputSchema, parseAuditFiles, type AuditExtract, type AuditInput } from "./inputs";
-import { TB_PROBE, probeCsvAmount } from "@/lib/agents/books/probe";
+import { auditInputSchema, classifyAuditFile, parseAuditFiles, type AuditExtract, type AuditInput } from "./inputs";
+import { TB_PROBE, probeCsvAmount, type ProbeTarget } from "@/lib/agents/books/probe";
 import { auditPack } from "./pack";
 import { AUDIT_CHECKLIST, AUDIT_KEY, auditLlmContext, auditRegistry } from "./rules";
+import { AUDIT_MODEL_TASKS } from "./tasks";
+
+/** The prior-year TB, with the same aliases as the year-end TB. */
+const PRIOR_TB_PROBE: ProbeTarget = { ...TB_PROBE, matches: (name) => classifyAuditFile(name) === "tb-prior" };
+
+/**
+ * Per-input probes (second audit, M2): +₹1 on the first amount of the year-end trial balance
+ * (required), of the prior-year trial balance, and of the first ledger-detail population file.
+ */
+export const AUDIT_INPUT_PROBES: readonly InputProbe[] = Object.freeze([
+  { input: "trial balance", mutate: (files: InputFile[]) => probeCsvAmount(files, [TB_PROBE]) },
+  { input: "prior trial balance", mutate: (files: InputFile[]) => probeCsvAmount(files, [PRIOR_TB_PROBE]) },
+  { input: "population", mutate: (files: InputFile[]) => mutateCsvCell(files, /^(population|pop|ledger[-_ ]detail)[-_ ].*\.csv$/i, ["amount", "value", "debit"], (v) => (v.trim() ? bumpAmountText(v) : null)) },
+]);
+
+/** Audit Assist's ADR-008 scope: its task registry, every checklist rule, the shared Books / Audit department sniff. */
+export const AUDIT_SCOPE: AgentScope = {
+  department: "Audit",
+  tasks: [...AUDIT_MODEL_TASKS],
+  ruleIds: AUDIT_CHECKLIST.rules.map((r) => r.id),
+  inputSniff: (files) =>
+    sniffDepartment(
+      files,
+      "Audit Assist",
+      (name) => classifyAuditFile(name) === "tb",
+      (fs) => {
+        const bank = fs.find((f) => classifyAuditFile(f.name) === "bank-statement");
+        return bank ? wrongDepartmentMessage(bank.name, { agent: "books", label: "Books Close" }, "Audit Assist") : null;
+      },
+    ),
+};
 
 export { AUDIT_CHECKLIST, AUDIT_KEY, auditRegistry } from "./rules";
 export { AUDIT_MODEL_TASKS, AUDIT_RELATED_PARTY_TASK } from "./tasks";
@@ -69,6 +103,9 @@ export const auditAgent: AgentDefinition<AuditInput, AuditExtract> = {
   checklistRegistry: auditRegistry,
   /** Accuracy-harness probe: +₹1 on the first amount of the year-end TB (CSV). */
   probeMutation: (files) => probeCsvAmount(files, [TB_PROBE]),
+  inputProbes: AUDIT_INPUT_PROBES,
+  requiredInputs: ["trial balance"],
+  scope: AUDIT_SCOPE,
 
   async extract({ input, job }) {
     return parseAuditFiles(input, job);

@@ -1,0 +1,23 @@
+Fixture Components Pvt Ltd
+Trial Balance as at 31-Mar-2026
+Particulars,Group,Debit,Credit
+Share Capital,Capital Account,,"11,00,000.00"
+Reserves and Surplus,Reserves & Surplus,,"15,50,000.00"
+HDFC Term Loan,Secured Loans,,"20,00,000.00"
+Trade Creditors,Sundry Creditors,,"18,00,000.00"
+GST Payable,Duties & Taxes,,"2,00,000.00"
+Plant and Machinery,Fixed Assets,"30,00,000.00",
+Closing Stock,Stock-in-Hand,"12,00,000.00",
+Trade Debtors,Sundry Debtors,"22,00,000.00",
+HDFC Current Account,Bank Accounts,"6,50,000.00",
+Cash,Cash-in-Hand,"1,50,000.00",
+Security Deposits,Deposits (Asset),"3,00,000.00",
+Sales - Domestic,Sales Accounts,,"1,20,00,000.00"
+Interest Income,Indirect Incomes,,"50,000.00"
+Purchases,Purchase Accounts,"78,00,000.00",
+Power and Fuel,Direct Expenses,"5,00,000.00",
+Salaries and Wages,Indirect Expenses,"18,00,000.00",
+Rent,Indirect Expenses,"6,00,000.00",
+Depreciation,Indirect Expenses,"3,00,000.00",
+Interest on Term Loan,Indirect Expenses,"2,00,000.00",
+Grand Total,,"1,87,00,000.00","1,87,00,000.00"

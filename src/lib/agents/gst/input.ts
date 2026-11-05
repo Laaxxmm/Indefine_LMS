@@ -161,6 +161,30 @@ async function gridsOf(f: RoleFile): Promise<{ grid: Grid; sheet?: string }[]> {
 }
 
 /**
+ * ADR-008 wrong-department sniff for the framework (AgentScope.inputSniff), run before any model
+ * call: every register file (sales, purchases, payables, e-invoice) goes through sniffRegister,
+ * sheet by sheet; a file none of whose sheets is a GST register stops the run with sniffRegister's
+ * message (which names the agent that handles it). Files that are missing or not recognised are
+ * left to the input schema.
+ */
+export async function gstInputSniff(files: { name: string; bytes: Buffer }[]): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const { input } = classifyFiles(files);
+  for (const f of input.files) {
+    if (f.role !== "sales" && f.role !== "purchases" && f.role !== "payables" && f.role !== "einvoice") continue;
+    if (f.role === "einvoice" && f.kind === "json") continue;
+    let grids: { grid: Grid }[];
+    try {
+      grids = await gridsOf(f);
+    } catch {
+      continue; // unreadable: the parser reports it
+    }
+    const sniffs = grids.map((g) => sniffRegister(g.grid, f.name, f.role as "sales" | "purchases" | "payables" | "einvoice"));
+    if (sniffs.length && sniffs.every((m) => m !== null)) return { ok: false, reason: sniffs[0] as string };
+  }
+  return { ok: true };
+}
+
+/**
  * First sheet (in workbook order) that has a register header row. Every sheet is sniffed first
  * (ADR-008): a file from another department fails closed before any model call.
  */

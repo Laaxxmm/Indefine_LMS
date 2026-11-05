@@ -21,7 +21,7 @@
       }
     ]
   },
-  "system.check:echo.related-party": {
+  "echo.check:echo.related-party": {
     "status": "pass",
     "evidence": {
       "quote": "Acme Traders",
