@@ -90,6 +90,8 @@ export class CloseLoopWorld {
   ];
   engagements: { id: string; reviewerId: string | null }[] = [];
   transactions = 0;
+  /** Raw queries (the DONE trigger's set_config), with the transaction number they ran in. */
+  rawQueries: { sql: string; values: unknown[]; transaction: number }[] = [];
   /** SharePoint as the verifier sees it, keyed by driveItemId. */
   sp = new Map<string, { path: string; bytes: Uint8Array; reportSha?: boolean }>();
   verifierCalls = { getItem: 0, download: 0 };
@@ -298,6 +300,11 @@ export class CloseLoopWorld {
         return u ? { managerId: u.managerId } : null;
       },
       findMany: async ({ where }) => this.users.filter((u) => u.level === where.level && u.active === where.active).map((u) => ({ id: u.id })),
+    },
+    // The DONE trigger hook (state-db.ts): records set_config calls with the transaction they ran in.
+    $queryRaw: async (q: TemplateStringsArray, ...values: unknown[]) => {
+      this.rawQueries.push({ sql: q.join("?"), values, transaction: this.transactions });
+      return [{ set_config: values[1] }];
     },
   };
 
