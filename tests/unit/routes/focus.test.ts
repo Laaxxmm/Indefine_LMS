@@ -53,13 +53,13 @@ afterEach(() => {
 });
 
 describe("layout", () => {
-  it("only the logo and one way back; same access as /agents; the Agents module must be on", async () => {
+  it("the one Firm OS header with a narrow column; same access as /agents; the Agents module must be on", async () => {
     as(user("priya"));
     const html = await renderHtml(await Layout({ children: null }));
-    expect(html.match(/<a /g)?.length).toBe(2);
-    expect(html).toContain('href="/focus"');
+    expect(html).toContain('aria-label="Firm OS"');
+    expect(html).toMatch(/href="\/focus"[^>]*>Next task<\/a>/);
     expect(html).toContain('href="/dashboard"');
-    expect(html).toContain(">Focus</p>");
+    expect(html).toContain('<main class="max-w-3xl');
     as(null);
     expect(await redirectTarget(() => Layout({ children: null }))).toBe("/");
     as(user("priya", { active: false }));

@@ -29,6 +29,7 @@ async function navOf(html: string): Promise<string[]> {
 const FIRM_OS_HREF = /href="\/(agents|coach|focus|comms|search|onboard|workspace|companion)\b/;
 const FIRM_OS_MODELS = new Set(["jobTask", "agentRun", "checklistResult", "sopPack", "commsDraft", "coachEvent", "coachPreference", "activityHeartbeat"]);
 const as = (s: Session) => signedIn(s);
+const SEARCH_BUTTON = 'aria-keyshortcuts="Control+K Meta+K"';
 
 describe("/dashboard", () => {
   beforeEach(() => {
@@ -70,6 +71,7 @@ describe("/dashboard", () => {
         const html = await page();
         expect(await navOf(html)).toEqual(["Courses /dashboard#courses", "Leaderboard /leaderboard", "Check-in /checkin", "Recap /recap/year", "Tools /tools", "Clients /clients"]);
         expect(html).not.toMatch(FIRM_OS_HREF);
+        expect(html).not.toContain(SEARCH_BUTTON); // no command palette without Firm OS
         expect(prismaCalls.filter((c) => FIRM_OS_MODELS.has(c.model))).toEqual([]);
       }
     });
@@ -88,8 +90,13 @@ describe("/dashboard", () => {
   describe("Firm OS switched on: links follow the workspace modules", () => {
     beforeEach(() => vi.stubEnv("FIRM_OS_ENABLED", "1"));
 
-    it("built-in staff modules: the LMS, Tools, Next task, Agents and My day; not Clients or Client messages", async () => {
-      expect(await navOf(await page())).toEqual([
+    it("built-in staff modules: the LMS, Tools, Next task, Agents and My day; not Clients or Client messages; the Search button", async () => {
+      const html = await page();
+      expect(html).toContain(SEARCH_BUTTON);
+      ws.setting = workspaceRow(["learning", "agents"]);
+      expect(await page()).not.toContain(SEARCH_BUTTON); // Search off for this person
+      ws.setting = null;
+      expect(await navOf(html)).toEqual([
         "Courses /dashboard#courses",
         "Leaderboard /leaderboard",
         "Check-in /checkin",

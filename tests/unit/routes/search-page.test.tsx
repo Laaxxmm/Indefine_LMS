@@ -50,11 +50,11 @@ describe("access", () => {
 });
 
 describe("layout", () => {
-  it("Firm OS header: logo, section label, nav with Search current and a way back to the dashboard", async () => {
+  it("Firm OS header: logo, section label, nav with the Search button and a way back to the dashboard", async () => {
     as(PEOPLE.priya);
     const html = await renderHtml(await Layout({ children: "x" }));
     expect(html).toContain('aria-label="Firm OS"'); // not "Search": the search form is its own landmark
-    expect(html).toMatch(/href="\/clients"/);
+    expect(html).toMatch(/<button[^>]*aria-keyshortcuts="Control\+K Meta\+K"[^>]*>.*Search<\/button>/);
     expect(html).toMatch(/href="\/agents"/);
     expect(html).toMatch(/href="\/dashboard"[^>]*>.*Dashboard/);
     expect(html).toContain("focus-visible:ring-2");

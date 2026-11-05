@@ -21,6 +21,7 @@ import { formatIst } from "@/lib/ist";
 import { isBreakNudgeEnabled } from "@/lib/agents/coach/flags";
 import { CoachCard } from "@/app/coach/CoachCard";
 import { ActivityPing } from "@/components/ActivityPing";
+import { SearchButton } from "@/components/SearchButton";
 import { ModuleOffNotice } from "@/app/workspace/ModuleOffNotice";
 import type { FirmDb } from "@/lib/agents/core/runner";
 import type { NextTaskView } from "@/lib/workspace/contract";
@@ -334,6 +335,10 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
         </nav>
 
         <div className="flex items-center gap-3">
+          {/* Opens the command palette (mounted once in the root layout for the same people). */}
+          {on("search") && (
+            <SearchButton className={`px-3.5 py-2 rounded-full border border-border bg-card text-[13.5px] font-semibold text-ink-mute hover:text-ink transition ${focusRing}`} />
+          )}
           {(learning || growth) && (
           <div
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-full border"
