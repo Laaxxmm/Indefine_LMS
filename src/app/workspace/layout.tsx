@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { FirmOsHeader } from "@/components/FirmOsHeader";
+import { pageMain } from "@/components/ui";
 import { canUseAgents } from "@/lib/agents/access";
 import { requireModule } from "@/lib/workspace/guard";
 
@@ -17,7 +18,7 @@ export default async function WorkspaceLayout({ children }: { children: React.Re
   return (
     <div className="min-h-screen">
       <FirmOsHeader user={session.user} home="/focus" />
-      <main className="max-w-[1280px] mx-auto px-5 sm:px-8 py-8">{children}</main>
+      <main className={pageMain}>{children}</main>
     </div>
   );
 }

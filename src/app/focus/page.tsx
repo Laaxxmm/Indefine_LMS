@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { btnGhost, card } from "@/components/ui";
-import { EmptyState, StateChip, eyebrow, focusRing, pageTitle, sectionTitle } from "@/app/agents/parts";
+import { Alert, EmptyState, PageHeader, Section, StateChip } from "@/components/firm-os";
 import type { FirmDb } from "@/lib/agents/core/runner";
 import { getNextTaskView } from "@/lib/workspace/next-task";
 import { NextActionButton } from "@/app/workspace/NextActionButton";
@@ -25,14 +25,17 @@ export default async function FocusPage({ searchParams }: { searchParams: Promis
   if (!task) {
     return (
       <div>
-        <p className={eyebrow}>Focus</p>
-        <h1 className={`${pageTitle} mb-6`}>Everything is up to date</h1>
-        <EmptyState title="Nothing is waiting for you right now">New work appears here when a job is assigned to you or a pack is sent to you for review.</EmptyState>
-        <p className="mt-6 text-center">
-          <Link href="/focus" className={`${btnGhost} ${focusRing} inline-flex`}>
-            Check again
-          </Link>
-        </p>
+        <PageHeader eyebrow="Focus" title="Everything is up to date" />
+        <EmptyState
+          title="Nothing is waiting for you right now"
+          action={
+            <Link href="/focus" className={btnGhost}>
+              Check again
+            </Link>
+          }
+        >
+          New work appears here when a job is assigned to you or a pack is sent to you for review.
+        </EmptyState>
       </div>
     );
   }
@@ -42,38 +45,40 @@ export default async function FocusPage({ searchParams }: { searchParams: Promis
   return (
     <div className="space-y-6">
       <div>
-        <p className={eyebrow}>Your next task</p>
-        <h1 className={pageTitle}>{job.title}</h1>
-        <p className="text-ink-mute text-[13.5px] mt-1.5">
-          {job.clientName ? `${job.clientName} (${job.clientCode})` : job.clientCode} · {job.service} · <span className="tabular-nums">{job.period} · FY {job.fy}</span>
-        </p>
-        <div className="flex items-center gap-2 flex-wrap mt-3">
+        <PageHeader
+          eyebrow="Your next task"
+          title={job.title}
+          meta={
+            <>
+              {job.clientName ? `${job.clientName} (${job.clientCode})` : job.clientCode} · {job.service} · {job.period} · FY {job.fy}
+            </>
+          }
+          className="!mb-4"
+        />
+        <div className="flex items-center gap-2 flex-wrap">
           <StateChip state={task.state} />
           <span className="text-[12px] text-ink-mute">You are the {job.part.toLowerCase()}</span>
         </div>
       </div>
 
       {after === job.id && (
-        <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-[13px]">
+        <Alert tone="warning">
           This task still needs you: the job is {task.state}, and the next step is {action.label}.
-        </p>
+        </Alert>
       )}
 
-      <section aria-labelledby="why" className={card}>
-        <h2 id="why" className={sectionTitle}>
-          Why this is next
-        </h2>
-        <p className="text-[13.5px]">{task.why}</p>
+      <Section id="why" title="Why this is next" card last>
+        <p className="text-[13px]">{task.why}</p>
         <div className="mt-2">
           <DueLine internalDue={job.internalDue} statutoryDue={job.statutoryDue} overdue={job.overdue} />
         </div>
-        <div className="mt-5 flex items-center gap-3 flex-wrap">
+        <div className="mt-6 flex items-center gap-3 flex-wrap">
           <NextActionButton action={action} jobId={job.id} context={context} />
-          <Link href={task.href} className={`${btnGhost} ${focusRing}`}>
+          <Link href={task.href} className={btnGhost}>
             Open the guided workspace
           </Link>
         </div>
-      </section>
+      </Section>
 
       {task.portalNote && <PortalNote note={task.portalNote} />}
 
@@ -93,7 +98,7 @@ export default async function FocusPage({ searchParams }: { searchParams: Promis
 
       <div className="flex items-center justify-between gap-3 flex-wrap pt-2">
         <p className="text-[13px] text-ink-mute">{view.remaining === 0 ? "Nothing else is waiting after this one." : `${view.remaining} more waiting after this one.`}</p>
-        <Link href={`/focus?after=${encodeURIComponent(job.id)}`} className={`${btnGhost} ${focusRing}`}>
+        <Link href={`/focus?after=${encodeURIComponent(job.id)}`} className={btnGhost}>
           Done? Show next task
         </Link>
       </div>

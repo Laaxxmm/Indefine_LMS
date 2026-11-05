@@ -7,24 +7,24 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Check, Copy, Loader2 } from "lucide-react";
-import { btnGhost, btnPrimary, btnSm, call, card, errorText, field } from "@/components/ui";
+import { btnGhost, btnPrimary, btnSm, call, card, cardTitle, errorText, field, focusRing, formWidth, labelText, sectionTitle, type ChipTone } from "@/components/ui";
 import { formatDate } from "@/lib/agents/core/format";
 import type { Question } from "@/lib/agents/onboarding/clarify";
 import { summarizeJobs, type OnboardingPlan } from "@/lib/agents/onboarding/plan";
 import type { SagaStep, StepStatus } from "@/lib/agents/onboarding/saga";
 import type { RunView, TuriaItem } from "@/lib/agents/onboarding/service";
 import { ENTITY_TYPES, FIELD_LABELS, SERVICE_LABELS, serviceLineLabel, type PartialSpec } from "@/lib/agents/onboarding/spec";
+import { Alert, Chip, Spinner } from "@/components/firm-os";
 
 const API = "/api/firm-os/onboard";
-const focusField = "focus:outline-none focus:ring-4 focus:ring-brand-500/15 focus:border-brand-500";
-const focusBtn = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2";
-const input = `${field} ${focusField}`;
-const label = "text-[11px] font-bold text-ink-mute";
-const primary = `${btnPrimary} ${focusBtn} inline-flex items-center gap-2`;
-const ghost = `${btnGhost} ${focusBtn} inline-flex items-center gap-1.5`;
-const summaryLink = `underline font-semibold text-ink ${focusBtn} rounded`;
-/** Section title: ui.ts h2 with ink-mute instead of ink-faint (~2:1 on white, below AA), as on /agents. */
-const h2 = "text-[10.5px] font-extrabold tracking-[0.12em] text-ink-mute uppercase mb-3";
+// Shared tokens (src/components/ui.ts): fields, labels, buttons and the section title.
+const focusBtn = focusRing;
+const input = field;
+const label = labelText;
+const primary = btnPrimary;
+const ghost = btnGhost;
+const summaryLink = `underline font-semibold text-ink ${focusRing} rounded`;
+const h2 = sectionTitle;
 
 /** DD MMM YYYY in IST, with fixed month names (en-IN locale data writes September as "Sept"). */
 const day = (iso: string | null | undefined) => (iso ? formatDate(new Date(iso)) : null);
@@ -35,12 +35,16 @@ type Busy = { key: string; text: string } | null;
 type Failure = { key: string; text: string } | null;
 
 function Spin({ busy, k, children }: { busy: Busy; k: string; children: React.ReactNode }) {
-  return busy?.key === k ? <><Loader2 className="w-4 h-4 animate-spin" aria-hidden /> {busy.text}</> : <>{children}</>;
+  return busy?.key === k ? <><Spinner /> {busy.text}</> : <>{children}</>;
 }
 
 function ErrorBox({ error, keys }: { error: Failure; keys: string[] }) {
   if (!error || !keys.includes(error.key)) return null;
-  return <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 text-rose-700 px-4 py-3 text-[13px] mt-4">{error.text}</div>;
+  return (
+    <Alert tone="error" className="mt-4">
+      {error.text}
+    </Alert>
+  );
 }
 
 export function OnboardPanel({ initial }: { initial: RunView | null }) {
@@ -114,7 +118,7 @@ function Describe({ busy, error, onStart }: { busy: Busy; error: Failure; onStar
   const [prompt, setPrompt] = useState("");
   return (
     <form
-      className={`${card} max-w-[640px]`}
+      className={`${card} ${formWidth}`}
       onSubmit={(e) => {
         e.preventDefault();
         if (prompt.trim().length >= 5) onStart(prompt.trim());
@@ -179,7 +183,7 @@ function Clarify({ run, busy, error, onAnswer }: { run: RunView; busy: Busy; err
   return (
     <div className="space-y-6">
       {(rows.length > 0 || run.notes.length > 0) && (
-        <section className={`${card} max-w-[640px]`} aria-labelledby="understood">
+        <section className={`${card} ${formWidth}`} aria-labelledby="understood">
           <h2 id="understood" className={h2}>Understood so far</h2>
           {run.notes.map((n) => <p key={n} className="text-[13px] text-amber-800 mb-2">{n}</p>)}
           {rows.length > 0 && (
@@ -196,7 +200,7 @@ function Clarify({ run, busy, error, onAnswer }: { run: RunView; busy: Busy; err
       )}
 
       <form
-        className={`${card} max-w-[640px]`}
+        className={`${card} ${formWidth}`}
         onSubmit={(e) => {
           e.preventDefault();
           onAnswer(filled, message.trim() || undefined);
@@ -245,7 +249,7 @@ function QuestionField({ q, value, onChange }: { q: Question; value: string | st
     const picked = Array.isArray(value) ? value : [];
     return (
       <fieldset aria-describedby={help}>
-        <legend className={`${label} mb-1.5`}>{q.label}</legend>
+        <legend className={`${label} mb-2`}>{q.label}</legend>
         <div className="grid sm:grid-cols-2 gap-2">
           {(q.options ?? []).map((o) => (
             <label key={o.value} className="flex items-center gap-2 text-[13px]">
@@ -298,7 +302,7 @@ function PlanPreview({ plan, busy, error, onCreate, onEdit }: { plan: Onboarding
   return (
     <section className={`${card} max-w-3xl`} aria-labelledby="plan-title">
       <h2 id="plan-title" className={h2}>What will be created</h2>
-      <p className="font-display font-bold text-xl">{plan.legalName} <span className="text-ink-mute font-semibold text-[15px]">· {plan.clientCode} · FY {plan.fy}</span></p>
+      <p className={cardTitle}>{plan.legalName} <span className="text-ink-mute font-semibold text-[15px]">· {plan.clientCode} · FY {plan.fy}</span></p>
 
       <ol className="mt-4 space-y-4 text-[13px]">
         <li>
@@ -352,13 +356,13 @@ function PlanPreview({ plan, busy, error, onCreate, onEdit }: { plan: Onboarding
         {plan.checks.length > 0 && (
           <li>
             <p className="font-bold">Checks by hand</p>
-            <ul className="list-disc pl-5 text-ink-mute">{plan.checks.map((c) => <li key={c}>{c}</li>)}</ul>
+            <ul className="list-disc pl-6 text-ink-mute">{plan.checks.map((c) => <li key={c}>{c}</li>)}</ul>
           </li>
         )}
       </ol>
 
       <ErrorBox error={error} keys={["create"]} />
-      <p className="mt-6 text-[12.5px] text-ink-soft" id="create-consequence">
+      <p className="mt-6 text-[12px] text-ink-soft" id="create-consequence">
         Create starts all of the above now: the client record, {plan.turia.mode === "MANUAL" ? "the Turia checklists" : "the Turia client and tasks"}, the SharePoint site and {plan.jobs.length} job{plan.jobs.length === 1 ? "" : "s"}. If a step fails, it stops there and Retry carries on; nothing is deleted.
       </p>
       <div className="mt-3 flex items-center gap-3 flex-wrap">
@@ -373,29 +377,25 @@ function PlanPreview({ plan, busy, error, onCreate, onEdit }: { plan: Onboarding
 
 // ---------------------------------------------------------------- 4. progress
 
-const CHIP: Record<StepStatus, string> = {
-  done: "bg-emerald-100 text-emerald-800",
-  running: "bg-brand-100 text-brand-800",
-  waiting: "bg-amber-100 text-amber-800",
-  blocked: "bg-amber-100 text-amber-800",
-  failed: "bg-rose-100 text-rose-700",
-  pending: "bg-muted text-ink-mute",
-};
+/** Saga step status on the shared Chip tones. */
+const CHIP: Record<StepStatus, ChipTone> = { done: "success", running: "brand", waiting: "warning", blocked: "warning", failed: "danger", pending: "neutral" };
 const CHIP_TEXT: Record<StepStatus, string> = { done: "Done", running: "Running", waiting: "Waiting on you", blocked: "Blocked", failed: "Failed", pending: "Not started" };
 
 function StepRow({ step }: { step: SagaStep }) {
   return (
     <li className="py-3 flex flex-col gap-1">
       <div className="flex items-center justify-between gap-3">
-        <span className="font-semibold text-[13.5px] flex items-center gap-2">
+        <span className="font-semibold text-[13px] flex items-center gap-2">
           {step.status === "done" && <Check className="w-4 h-4 text-emerald-700" aria-hidden />}
           {step.status === "running" && <Loader2 className="w-4 h-4 animate-spin text-brand-600" aria-hidden />}
           {(step.status === "failed" || step.status === "blocked") && <AlertTriangle className="w-4 h-4 text-amber-700" aria-hidden />}
           {step.label}
         </span>
-        <span className={`shrink-0 px-1.5 py-[1px] rounded-md font-bold uppercase text-[9.5px] tracking-wide ${CHIP[step.status]}`}>{CHIP_TEXT[step.status]}</span>
+        <Chip tone={CHIP[step.status]} className="shrink-0">
+          {CHIP_TEXT[step.status]}
+        </Chip>
       </div>
-      {step.action && <p className="text-[12.5px] text-amber-800">{step.action}</p>}
+      {step.action && <p className="text-[12px] text-amber-800">{step.action}</p>}
       {step.status === "failed" && step.error && <p className={errorText}>{step.error}</p>}
     </li>
   );
@@ -412,7 +412,7 @@ function Progress({ run, busy, error, onResume, onConfirm }: { run: RunView; bus
     <div className="space-y-6">
       <section className={`${card} max-w-3xl`} aria-labelledby="progress-title">
         <h2 id="progress-title" className={h2}>{run.plan ? `${run.plan.legalName} · ${run.plan.clientCode}` : "Progress"}</h2>
-        <p className="font-display font-bold text-xl">{heading}</p>
+        <p className={cardTitle}>{heading}</p>
         <ol className="mt-2 divide-y divide-border">{steps.map((s) => <StepRow key={s.key} step={s} />)}</ol>
         {run.status === "DONE" && summary && (
           <div className="text-[13px] text-ink-mute mt-3">
@@ -421,7 +421,7 @@ function Progress({ run, busy, error, onResume, onConfirm }: { run: RunView; bus
               {summary.nextInternalDue && ` Next internal due: ${summary.nextInternalDue.title} ${summary.nextInternalDue.period} on ${day(summary.nextInternalDue.on)}.`}
             </p>
             {/* Where each created thing lives: the client record, its CL- site, and Agents, where the jobs are worked on. */}
-            <ul className="mt-2 flex flex-wrap gap-x-5 gap-y-1">
+            <ul className="mt-2 flex flex-wrap gap-x-6 gap-y-1">
               {summary.clientUrl && (
                 <li><Link href={summary.clientUrl} className={summaryLink}>{run.plan ? `${run.plan.legalName} in Clients` : "The client in Clients"}</Link></li>
               )}
@@ -488,10 +488,10 @@ function TuriaCard({ item, busy, error, onConfirm }: { item: TuriaItem; busy: Bu
   return (
     <article className={card} aria-labelledby={`turia-${item.syncId}`}>
       <div className="flex items-center justify-between gap-3">
-        <h3 id={`turia-${item.syncId}`} className="font-bold text-[14px]">{c?.title ?? item.operation}</h3>
-        <span className={`shrink-0 px-1.5 py-[1px] rounded-md font-bold uppercase text-[9.5px] tracking-wide ${done ? CHIP.done : CHIP.waiting}`}>
+        <h3 id={`turia-${item.syncId}`} className="font-bold text-[13px] leading-5">{c?.title ?? item.operation}</h3>
+        <Chip tone={done ? CHIP.done : CHIP.waiting} className="shrink-0">
           {done ? <>Done in Turia · <span className="normal-case">{item.turiaRef}</span></> : "To do"}
-        </span>
+        </Chip>
       </div>
       {!done && c && (
         <>
@@ -502,11 +502,11 @@ function TuriaCard({ item, busy, error, onConfirm }: { item: TuriaItem; busy: Bu
                 <div className="flex-1 min-w-0">
                   <p>{s.text}</p>
                   {s.values && (
-                    <ul className="mt-1.5 space-y-1.5">
+                    <ul className="mt-2 space-y-2">
                       {s.values.map((v) => (
                         <li key={v.label + v.value} className="flex items-center gap-2 flex-wrap">
                           <span className="text-ink-mute text-[12px] w-32 shrink-0">{v.label}</span>
-                          <code className="font-semibold bg-muted rounded px-2 py-0.5 break-all">{v.value}</code>
+                          <code className="font-semibold bg-muted rounded px-2 py-1 break-all">{v.value}</code>
                           <CopyButton text={v.value} what={v.label} />
                         </li>
                       ))}
@@ -518,7 +518,7 @@ function TuriaCard({ item, busy, error, onConfirm }: { item: TuriaItem; busy: Bu
           </ol>
           <ErrorBox error={error} keys={[`turia:${item.syncId}`]} />
           <form
-            className="mt-4 flex flex-wrap items-end gap-3 max-w-[640px]"
+            className={`mt-4 flex flex-wrap items-end gap-3 ${formWidth}`}
             onSubmit={(e) => {
               e.preventDefault();
               if (ref.trim()) onConfirm(item.syncId, ref.trim(), needMinutes ? Number(minutes) : null);

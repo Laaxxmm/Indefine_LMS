@@ -3,11 +3,11 @@
 // The guided workspace's right-hand viewer: one tab strip (role="tablist"), one panel shown at a
 // time. Arrow keys, Home and End move between tabs; the panels are server-rendered and passed in.
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { focusRing } from "@/app/agents/parts";
+import { focusRing } from "@/components/ui";
 
 export type WorkspaceTab = { id: string; label: string; count?: number; content: ReactNode };
 
-const tabClass = `shrink-0 whitespace-nowrap px-3.5 py-2 rounded-full text-sm font-semibold transition ${focusRing}`;
+const tabClass = `shrink-0 whitespace-nowrap px-4 py-2 rounded-full text-sm font-semibold transition ${focusRing}`;
 // NavLink's active style (brand-50 fill, brand-600 text): the selected tab reads as the current section.
 const selectedClass = "bg-brand-50 text-brand-600";
 const idleClass = "text-ink-mute hover:text-ink hover:bg-muted";
@@ -48,7 +48,7 @@ export function WorkspaceTabs({ tabs, initial, label }: { tabs: WorkspaceTab[]; 
               className={`${tabClass} ${on ? selectedClass : idleClass}`}
             >
               {t.label}
-              {t.count !== undefined && <span className="ml-1.5 tabular-nums text-[12px] font-bold">{t.count}</span>}
+              {t.count !== undefined && <span className="ml-2 tabular-nums text-[12px] font-bold">{t.count}</span>}
             </button>
           );
         })}

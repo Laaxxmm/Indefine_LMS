@@ -48,7 +48,7 @@ describe("/admin/firm-os/models", () => {
     // Phone width: stat cards stack (a ₹ total overflowed a half-width card at 390px) and the tables'
     // cards may shrink inside the two-column grid (they widened the page to 462px).
     expect(html).toContain("grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4");
-    expect(html).toMatch(/<section class="[^"]*min-w-0"/);
+    expect(html).toMatch(/<section [^>]*class="[^"]*min-w-0"/);
     expect(html).not.toMatch(/submit to portal/i);
   });
 

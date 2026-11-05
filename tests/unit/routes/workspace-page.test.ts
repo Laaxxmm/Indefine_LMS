@@ -100,7 +100,9 @@ describe("split view", () => {
     expect(html).toContain("Before you move on");
     // Phone: one column, the panel first (above the viewer); large screens: two columns, panel sticky.
     expect(html).toContain('class="grid grid-cols-1 gap-6 items-start lg:grid-cols-[minmax(0,400px)_minmax(0,1fr)]"');
-    expect(html).toMatch(/<div data-panel="job" class="space-y-6 lg:sticky lg:top-20 lg:self-start/);
+    expect(html).toMatch(/<div data-panel="job"[^>]*class="space-y-6 lg:sticky lg:top-20 lg:self-start/);
+    // The panel scrolls on its own on large screens, so the keyboard can reach it: a focusable region named by the job title.
+    expect(html).toMatch(/<div data-panel="job" role="region" aria-labelledby="job" tabindex="0"/);
     expect(html.indexOf(`data-panel="job"`)).toBeLessThan(html.indexOf(`role="tablist"`));
     expect(html).not.toContain("<aside");
     // Tabs: three, the client documents selected when there are no deliverables.

@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { FirmOsHeader } from "@/components/FirmOsHeader";
+import { pageMain } from "@/components/ui";
 import { requireCompanion } from "@/lib/workspace/guard";
 
 export const dynamic = "force-dynamic";
@@ -15,8 +16,8 @@ export default async function CompanionLayout({ children }: { children: React.Re
 
   return (
     <div className="min-h-screen">
-      <FirmOsHeader user={session.user} home="/companion" width="max-w-[1180px]" />
-      <main className="max-w-[1180px] mx-auto px-5 sm:px-8 py-8">{children}</main>
+      <FirmOsHeader user={session.user} home="/companion" />
+      <main className={pageMain}>{children}</main>
     </div>
   );
 }

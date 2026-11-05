@@ -1,9 +1,8 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { isAdmin } from "@/lib/access";
-import { card } from "@/components/ui";
-import { eyebrow, focusRing, sectionTitle } from "@/app/agents/parts";
+import { btnGhost, card, field, figure, labelText, sectionTitle, td, tdNum, tr } from "@/components/ui";
+import { Alert, Chip, DataTable, EmptyState, PageHeader, Section } from "@/components/firm-os";
 import { prisma } from "@/lib/prisma";
 import { formatDayKey as formatDayKeyStrict } from "@/lib/agents/core/format";
 import { loadModelCalls } from "@/lib/ai/db";
@@ -34,7 +33,6 @@ export const dynamic = "force-dynamic";
 // section (ADR-008 §9) shows per-agent per-day drift rates against env-overridable thresholds;
 // loading the page records one `guardrail-breach` AuditEvent per agent per day that breaches.
 
-const num = "text-right tabular-nums";
 
 /** DD MMM YYYY with fixed month names (en-IN locale data writes September as "Sept"). */
 const formatDayKey = (key: string) => (/^\d{4}-\d{2}-\d{2}$/.test(key) ? formatDayKeyStrict(key) : key);
@@ -42,113 +40,84 @@ const formatDayKey = (key: string) => (/^\d{4}-\d{2}-\d{2}$/.test(key) ? formatD
 function GuardrailsTable({ days, th }: { days: GuardrailDay[]; th: GuardrailThresholds }) {
   const breached = days.filter((d) => d.breaches.length > 0).length;
   return (
-    <section className={`${card} min-w-0`} aria-labelledby="guardrails-heading">
-      <h2 id="guardrails-heading" className={sectionTitle}>
-        Guardrails
-      </h2>
-      <p className="text-sm text-ink-mute mb-3">
-        Drift per agent per day (ADR-008, ADR-009). A rate breaches when it is above its limit and has at least {formatCount(th.minSample)} cases; any scope violation
-        breaches, and so does a task whose share of ungrounded answers is over its hallucination budget. Limits:{" "}
-        {GUARDRAIL_METRICS.map((m) => `${GUARDRAIL_METRIC_LABELS[m]} ${Math.round(th[m] * 1000) / 10}%`).join(" · ")}. Override with{" "}
-        <code className="text-xs">{guardrailThresholdEnv("schemaFail")}</code> and the other <code className="text-xs">GUARDRAIL_*</code> settings.
+    <Section id="guardrails-heading" title="Guardrails" last className="min-w-0">
+      <p className="text-[13px] leading-5 text-ink-mute mb-4 max-w-3xl">
+        Drift per agent per day (ADR-008, ADR-009). A rate breaches when it is above its limit and has at least {formatCount(th.minSample)} cases; any scope violation breaches, and so does a task
+        whose share of ungrounded answers is over its hallucination budget. Limits: {GUARDRAIL_METRICS.map((m) => `${GUARDRAIL_METRIC_LABELS[m]} ${Math.round(th[m] * 1000) / 10}%`).join(" · ")}.
+        Override with <code className="text-[12px]">{guardrailThresholdEnv("schemaFail")}</code> and the other <code className="text-[12px]">GUARDRAIL_*</code> settings.
       </p>
       {days.length === 0 ? (
-        <p className="text-sm text-ink-mute">No agent activity in this range.</p>
+        <EmptyState title="No agent activity in this range." />
       ) : (
         <>
           {breached > 0 && (
-            <p className="text-sm font-semibold text-red-700 mb-3" role="status">
+            <Alert tone="error" role="status" className="mb-4">
               {formatCount(breached)} agent-day{breached === 1 ? "" : "s"} breached a guardrail limit.
-            </p>
+            </Alert>
           )}
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-ink-mute">
-                <tr className="border-b border-border">
-                  <th scope="col" className="text-left font-semibold py-2.5 pr-3">Day</th>
-                  <th scope="col" className="text-left font-semibold py-2.5 px-3">Agent</th>
+          <DataTable
+            caption="Guardrail rates per agent per day"
+            columns={[
+              { label: "Day" },
+              { label: "Agent" },
+              ...GUARDRAIL_METRICS.map((m) => ({ label: GUARDRAIL_METRIC_LABELS[m], align: "right" as const })),
+              { label: "Scope violations", align: "right" },
+              { label: "Hallucination (worst task vs budget)" },
+              { label: "Injections withheld", align: "right" },
+              { label: "Status" },
+            ]}
+          >
+            {days.map((d) => {
+              const hit = new Set(d.breaches.map((b) => b.metric));
+              return (
+                <tr key={`${d.agent}:${d.day}`} className={tr}>
+                  <td className={`${td} whitespace-nowrap tabular-nums`}>{formatDayKey(d.day)}</td>
+                  <td className={td}>{d.agent}</td>
                   {GUARDRAIL_METRICS.map((m) => (
-                    <th key={m} scope="col" className={`${num} font-semibold py-2.5 px-3`}>
-                      {GUARDRAIL_METRIC_LABELS[m]}
-                    </th>
+                    <td key={m} className={`${tdNum} ${hit.has(m) ? "font-semibold text-rose-700" : ""}`} title={`${formatCount(d.rates[m].n)} of ${formatCount(d.rates[m].d)}`}>
+                      {formatRate(d.rates[m])}
+                    </td>
                   ))}
-                  <th scope="col" className={`${num} font-semibold py-2.5 px-3`}>Scope violations</th>
-                  <th scope="col" className="text-left font-semibold py-2.5 px-3">Hallucination (worst task vs budget)</th>
-                  <th scope="col" className={`${num} font-semibold py-2.5 px-3`}>Injections withheld</th>
-                  <th scope="col" className="text-left font-semibold py-2.5 pl-3">Status</th>
+                  <td className={`${tdNum} ${d.scopeViolations > 0 ? "font-semibold text-rose-700" : ""}`}>{formatCount(d.scopeViolations)}</td>
+                  <td className={`${td} ${d.hallucination[0]?.breach ? "font-semibold text-rose-700" : ""}`} title={d.hallucination.map((h) => `${h.task}: ${formatRate(h.rate)} of ${formatCount(h.rate.d)}, budget ${Math.round(h.budget * 1000) / 10}%`).join("; ")}>
+                    {d.hallucination[0] ? `${formatRate(d.hallucination[0].rate)} ${d.hallucination[0].task} (budget ${Math.round(d.hallucination[0].budget * 1000) / 10}%)` : "—"}
+                  </td>
+                  <td className={`${tdNum} ${d.injections > 0 ? "font-semibold text-rose-700" : ""}`}>{formatCount(d.injections)}</td>
+                  <td className={td}>
+                    {d.breaches.length > 0 ? <Chip tone="danger">Breach: {d.breaches.map(breachLabel).join(", ")}</Chip> : <span className="text-ink-mute">Within limits</span>}
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {days.map((d) => {
-                  const hit = new Set(d.breaches.map((b) => b.metric));
-                  return (
-                    <tr key={`${d.agent}:${d.day}`} className="border-b border-border last:border-0 h-11">
-                      <td className="pr-3 whitespace-nowrap">{formatDayKey(d.day)}</td>
-                      <td className="px-3">{d.agent}</td>
-                      {GUARDRAIL_METRICS.map((m) => (
-                        <td key={m} className={`${num} px-3 ${hit.has(m) ? "font-semibold text-red-700" : ""}`} title={`${formatCount(d.rates[m].n)} of ${formatCount(d.rates[m].d)}`}>
-                          {formatRate(d.rates[m])}
-                        </td>
-                      ))}
-                      <td className={`${num} px-3 ${d.scopeViolations > 0 ? "font-semibold text-red-700" : ""}`}>{formatCount(d.scopeViolations)}</td>
-                      <td className={`px-3 ${d.hallucination[0]?.breach ? "font-semibold text-red-700" : ""}`} title={d.hallucination.map((h) => `${h.task}: ${formatRate(h.rate)} of ${formatCount(h.rate.d)}, budget ${Math.round(h.budget * 1000) / 10}%`).join("; ")}>
-                        {d.hallucination[0] ? `${formatRate(d.hallucination[0].rate)} ${d.hallucination[0].task} (budget ${Math.round(d.hallucination[0].budget * 1000) / 10}%)` : "—"}
-                      </td>
-                      <td className={`${num} px-3 ${d.injections > 0 ? "font-semibold text-red-700" : ""}`}>{formatCount(d.injections)}</td>
-                      <td className="pl-3">
-                        {d.breaches.length > 0 ? (
-                          <span className="inline-flex items-center rounded-md bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700 ring-1 ring-inset ring-red-200">
-                            Breach: {d.breaches.map(breachLabel).join(", ")}
-                          </span>
-                        ) : (
-                          <span className="text-ink-mute">Within limits</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+              );
+            })}
+          </DataTable>
         </>
       )}
-    </section>
+    </Section>
   );
 }
 
-function UsageTable({ title, label, rows, keyLabel }: { title: string; label: string; rows: UsageBucket[]; keyLabel?: (k: string) => string }) {
+function UsageTable({ id, title, label, rows, keyLabel }: { id: string; title: string; label: string; rows: UsageBucket[]; keyLabel?: (k: string) => string }) {
   return (
-    <section className={`${card} min-w-0`}>
-      <h2 className={sectionTitle}>{title}</h2>
+    <Section id={id} title={title} last className="min-w-0">
       {rows.length === 0 ? (
-        <p className="text-sm text-ink-mute">No model calls in this range.</p>
+        <EmptyState title="No model calls in this range." />
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-ink-mute">
-              <tr className="border-b border-border">
-                <th scope="col" className="text-left font-semibold py-2.5 pr-3">{label}</th>
-                <th scope="col" className={`${num} font-semibold py-2.5 px-3`}>Cost</th>
-                <th scope="col" className={`${num} font-semibold py-2.5 px-3`}>Calls</th>
-                <th scope="col" className={`${num} font-semibold py-2.5 px-3`}>Escalations</th>
-                <th scope="col" className={`${num} font-semibold py-2.5 pl-3`}>Queued for human</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.key} className="border-b border-border last:border-0 h-11">
-                  <td className="pr-3">{keyLabel ? keyLabel(r.key) : r.key}</td>
-                  <td className={`${num} px-3 font-semibold`}>{formatInr(r.costInr)}</td>
-                  <td className={`${num} px-3`}>{formatCount(r.calls)}</td>
-                  <td className={`${num} px-3`}>{formatCount(r.escalations)}</td>
-                  <td className={`${num} pl-3`}>{formatCount(r.queued)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          caption={`Model usage ${title.toLowerCase()}`}
+          columns={[{ label }, { label: "Cost", align: "right" }, { label: "Calls", align: "right" }, { label: "Escalations", align: "right" }, { label: "Queued for human", align: "right" }]}
+        >
+          {rows.map((r) => (
+            <tr key={r.key} className={tr}>
+              <td className={`${td} whitespace-nowrap`}>{keyLabel ? keyLabel(r.key) : r.key}</td>
+              <td className={`${tdNum} font-semibold`}>{formatInr(r.costInr)}</td>
+              <td className={tdNum}>{formatCount(r.calls)}</td>
+              <td className={tdNum}>{formatCount(r.escalations)}</td>
+              <td className={tdNum}>{formatCount(r.queued)}</td>
+            </tr>
+          ))}
+        </DataTable>
       )}
-    </section>
+    </Section>
   );
 }
 
@@ -178,32 +147,23 @@ export default async function ModelUsagePage({ searchParams }: { searchParams: P
 
   return (
     <main className="min-h-screen px-6 py-10 max-w-6xl mx-auto">
-      <div className="mb-6 flex items-end justify-between flex-wrap gap-4">
-        <div>
-          <p className={`${eyebrow} mb-1.5`}>Admin · Firm OS</p>
-          <h1 className="font-display text-[32px] font-extrabold tracking-[-0.02em] leading-none">Model usage</h1>
-          <p className="text-sm text-ink-mute mt-2">
-            ModelRouter cost and outcomes, {formatDayKey(range.fromKey)} to {formatDayKey(range.toKey)} (IST).
-          </p>
-        </div>
-        <Link
-          href="/admin"
-          className={`text-sm text-ink-mute hover:text-ink inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white hover:bg-muted border border-border shadow-soft transition shrink-0 ${focusRing}`}
-        >
-          ← Admin
-        </Link>
-      </div>
+      <PageHeader
+        back={{ href: "/admin", label: "Admin" }}
+        eyebrow="Admin · Firm OS"
+        title="Model usage"
+        lead={`ModelRouter cost and outcomes, ${formatDayKey(range.fromKey)} to ${formatDayKey(range.toKey)} (IST).`}
+      />
 
-      <form method="GET" className={`${card} mb-6 flex flex-wrap items-end gap-4`}>
-        <label className="text-sm">
-          <span className="block text-ink-mute mb-1">From</span>
-          <input type="date" name="from" defaultValue={range.fromKey} className={`bg-white border border-border rounded-lg px-3 py-2 tabular-nums ${focusRing}`} />
+      <form method="GET" className={`${card} mb-6 flex flex-wrap items-end gap-4`} aria-label="Date range">
+        <label className={`flex flex-col gap-1 ${labelText}`}>
+          From
+          <input type="date" name="from" defaultValue={range.fromKey} className={`${field} w-auto font-normal text-ink tabular-nums`} />
         </label>
-        <label className="text-sm">
-          <span className="block text-ink-mute mb-1">To</span>
-          <input type="date" name="to" defaultValue={range.toKey} className={`bg-white border border-border rounded-lg px-3 py-2 tabular-nums ${focusRing}`} />
+        <label className={`flex flex-col gap-1 ${labelText}`}>
+          To
+          <input type="date" name="to" defaultValue={range.toKey} className={`${field} w-auto font-normal text-ink tabular-nums`} />
         </label>
-        <button className="px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2">
+        <button type="submit" className={`${btnGhost} h-10`}>
           Apply
         </button>
       </form>
@@ -212,21 +172,21 @@ export default async function ModelUsagePage({ searchParams }: { searchParams: P
         {stats.map((s) => (
           <div key={s.label} className={card}>
             <p className={sectionTitle}>{s.label}</p>
-            <p className="font-display text-[26px] font-extrabold tabular-nums leading-none">{s.value}</p>
+            <p className={figure}>{s.value}</p>
           </div>
         ))}
       </div>
       {t.refused > 0 && (
-        <p className="text-sm text-ink-mute mb-6">
+        <p className="text-[13px] leading-5 text-ink-mute mb-6">
           {formatCount(t.refused)} call{t.refused === 1 ? " was" : "s were"} refused by the budget guard (per-run limit or AI_DAILY_BUDGET_INR).
         </p>
       )}
 
-      <div className="space-y-6">
-        <UsageTable title="By day" label="Day" rows={summary.byDay} keyLabel={formatDayKey} />
+      <div className="space-y-8">
+        <UsageTable id="by-day" title="By day" label="Day" rows={summary.byDay} keyLabel={formatDayKey} />
         <div className="grid lg:grid-cols-2 gap-6">
-          <UsageTable title="By agent" label="Agent" rows={summary.byAgent} keyLabel={(k) => getAgent(k)?.title ?? (k === "unassigned" ? "Not tied to an agent" : k)} />
-          <UsageTable title="By provider" label="Provider" rows={summary.byProvider} keyLabel={(k) => PROVIDER_LABEL[k] ?? k} />
+          <UsageTable id="by-agent" title="By agent" label="Agent" rows={summary.byAgent} keyLabel={(k) => getAgent(k)?.title ?? (k === "unassigned" ? "Not tied to an agent" : k)} />
+          <UsageTable id="by-provider" title="By provider" label="Provider" rows={summary.byProvider} keyLabel={(k) => PROVIDER_LABEL[k] ?? k} />
         </div>
         <GuardrailsTable days={guardrailDays} th={thresholds} />
       </div>
