@@ -50,7 +50,7 @@ describe("staff access", () => {
   it("inactive users and unknown agents / jobs are refused", async () => {
     const w = echoWorld();
     expect(await startAgentRun(user("priya", { active: false }), "echo", "job-1", w.deps)).toMatchObject({ ok: false, status: 404 });
-    expect(await startAgentRun(user("priya"), "gst", "job-1", w.deps)).toMatchObject({ ok: false, status: 404 });
+    expect(await startAgentRun(user("priya"), "no-such-agent", "job-1", w.deps)).toMatchObject({ ok: false, status: 404 });
     expect(await startAgentRun(user("meera"), "echo", "job-x", w.deps)).toMatchObject({ ok: false, status: 404 });
   });
 
