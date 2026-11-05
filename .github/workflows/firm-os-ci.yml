@@ -1,0 +1,82 @@
+# Firm OS CI (orchestrator Phase 0 task 5): lint, typecheck, unit tests and the guard scripts
+# on every PR and on pushes to firm-os/** branches; the e2e smoke runs on PRs against a
+# throwaway Postgres. Nothing here needs a repository secret.
+name: Firm OS CI
+
+on:
+  pull_request:
+  push:
+    branches: ["firm-os/**"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firm-os-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      # no-skip, secrets, no-portal, no-delete, ai-boundary
+      - run: npm run verify:firm-os
+      # Existing LMS verify scripts that run on a clean checkout with no secrets or database.
+      - run: npm run verify:access
+      - run: npm run verify:cron-auth
+      - run: npm run verify:secret-box
+      - run: npm run verify:graph-scopes
+      - run: npm run verify:work
+      - run: npm run verify:clients
+      - run: npm run verify:office-tools
+      - run: npm run verify:profit-split
+
+  e2e:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: lms_e2e
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/lms_e2e?schema=public
+      AUTH_SECRET: "e2e only - not a real secret"
+      AUTH_TRUST_HOST: "true"
+      AUTH_URL: http://localhost:3100
+      E2E_PORT: "3100"
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx prisma migrate deploy
+      # The smoke spec uses only Playwright's request fixture: no browser install needed.
+      - run: npm run e2e
