@@ -12,6 +12,7 @@
 import { prisma } from "@/lib/prisma";
 import { ELEVATED_SCOPES, scopesCover } from "@/lib/graph-scopes";
 import { keyFromEnv, open, seal } from "@/lib/secret-box";
+import { GRAPH_HOST, isGraphUrl } from "@/lib/hardening/net";
 
 const GRAPH = "https://graph.microsoft.com/v1.0";
 
@@ -361,7 +362,11 @@ export async function listOrgUsers(token: string): Promise<GraphOrgUser[]> {
       const isMember = !u.userType || u.userType.toLowerCase() === "member";
       if (enabled && licensed && isMember) out.push(u);
     }
-    url = json["@odata.nextLink"];
+    // The next page link comes from the response: the bearer token goes only to Graph itself
+    // (security audit #33), never to whatever host a tampered or proxied response names.
+    const next = json["@odata.nextLink"];
+    if (next !== undefined && !isGraphUrl(next)) throw new Error(`Graph /users returned a next-page link off ${GRAPH_HOST}; stopped without sending the token`);
+    url = next;
   }
   return out;
 }

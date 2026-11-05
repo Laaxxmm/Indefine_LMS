@@ -11,6 +11,7 @@ import { INJECTION_FLAG } from "@/lib/agents/core/guardrails/untrusted";
 import { diffPacks, type PackDiff } from "@/lib/agents/core/mistakes";
 import { latestPackQuery, type AnyAgent, type FirmDb } from "@/lib/agents/core/runner";
 import { getAgent } from "@/lib/agents/registry";
+import { httpsLink } from "@/lib/hardening/net";
 
 export type RunRow = {
   id: string;
@@ -293,7 +294,8 @@ export async function loadRunReview(db: FirmDb, user: SessionUser, runId: string
         source: c.source,
         quote: ev.quote ?? null,
         location: ev.location ?? null,
-        link: ev.link ?? null,
+        // Evidence links are shown as <a href>: https only (no javascript:, data:, http:, relative) — audit #33.
+        link: httpsLink(ev.link),
         flags: ev.flags ?? [],
       };
     })
