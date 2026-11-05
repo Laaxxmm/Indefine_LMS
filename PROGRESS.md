@@ -1,13 +1,13 @@
 # PROGRESS — Indefine Firm OS
-Current phase: 3 + 4 (parallel) | Branch: firm-os/phase-0-inventory | Last green: 2026-11-05 20:40 IST
-Tests: unit+integration 974/974 (29 files; Firm OS coverage 99.7% lines / 97.4% branches) · e2e 4/4 (smoke, local, no DB) · accuracy: GST P=– R=– | ROC – | TAX – | BOOKS – | AUDIT –
-Model mode: CLAUDE_ONLY + LOCAL_STUB(fail-closed)
+Current phase: 3 + 4 (parallel) | Branch: firm-os/phase-0-inventory | Last green: 2026-11-05 21:35 IST
+Tests: unit+integration 1198/1198 (43 files; Firm OS coverage 99.7% lines / 97.4% branches) · e2e 4/4 (smoke, local, no DB) · accuracy: GST P=– R=– | ROC – | TAX – | BOOKS – | AUDIT –
+Model mode: CLAUDE_ONLY + LOCAL_STUB(fail-closed) | Turia bridge: MANUAL (ADR-003)
 
 ## Phase checklist (✅ only when QA gate green)
 - [x] 0 Inventory & ADRs ✅ (QA gate green 19:40 IST)
 - [x] 1 Path A finish + /clients → CL-{Code} ✅ (20:25 IST; live verify-patha Blocked — creds)
 - [x] 2 ModelRouter + anonymizer + local stub ✅ (20:25 IST; live Claude smoke Blocked — key)
-- [ ] 3 Onboarding Agent
+- [ ] 3 Onboarding Agent — code complete, unit/integration green; QA gate pending e2e 3/3 (Blocked: staging DB + partner session)
 - [ ] 4 Task-agent framework
 - [ ] 5 GST Prep
 - [ ] 6 ROC Prep + Tax Prep
@@ -53,7 +53,13 @@ Phase 4 (in progress)
 - [ ] 1 runner.ts · 4 mistakes.ts · 5 review UI /agents · 6 scripts/accuracy.ts (agent running)
 Phase 3 (in progress)
 - [x] 6 calendar.ts + calendar-defaults.ts — rules as data; GSTR-1/3B (QRMP state groups), GSTR-9/9C, TDS, advance tax, ITR, AOC-4, MGT-7, DIR-3 KYC, ADT-1, MSME-1; internal due = statutory − buffer, rolled back past weekends
-- [ ] 1–5, 7 onboarding (agent running)
+- [x] 1 /onboard chat page (partner/manager only; links on /tools and /clients nav)
+- [x] 2 extractor (router, anonymize-then-cloud) + clarifier (≤ 5 missing fields per turn; falls back to questions if the router fails)
+- [x] 3 validators in code: PAN, GSTIN checksum + state + embedded PAN, CIN/LLPIN, client-code uniqueness, assignee exists
+- [x] 4 plan preview; FIRM_OS_ONBOARD_CONFIRM (default true) requires "Create"
+- [x] 5 saga (LMS client via new src/lib/clients/service.ts shared with POST /api/clients → Turia ManualBridge → ensureClientSite/ensureFyTree → Engagement + JobTasks via calendar planner → summary); resumable; SharePoint BlockedError → step BLOCKED with action
+- [x] 7 failure at each of 6 steps + resume, no duplicates, no deletes
+- [ ] e2e 3/3: tests/e2e-db/onboard.spec.ts via `npm run e2e:db` (playwright.db.config.ts, --repeat-each=3) — **Blocked**: staging DB, E2E_PARTNER_STATE, ANTHROPIC_API_KEY
 
 Shared foundation (commit c61d885): additive Prisma section "Firm OS: shared spine" — `FirmClient`, `ModelCall`, `AuditEvent` + enums; migration `20261105190000_firm_os_spine` (CREATE only, no ALTER/DROP of LMS columns).
 
@@ -78,6 +84,13 @@ Shared foundation (commit c61d885): additive Prisma section "Firm OS: shared spi
 | Checklist engine | src/lib/agents/core/checklist.test.ts | green (30) |
 | Deliverable templates + INR format | src/lib/agents/core/templates.test.ts, format.test.ts | green (54) |
 | Statutory calendar | src/lib/agents/core/calendar.test.ts | green (69) |
+| RBAC firmRole / canOnboard | src/lib/rbac/policy.test.ts | green |
+| Turia adapter + ManualBridge | src/lib/integrations/turia/turia.test.ts | green |
+| Onboarding extractor (20 fixtures), clarifier, validators, planner, plan | src/lib/agents/onboarding/*.test.ts | green |
+| Onboarding saga (fail at each step + resume) | src/lib/agents/onboarding/saga.test.ts | green |
+| Client creation service (shared) | tests/unit/clients-service.test.ts | green |
+| /onboard page + API (403/400) | tests/unit/routes/onboard*.test.ts | green |
+| E2E onboarding golden path | tests/e2e-db/onboard.spec.ts | Blocked (staging DB) |
 
 ## Accuracy scoreboard     (agent → fixture set → precision → recall → threshold → pass/fail → date)
 _None yet (from Phase 5)._
@@ -88,6 +101,7 @@ _None yet (from Phase 5)._
 - ADR-001 Extend LMS · ADR-002 ModelRouter · ADR-003 Turia (ManualBridge default — no documented Turia API) · ADR-004 SharePoint Path A · ADR-005 Close loop for DONE · ADR-006 DPDP data classes (docs/adr/).
 - Guard allowlists (frozen, Firm OS dirs never allowlistable): LEGACY_PORTAL_READONLY = src/lib/statutory/cloud.ts, statutory-extension/{background.js,collectors.js,manifest.json} (public news reads), src/lib/certificates/templates/format-vi.ts (certificate wording only, no network allowed). LEGACY_GEMINI = src/lib/{gemini,quiz-gen,distill,transcribe}.ts.
 - Models (env-overridable): FAST claude-haiku-5-5 · SMART claude-sonnet-5-5 · HARD claude-opus-5-5 · Grok grok-4 (price unverified, configurable). USD_INR 88, ROUTER_MIN_CONF 0.75, AI_DAILY_BUDGET_INR 1000. `judgement` difficulty routes SMART→HARD (spec silent). Local-model calls are not masked (data stays on LAN); ModelCall hash always of masked prompt.
+- Onboarding: LMS Client.turnover is required, so turnover is a clarifier question (not defaulted). Existing client with same name/PAN is linked, not duplicated. Turia task issued only for the first period of each series. Firm OS UI keeps the LMS brand theme (violet) instead of the spec's teal fallback — spec says extend the existing theme. `isManager` added to src/lib/access.ts (MANAGER, SENIOR_MANAGER).
 - JobTask edges added beyond spec: IN_PREP→IN_REVIEW (manual prep, no agent); FILED_BY_HUMAN/CLOSING→APPROVED retract-filing (manager/partner, note). No CLOSING→FILED_BY_HUMAN, nothing out of DONE. Ack ref required for GST/ROC/IncomeTax/TDS.
 - Calendar: AGM-relative forms count AGM day as day 1 (configurable `countAgmDay`); statutory dates never moved, only flagged on non-working days.
 - Path A: SP_SITE_OWNER required for app-only site creation; default period folders GST/Books 12 months, TDS Q1–Q4, others Annual; uploads stay on the legacy layout under the flag.
@@ -102,6 +116,7 @@ _None yet (from Phase 5)._
 - ANTHROPIC_API_KEY (and optional XAI_API_KEY) · live router smoke call · put in .env.local / Railway · 2026-11-05
 - Staging DATABASE_URL · map-legacy-folders report, /admin/firm-os/models view, DB e2e · provide Railway staging branch DB · 2026-11-05
 - **Partner verification of calendar defaults** · CA judgement · confirm: QRMP 3B 22nd/24th state groups vs current CBIC notification; AGM day-counting convention; ITR non-audit due date under Income-tax Act 2025 / Finance Act 2026 (kept 31 Jul); DIR-3 KYC frequency (kept annual 30 Sep); 2025-Act form names for TDS/advance tax · 2026-11-05
+- **Partner sign-off on onboarding catalog** · CA judgement · review JOB_CATALOG per entity type (src/lib/agents/onboarding/planner.ts) and PAN 4th-char rule per entity (validators.ts); calendar rules missing for Books close, Audit, Engagement letter, LLP Form 11/8; AGM date not captured at onboarding so AOC-4/MGT-7/ADT-1 stay pending · 2026-11-05
 - Push branches / open PRs · no gh CLI on this machine · human approval to push firm-os/* branches · 2026-11-05
 
 ## Known gaps / tech debt
@@ -129,3 +144,5 @@ _None yet (from Phase 5)._
 - 20:28 · 3 · Agent started: Phase 3 onboarding (rbac, Turia ManualBridge, extractor, saga, /onboard) · –
 - 20:38 · 3/4 · Merged agent core (state machine, checklist, templates, calendar) · 974/974
 - 20:40 · 4 · Agent started: Phase 4 runner, echo agent, mistakes, accuracy harness, /agents review UI · –
+- 21:30 · 3 · Merged onboarding (rbac, Turia ManualBridge, extractor/clarifier/validators, saga, /onboard); added playwright.db.config.ts + npm run e2e:db · 1198/1198
+- 21:35 · 3 · next build green; Phase 3 QA gate waits on e2e 3/3 (Blocked: staging DB) · 1198/1198
