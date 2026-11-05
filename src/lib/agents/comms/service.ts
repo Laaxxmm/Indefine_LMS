@@ -10,6 +10,8 @@ import { z } from "zod";
 import type { SessionUser } from "@/lib/access";
 import { canSeeAllRuns, canUseAgents, canViewJob, jobScopeWhere } from "@/lib/agents/access";
 import { formatDateTimeIst } from "@/lib/agents/core/format";
+import type { AuditDb } from "@/lib/audit/log";
+import { auditRead } from "@/lib/audit/reads";
 import { addDays, istDayKey, istDayStart, parseDayKey } from "@/lib/ist";
 import type { OutlookDraft, OutlookDraftInput } from "@/lib/integrations/outlook/drafts";
 import { draftMessage, splitBilingual, type DraftRequest } from "./compose";
@@ -368,6 +370,8 @@ export async function loadDraft(db: CommsDb, user: SessionUser, id: string): Pro
   const r = await loadRow(db, user, id);
   if (!r.ok) return r;
   const { d, job, client } = r.data;
+  // Who opened which client message (breach runbook §2): one "view" per person per draft per hour.
+  await auditRead(db as unknown as AuditDb, { actorId: user?.id, entity: "CommsDraft", entityId: d.id, meta: { clientCode: client?.clientCode ?? null, jobTaskId: job?.id ?? null } });
   const [audit, author] = await Promise.all([
     db.auditEvent.findFirst({ where: { entity: "CommsDraft", entityId: d.id, action: COMMS_AUDIT.create }, orderBy: { createdAt: "desc" }, select: { meta: true } }),
     db.user.findUnique({ where: { id: d.createdById }, select: { name: true, email: true } }),

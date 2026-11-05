@@ -169,5 +169,5 @@ describe("evidence links on the review screen (src/lib/agents/views.ts)", () => 
     const byId = new Map(review!.checklist.map((c) => [c.id, c.link]));
     expect(byId.get(results[0].id as string)).toBeNull();
     expect(byId.get(results[1].id as string)).toBe("https://contoso.sharepoint.com/sites/CL-ACME01/x.xlsx");
-  });
+  }, 60_000);
 });

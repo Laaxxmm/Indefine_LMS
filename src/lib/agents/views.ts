@@ -12,6 +12,7 @@ import { diffPacks, type PackDiff } from "@/lib/agents/core/mistakes";
 import { latestPackQuery, type AnyAgent, type FirmDb } from "@/lib/agents/core/runner";
 import { getAgent } from "@/lib/agents/registry";
 import { httpsLink } from "@/lib/hardening/net";
+import { auditRead } from "@/lib/audit/reads";
 
 export type RunRow = {
   id: string;
@@ -278,6 +279,8 @@ export async function loadRunReview(db: FirmDb, user: SessionUser, runId: string
     },
   });
   if (!run || !canViewJob(user, run.jobTask)) return null;
+  // Who opened which client's run (breach runbook §2): one "view" per person per run per hour.
+  await auditRead(db, { actorId: user?.id, entity: "AgentRun", entityId: run.id, meta: { agent: run.agent, jobTaskId: run.jobTaskId, clientCode: run.jobTask.firmClient.clientCode }, now });
   const latest = await db.agentRun.findFirst({ where: { jobTaskId: run.jobTaskId }, orderBy: { startedAt: "desc" }, select: { id: true } });
   const isLatest = latest?.id === run.id;
   const comments = await db.auditEvent.findMany({ where: { entity: "AgentRun", entityId: run.id, action: "comment" }, orderBy: { createdAt: "asc" } });

@@ -19,6 +19,7 @@ import { transitionJobTask, type TransitionResult } from "@/lib/agents/core/stat
 import { DOCX_MIME, XLSX_MIME } from "@/lib/agents/core/templates";
 import { AGENTS, getAgent } from "@/lib/agents/registry";
 import { logAudit } from "@/lib/audit/log";
+import { auditRead } from "@/lib/audit/reads";
 import { agentRunBusyMessage, agentRunSlots, type ConcurrencyLimiter } from "@/lib/hardening/concurrency";
 
 /** A successful transition, as transitionJobTask reports it. */
@@ -364,6 +365,8 @@ export async function previewDeliverable(user: SessionUser, deliverableId: strin
   const f = await readDeliverable(user, deliverableId, deps);
   if (!f.ok) return f;
   if (f.data.mimeType !== XLSX_MIME) return fail(400, "Preview is available for spreadsheets only; download the file instead");
+  // The preview shows the file's contents on screen: a "view" (one per person per file per hour; breach runbook §2).
+  await auditRead(deps.db, { actorId: user?.id, entity: "Deliverable", entityId: deliverableId, meta: { kind: "preview" }, now: deps.now() });
   try {
     return { ok: true, data: await previewWorkbook(f.data.bytes) };
   } catch (e) {
