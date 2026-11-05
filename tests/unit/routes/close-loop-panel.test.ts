@@ -27,7 +27,7 @@ const routes = {
 };
 
 const PORTAL_OR_SEND = />\s*(Submit to portal|Send[^<]*|File on portal)\s*</i;
-const NO_ACTIONS = { run: false, submit: false, requestChanges: false, approve: false, approveNeedsNote: false, proposeMistake: false, finalize: false };
+const NO_ACTIONS = { run: false, submit: false, rerun: false, requestChanges: false, approve: false, approveNeedsNote: false, proposeMistake: false, finalize: false };
 const signedIn = (s: unknown) => (auth as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(s);
 const priya = () => activeSession({ id: "u-priya" });
 const html = async (el: Parameters<typeof renderRaw>[0]) => (await renderRaw(el)).replace(/<!-- -->/g, "");

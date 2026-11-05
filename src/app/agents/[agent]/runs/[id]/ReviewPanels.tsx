@@ -525,7 +525,7 @@ export function CloseLoopActions({ view }: { view: CloseLoopView }) {
 const IDLE: Partial<Record<JobTaskState, string>> = {
   ASSIGNED: "Assigned. The preparer runs the agent when the documents are ready.",
   IN_PREP: "In preparation. The preparer runs the agent again when the documents are ready.",
-  AGENT_DONE: "The agent has prepared the pack. The preparer checks it and submits it for review.",
+  AGENT_DONE: "The agent has prepared the pack. The preparer checks it and submits it for review, or re-runs the agent with a note.",
   IN_REVIEW: "Submitted for review. The reviewer approves the pack or requests changes.",
   APPROVED: "Pack approved and in Final. A person files it on the portal and records the acknowledgement.",
   FILED_BY_HUMAN: "Filed by a person on the portal. The job closes when the Final file and the Turia close are confirmed.",
@@ -541,6 +541,27 @@ export function approveConsequence(deliverables: number): string {
       ? "This run has no files to copy to Final."
       : `It copies ${deliverables === 1 ? "the file" : `the ${deliverables} files`} to Final as a new version (nothing is overwritten).`;
   return `Approving moves the job to APPROVED. ${copy} A person then files it on the portal; Firm OS never files anything.`;
+}
+
+/** What "Re-run with a note" does, shown with the note box before the re-run is sent. */
+export const RERUN_CONSEQUENCE =
+  "Re-running moves the job back to IN_PREP and starts a new agent run with your note. This run is kept for the record; submit the new run for review when it is ready.";
+
+const RERUN_NOTE_MIN = 3; // as the route's schema (rerunZ)
+
+/** Body for "Re-run with a note": the note is required (at least 3 characters, as the route asks). */
+export function rerunBody(note: string): { ok: true; body: { note: string } } | Fail {
+  const n = note.trim();
+  return n.length < RERUN_NOTE_MIN ? { ok: false, error: "Say why the agent is being re-run" } : { ok: true, body: { note: n } };
+}
+
+/** POST /rerun: AGENT_DONE → IN_PREP with the note, then a new run; returns the new run's id. */
+export async function requestRerun(runId: string, note: string, send: Send = call): Promise<{ ok: true; runId: string } | Fail> {
+  const b = rerunBody(note);
+  if (!b.ok) return b;
+  const r = await send(`/api/firm-os/agents/runs/${encodeURIComponent(runId)}/rerun`, b.body);
+  if (!r.ok) return { ok: false, error: r.error ?? "Something went wrong" };
+  return { ok: true, runId: String(r.data.runId ?? "") };
 }
 
 export function ActionBar({
@@ -565,7 +586,7 @@ export function ActionBar({
 }) {
   const router = useRouter();
   const id = useId();
-  const [mode, setMode] = useState<"idle" | "changes" | "approve">("idle");
+  const [mode, setMode] = useState<"idle" | "changes" | "approve" | "rerun">("idle");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -584,6 +605,18 @@ export function ActionBar({
     setBusy(false);
     setMode("idle");
     router.refresh();
+  }
+
+  async function rerun() {
+    setBusy(true);
+    setError(null);
+    const r = await requestRerun(runId, note);
+    if (!r.ok) {
+      setBusy(false);
+      return setError(r.error);
+    }
+    setNote("");
+    router.push(`/agents/${agent}/runs/${r.runId}`); // navigating: stay busy so nothing is sent twice
   }
 
   const spinner = busy && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />;
@@ -644,11 +677,42 @@ export function ActionBar({
         </div>
       </>
     );
-  } else if (actions.submit) {
+  } else if (actions.submit || actions.rerun) {
+    // Submit for review is the one primary action; "Re-run with a note" is secondary. Its first click
+    // opens the note box and says what a re-run does; the second sends it (note required).
     content = (
-      <button type="button" disabled={busy} onClick={() => go(`${base}/submit`)} className={`${primary} ml-auto`}>
-        {spinner}Submit for review
-      </button>
+      <>
+        {mode === "rerun" && noteBox("Why re-run? The agent runs again with this note.")}
+        {mode === "rerun" && (
+          <p id={`${id}-rerun`} className="text-[13px] text-ink-soft w-full sm:w-auto sm:max-w-[520px]">
+            {RERUN_CONSEQUENCE}
+          </p>
+        )}
+        <div className="flex items-center gap-2 ml-auto">
+          {mode === "rerun" && (
+            <button type="button" onClick={() => setMode("idle")} className={`${btnGhost} ${focusRing}`}>
+              Cancel
+            </button>
+          )}
+          {actions.rerun && (
+            <button
+              type="button"
+              disabled={busy || (mode === "rerun" && !rerunBody(note).ok)}
+              onClick={() => (mode === "rerun" ? rerun() : setMode("rerun"))}
+              aria-describedby={mode === "rerun" ? `${id}-rerun` : undefined}
+              className={`${btnWarn} ${focusRing} inline-flex items-center gap-1.5`}
+            >
+              {mode === "rerun" && spinner}
+              {mode === "rerun" ? "Re-run agent with this note" : "Re-run with a note"}
+            </button>
+          )}
+          {actions.submit && mode !== "rerun" && (
+            <button type="button" disabled={busy} onClick={() => go(`${base}/submit`)} className={primary}>
+              {spinner}Submit for review
+            </button>
+          )}
+        </div>
+      </>
     );
   } else if (actions.finalize) {
     content = (

@@ -4,6 +4,7 @@ import { z } from "zod";
 const note = z.string().trim().max(2000, "Keep the note under 2,000 characters");
 
 export const requestChangesZ = z.object({ note: note.min(3, "Say what needs to change") }).strict();
+export const rerunZ = z.object({ note: note.min(3, "Say why the agent is being re-run") }).strict();
 export const approveZ = z.object({ note: note.optional().nullable() }).strict();
 export const commentZ = z.object({ text: z.string().trim().min(1, "Write a comment first").max(2000) }).strict();
 export const mistakeZ = z

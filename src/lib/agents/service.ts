@@ -4,7 +4,7 @@
 // defaultAgentDeps(); tests pass their own (memory db, recorded router, fake SharePoint).
 //
 // Transition hooks: after each JobTask transition this service makes (submit, request changes,
-// approve) it calls `deps.afterTransition` when one is injected. The close loop
+// re-run, approve) it calls `deps.afterTransition` when one is injected. The close loop
 // (src/lib/close-loop) imports this module, so this module never imports the close loop: the
 // routes inject the close-loop dispatcher with withCloseLoopHook() from close-loop/defaults.ts,
 // the same afterTransition the /api/firm-os/jobs/[id]/state route runs. A hook only adds work;
@@ -132,18 +132,45 @@ export async function submitForReview(user: SessionUser, runId: string, deps: Ag
   return { ok: true, data: { state: "IN_REVIEW" } };
 }
 
-/** "Request changes": IN_REVIEW → IN_PREP with the reviewer's note, then a new run with that note. */
-export async function requestChanges(user: SessionUser, runId: string, note: string, deps: AgentServiceDeps) {
+/**
+ * Back to IN_PREP with a note, then a new run (attempt n+1) with that note. Shared by "Request
+ * changes" (from IN_REVIEW, the reviewer) and "Re-run with a note" (from AGENT_DONE, the preparer);
+ * the state machine decides who may take each edge. `onMoved` records anything extra on the old run.
+ */
+async function backToPrepAndRun(
+  user: SessionUser,
+  runId: string,
+  note: string,
+  from: "IN_REVIEW" | "AGENT_DONE",
+  deps: AgentServiceDeps,
+  onMoved?: () => Promise<unknown>,
+) {
   const v = await visibleRun(user, deps.db, runId);
   if (!v.ok) return v;
   const def = getAgent(v.data.agent, deps.agents);
   if (!def) return fail(404, `Unknown agent ${v.data.agent}`);
   if ((await latestRunId(deps.db, v.data.jobTaskId)) !== runId) return fail(409, "A newer run exists for this job; open the latest run");
-  const t = await transitionJobTask(deps.db, v.data.jobTaskId, "IN_PREP", actorOf(user)!, { expectedState: "IN_REVIEW", note, now: deps.now() });
+  const t = await transitionJobTask(deps.db, v.data.jobTaskId, "IN_PREP", actorOf(user)!, { expectedState: from, note, now: deps.now() });
   if (!t.ok) return fail(t.code === "FORBIDDEN" ? 403 : t.code === "NOTE_REQUIRED" ? 400 : 409, t.reason);
-  await deps.db.agentRun.update({ where: { id: runId }, data: { status: "CHANGES_REQUESTED", reviewNotes: note.trim() } });
+  if (onMoved) await onMoved();
   await fireHook(deps, t, user);
   return outcomeResult(await runAgent(def, v.data.jobTaskId, deps, { startedById: user?.id ?? null, notes: note }));
+}
+
+/** "Request changes": IN_REVIEW → IN_PREP with the reviewer's note, then a new run with that note. */
+export async function requestChanges(user: SessionUser, runId: string, note: string, deps: AgentServiceDeps) {
+  return backToPrepAndRun(user, runId, note, "IN_REVIEW", deps, () =>
+    deps.db.agentRun.update({ where: { id: runId }, data: { status: "CHANGES_REQUESTED", reviewNotes: note.trim() } }),
+  );
+}
+
+/**
+ * "Re-run with a note": AGENT_DONE → IN_PREP (edge `rerun-agent`: the assignee, a manager or a
+ * partner, note required), then a new run with that note. The old run stays as it was, for the
+ * record; the note is kept on the JobTaskEvent and on the new run.
+ */
+export async function rerunAgent(user: SessionUser, runId: string, note: string, deps: AgentServiceDeps) {
+  return backToPrepAndRun(user, runId, note, "AGENT_DONE", deps);
 }
 
 /**
