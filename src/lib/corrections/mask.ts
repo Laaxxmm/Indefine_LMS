@@ -11,6 +11,7 @@
 // map is thrown away: the audit keeps ⟨PAN_1⟩, never the PAN. Pure module: no I/O.
 import { createHash } from "node:crypto";
 import { mask as anonymize } from "@/lib/ai/anonymizer";
+import type { DictionaryEntry } from "@/lib/ai/types";
 
 export type PiiKind = "pan" | "aadhaar" | "phone" | "email" | "gstin" | "name" | "text";
 
@@ -54,7 +55,37 @@ export function maskForAudit(kind: PiiKind | undefined, value: unknown): AuditVa
   return maskText(s);
 }
 
-/** A reason or note typed by staff, with PAN / GSTIN / Aadhaar / phone / email / account numbers replaced by tokens. */
-export function scrubFreeText(text: string): string {
-  return anonymize(text.trim()).masked;
+/**
+ * A reason, note or comment typed by staff, as it may be stored: PAN / GSTIN / Aadhaar / phone /
+ * email / account numbers replaced by tokens, and — when a dictionary is given — the client's names
+ * too (⟨ORG_1⟩, ⟨NAME_1⟩). The token map is thrown away, so the stored text never holds the value.
+ */
+export function scrubFreeText(text: string, dictionary: readonly DictionaryEntry[] = []): string {
+  return anonymize(text.trim(), dictionary.length ? { dictionary: [...dictionary] } : {}).masked;
+}
+
+type ClientNames = { name?: string | null; contactName?: string | null; entityType?: string | null };
+
+/** "Kiran Kumar" → ["Kiran", "Kumar"]: parts of three letters or more of a name of two words or more. */
+function nameParts(value: string): string[] {
+  const words = value.trim().split(/\s+/).filter(Boolean);
+  return words.length < 2 ? [] : words.filter((w) => /^\p{L}{3,}$/u.test(w));
+}
+
+/**
+ * Masking dictionary for notes about one client (ADR-006 class A): the client's name (a company
+ * as ORG, an individual as NAME, with the parts of the name), the contact person's full name and its
+ * parts. Pass the result to scrubFreeText(). Null-safe: no client, no entries.
+ */
+export function clientDictionary(...clients: (ClientNames | null | undefined)[]): DictionaryEntry[] {
+  const out: DictionaryEntry[] = [];
+  for (const c of clients) {
+    if (!c) continue;
+    const name = c.name?.trim();
+    const contact = c.contactName?.trim();
+    const individual = c.entityType === "INDIVIDUAL";
+    if (name) out.push({ value: name, kind: individual ? "NAME" : "ORG" }, ...(individual ? nameParts(name) : []).map((v) => ({ value: v, kind: "NAME" as const })));
+    if (contact) out.push({ value: contact, kind: "NAME" }, ...nameParts(contact).map((v) => ({ value: v, kind: "NAME" as const })));
+  }
+  return out.filter((e) => e.value.length >= 3 && !e.value.startsWith("[erased]"));
 }

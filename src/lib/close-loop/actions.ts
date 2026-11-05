@@ -11,6 +11,7 @@ import type { JobTaskState } from "@prisma/client";
 import type { SessionUser } from "@/lib/access";
 import { actorOf } from "@/lib/agents/access";
 import { transitionJobTask } from "@/lib/agents/core/state-db";
+import { scrubFreeText } from "@/lib/corrections/mask";
 import type { ManualBridge } from "@/lib/integrations/turia/manual-bridge";
 import { canActOnJob } from "@/lib/rbac/policy";
 import { audit, loadJob } from "./db";
@@ -113,9 +114,11 @@ export async function setJobState(jobTaskId: string, input: SetStateInput, user:
   }
   if (input.to === "FILED_BY_HUMAN") throw new CloseLoopError("invalid", "Use Mark filed, with the acknowledgement reference");
   const { actor } = await jobFor(user, jobTaskId, deps);
-  const t = await transitionJobTask(deps.db, jobTaskId, input.to, actor, { expectedState: input.expectedState, note: input.note ?? null, now: deps.now?.() ?? new Date() });
+  // The note is stored with identifiers (PAN, GSTIN, phone, email …) masked (ADR-006).
+  const note = input.note?.trim() ? scrubFreeText(input.note) : (input.note ?? null);
+  const t = await transitionJobTask(deps.db, jobTaskId, input.to, actor, { expectedState: input.expectedState, note, now: deps.now?.() ?? new Date() });
   if (!t.ok) throw transitionError(t);
   // e.g. "retract-filing" (FILED_BY_HUMAN / CLOSING → APPROVED, manager or partner, note kept).
-  await audit(deps.db, { actorId: actor.userId, action: t.edge, entity: "JobTask", entityId: jobTaskId, meta: { from: t.from, to: t.to, eventId: t.eventId, note: input.note ?? null } });
+  await audit(deps.db, { actorId: actor.userId, action: t.edge, entity: "JobTask", entityId: jobTaskId, meta: { from: t.from, to: t.to, eventId: t.eventId, note } });
   return { state: t.to, hook: await afterTransition(t, user, deps) };
 }
