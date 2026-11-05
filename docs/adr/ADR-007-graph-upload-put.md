@@ -1,6 +1,6 @@
 # ADR-007 — Graph file upload uses HTTP PUT, create-only
 
-Status: Proposed (needs partner/owner confirmation), 2026-11-05
+Status: Accepted (owner approved), 2026-11-05
 
 ## Context
 
