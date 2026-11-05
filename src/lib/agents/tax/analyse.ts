@@ -80,7 +80,13 @@ export type TaxAnalysis = {
   due139: string;
   dueCategory: "audit" | "non-audit";
   belated: boolean;
-  presumptive: { claimed: "44AD" | "44ADA" | null; eligible: boolean; reasons: string[]; incomePaise: number; cashSharePaise: number };
+  /**
+   * `incomePaise` is the deemed income. `declaredLower`: an eligible taxpayer declares less
+   * (business.declaredIncome > 0 and below the deemed income) — the declared income is used, and
+   * the profit is not "declared in accordance with sub-section (1)" (ITR-3, regular advance tax,
+   * s.44AB(d)/(e) audit when total income exceeds the basic exemption).
+   */
+  presumptive: { claimed: "44AD" | "44ADA" | null; eligible: boolean; reasons: string[]; incomePaise: number; cashSharePaise: number; declaredLower: boolean };
   businessIncome: number;
   msme: { findings: MsmeFinding[]; disallowedPaise: number; applied: boolean };
   cgResult: CgResult;
@@ -94,6 +100,8 @@ export type TaxAnalysis = {
   tds: { rows: { tan: string; deductor: string; books: number; form26as: number; diff: number; credit: number }[]; credit: number; total26as: number; totalBooks: number; have26as: boolean };
   ais: { rows: { line: AisLine; outcome: AisOutcome; bookId: string | null; unexplainedPaise: number; note: string }[]; unexplainedPaise: number; questions: number; haveAis: boolean };
   audit: { required: boolean; reason: string };
+  /** Income test for s.44AB(d)/(e) and s.44AD(4): new-regime total income against the basic exemption (0 for firms / companies). */
+  auditIncomeTest: { totalIncomePaise: number; basicExemptionPaise: number };
   itrForm: "ITR-1" | "ITR-2" | "ITR-3" | "ITR-4" | "ITR-5" | "ITR-6";
   advance: { liable: boolean; exempt: boolean; presumptiveOnly: boolean; assessedTaxPaise: number; paidPaise: number; rows: InstalmentRow[]; i234B: number; i234C: number };
   i234A: number;
@@ -133,7 +141,7 @@ export function presumptiveCheck(o: Organiser, rules: TaxRuleSet): TaxAnalysis["
   const b = o.business;
   const claimed = p.presumptive;
   const cash = b ? b.cashReceiptsPaise + b.nonAccountPayeeChequePaise : 0;
-  if (!claimed || !b) return { claimed, eligible: false, reasons: [], incomePaise: 0, cashSharePaise: cash };
+  if (!claimed || !b) return { claimed, eligible: false, reasons: [], incomePaise: 0, cashSharePaise: cash, declaredLower: false };
   const r = rules.presumptive;
   const reasons: string[] = [];
   const cashOk = withinShare(cash, b.turnoverPaise, r.cashShareMaxBp);
@@ -152,14 +160,25 @@ export function presumptiveCheck(o: Organiser, rules: TaxRuleSet): TaxAnalysis["
     if (b.turnoverPaise > limit) reasons.push(`gross receipts ₹${b.turnoverPaise / 100} exceed the ₹${limit / 100} limit`);
   }
   const eligible = reasons.length === 0;
-  return { claimed, eligible, reasons, incomePaise: eligible ? presumptiveIncome(claimed, b.turnoverPaise, b.digitalReceiptsPaise, rules) : 0, cashSharePaise: cash };
+  const incomePaise = eligible ? presumptiveIncome(claimed, b.turnoverPaise, b.digitalReceiptsPaise, rules) : 0;
+  const declaredLower = eligible && b.declaredIncomePaise > 0 && b.declaredIncomePaise < incomePaise;
+  return { claimed, eligible, reasons, incomePaise, cashSharePaise: cash, declaredLower };
 }
 
 function auditCheck(o: Organiser, pres: TaxAnalysis["presumptive"], rules: TaxRuleSet, incomeAboveExemption: boolean): TaxAnalysis["audit"] {
   const p = o.profile;
   const b = o.business;
   if (p.businessKind === "none" || !b) return { required: false, reason: "no business or profession income" };
-  if (pres.claimed && pres.eligible) return { required: false, reason: `income offered under s.${pres.claimed} at or above the presumptive rate` };
+  if (pres.claimed && pres.eligible && !pres.declaredLower) return { required: false, reason: `income offered under s.${pres.claimed} at or above the presumptive rate` };
+  if (pres.claimed && pres.eligible && pres.declaredLower && incomeAboveExemption) {
+    // Declared below the deemed income: the first proviso to s.44AB (profit declared under s.44AD(1) /
+    // s.44ADA(1)) no longer applies. For s.44AD, clause (e) needs s.44AD(4) to apply (profit declared
+    // under s.44AD in one of the five preceding years) — assumed here; partner to confirm.
+    return pres.claimed === "44ADA"
+      ? { required: true, reason: "s.44AB(d) read with s.44ADA(4): income declared below the deemed 50% of receipts and total income exceeds the basic exemption" }
+      : { required: true, reason: "s.44AB(e) read with s.44AD(4)-(5): income declared below the deemed income and total income exceeds the basic exemption (s.44AD(4) taken to apply: confirm s.44AD was used in one of the five preceding years)" };
+  }
+  // Otherwise (declared lower with income within the exemption, or no presumptive scheme) the turnover tests apply.
   const a = rules.audit44AB;
   if (p.presumptiveLock && pres.claimed === "44AD" && incomeAboveExemption) return { required: true, reason: "s.44AB(e) read with s.44AD(4)-(5): opted out within the five-year lock and income exceeds the basic exemption" };
   if (p.businessKind === "profession") {
@@ -325,8 +344,9 @@ function analyse(x: TaxExtract): TaxAnalysis {
   let businessIncome = 0;
   let msmeApplied = false;
   if (b && p.businessKind !== "none") {
-    // Presumptive: the deemed income, or a higher sum the taxpayer declares — never the books profit by default.
-    if (pres.claimed && pres.eligible) businessIncome = Math.max(pres.incomePaise, b.declaredIncomePaise);
+    // Presumptive: the deemed income, or a higher sum the taxpayer declares — never the books profit by
+    // default. A lower declared income is used as declared (pres.declaredLower; audit and ITR follow).
+    if (pres.claimed && pres.eligible) businessIncome = pres.declaredLower ? b.declaredIncomePaise : Math.max(pres.incomePaise, b.declaredIncomePaise);
     else {
       msmeApplied = true;
       businessIncome = b.booksProfitPaise + msmeRes.totalPaise + b.otherDisallowancesPaise;
@@ -472,7 +492,10 @@ function analyse(x: TaxExtract): TaxAnalysis {
   const anyLoss = (x.priorItr?.lossesCarriedForward.length ?? 0) > 0 || chosenFull.currentLoss > 0 || cg.lossCarriedForwardPaise > 0;
   const simple = p.residentialStatus === "resident" && chosenFull.totalIncome <= rules.itr.itr1IncomeLimitPaise && !anyLoss && (rows.length === 0 || onlySmall112A);
   const hasBiz = p.businessKind !== "none";
-  const presOk = !!pres.claimed && pres.eligible;
+  // presScheme: an eligible scheme is in use (s.43B(h) not applied, no MSME ageing needed). presOk: the
+  // profit is declared under s.44AD(1) / s.44ADA(1) — ITR-4 and the single 15 March instalment (s.211(1)(b)).
+  const presScheme = !!pres.claimed && pres.eligible;
+  const presOk = presScheme && !pres.declaredLower;
   let itrForm: TaxAnalysis["itrForm"];
   if (p.status === "company") itrForm = "ITR-6";
   else if (p.status === "firm") itrForm = !p.isLlp && simple && presOk ? "ITR-4" : "ITR-5";
@@ -504,7 +527,7 @@ function analyse(x: TaxExtract): TaxAnalysis {
   if (!have26as) missingDocs.push("Form 26AS (downloaded from TRACES by staff)");
   if (!haveAis) missingDocs.push("Annual Information Statement (AIS / TIS)");
   if (!x.capitalGains && (x.ais ?? []).some((l) => l.category.startsWith("sale-"))) missingDocs.push("Capital gains statement (AIS shows a sale of securities or property)");
-  if (!x.msme && hasBiz && !presOk) missingDocs.push("MSME supplier ageing with acceptance and payment dates (s.43B(h))");
+  if (!x.msme && hasBiz && !presScheme) missingDocs.push("MSME supplier ageing with acceptance and payment dates (s.43B(h))");
   if (!x.priorItr) missingDocs.push("Prior-year ITR acknowledgement and computation");
   if (personal && p.regimeClaimed === "old" && hasBiz && !p.form10IEAFiledOn) missingDocs.push("Form 10-IEA acknowledgement (old regime with business income)");
 
@@ -537,6 +560,7 @@ function analyse(x: TaxExtract): TaxAnalysis {
     tds,
     ais,
     audit,
+    auditIncomeTest: { totalIncomePaise: resNew.totalIncome, basicExemptionPaise: exemptLimit },
     itrForm,
     advance: { liable: adv.liable, exempt, presumptiveOnly: presOk, assessedTaxPaise: assessed, paidPaise: paid, rows: adv.rows, i234B: adv.i234B, i234C: adv.i234C },
     i234A,

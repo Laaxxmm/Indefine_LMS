@@ -182,7 +182,7 @@ const FY_2025_26: TaxRuleSet = {
     s44ADOtherBp: 800,
     s44ADABp: 5000,
     verify:
-      "s.44AD: resident individual / HUF / firm (not LLP), turnover â‰¤ â‚¹2 crore or â‚¹3 crore if cash receipts â‰¤ 5% (a cheque or draft that is not account payee counts as cash); 6% on banking-channel receipts received by the s.139(1) due date, 8% on the rest; s.44AD(4) five-year lock. s.44ADA: resident, specified profession, receipts â‰¤ â‚¹50 lakh or â‚¹75 lakh if cash â‰¤ 5%; 50%.",
+      "s.44AD: resident individual / HUF / firm (not LLP), turnover â‰¤ â‚¹2 crore or â‚¹3 crore if cash receipts â‰¤ 5% (a cheque or draft that is not account payee counts as cash); 6% on banking-channel receipts received by the s.139(1) due date, 8% on the rest; s.44AD(4) five-year lock. An income declared BELOW the deemed income (s.44AD or s.44ADA) is used as declared; the profit is then not declared under sub-section (1), so ITR-3, the regular advance-tax instalments, and a tax audit u/s 44AB(d) (s.44ADA(4)) or u/s 44AB(e) (s.44AD(4)-(5)) when total income exceeds the basic exemption (new-regime limit) - for s.44AD the agent assumes s.44AD(4) applies (profit declared under s.44AD in one of the five preceding years): PARTNER TO CONFIRM from the prior returns. s.44ADA: resident, specified profession, receipts â‰¤ â‚¹50 lakh or â‚¹75 lakh if cash â‰¤ 5%; 50%.",
   },
   audit44AB: {
     businessLimitPaise: 1 * CR,

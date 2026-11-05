@@ -80,6 +80,38 @@ describe("presumptive conditions (boundaries)", () => {
     expect(a("clean-44ada-doctor").businessIncome).toBe(rs(30_00_000));
     expect(a("clean-44ada-doctor", (o) => (o.business.declaredIncome = "32,00,000")).businessIncome).toBe(rs(32_00_000));
   });
+  describe("income declared below the deemed income (s.44AD / s.44ADA)", () => {
+    // Trader: turnover 90,00,000, cash 10,00,000; deemed 6% x 80,00,000 + 8% x 10,00,000 = 5,60,000.
+    const trader = (declared: string) => a("trap-44ad-declared-below-deemed", (o) => (o.business.declaredIncome = declared), { matches: [] });
+    it("the declared income is used; ITR-3; regular advance-tax instalments; audit u/s 44AB(e) when TI exceeds the basic exemption", () => {
+      const x = trader("4,50,000");
+      expect(x.presumptive).toMatchObject({ claimed: "44AD", eligible: true, incomePaise: rs(5_60_000), declaredLower: true });
+      expect(x.businessIncome).toBe(rs(4_50_000));
+      expect(x.chosen.totalIncome).toBe(rs(4_50_000));
+      expect(x.audit).toMatchObject({ required: true, reason: expect.stringMatching(/^s\.44AB\(e\) read with s\.44AD\(4\)-\(5\)/) });
+      expect(x.due139).toBe("2026-10-31");
+      expect(x.itrForm).toBe("ITR-3");
+      expect(x.advance.presumptiveOnly).toBe(false);
+      expect(x.auditIncomeTest).toEqual({ totalIncomePaise: rs(4_50_000), basicExemptionPaise: rs(4_00_000) });
+    });
+    it("boundary on the basic exemption: TI 4,00,000 → no s.44AB(e) audit (turnover tests: 90 lakh is within ₹1 crore); 4,00,010 → audit", () => {
+      expect(trader("4,00,000").audit.required).toBe(false);
+      expect(trader("4,00,000").audit.reason).toMatch(/turnover within/);
+      expect(trader("4,00,010").audit.required).toBe(true);
+    });
+    it("declared equal to (or above) the deemed income is not a lower declaration; 0 = nothing declared", () => {
+      expect(trader("5,60,000")).toMatchObject({ businessIncome: rs(5_60_000), itrForm: "ITR-4", audit: { required: false } });
+      expect(trader("5,59,999.99").presumptive.declaredLower).toBe(true);
+      expect(trader("6,00,000").businessIncome).toBe(rs(6_00_000));
+      expect(trader("0").presumptive.declaredLower).toBe(false);
+    });
+    it("s.44ADA: declared 25,00,000 against the deemed 30,00,000 → s.44AB(d) audit, ITR-3", () => {
+      const x = a("clean-44ada-doctor", (o) => (o.business.declaredIncome = "25,00,000"));
+      expect(x.businessIncome).toBe(rs(25_00_000));
+      expect(x.audit).toMatchObject({ required: true, reason: expect.stringMatching(/^s\.44AB\(d\) read with s\.44ADA\(4\)/) });
+      expect(x.itrForm).toBe("ITR-3");
+    });
+  });
   it("no scheme claimed", () => {
     expect(presumptiveCheck(extractOf("clean-salaried-new").organiser, R)).toMatchObject({ claimed: null, eligible: false });
   });

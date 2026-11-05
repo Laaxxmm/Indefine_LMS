@@ -64,6 +64,21 @@ describe("26AS / AIS", () => {
 });
 
 describe("business rules", () => {
+  it("tax.presumptive-declared-lower: declared below the deemed income fails with the s.44AB clause; at or above passes; no scheme na", () => {
+    const low = run("tax.presumptive-declared-lower", extractOf("trap-44ad-declared-below-deemed", undefined, { matches: [] }));
+    expect(low).toMatchObject({ status: "fail", evidence: { quote: "declaredIncome 4,50,000.00", location: "organiser.json business.declaredIncome" } });
+    expect(low.message).toMatch(/declared ₹4,50,000\.00 is below the s\.44AD deemed income ₹5,60,000\.00/);
+    expect(low.message).toMatch(/s\.44AB\(e\) read with s\.44AD\(4\)-\(5\)/);
+    expect(low.message).toMatch(/basic exemption \(₹4,00,000\.00\): total income ₹4,50,000\.00, so the audit is required/);
+    const doc = run("tax.presumptive-declared-lower", extractOf("clean-44ada-doctor", (o) => (o.business.declaredIncome = "25,00,000")));
+    expect(doc.message).toMatch(/s\.44AB\(d\) read with s\.44ADA\(4\)/);
+    // Within the exemption: still flagged (lower declaration), but the audit is not required on this ground.
+    const small = run("tax.presumptive-declared-lower", extractOf("trap-44ad-declared-below-deemed", (o) => (o.business.declaredIncome = "4,00,000"), { matches: [] }));
+    expect(small.message).toMatch(/total income ₹4,00,000\.00, so the audit is not required on this ground/);
+    expect(run("tax.presumptive-declared-lower", extractOf("clean-44ad-presumptive")).status).toBe("pass");
+    expect(run("tax.presumptive-declared-lower", clean()).status).toBe("na");
+    expect(run("tax.presumptive-declared-lower", extractOf("trap-44ad-over-limit-bearer-cheques", undefined, { matches: [] })).status).toBe("na");
+  });
   it("tax.presumptive-conditions: over the limit fails, eligible passes, none claimed na", () => {
     expect(run("tax.presumptive-conditions", extractOf("trap-44ad-over-limit-bearer-cheques", undefined, { matches: [] })).status).toBe("fail");
     expect(run("tax.presumptive-conditions", extractOf("clean-44ad-presumptive")).message).toMatch(/presumptive income ₹11,40,000.00/);
