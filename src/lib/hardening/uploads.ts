@@ -2,13 +2,15 @@
 // 25 MB per file, a content sniff so a renamed file is caught, and a virus-scan hook.
 //
 // Where it applies
-//   - readUploadForm(): for any Firm OS route that accepts a file (none exists yet; the agent
-//     "uploads" input source and Phase 10 attachments plug in here). Rejections are 413 / 415 / 422.
+//   - readMultipartUpload() / readUploadForm(): every route that accepts a multipart upload. The
+//     body is capped before it is read (Content-Length, then a running count), and each file is
+//     screened strictly against the route's own type list. Used by the LMS client documents
+//     (DOCUMENT_TYPES: office files and scanned images, 50 MB each), the tax office tools (PDF)
+//     and engagement-letter PDFs. Rejections are 413 / 415 / 422 with a sentence.
 //   - Agent inputs (src/lib/agents/core/inputs.ts): files a run reads from the job's ClientDocs
 //     folder on SharePoint are screened with screenUpload() in "warn" mode for type (the ROC agent
 //     reads an optional notes.txt), and strictly for size and the scan verdict; the staff "uploads"
 //     source is screened strictly.
-//   - The legacy LMS client-document upload keeps its own MAX_UPLOAD_BYTES (not Firm OS).
 //
 // Virus scanning is a placeholder: no scanner is configured, so the default verdict is
 // "not-scanned" and the file is ALLOWED WITH A WARNING, which is logged (one structured line, no
@@ -30,6 +32,12 @@ export const UPLOAD_TYPES: Readonly<Record<string, readonly string[]>> = {
   docx: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
 };
 export const UPLOAD_EXTENSIONS = Object.keys(UPLOAD_TYPES);
+
+export type UploadTypes = Readonly<Record<string, readonly string[]>>;
+/** What staff attach to a client record: the office documents above plus scanned images (KYC scans). */
+export const DOCUMENT_TYPES: UploadTypes = { ...UPLOAD_TYPES, jpg: ["image/jpeg", "image/pjpeg"], jpeg: ["image/jpeg", "image/pjpeg"], png: ["image/png"] };
+/** PDF only (returns, signed letters). */
+export const PDF_TYPES: UploadTypes = { pdf: UPLOAD_TYPES.pdf };
 /** MIME types that say nothing about the content (the extension and the sniff decide). */
 const GENERIC_MIME = new Set(["", "application/octet-stream", "binary/octet-stream", "application/x-download"]);
 
@@ -39,13 +47,13 @@ export type UploadCheck = { ok: true; ext: string } | { ok: false; status: 400 |
 export const extOf = (name: string) => (name.match(/\.([A-Za-z0-9]+)$/)?.[1] ?? "").toLowerCase();
 
 /** Name, extension, declared MIME type and size; no bytes needed. */
-export function checkUpload(file: { name: string; size: number; type?: string | null }, maxBytes = UPLOAD_MAX_BYTES): UploadCheck {
+export function checkUpload(file: { name: string; size: number; type?: string | null }, maxBytes = UPLOAD_MAX_BYTES, types: UploadTypes = UPLOAD_TYPES): UploadCheck {
   const name = file.name?.trim() ?? "";
   if (!name || name.length > 200 || /[\\/\0]/.test(name) || name === "." || name === "..") return { ok: false, status: 400, code: "name", reason: "The file needs a plain name (no folders), up to 200 characters" };
   const ext = extOf(name);
-  if (!UPLOAD_TYPES[ext]) return { ok: false, status: 415, code: "type", reason: `${ext ? `.${ext}` : "This"} file type is not accepted. Upload ${UPLOAD_EXTENSIONS.map((e) => e.toUpperCase()).join(", ")} only.` };
+  if (!types[ext]) return { ok: false, status: 415, code: "type", reason: `${ext ? `.${ext}` : "This"} file type is not accepted. Upload ${Object.keys(types).map((e) => e.toUpperCase()).join(", ")} only.` };
   const mime = (file.type ?? "").split(";")[0].trim().toLowerCase();
-  if (!GENERIC_MIME.has(mime) && !UPLOAD_TYPES[ext].includes(mime)) return { ok: false, status: 415, code: "type-mismatch", reason: `The file is named .${ext} but was sent as ${mime}` };
+  if (!GENERIC_MIME.has(mime) && !types[ext].includes(mime)) return { ok: false, status: 415, code: "type-mismatch", reason: `The file is named .${ext} but was sent as ${mime}` };
   return sizeCheck(file.size, maxBytes) ?? { ok: true, ext };
 }
 
@@ -73,6 +81,11 @@ export function sniffMatches(ext: string, bytes: Uint8Array): boolean {
       return starts([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]) || isText(bytes);
     case "csv":
       return isText(bytes);
+    case "jpg":
+    case "jpeg":
+      return starts([0xff, 0xd8, 0xff]);
+    case "png":
+      return starts([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
     case "json": {
       if (!isText(bytes)) return false;
       const first = head(64).find((b) => ![0xef, 0xbb, 0xbf, 0x20, 0x09, 0x0a, 0x0d].includes(b));
@@ -135,6 +148,8 @@ export type ScreenOptions = {
   typeMode?: "strict" | "warn";
   /** Where the file came from, for the log ("upload", "client-docs"). */
   source?: string;
+  /** The accepted types for this route (default UPLOAD_TYPES). */
+  types?: UploadTypes;
 };
 
 /** Every check on one file: name/type/size, content sniff, then the scan hook. */
@@ -156,7 +171,7 @@ export async function screenUpload(file: { name: string; bytes: Uint8Array; type
     return r;
   };
 
-  const c = checkUpload({ name: file.name, size: file.bytes.length, type: file.type }, opts.maxBytes);
+  const c = checkUpload({ name: file.name, size: file.bytes.length, type: file.type }, opts.maxBytes, opts.types);
   const typeOnly = !c.ok && (c.code === "type" || c.code === "type-mismatch");
   if (!c.ok && !(typeOnly && opts.typeMode === "warn")) return reject(c);
   // Warn mode lets an off-list type through, never an empty or oversized file.
@@ -182,28 +197,104 @@ export function uploadErrorResponse(r: Extract<ScreenResult, { ok: false }>): Ne
 
 export type UploadedFile = { name: string; type: string; bytes: Uint8Array; warning: string | null };
 
+/** Multipart framing on top of the files themselves. */
+const FRAMING_BYTES = 64 * 1024;
+
+const tooBig = (size: number, max: number) => uploadErrorResponse({ ok: false, status: 413, code: "size", reason: `The upload is ${mb(size)}; the limit is ${mb(max)}` });
+
 /**
- * For a route that accepts a multipart upload: refuses by Content-Length before reading the body,
- * then reads the one file field and screens it. Returns the file, or the error response to send.
+ * The request body, read no further than `cap` bytes: refused unread when Content-Length says it
+ * is bigger, and cut off (413) while reading when a body without one runs past the cap. Memory
+ * stays bounded whatever the client sends.
  */
-export async function readUploadForm(req: Request, opts: ScreenOptions & { field?: string } = {}): Promise<{ ok: true; file: UploadedFile } | { ok: false; res: NextResponse }> {
+export async function readBodyCapped(req: Request, cap: number, limitShown = cap): Promise<{ ok: true; bytes: Uint8Array<ArrayBuffer> } | { ok: false; res: NextResponse }> {
+  const declared = Number(req.headers.get("content-length") ?? "");
+  if (Number.isFinite(declared) && declared > cap) return { ok: false, res: tooBig(declared, limitShown) };
+  if (!req.body) return { ok: true, bytes: new Uint8Array(new ArrayBuffer(0)) };
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > cap) {
+      await reader.cancel().catch(() => {});
+      return { ok: false, res: tooBig(total, limitShown) };
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(new ArrayBuffer(total));
+  let at = 0;
+  for (const c of chunks) {
+    bytes.set(c, at);
+    at += c.byteLength;
+  }
+  return { ok: true, bytes };
+}
+
+export type MultipartOptions = ScreenOptions & {
+  /** File fields to read (default ["file"]). */
+  fields?: readonly string[];
+  /** Most files in one request (default 1). */
+  maxFiles?: number;
+  /** Cap on the whole body (default maxFiles × maxBytes plus framing). */
+  maxTotalBytes?: number;
+};
+
+export type RejectedFile = { name: string; status: number; reason: string };
+
+/**
+ * For every route that accepts a multipart upload: the body is capped before it is read (see
+ * readBodyCapped), then each file in the given fields is screened strictly (name, type allowlist
+ * for the route, size, content sniff, virus-scan hook). Returns the other form fields, the screened
+ * files and the refused ones (multi-file routes report those per file), or the response to send.
+ */
+export async function readMultipartUpload(
+  req: Request,
+  opts: MultipartOptions = {},
+): Promise<{ ok: true; form: FormData; files: UploadedFile[]; rejected: RejectedFile[] } | { ok: false; res: NextResponse }> {
   const max = opts.maxBytes ?? UPLOAD_MAX_BYTES;
-  const declared = Number(req.headers.get("content-length") ?? "0");
-  // Multipart framing adds a little; anything far above the limit is refused unread.
-  if (declared > max + 64 * 1024) return { ok: false, res: uploadErrorResponse({ ok: false, status: 413, code: "size", reason: `The upload is ${mb(declared)}; the limit is ${mb(max)}` }) };
+  const maxFiles = opts.maxFiles ?? 1;
+  const cap = opts.maxTotalBytes ?? max * maxFiles + FRAMING_BYTES;
+  const body = await readBodyCapped(req, cap, maxFiles === 1 ? max : cap);
+  if (!body.ok) return body;
   let form: FormData;
   try {
-    form = await req.formData();
+    form = await new Response(body.bytes, { headers: { "content-type": req.headers.get("content-type") ?? "" } }).formData();
   } catch {
     return { ok: false, res: NextResponse.json({ error: "Send the file as multipart/form-data", code: "name" }, { status: 400 }) };
   }
-  const value = form.get(opts.field ?? "file");
-  if (!value || typeof value === "string") return { ok: false, res: NextResponse.json({ error: "Attach a file", code: "empty" }, { status: 400 }) };
-  const file = value as File;
-  const pre = checkUpload({ name: file.name, size: file.size, type: file.type }, max);
-  if (!pre.ok && pre.code === "size") return { ok: false, res: uploadErrorResponse(pre) };
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  const r = await screenUpload({ name: file.name, bytes, type: file.type }, { ...opts, source: opts.source ?? "upload", typeMode: "strict" });
-  if (!r.ok) return { ok: false, res: uploadErrorResponse(r) };
-  return { ok: true, file: { name: file.name, type: file.type, bytes, warning: r.warning } };
+  const values = (opts.fields ?? ["file"]).flatMap((f) => form.getAll(f)).filter((v): v is File => typeof v !== "string");
+  if (values.length > maxFiles) {
+    return { ok: false, res: NextResponse.json({ error: `Upload at most ${maxFiles} file${maxFiles === 1 ? "" : "s"} at a time.`, code: "size" }, { status: 413 }) };
+  }
+  const files: UploadedFile[] = [];
+  const rejected: RejectedFile[] = [];
+  for (const file of values) {
+    const pre = checkUpload({ name: file.name, size: file.size, type: file.type }, max, opts.types);
+    if (!pre.ok && pre.code === "size") {
+      rejected.push({ name: file.name, status: pre.status, reason: pre.reason });
+      continue;
+    }
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const r = await screenUpload({ name: file.name, bytes, type: file.type }, { ...opts, source: opts.source ?? "upload", typeMode: "strict" });
+    if (r.ok) files.push({ name: file.name, type: file.type, bytes, warning: r.warning });
+    else rejected.push({ name: file.name, status: r.status, reason: r.reason });
+  }
+  return { ok: true, form, files, rejected };
+}
+
+/**
+ * For a route that accepts one file: refuses by Content-Length (and by a running count) before
+ * the body is read, then screens the one file field. Returns the file, or the error response.
+ */
+export async function readUploadForm(req: Request, opts: ScreenOptions & { field?: string } = {}): Promise<{ ok: true; file: UploadedFile; form: FormData } | { ok: false; res: NextResponse }> {
+  const r = await readMultipartUpload(req, { ...opts, fields: [opts.field ?? "file"], maxFiles: 1 });
+  if (!r.ok) return r;
+  const bad = r.rejected[0];
+  if (bad) return { ok: false, res: NextResponse.json({ error: bad.reason, code: "rejected" }, { status: bad.status }) };
+  const file = r.files[0];
+  if (!file) return { ok: false, res: NextResponse.json({ error: "Attach a file", code: "empty" }, { status: 400 }) };
+  return { ok: true, file, form: r.form };
 }

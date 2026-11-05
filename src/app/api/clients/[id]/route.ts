@@ -6,12 +6,14 @@ import { prisma } from "@/lib/prisma";
 import { canManageClients, clientBodyZ, folderName, turnoverBand } from "@/lib/clients/core";
 import { renameClientFolder } from "@/lib/clients/storage";
 import { scheduleWorkbookRebuild } from "@/lib/clients/workbook";
+import { CLIENT_PII, auditEdit, maskedChanges } from "@/lib/clients/audit";
 
 export const maxDuration = 60;
 
 const patchZ = clientBodyZ.partial().extend({ active: z.boolean().optional() });
 
-// Edit client details. Admins and partners only.
+// Edit client details. Admins and partners only (canManageClients); every edit is an AuditEvent
+// with masked before / after (src/lib/clients/audit.ts).
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -53,6 +55,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (dup) return NextResponse.json({ error: `PAN already belongs to ${dup.name}` }, { status: 409 });
   }
 
+  const changes = maskedChanges(existing as unknown as Record<string, unknown>, data as Record<string, unknown>, CLIENT_PII);
   try {
     await prisma.client.update({ where: { id }, data });
   } catch (e) {
@@ -60,6 +63,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: "Another client already has that name or PAN" }, { status: 409 });
     throw e;
   }
+  // Who changed which fields, before / after masked (identifiers last 4, names initials, notes fingerprinted).
+  await auditEdit(prisma, { actorId: session.user.id, action: "update", entity: "Client", entityId: id, changes });
   scheduleWorkbookRebuild();
   return NextResponse.json({ ok: true });
 }

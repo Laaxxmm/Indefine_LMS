@@ -4,6 +4,10 @@ import {
   UPLOAD_MAX_BYTES,
   checkUpload,
   notScannedScanner,
+  DOCUMENT_TYPES,
+  PDF_TYPES,
+  readBodyCapped,
+  readMultipartUpload,
   readUploadForm,
   screenUpload,
   sniffMatches,
@@ -143,5 +147,68 @@ describe("readUploadForm", () => {
   it("refuses a file over the limit by its size before reading it", async () => {
     const r = await readUploadForm(form(new File([CSV], "a.csv")), { maxBytes: 5, log: () => {} });
     expect(r.ok || r.res.status).toBe(413);
+  });
+});
+
+describe("readMultipartUpload (every multipart route: body capped before it is read, each file screened)", () => {
+  const JPG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
+  const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
+  const HTML = enc("<html><script>alert(1)</script></html>");
+  const multi = (files: File[], extra: Record<string, string> = {}, headers: Record<string, string> = {}) => {
+    const fd = new FormData();
+    for (const f of files) fd.append("files", f);
+    for (const [k, v] of Object.entries(extra)) fd.set(k, v);
+    return new Request("http://x/api/upload", { method: "POST", body: fd, headers });
+  };
+
+  it("client documents: office files and scanned images pass; .exe, .html and a renamed executable are refused per file; other fields are returned", async () => {
+    const r = await readMultipartUpload(
+      multi(
+        [new File([PDF], "pan.pdf", { type: "application/pdf" }), new File([JPG], "kyc.jpg", { type: "image/jpeg" }), new File([PNG], "kyc.png"), new File([EXE], "tool.exe"), new File([HTML], "page.html", { type: "text/html" }), new File([EXE], "fake.pdf")],
+        { docType: "PAN" },
+      ),
+      { fields: ["files"], types: DOCUMENT_TYPES, maxFiles: 10, log: () => {} },
+    );
+    if (!r.ok) throw new Error("expected ok");
+    expect(r.files.map((f) => f.name)).toEqual(["pan.pdf", "kyc.jpg", "kyc.png"]);
+    expect(r.rejected.map((x) => [x.name, x.status])).toEqual([
+      ["tool.exe", 415],
+      ["page.html", 415],
+      ["fake.pdf", 415],
+    ]);
+    expect(r.form.get("docType")).toBe("PAN");
+  });
+
+  it("refuses too many files, and a body over the cap — by Content-Length unread, or by counting a body that has none", async () => {
+    const many = await readMultipartUpload(multi([new File([PDF], "a.pdf"), new File([PDF], "b.pdf")]), { fields: ["files"], types: PDF_TYPES, maxFiles: 1, log: () => {} });
+    expect(many.ok || many.res.status).toBe(413);
+    const declared = await readMultipartUpload(multi([new File([PDF], "a.pdf")], {}, { "content-length": String(500 * 1024 * 1024) }), { fields: ["files"], maxFiles: 2, maxTotalBytes: 1024 * 1024, log: () => {} });
+    expect(declared.ok || declared.res.status).toBe(413);
+    // A streamed body with no Content-Length is cut off once it passes the cap.
+    const chunk = new Uint8Array(64 * 1024);
+    let sent = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(c) {
+        sent += 1;
+        if (sent > 100) c.close();
+        else c.enqueue(chunk);
+      },
+    });
+    const streamed = new Request("http://x", { method: "POST", body: stream, headers: { "content-type": "multipart/form-data; boundary=x" }, duplex: "half" } as RequestInit);
+    const r = await readBodyCapped(streamed, 256 * 1024);
+    expect(r.ok || r.res.status).toBe(413);
+    expect(sent).toBeLessThan(100); // stopped reading early
+  });
+
+  it("PDF-only routes refuse anything else, and sniff the content", async () => {
+    const r = await readMultipartUpload(multi([new File([CSV], "returns.csv"), new File([CSV], "return.pdf"), new File([PDF], "gstr3b.pdf")]), { fields: ["files"], types: PDF_TYPES, maxFiles: 5, log: () => {} });
+    if (!r.ok) throw new Error("expected ok");
+    expect(r.files.map((f) => f.name)).toEqual(["gstr3b.pdf"]);
+    expect(r.rejected.map((x) => x.reason)).toEqual([".csv file type is not accepted. Upload PDF only.", "The content does not look like a .pdf file"]);
+    expect(sniffMatches("jpg", JPG)).toBe(true);
+    expect(sniffMatches("png", PNG)).toBe(true);
+    expect(sniffMatches("png", JPG)).toBe(false);
+    expect(checkUpload({ name: "scan.jpg", size: 10 }).ok).toBe(false); // images are not in the Firm OS default list
+    expect(checkUpload({ name: "scan.jpg", size: 10, type: "image/jpeg" }, UPLOAD_MAX_BYTES, DOCUMENT_TYPES).ok).toBe(true);
   });
 });

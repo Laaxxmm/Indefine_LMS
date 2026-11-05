@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { canUseOfficeTools } from "@/lib/office-tools/access";
 import { TAX_PROCESSORS, XLSX_MIME, type PdfFile } from "@/lib/office-tools/tax";
 import { recordToolRun } from "@/lib/office-tools/audit";
+import { PDF_TYPES, readMultipartUpload } from "@/lib/hardening/uploads";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -10,6 +11,8 @@ export const maxDuration = 60;
 // Return PDFs are ~100 KB each; these only stop a crafted upload from tying up the parser.
 const MAX_FILES = 200;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
+/** 200 returns at ~100 KB are ~20 MB; the whole request is capped well above that, far below 200 × 10 MB. */
+const MAX_REQUEST_BYTES = 100 * 1024 * 1024;
 
 // Process uploaded return PDFs into an Excel workbook. No file is stored — the .xlsx
 // streams straight back; the run is logged for audit (tool + file count).
@@ -22,16 +25,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ tool: s
   const proc = TAX_PROCESSORS[tool];
   if (!proc) return NextResponse.json({ error: "Unknown tool" }, { status: 404 });
 
-  const form = await req.formData().catch(() => null);
-  if (!form) return NextResponse.json({ error: "Invalid upload" }, { status: 400 });
-  const uploaded = form.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
-  if (uploaded.length === 0) return NextResponse.json({ error: "Upload at least one PDF." }, { status: 400 });
-  if (uploaded.length > MAX_FILES) return NextResponse.json({ error: `Upload at most ${MAX_FILES} PDFs at a time.` }, { status: 413 });
-  const big = uploaded.find((f) => f.size > MAX_FILE_BYTES);
-  if (big) return NextResponse.json({ error: `${big.name} is over 10 MB.` }, { status: 413 });
+  // The body is capped before it is read, and every file is screened: PDF only (content checked),
+  // 10 MB each, at most MAX_FILES (src/lib/hardening/uploads.ts).
+  const read = await readMultipartUpload(req, { fields: ["files"], types: PDF_TYPES, maxBytes: MAX_FILE_BYTES, maxFiles: MAX_FILES, maxTotalBytes: MAX_REQUEST_BYTES, source: "tax-tool" });
+  if (!read.ok) return read.res;
+  const bad = read.rejected[0];
+  if (bad) return NextResponse.json({ error: `${bad.name}: ${bad.reason}. Upload the return PDFs only.` }, { status: bad.status });
+  if (read.files.length === 0) return NextResponse.json({ error: "Upload at least one PDF." }, { status: 400 });
 
-  const files: PdfFile[] = [];
-  for (const f of uploaded) files.push({ name: f.name, buffer: Buffer.from(await f.arrayBuffer()) });
+  const files: PdfFile[] = read.files.map((f) => ({ name: f.name, buffer: Buffer.from(f.bytes) }));
 
   let result: { bytes: Buffer; count: number };
   try {
