@@ -6,18 +6,21 @@
 //   reminders every 30 min, working time: T−2h / T−30m "reminder" before the internal due moment
 //             (dedupeKey reminder:<job>:<user>:<slot>); once overdue, one "escalation" per job per
 //             day (dedupeKey escalation:<job>:<istDay>). Jobs before filing only (reminders.ts).
+//   summary   Friday 16:00 IST: a weekly cycle-time "summary" per person (dedupeKey
+//             summary:<user>:<weekOf>), readable by the person and their manager only.
 //
 // Delivery is in-app only (the /coach page and the dashboard card). The LMS has no Teams or e-mail
 // channel to staff: the work tracker's chat posts as its lead into one two-person chat and is not a
 // general channel, and sending mail as a person is a client-facing send path the Firm OS forbids.
 import { formatDate } from "@/lib/agents/core/format";
-import { addDays, istDayKey, istDayStart } from "@/lib/ist";
-import { DEFAULT_CALENDAR, type CoachCalendar } from "./config";
+import { addDays, istDayKey, istDayStart, istWeekStart, istWeekday } from "@/lib/ist";
+import { DEFAULT_CALENDAR, SUMMARY_SCHEDULE, type CoachCalendar } from "./config";
 import { toRankInputs } from "./board";
 import { COACH_ACTOR, COACH_JOB_SELECT, MAX_ROWS, audit, createOnce, dedupeKey, jobLabel, type CoachDb, type CoachJobRow } from "./db";
-import { PRE_FILING_STATES, buildBoard, stepHolder, type RankOptions, type RankedBoard, type RankedItem } from "./rank";
+import { POST_FILING_STATES, PRE_FILING_STATES, buildBoard, stepHolder, type RankOptions, type RankedBoard, type RankedItem } from "./rank";
 import { dueReminderSlot, escalationMessage, escalationTarget, isInternalOverdue, reminderMessage } from "./reminders";
-import { isCoachWorkingTime } from "./workdays";
+import { weeklySummary } from "./summary";
+import { isCoachWorkingTime, istMinutes } from "./workdays";
 
 export type CoachCronDeps = {
   db: CoachDb;
@@ -191,20 +194,80 @@ export async function runReminders(deps: CoachCronDeps): Promise<ReminderRunSumm
   return s;
 }
 
+// ------------------------------------------------------------------ weekly summary
+
+export interface SummaryRunSummary {
+  at: string;
+  skipped?: "not-friday-afternoon";
+  weekOf: string;
+  people: number;
+  created: number;
+  existing: number;
+}
+
+/** Friday from 16:00 IST (a manual run at any other time does nothing). */
+export function isSummaryTime(now: Date): boolean {
+  return istWeekday(now) === SUMMARY_SCHEDULE.weekday && istMinutes(now) >= SUMMARY_SCHEDULE.fromMin;
+}
+
+/**
+ * Friday 16:00 IST: one CoachEvent "summary" per person with jobs this week (done, open or past due)
+ * — dedupeKey summary:<user>:<weekOf>. The event is the person's; their manager may read it
+ * (access.ts), nobody else.
+ */
+export async function runWeeklySummary(deps: CoachCronDeps): Promise<SummaryRunSummary> {
+  const { now, calendar } = setup(deps);
+  const weekStart = istWeekStart(now);
+  const weekOf = istDayKey(weekStart);
+  const s: SummaryRunSummary = { at: now.toISOString(), weekOf, people: 0, created: 0, existing: 0 };
+  if (!isSummaryTime(now)) return { ...s, skipped: "not-friday-afternoon" };
+
+  const done = await deps.db.jobTask.findMany({
+    where: { state: "DONE", doneAt: { gte: weekStart, lte: now } },
+    select: { id: true, assigneeId: true, events: { select: { fromState: true, toState: true, createdAt: true, note: true }, orderBy: { createdAt: "asc" } } },
+    orderBy: { id: "asc" },
+    take: MAX_ROWS,
+  });
+  const open = await deps.db.jobTask.findMany({
+    where: { state: { in: [...PRE_FILING_STATES, ...POST_FILING_STATES] } },
+    select: { id: true, state: true, assigneeId: true, internalDueOn: true },
+    orderBy: { id: "asc" },
+    take: MAX_ROWS,
+  });
+  const people = [...new Set([...done, ...open].map((j) => j.assigneeId).filter((x): x is string => !!x))].sort();
+  const users = await activeUsers(deps.db, people);
+
+  for (const userId of people.filter((id) => users.has(id))) {
+    s.people += 1;
+    const mine = open.filter((j) => j.assigneeId === userId);
+    const overdue = mine.filter(
+      (j) => (PRE_FILING_STATES as readonly string[]).includes(j.state) && j.internalDueOn && isInternalOverdue(j.internalDueOn, now, { calendar }),
+    ).length;
+    const summary = weeklySummary({ weekStart, done: done.filter((j) => j.assigneeId === userId), open: mine.length, overdue });
+    const created = await createOnce(deps.db, { userId, kind: "summary", dedupeKey: dedupeKey.summary(userId, weekOf), payload: summary });
+    if (created) s.created += 1;
+    else s.existing += 1;
+  }
+  if (s.created > 0) await audit(deps.db, { actorId: COACH_ACTOR, action: "coach-summary", entity: "CoachEvent", meta: { weekOf, created: s.created } });
+  return s;
+}
+
 // ------------------------------------------------------------------ entry
 
-export const COACH_JOBS = ["morning", "reminders"] as const;
+export const COACH_JOBS = ["morning", "reminders", "summary"] as const;
 export type CoachJob = (typeof COACH_JOBS)[number];
 
 export function isCoachJob(v: string | null): v is CoachJob {
   return !!v && (COACH_JOBS as readonly string[]).includes(v);
 }
 
-export async function runCoachJob(job: CoachJob, deps: CoachCronDeps): Promise<MorningSummary | ReminderRunSummary> {
+export async function runCoachJob(job: CoachJob, deps: CoachCronDeps): Promise<MorningSummary | ReminderRunSummary | SummaryRunSummary> {
   switch (job) {
     case "morning":
       return runMorning(deps);
     case "reminders":
       return runReminders(deps);
+    case "summary":
+      return runWeeklySummary(deps);
   }
 }
