@@ -2,9 +2,11 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { ActivityPing } from "@/components/ActivityPing";
 import { LogoMark } from "@/components/Logo";
 import { NavLink } from "@/components/NavLink";
 import { canUseAgents } from "@/lib/agents/access";
+import { isBreakNudgeEnabled } from "@/lib/agents/coach/flags";
 import { canOnboard } from "@/lib/rbac/policy";
 
 export const dynamic = "force-dynamic";
@@ -35,11 +37,13 @@ export default async function OnboardLayout({ children }: { children: React.Reac
             <NavLink href="/onboard" className={link}>Firm OS onboarding</NavLink>
             <Link href="/clients" className={link}>Clients</Link>
             {canUseAgents(session.user) && <Link href="/agents" className={link}>Agents</Link>}
+            {canUseAgents(session.user) && <Link href="/coach" className={link}>My day</Link>}
             <Link href="/dashboard" className={`${link} flex items-center gap-2`}><ArrowLeft className="w-4 h-4" aria-hidden /> Dashboard</Link>
           </nav>
         </div>
       </header>
       <main className="max-w-[1180px] mx-auto px-5 sm:px-8 py-8">{children}</main>
+      <ActivityPing enabled={isBreakNudgeEnabled()} />
     </div>
   );
 }
