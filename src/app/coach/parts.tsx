@@ -27,7 +27,7 @@ export function BoardTable({ items, caption }: { items: BoardItem[]; caption: st
     >
       {items.map((r) => (
         <tr key={r.id} className={tr}>
-          <td className={`${td} font-semibold`}>
+          <td className={`${td} font-semibold min-w-[12rem]`}>
             {r.title}
             <span className="ml-2 text-[12px] text-ink-mute font-normal">{r.service}</span>
           </td>

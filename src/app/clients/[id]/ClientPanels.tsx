@@ -7,7 +7,7 @@ import type { ClientDocType, JobStatus, ServiceType } from "@prisma/client";
 import { departmentLabel } from "@/lib/ca-firm";
 import { DOC_TYPES, JOB_DOC_TYPES, JOB_STATUSES, KYC_DOC_TYPES, keysOf } from "@/lib/clients/core";
 import type { Handler } from "@/lib/clients/services";
-import { card, h2 } from "@/components/ui";
+import { card, focusRing, h2 } from "@/components/ui";
 
 export type JobView = { id: string; fy: string; department: ServiceType["department"]; service: string; handlerId: string; status: JobStatus; dueOn: string; fees: string; notes: string; folderStatus: string; docCount: number; folderHref?: string };
 export type DocView = { id: string; jobId: string | null; docType: ClientDocType; name: string; webUrl: string; uploadedBy: string; createdAt: string };
@@ -84,7 +84,7 @@ export function ClientPanels({ clientId, folderStatus, jobs, documents, services
 
       <section className={card}>
         <h2 className={h2}>Jobs ({jobs.length})</h2>
-        <div className="overflow-x-auto">
+        <div role="region" aria-label="Jobs" tabIndex={0} className={`overflow-x-auto rounded-lg ${focusRing}`}>
           <table className="w-full text-[13px]">
             <thead className="text-[11px] uppercase tracking-wide text-ink-faint text-left">
               <tr><th className="py-2 pr-3">FY</th><th className="py-2 pr-3">Department</th><th className="py-2 pr-3">Service</th><th className="py-2 pr-3">Handler</th><th className="py-2 pr-3">Status</th><th className="py-2 pr-3">Due</th><th className="py-2 pr-3">Notes</th><th className="py-2 pr-3">Fees (₹)</th><th className="py-2 pr-3">Docs</th><th /></tr>
@@ -95,11 +95,11 @@ export function ClientPanels({ clientId, folderStatus, jobs, documents, services
                   <td className="py-2 pr-3 font-semibold">{j.fy}</td>
                   <td className="py-2 pr-3">{departmentLabel(j.department)}</td>
                   <td className="py-2 pr-3">{j.service}{j.folderHref && <a href={j.folderHref} target="_blank" rel="noreferrer" title="Open Path A folder" aria-label="Open Path A folder" className="ml-1.5 inline-flex align-middle text-brand-600"><ExternalLink className="w-3.5 h-3.5" /></a>}</td>
-                  <td className="py-2 pr-3"><select value={j.handlerId} onChange={(e) => run(j.id, () => call(`/api/clients/jobs/${j.id}`, json({ handlerId: e.target.value }, "PATCH")))} className={field}>{handlers.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}</select></td>
-                  <td className="py-2 pr-3"><select value={j.status} onChange={(e) => run(j.id, () => call(`/api/clients/jobs/${j.id}`, json({ status: e.target.value }, "PATCH")))} className={field}>{keysOf(JOB_STATUSES).map((s) => <option key={s} value={s}>{JOB_STATUSES[s]}</option>)}</select></td>
-                  <td className="py-2 pr-3"><input type="date" defaultValue={j.dueOn} onBlur={(e) => { if (e.target.value !== j.dueOn) run(j.id, () => call(`/api/clients/jobs/${j.id}`, json({ dueOn: e.target.value }, "PATCH"))); }} className={field} /></td>
-                  <td className="py-2 pr-3"><input defaultValue={j.notes} placeholder="Notes" onBlur={(e) => { if (e.target.value !== j.notes) run(j.id, () => call(`/api/clients/jobs/${j.id}`, json({ notes: e.target.value }, "PATCH"))); }} className={`${field} w-40`} /></td>
-                  <td className="py-2 pr-3"><input type="number" min={0} defaultValue={j.fees} onBlur={(e) => { if (e.target.value !== j.fees) run(j.id, () => call(`/api/clients/jobs/${j.id}`, json({ fees: e.target.value }, "PATCH"))); }} className={`${field} w-28`} /></td>
+                  <td className="py-2 pr-3"><select aria-label="Handler" value={j.handlerId} onChange={(e) => run(j.id, () => call(`/api/clients/jobs/${j.id}`, json({ handlerId: e.target.value }, "PATCH")))} className={field}>{handlers.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}</select></td>
+                  <td className="py-2 pr-3"><select aria-label="Status" value={j.status} onChange={(e) => run(j.id, () => call(`/api/clients/jobs/${j.id}`, json({ status: e.target.value }, "PATCH")))} className={field}>{keysOf(JOB_STATUSES).map((s) => <option key={s} value={s}>{JOB_STATUSES[s]}</option>)}</select></td>
+                  <td className="py-2 pr-3"><input type="date" aria-label="Due date" defaultValue={j.dueOn} onBlur={(e) => { if (e.target.value !== j.dueOn) run(j.id, () => call(`/api/clients/jobs/${j.id}`, json({ dueOn: e.target.value }, "PATCH"))); }} className={field} /></td>
+                  <td className="py-2 pr-3"><input aria-label="Notes" defaultValue={j.notes} placeholder="Notes" onBlur={(e) => { if (e.target.value !== j.notes) run(j.id, () => call(`/api/clients/jobs/${j.id}`, json({ notes: e.target.value }, "PATCH"))); }} className={`${field} w-40`} /></td>
+                  <td className="py-2 pr-3"><input type="number" aria-label="Fees ₹" min={0} defaultValue={j.fees} onBlur={(e) => { if (e.target.value !== j.fees) run(j.id, () => call(`/api/clients/jobs/${j.id}`, json({ fees: e.target.value }, "PATCH"))); }} className={`${field} w-28`} /></td>
                   <td className="py-2 pr-3">{j.docCount}</td>
                   <td className="py-2 text-right">{canManage && j.docCount === 0 && <button title="Remove job" aria-label="Remove job" onClick={() => { if (confirm("Remove this job record?")) run(j.id, () => call(`/api/clients/jobs/${j.id}`, { method: "DELETE" })); }} className="text-ink-faint hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>}</td>
                 </tr>
@@ -108,12 +108,12 @@ export function ClientPanels({ clientId, folderStatus, jobs, documents, services
           </table>
         </div>
         <form className="mt-4 flex flex-wrap items-end gap-2" onSubmit={async (e) => { e.preventDefault(); const ok = await run("newjob", () => call(`/api/clients/${clientId}/jobs`, json({ serviceTypeId: nj.serviceTypeId, fy: nj.fy, handlerId: nj.handlerId, dueOn: nj.dueOn, fees: nj.fees }))); if (ok) setNj({ ...nj, dueOn: "", fees: "" }); }}>
-          <select value={nj.department} onChange={(e) => { const d = e.target.value as ServiceType["department"]; setNj({ ...nj, department: d, serviceTypeId: services.find((s) => s.department === d)?.id ?? "" }); }} className={field}>{[...new Set(services.map((s) => s.department))].map((d) => <option key={d} value={d}>{departmentLabel(d)}</option>)}</select>
-          <select value={nj.serviceTypeId} onChange={(e) => setNj({ ...nj, serviceTypeId: e.target.value })} className={field}>{deptServices.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
-          <select value={nj.fy} onChange={(e) => setNj({ ...nj, fy: e.target.value })} className={field}>{fys.map((f) => <option key={f}>{f}</option>)}</select>
-          <select value={nj.handlerId} onChange={(e) => setNj({ ...nj, handlerId: e.target.value })} className={field}>{handlers.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}</select>
-          <input type="date" value={nj.dueOn} onChange={(e) => setNj({ ...nj, dueOn: e.target.value })} className={field} title="Due date" />
-          <input type="number" min={0} placeholder="Fees ₹" value={nj.fees} onChange={(e) => setNj({ ...nj, fees: e.target.value })} className={`${field} w-28`} />
+          <select aria-label="Department" value={nj.department} onChange={(e) => { const d = e.target.value as ServiceType["department"]; setNj({ ...nj, department: d, serviceTypeId: services.find((s) => s.department === d)?.id ?? "" }); }} className={field}>{[...new Set(services.map((s) => s.department))].map((d) => <option key={d} value={d}>{departmentLabel(d)}</option>)}</select>
+          <select aria-label="Service" value={nj.serviceTypeId} onChange={(e) => setNj({ ...nj, serviceTypeId: e.target.value })} className={field}>{deptServices.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
+          <select aria-label="Financial year" value={nj.fy} onChange={(e) => setNj({ ...nj, fy: e.target.value })} className={field}>{fys.map((f) => <option key={f}>{f}</option>)}</select>
+          <select aria-label="Handler" value={nj.handlerId} onChange={(e) => setNj({ ...nj, handlerId: e.target.value })} className={field}>{handlers.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}</select>
+          <input type="date" aria-label="Due date" value={nj.dueOn} onChange={(e) => setNj({ ...nj, dueOn: e.target.value })} className={field} title="Due date" />
+          <input type="number" aria-label="Fees ₹" min={0} placeholder="Fees ₹" value={nj.fees} onChange={(e) => setNj({ ...nj, fees: e.target.value })} className={`${field} w-28`} />
           <button type="submit" disabled={!!busy || !nj.serviceTypeId} className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-600 disabled:bg-ink-faint text-white text-[13px] font-bold">{busy === "newjob" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Add job</button>
         </form>
       </section>
@@ -121,11 +121,11 @@ export function ClientPanels({ clientId, folderStatus, jobs, documents, services
       <section className={card}>
         <h2 className={h2}>Documents ({documents.length})</h2>
         <div className="flex flex-wrap items-center gap-2 mb-4">
-          <select value={target} onChange={(e) => { setTarget(e.target.value); setDocType(e.target.value === "KYC" ? "PAN" : "SOURCE_DATA"); }} className={field}>
+          <select aria-label="Document belongs to" value={target} onChange={(e) => { setTarget(e.target.value); setDocType(e.target.value === "KYC" ? "PAN" : "SOURCE_DATA"); }} className={field}>
             <option value="KYC">KYC (client-level)</option>
             {jobs.map((j) => <option key={j.id} value={j.id}>{j.fy} · {j.service}</option>)}
           </select>
-          <select value={docType} onChange={(e) => setDocType(e.target.value)} className={field}>{Object.entries(typeOptions).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
+          <select aria-label="Document type" value={docType} onChange={(e) => setDocType(e.target.value)} className={field}>{Object.entries(typeOptions).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
           <label className="inline-flex items-center gap-2 px-4 py-1.5 rounded-lg border border-border bg-card text-[13px] font-semibold cursor-pointer hover:bg-muted">
             {busy === "upload" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />} Upload files
             <input type="file" multiple className="hidden" disabled={!!busy} onChange={(e) => { upload(e.target.files); e.target.value = ""; }} />

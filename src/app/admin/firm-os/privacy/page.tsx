@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { isAdmin } from "@/lib/access";
-import { btnPrimary, card, field, figure, focusRing, labelText, linkText, sectionTitle, td, tr } from "@/components/ui";
+import { btnGhost, card, field, figure, focusRing, labelText, linkText, sectionTitle, td, tr } from "@/components/ui";
 import { DataTable, EmptyState, Section } from "@/components/firm-os";
 import { prisma } from "@/lib/prisma";
 import { istDayKey } from "@/lib/ist";
@@ -84,11 +84,11 @@ export default async function PrivacyRequestsPage({ searchParams }: { searchPara
             ))}
           </select>
         </label>
-        <label className="text-[13px] leading-5 inline-flex items-center gap-2 h-9">
+        <label className="text-[13px] leading-5 inline-flex items-center gap-2 h-10">
           <input type="checkbox" name="overdue" value="1" defaultChecked={filters.overdue} className={`h-4 w-4 rounded border-border ${focusRing}`} />
           Overdue only
         </label>
-        <button type="submit" className={`${btnPrimary} h-9`}>
+        <button type="submit" className={`${btnGhost} h-10`}>
           Apply
         </button>
       </form>

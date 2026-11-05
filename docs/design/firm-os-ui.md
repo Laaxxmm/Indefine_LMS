@@ -18,7 +18,9 @@ grouping, DD MMM YYYY, IST, calm, no emoji, AA contrast, keyboard reachable).
 | `stack` | `space-y-6` (24) | cards in one column |
 | `card` | `p-6` (24) | every card |
 | `tr` + `td` / `th` | `h-11` + `py-1.5 px-4` (44) | every table row and head; a 32 px button or 24 px chip fits exactly |
-| `btn` | `py-1.5` + `leading-5` (32); `btnSm` 24 | buttons |
+| `btn` | `py-[5px]` + `leading-5` + 1 px border on every variant (32); `btnSm` 24; beside a field `h-10` (40) | buttons — a ghost and a primary side by side are the same height |
+| `field` | `py-[9px]` + border, inputs and selects `h-10` (40); textareas keep their rows | text fields, selects |
+| nav pill (`firmOsLink`, `areaLink`) | `py-2` + `leading-5` (36) | header nav, tabs |
 | `chip` | `py-1` + `leading-4` (24) | status chips |
 
 Between regions only multiples of 8. Inside a dense control (a chip, button, table cell, the gap
@@ -42,6 +44,7 @@ than the old 20 (`px-5`), because 20 is off the grid.
 | Label | `labelText` | 12/16 bold ink-soft |
 | Hint, caption, meta | `hintText`, `caption` | 12/16 ink-mute |
 | Error | `errorText` | 13/20 rose-700 |
+| Card title | `cardTitle` | display face, bold, 20/28 (the client named in the onboarding plan) |
 | Figure | `figure` | display face, 28/32, extrabold, tabular |
 | Numbers | `numeric` | `tabular-nums` on every amount, date, duration and count column |
 
@@ -91,13 +94,16 @@ files other agents are editing without touching them.
 | `Chip`, `StateChip`, `RunStatusChip`, `PartnerChip` | `StateChip` from `app/agents/parts`, the hand-toned chips on privacy, breaches, mistakes, onboarding steps (9.5 px rounded-md) |
 | `Alert` (error / warning / info / success; errors `role="alert"`) | the rose / amber / sky boxes written by hand in 15+ places |
 | `EmptyState` | `parts.EmptyState` (p-12, rounded-[20px]) |
-| `DataTable` (caption, `th scope="col"`, overflow-x wrapper, 44 px rows, `sticky` option) | `tableWrap` + `<table>` + `<thead>` written per page |
+| `DataTable` (caption, `th scope="col"`, its own sideways scroll in a keyboard-focusable region named by the caption, 44 px rows, `sticky` option) | `tableWrap` + `<table>` + `<thead>` written per page |
 | `FormField` + `describedBy()` (label, hint, error `role="alert"`, ids tied) | label / hint / error triples written per form |
 | `Button` (variants from `ui.ts`, `busy` → spinner + disabled + `aria-busy`), `buttonClass()` | `${btnX} ${focusRing} inline-flex items-center gap-1.5` + `{busy && <Loader2 …/>}` per button; the comms pill buttons |
 | `ConfirmStep` / `ConfirmPanel` | the confirm groups written per screen (privacy, breaches, spot checks, companion, mistakes) |
 
-The focus ring is part of `btn` and `linkText`; `focusRing` has one definition (`ui.ts`), and the
-copies in FirmOsHeader, DraftForm, DraftActions, CorrectionHistory and OnboardPanel are gone.
+The focus ring is part of `btn`, `field` and `linkText`; `focusRing` has one definition (`ui.ts`),
+and the copies in FirmOsHeader, DraftForm, DraftActions, CorrectionHistory and OnboardPanel are gone.
+The LMS areas (`/clients`, `/work`, `/tools`) share `src/components/AreaHeader.tsx`, built like the
+Firm OS header (wraps on a phone, NavLink marks the current section). Filter and search forms use a
+ghost button (40 px beside the 40 px field), so the page's one primary stays the page's action.
 
 *Settled by:* the request named the pieces and where they go; `ui.ts` was already the shared layer
 (imported by 45 files), so the strings went there and the components on top.
@@ -117,3 +123,12 @@ copies in FirmOsHeader, DraftForm, DraftActions, CorrectionHistory and OnboardPa
 * **Amounts**: `formatInr` (Indian grouping, ₹) with tabular numerals.
 * **No emoji, no gamification** on Firm OS pages. (LMS pages keep theirs — an owner decision; the
   list is in docs/qa/ui-checklist.md.)
+
+## How it is checked
+
+* Render tests: `tests/unit/firm-os-components.test.tsx` (variants, busy state, roles, aria wiring),
+  `tests/unit/area-header.test.tsx`, `tests/unit/ist-display.test.ts`, and the route render tests.
+* Visual: `npx vitest run --config tests/regression/visual.vitest.config.ts` renders every page in
+  docs/qa/ui-checklist.md; `node tests/regression/visual-check.mjs` measures each at 390 / 1280 / 1440
+  (overflow, row / control heights, card padding, focus ring on every Tab stop, primaries, "Sept", axe-core
+  WCAG A/AA). Results are in docs/qa/ui-checklist.md.

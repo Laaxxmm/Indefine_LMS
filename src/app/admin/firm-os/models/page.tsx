@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { isAdmin } from "@/lib/access";
-import { btnPrimary, card, field, figure, labelText, sectionTitle, td, tdNum, tr } from "@/components/ui";
+import { btnGhost, card, field, figure, labelText, sectionTitle, td, tdNum, tr } from "@/components/ui";
 import { Alert, Chip, DataTable, EmptyState, PageHeader, Section } from "@/components/firm-os";
 import { prisma } from "@/lib/prisma";
 import { formatDayKey as formatDayKeyStrict } from "@/lib/agents/core/format";
@@ -108,7 +108,7 @@ function UsageTable({ id, title, label, rows, keyLabel }: { id: string; title: s
         >
           {rows.map((r) => (
             <tr key={r.key} className={tr}>
-              <td className={td}>{keyLabel ? keyLabel(r.key) : r.key}</td>
+              <td className={`${td} whitespace-nowrap`}>{keyLabel ? keyLabel(r.key) : r.key}</td>
               <td className={`${tdNum} font-semibold`}>{formatInr(r.costInr)}</td>
               <td className={tdNum}>{formatCount(r.calls)}</td>
               <td className={tdNum}>{formatCount(r.escalations)}</td>
@@ -163,7 +163,7 @@ export default async function ModelUsagePage({ searchParams }: { searchParams: P
           To
           <input type="date" name="to" defaultValue={range.toKey} className={`${field} w-auto font-normal text-ink tabular-nums`} />
         </label>
-        <button type="submit" className={`${btnPrimary} h-9`}>
+        <button type="submit" className={`${btnGhost} h-10`}>
           Apply
         </button>
       </form>

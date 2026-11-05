@@ -138,7 +138,7 @@ export default async function WorkspaceSettingsPage({ searchParams }: { searchPa
             Search people by name or email
             <input id="ws-q" type="search" name="q" defaultValue={q} maxLength={100} autoComplete="off" className={`${field} font-normal text-ink`} />
           </label>
-          <button type="submit" className={btnGhost}>
+          <button type="submit" className={`${btnGhost} h-10`}>
             Search
           </button>
         </form>

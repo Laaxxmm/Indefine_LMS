@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { ExternalLink } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-import { card, eyebrow, linkText, pageTitle, sectionTitle, type ChipTone } from "@/components/ui";
+import { card, eyebrow, focusRing, linkText, pageTitle, sectionTitle, type ChipTone } from "@/components/ui";
 import { BackLink, Chip, RunStatusChip, Section, StateChip } from "@/components/firm-os";
 import { DeliverablesPanel } from "@/app/agents/[agent]/runs/[id]/ReviewPanels";
 import { DOC_TYPES } from "@/lib/clients/core";
@@ -129,7 +129,7 @@ export default async function WorkspacePage({ params }: { params: Promise<{ jobI
       <BackLink href="/focus">Next task</BackLink>
       <div className="grid grid-cols-1 gap-6 items-start lg:grid-cols-[minmax(0,400px)_minmax(0,1fr)]">
         {/* Not an <aside>: it holds the page's title and its one primary action. The padding keeps the cards' shadow inside the scroll box. */}
-        <div data-panel="job" className="space-y-6 lg:sticky lg:top-20 lg:self-start lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:px-3 lg:-mx-3 lg:pb-6">
+        <div data-panel="job" role="region" aria-labelledby="job" tabIndex={0} className={`space-y-6 lg:sticky lg:top-20 lg:self-start lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:px-3 lg:-mx-3 lg:pb-6 rounded-2xl ${focusRing}`}>
           <section aria-labelledby="job" className={card}>
             <p className={`${eyebrow} mb-2`}>Guided workspace</p>
             <h1 id="job" className={`${pageTitle} break-words`}>

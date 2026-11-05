@@ -50,7 +50,7 @@ export default async function CommsPage({ searchParams }: { searchParams: Promis
           </select>
         </label>
         {job && <input type="hidden" name="job" value={job} />}
-        <button type="submit" className={`${btnGhost} h-9`}>
+        <button type="submit" className={`${btnGhost} h-10`}>
           Filter
         </button>
         {(client || job) && (

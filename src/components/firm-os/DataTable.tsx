@@ -1,7 +1,7 @@
 // A data table: rounded card that scrolls sideways on its own (never the page), a caption for
 // screen readers, column heads with scope="col", 44 px rows (ui.ts tr / td / tdNum). `sticky` keeps
 // the head in view while a long table scrolls inside a 70vh box.
-import { cx, table, tableWrap, th, thead } from "@/components/ui";
+import { cx, focusRing, table, tableWrap, th, thead } from "@/components/ui";
 
 export type Column = {
   label: React.ReactNode;
@@ -26,7 +26,9 @@ export function DataTable({
   children: React.ReactNode;
 }) {
   return (
-    <div className={cx(tableWrap, sticky && "max-h-[70vh] overflow-y-auto", className)}>
+    // A keyboard-focusable region named by the caption: when the table is wider than a phone it
+    // scrolls inside this box, and the arrow keys can scroll it (WCAG 2.1.1; axe scrollable-region-focusable).
+    <div role="region" aria-label={caption} tabIndex={0} className={cx(tableWrap, focusRing, sticky && "max-h-[70vh] overflow-y-auto", className)}>
       <table className={table}>
         <caption className="sr-only">{caption}</caption>
         <thead className={thead}>

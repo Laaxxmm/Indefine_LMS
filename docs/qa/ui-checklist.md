@@ -22,9 +22,12 @@ Widths: **1280** and **1440** (desktop, Lighthouse "Desktop"), **390** (phone, L
 DevTools device toolbar → 390 × 844).
 
 Before staging, take a first look locally: `npx vitest run --config tests/regression/visual.vitest.config.ts`
-then open `test-results/visual/index.html` (each page as server-rendered HTML with the compiled
-Tailwind CSS, viewable at 390 / 1280 / 1440). That catches layout and overflow problems early; it
-cannot run client interactions, focus order or Lighthouse — those are only checked on staging.
+then open `test-results/visual/index.html` (each page as server-rendered HTML with the compiled Tailwind CSS,
+viewable at 390 / 1280 / 1440), and run `node tests/regression/visual-check.mjs` (installed Chrome via Playwright): it
+measures page overflow, row / head / control heights, card padding, the focus ring on every Tab stop, filled primary
+buttons, "Sept" / emoji, and runs axe-core (WCAG A/AA) at each width, writing `test-results/visual/check.json`. That
+catches layout, overflow, focus and contrast problems early; it cannot sign in, run client steps or run Lighthouse —
+those are only checked on staging.
 
 ## Pages
 
@@ -56,91 +59,113 @@ Phase column: pages marked 9 / 10 / 11 exist only after that phase is merged.
 
 ## Results
 
-Tester: ________________________  Date: ____ ___ 2026  Build / commit: __________  Staging URL: __________________
+Local design pass (not the staging pass): design consistency agent, 06 Nov 2026, branch
+`worktree-agent-aeb5be4e77051c217` (commits `design: …`), server-rendered pages with the compiled Tailwind CSS
+(`tests/regression/visual-render.ts`), measured in Chrome by `tests/regression/visual-check.mjs` at each width and
+looked at in the browser pane, screenshots and montages. Staging URL: — (local render). Not covered here, so still for
+the staging pass: real sign-in, client-side steps (confirm steps opening, busy states — covered by render tests),
+Lighthouse itself.
+
+Legend: **8pt grid** = table rows and heads ≥ 44 px, card padding 24, buttons 32 (24 compact, 36 nav / tab, 40 beside a
+field), fields 40, measured. **Alignment** ✅ = looked at by eye at that width; ✅\* = measured only (same layout as the
+widths looked at). **Focus** = every element Tab reaches shows the ring (number of stops). **Lighthouse a11y** = axe-core
+WCAG 2.0 / 2.1 A + AA violations (axe is the engine Lighthouse's accessibility score is built on; Lighthouse itself is for
+staging). **Shot** = `test-results/visual/shots/` (git-ignored).
+
+Summary: 71 rows · 67 pass · 0 fail · 4 n/a (Run review CLOSING and DONE need the close-loop world — covered by
+`tests/unit/routes/close-loop-panel.test.ts`). Per width: 1280 → 23 pass, 0 fail, 2 n/a · 1440 → 21 pass, 0 fail ·
+390 → 23 pass, 0 fail, 2 n/a.
 
 | # | Width | 8pt grid | Alignment | No overflow | Focus | Lighthouse a11y | One primary | Conventions | No portal / send | Shot | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 Onboard | 1280 | | | | | | | | | | |
-| 1 Onboard | 1440 | | | | | | | | | | |
-| 1 Onboard | 390 | | | | | | | | | | |
-| 2 Agents list | 1280 | | | | | | | | | | |
-| 2 Agents list | 1440 | | | | | | | | | | |
-| 2 Agents list | 390 | | | | | | | | | | |
-| 3 Agent page | 1280 | | | | | | | | | | |
-| 3 Agent page | 1440 | | | | | | | | | | |
-| 3 Agent page | 390 | | | | | | | | | | |
-| 4 Run review — AGENT_DONE (assignee) | 1280 | | | | | | | | | | |
-| 4 Run review — AGENT_DONE (assignee) | 1440 | | | | | | | | | | |
-| 4 Run review — AGENT_DONE (assignee) | 390 | | | | | | | | | | |
-| 4 Run review — IN_REVIEW (reviewer, Approve / Request changes) | 1280 | | | | | | | | | | |
-| 4 Run review — IN_REVIEW (reviewer, Approve / Request changes) | 1440 | | | | | | | | | | |
-| 4 Run review — IN_REVIEW (reviewer, Approve / Request changes) | 390 | | | | | | | | | | |
-| 4 Run review — APPROVED (Mark filed form) | 1280 | | | | | | | | | | |
-| 4 Run review — APPROVED (Mark filed form) | 390 | | | | | | | | | | |
-| 4 Run review — CLOSING (Record Turia close; partner: Retract) | 1280 | | | | | | | | | | |
-| 4 Run review — CLOSING (Record Turia close; partner: Retract) | 390 | | | | | | | | | | |
-| 4 Run review — DONE (cycle time) | 1280 | | | | | | | | | | |
-| 4 Run review — DONE (cycle time) | 390 | | | | | | | | | | |
-| 5 Mistake log | 1280 | | | | | | | | | | |
-| 5 Mistake log | 1440 | | | | | | | | | | |
-| 5 Mistake log | 390 | | | | | | | | | | |
-| 6 Spot checks | 1280 | | | | | | | | | | |
-| 6 Spot checks | 1440 | | | | | | | | | | |
-| 6 Spot checks | 390 | | | | | | | | | | |
-| 7 Coach | 1280 | | | | | | | | | | |
-| 7 Coach | 1440 | | | | | | | | | | |
-| 7 Coach | 390 | | | | | | | | | | |
-| 8 Dashboard board card / nudges | 1280 | | | | | | | | | | |
-| 8 Dashboard board card / nudges | 1440 | | | | | | | | | | |
-| 8 Dashboard board card / nudges | 390 | | | | | | | | | | |
-| 9 Comms | 1280 | | | | | | | | | | |
-| 9 Comms | 1440 | | | | | | | | | | |
-| 9 Comms | 390 | | | | | | | | | | |
-| 10 Engagement letter (Outlook draft) | 1280 | | | | | | | | | | |
-| 10 Engagement letter (Outlook draft) | 390 | | | | | | | | | | |
-| 11 Admin — Model usage | 1280 | | | | | | | | | | |
-| 11 Admin — Model usage | 1440 | | | | | | | | | | |
-| 11 Admin — Model usage | 390 | | | | | | | | | | |
-| 12 Admin — Mistake log | 1280 | | | | | | | | | | |
-| 12 Admin — Mistake log | 1440 | | | | | | | | | | |
-| 12 Admin — Mistake log | 390 | | | | | | | | | | |
-| 13 Admin — Cycle time | 1280 | | | | | | | | | | |
-| 13 Admin — Cycle time | 1440 | | | | | | | | | | |
-| 13 Admin — Cycle time | 390 | | | | | | | | | | |
-| 14 Client page — Firm OS jobs card | 1280 | | | | | | | | | | |
-| 14 Client page — Firm OS jobs card | 1440 | | | | | | | | | | |
-| 14 Client page — Firm OS jobs card | 390 | | | | | | | | | | |
-| 15 Job workspace | 1280 | | | | | | | | | | |
-| 15 Job workspace | 1440 | | | | | | | | | | |
-| 15 Job workspace | 390 | | | | | | | | | | |
-| 16 Search | 1280 | | | | | | | | | | |
-| 16 Search | 1440 | | | | | | | | | | |
-| 16 Search | 390 | | | | | | | | | | |
-| 17 Focus | 1280 | | | | | | | | | | |
-| 17 Focus | 1440 | | | | | | | | | | |
-| 17 Focus | 390 | | | | | | | | | | |
-| 18 Companion | 1280 | | | | | | | | | | |
-| 18 Companion | 1440 | | | | | | | | | | |
-| 18 Companion | 390 | | | | | | | | | | |
-| 19 Admin — Workspace modules | 1280 | | | | | | | | | | |
-| 19 Admin — Workspace modules | 1440 | | | | | | | | | | |
-| 19 Admin — Workspace modules | 390 | | | | | | | | | | |
-| 20 Admin — Privacy requests | 1280 | | | | | | | | | | |
-| 20 Admin — Privacy requests | 1440 | | | | | | | | | | |
-| 20 Admin — Privacy requests | 390 | | | | | | | | | | |
-| 21 Admin — Breach register | 1280 | | | | | | | | | | |
-| 21 Admin — Breach register | 1440 | | | | | | | | | | |
-| 21 Admin — Breach register | 390 | | | | | | | | | | |
+| 1 Onboard | 1280 | ✅ | ✅* | ✅ | ✅ 3 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — |  |
+| 1 Onboard | 1440 | ✅ | ✅* | ✅ | ✅ 3 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — |  |
+| 1 Onboard | 390 | ✅ | ✅ | ✅ | ✅ 3 stops | ✅ axe 0 | ✅ | ✅ | ✅ | montage-390-*.png |  |
+| 2 Agents list | 1280 | ✅ | ✅ | ✅ | ✅ 11/10 stops | ✅ axe 0 | ✅ | ✅ | ✅ | before/after-agents-partner-1280.png |  |
+| 2 Agents list | 1440 | ✅ | ✅ | ✅ | ✅ 11/10 stops | ✅ axe 0 | ✅ | ✅ | ✅ | before/after-agents-partner-1440.png |  |
+| 2 Agents list | 390 | ✅ | ✅ | ✅ | ✅ 11/10 stops | ✅ axe 0 | ✅ | ✅ | ✅ | before/after-agents-partner-390.png |  |
+| 3 Agent page | 1280 | ✅ | ✅* | ✅ | ✅ 12 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — |  |
+| 3 Agent page | 1440 | ✅ | ✅* | ✅ | ✅ 12 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — |  |
+| 3 Agent page | 390 | ✅ | ✅ | ✅ | ✅ 12 stops | ✅ axe 0 | ✅ | ✅ | ✅ | montage-390-*.png |  |
+| 4 Run review — AGENT_DONE (assignee) | 1280 | ✅ | ✅* | ✅ | ✅ 15 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — | Rendered as the assignee's IN_REVIEW view (the seed submits the pack); the AGENT_DONE bar (Submit for review + Re-run with a note) is asserted in tests/unit/routes/agents.test.ts. |
+| 4 Run review — AGENT_DONE (assignee) | 1440 | ✅ | ✅* | ✅ | ✅ 15 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — |  |
+| 4 Run review — AGENT_DONE (assignee) | 390 | ✅ | ✅* | ✅ | ✅ 15 stops | ✅ axe 0 | ✅ | ✅ | ✅ | montage-390-*.png |  |
+| 4 Run review — IN_REVIEW (reviewer, Approve / Request changes) | 1280 | ✅ | ✅ | ✅ | ✅ 17 stops | ✅ axe 0 | ✅ | ✅ | ✅ | before/after-run-reviewer-1280.png |  |
+| 4 Run review — IN_REVIEW (reviewer, Approve / Request changes) | 1440 | ✅ | ✅ | ✅ | ✅ 17 stops | ✅ axe 0 | ✅ | ✅ | ✅ | before/after-run-reviewer-1440.png |  |
+| 4 Run review — IN_REVIEW (reviewer, Approve / Request changes) | 390 | ✅ | ✅ | ✅ | ✅ 17 stops | ✅ axe 0 | ✅ | ✅ | ✅ | before/after-run-reviewer-390.png |  |
+| 4 Run review — APPROVED (Mark filed form) | 1280 | ✅ | ✅* | ✅ | ✅ 18/18 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — |  |
+| 4 Run review — APPROVED (Mark filed form) | 390 | ✅ | ✅ | ✅ | ✅ 21/21 stops | ✅ axe 0 | ✅ | ✅ | ✅ | montage-390-*.png |  |
+| 4 Run review — CLOSING (Record Turia close; partner: Retract) | 1280 | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | — | Not rendered locally (needs the close-loop world); bar markup asserted in tests/unit/routes/close-loop-panel.test.ts. Same ActionBar / Button / field tokens as APPROVED. |
+| 4 Run review — CLOSING (Record Turia close; partner: Retract) | 390 | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | — | Not rendered locally (needs the close-loop world); bar markup asserted in tests/unit/routes/close-loop-panel.test.ts. Same ActionBar / Button / field tokens as APPROVED. |
+| 4 Run review — DONE (cycle time) | 1280 | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | — | Not rendered locally; CloseLoopStatus DONE line asserted in close-loop-panel.test.ts. |
+| 4 Run review — DONE (cycle time) | 390 | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | — | Not rendered locally; CloseLoopStatus DONE line asserted in close-loop-panel.test.ts. |
+| 5 Mistake log | 1280 | ✅ | ✅* | ✅ | ✅ 10 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — |  |
+| 5 Mistake log | 1440 | ✅ | ✅* | ✅ | ✅ 10 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — |  |
+| 5 Mistake log | 390 | ✅ | ✅ | ✅ | ✅ 10 stops | ✅ axe 0 | ✅ | ✅ | ✅ | montage-390-*.png |  |
+| 6 Spot checks | 1280 | ✅ | ✅* | ✅ | ✅ 10 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — |  |
+| 6 Spot checks | 1440 | ✅ | ✅* | ✅ | ✅ 10 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — |  |
+| 6 Spot checks | 390 | ✅ | ✅ | ✅ | ✅ 10 stops | ✅ axe 0 | ✅ | ✅ | ✅ | montage-390-*.png |  |
+| 7 Coach | 1280 | ✅ | ✅* | ✅ | ✅ 3 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — |  |
+| 7 Coach | 1440 | ✅ | ✅* | ✅ | ✅ 3 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — |  |
+| 7 Coach | 390 | ✅ | ✅ | ✅ | ✅ 3 stops | ✅ axe 0 | ✅ | ✅ | ✅ | montage-390-*.png |  |
+| 8 Dashboard board card / nudges | 1280 | ✅ | ✅* | ✅ | ✅ 14 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — | LMS dashboard; the My day card shows only with open Firm OS jobs (none for this session). LMS emoji kept (owner decision). |
+| 8 Dashboard board card / nudges | 1440 | ✅ | ✅* | ✅ | ✅ 14 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — |  |
+| 8 Dashboard board card / nudges | 390 | ✅ | ✅* | ✅ | ✅ 14 stops | ✅ axe 0 | ✅ | ✅ | ✅ | montage-390-*.png |  |
+| 9 Comms | 1280 | ✅ | ✅ | ✅ | ✅ 5/5 stops | ✅ axe 0 | ✅ | ✅ | ✅ | before/after-comms-1280.png | List and new-draft panel rendered; the draft page (/comms/[id]) needs the comms world: asserted in tests/unit/routes/comms.test.ts. |
+| 9 Comms | 1440 | ✅ | ✅ | ✅ | ✅ 5/5 stops | ✅ axe 0 | ✅ | ✅ | ✅ | before/after-comms-1440.png |  |
+| 9 Comms | 390 | ✅ | ✅ | ✅ | ✅ 5/5 stops | ✅ axe 0 | ✅ | ✅ | ✅ | before/after-comms-390.png |  |
+| 10 Engagement letter (Outlook draft) | 1280 | ✅ | ✅* | ✅ | ✅ 5 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — |  |
+| 10 Engagement letter (Outlook draft) | 390 | ✅ | ✅* | ✅ | ✅ 5 stops | ✅ axe 0 | ✅ | ✅ | ✅ | montage-390-*.png |  |
+| 11 Admin — Model usage | 1280 | ✅ | ✅ | ✅ | ✅ 21 stops | ✅ axe 0 | ✅ | ✅ | ✅ | before/after-admin-models-1280.png |  |
+| 11 Admin — Model usage | 1440 | ✅ | ✅ | ✅ | ✅ 21 stops | ✅ axe 0 | ✅ | ✅ | ✅ | before/after-admin-models-1440.png |  |
+| 11 Admin — Model usage | 390 | ✅ | ✅ | ✅ | ✅ 4 stops | ✅ axe 0 | ✅ | ✅ | ✅ | before/after-admin-models-390.png |  |
+| 12 Admin — Mistake log | 1280 | ✅ | ✅* | ✅ | ✅ 20 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — |  |
+| 12 Admin — Mistake log | 1440 | ✅ | ✅* | ✅ | ✅ 20 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — |  |
+| 12 Admin — Mistake log | 390 | ✅ | ✅* | ✅ | ✅ 3 stops | ✅ axe 0 | ✅ | ✅ | ✅ | montage-390-*.png |  |
+| 13 Admin — Cycle time | 1280 | ✅ | ✅* | ✅ | ✅ 21 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — |  |
+| 13 Admin — Cycle time | 1440 | ✅ | ✅* | ✅ | ✅ 21 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — |  |
+| 13 Admin — Cycle time | 390 | ✅ | ✅* | ✅ | ✅ 4 stops | ✅ axe 0 | ✅ | ✅ | ✅ | montage-390-*.png |  |
+| 14 Client page — Firm OS jobs card | 1280 | ✅ | ✅* | ✅ | ✅ 14 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — | The Firm OS card meets the bar (44 px rows and head). The page's own LMS Jobs table keeps its compact 33 px head row (LMS look); its controls got labels and the table a focusable scroll region. |
+| 14 Client page — Firm OS jobs card | 1440 | ✅ | ✅* | ✅ | ✅ 14 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — |  |
+| 14 Client page — Firm OS jobs card | 390 | ✅ | ✅* | ✅ | ✅ 14 stops | ✅ axe 0 | ✅ | ✅ | ✅ | montage-390-*.png |  |
+| 15 Job workspace | 1280 | ✅ | ✅* | ✅ | ✅ 9 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — |  |
+| 15 Job workspace | 1440 | ✅ | ✅ | ✅ | ✅ 9 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — |  |
+| 15 Job workspace | 390 | ✅ | ✅ | ✅ | ✅ 9 stops | ✅ axe 0 | ✅ | ✅ | ✅ | montage-390-*.png |  |
+| 16 Search | 1280 | ✅ | ✅* | ✅ | ✅ 13 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — |  |
+| 16 Search | 1440 | ✅ | ✅* | ✅ | ✅ 13 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — |  |
+| 16 Search | 390 | ✅ | ✅ | ✅ | ✅ 13 stops | ✅ axe 0 | ✅ | ✅ | ✅ | montage-390-*.png |  |
+| 17 Focus | 1280 | ✅ | ✅* | ✅ | ✅ 3 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — |  |
+| 17 Focus | 1440 | ✅ | ✅* | ✅ | ✅ 3 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — |  |
+| 17 Focus | 390 | ✅ | ✅ | ✅ | ✅ 3 stops | ✅ axe 0 | ✅ | ✅ | ✅ | montage-390-*.png |  |
+| 18 Companion | 1280 | ✅ | ✅* | ✅ | ✅ 3 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — |  |
+| 18 Companion | 1440 | ✅ | ✅* | ✅ | ✅ 3 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — |  |
+| 18 Companion | 390 | ✅ | ✅ | ✅ | ✅ 3 stops | ✅ axe 0 | ✅ | ✅ | ✅ | montage-390-*.png |  |
+| 19 Admin — Workspace modules | 1280 | ✅ | ✅* | ✅ | ✅ 27 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — |  |
+| 19 Admin — Workspace modules | 1440 | ✅ | ✅* | ✅ | ✅ 27 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — |  |
+| 19 Admin — Workspace modules | 390 | ✅ | ✅ | ✅ | ✅ 15 stops | ✅ axe 0 | ✅ | ✅ | ✅ | montage-390-*.png |  |
+| 20 Admin — Privacy requests | 1280 | ✅ | ✅* | ✅ | ✅ 22 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — | List rendered; the request page (/admin/firm-os/privacy/[id]) is being changed by the security work and was left to wrapper classes only (shared AdminHeader, chips and ConfirmStep reach it). |
+| 20 Admin — Privacy requests | 1440 | ✅ | ✅ | ✅ | ✅ 22 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — |  |
+| 20 Admin — Privacy requests | 390 | ✅ | ✅ | ✅ | ✅ 5 stops | ✅ axe 0 | ✅ | ✅ | ✅ | montage-390-*.png |  |
+| 21 Admin — Breach register | 1280 | ✅ | ✅* | ✅ | ✅ 22 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — | Register rendered; the incident page uses the same PageHeader, figure and Button tokens (asserted in src/app/admin/firm-os/privacy/pages.test.tsx). |
+| 21 Admin — Breach register | 1440 | ✅ | ✅* | ✅ | ✅ 22 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — |  |
+| 21 Admin — Breach register | 390 | ✅ | ✅ | ✅ | ✅ 5 stops | ✅ axe 0 | ✅ | ✅ | ✅ | montage-390-*.png |  |
 
 ## Known before the staging pass
 
-From the UI audit (PROGRESS "UI audit", "Known gaps") — check that each is still as recorded:
+From the UI audit (PROGRESS "UI audit", "Known gaps") and the design consistency pass (06 Nov 2026,
+`docs/design/firm-os-ui.md`):
 
 - Firm OS pages use the LMS violet brand theme (spec: extend the existing theme), not the teal fallback.
-- LMS (not Firm OS) pages: `/clients`, `/work`, `/tools` headers do not wrap at 390 px; `ink-faint` text
-  ≈ 2:1 contrast across the LMS; dashboard emoji. These are LMS debts, not Firm OS failures — note them
-  but do not fail a Firm OS row for them.
-- Local visual render (2026-11-06, after the Phase 9–11 merges, `tests/regression/visual-render.ts`): all 23
-  current Firm OS / comparison pages render with the compiled CSS, /agents/spot-checks included. (Workspace job pages need a job id; check them on staging.)
+- Fixed in the design pass: `/clients`, `/work`, `/tools` headers wrap at 390 px and mark the current section
+  (AreaHeader + NavLink); `ink-faint` text is AA (token remapped to #6c6a82, the shared h2 uses ink-mute); "Sept" from
+  en-IN in `src/lib/ist.ts` (fixed month list); `/tools` card "Open" text and the client page's unlabelled selects.
+- LMS debts left as they are (owner decisions or LMS look, not Firm OS fails): emoji and gamification on
+  `/dashboard` (👋 🎉 🔥 ⚡ 🎬 🏅 🚀 📡 💬 ✨ 🕑 💼 ✅), `/` (sign-in), `/leaderboard`, `/recap`, `/team/[userId]`,
+  `/initiatives`, `/tools/neo-centra` (+ how-it-works), `/admin/auto-quiz`, `/admin/live`, `/admin/trajectory`;
+  the client page's own Jobs table head is 33 px; LMS pages that format dates with en-IN directly
+  (`/clients` list, `/tools/sop-builder`, office-tools history, certificate history, `src/lib/client-ops/core.ts`)
+  still write "Sept" — they do not go through `src/lib/ist.ts`.
+- Local visual render (06 Nov 2026, design pass): 28 renders — every Firm OS page in the list above plus the LMS
+  comparison pages — with the master switch on; Run review APPROVED rendered after a real approval of the echo run.
 
 Sign-off: UI checklist complete and passing — ________________________ (owner) date ____________

@@ -33,7 +33,7 @@ export function RunsTable({ runs, showAgent = true }: { runs: RunRow[]; showAgen
     >
       {runs.map((r) => (
         <tr key={r.id} className={tr}>
-          <td className={td}>
+          <td className={`${td} min-w-[12rem]`}>
             <Link href={`/agents/${r.agent}/runs/${r.id}`} className={linkText}>
               {r.jobTitle}
             </Link>

@@ -65,17 +65,18 @@ export const figure = "font-display text-[28px] leading-8 font-extrabold tabular
 export const linkText = `font-semibold text-brand-600 hover:text-brand-700 hover:underline rounded ${focusRing}`;
 
 // ------------------------------------------------------------------ buttons
-// One shape: rounded-lg, 13 px bold, 32 px tall (20 line + 2 × 6); btnSm makes it 24 px for rows
-// and cards. One primary (filled) button per screen; the rest are ghost or a tone. Focus ring built in.
+// One shape: rounded-lg, 13 px bold, 32 px tall (20 line + 2 × 5 padding + 2 × 1 border; every variant has a
+// border so a ghost button and the primary beside it are the same height); btnSm makes it 24 px for rows and
+// cards. One primary (filled) button per screen; the rest are ghost or a tone. Focus ring built in.
 
-export const btn = `inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-[13px] leading-5 font-bold transition disabled:opacity-50 disabled:cursor-not-allowed ${focusRing}`;
-export const btnPrimary = `${btn} bg-brand-500 hover:bg-brand-600 text-white`;
+export const btn = `inline-flex items-center justify-center gap-2 px-3 py-[5px] rounded-lg text-[13px] leading-5 font-bold transition disabled:opacity-50 disabled:cursor-not-allowed ${focusRing}`;
+export const btnPrimary = `${btn} border border-brand-500 bg-brand-500 hover:border-brand-600 hover:bg-brand-600 text-white`;
 export const btnGhost = `${btn} border border-border bg-card text-ink-soft hover:bg-muted hover:text-ink`;
 export const btnSuccess = `${btn} border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100`;
 export const btnWarn = `${btn} border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100`;
 export const btnDanger = `${btn} border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100`;
 /** Compact variant for buttons that sit inside a card or a table row. Prefix with the colour class. */
-export const btnSm = "!px-2.5 !py-0.5 !text-[12px] !rounded-md";
+export const btnSm = "!px-2.5 !py-px !text-[12px] !rounded-md";
 
 /** One colour per verb, so Finish is green and Obsolete is red on every screen. */
 export function workActionClass(action: "activate" | "pause" | "finish" | "obsolete" | "reopen" | "continue"): string {
@@ -103,8 +104,9 @@ export function firstName(name: string | null | undefined): string {
 
 /** Card: padding 24. */
 export const card = "rounded-2xl bg-card border border-border shadow-lift p-6";
-/** Text field / select / textarea: 36 px tall (20 line + 2 × 8), the shared focus ring. */
-export const field = `rounded-lg border border-border bg-page/60 px-3 py-2 text-[13px] leading-5 w-full ${focusRing}`;
+/** Text field / select / textarea, the shared focus ring. Inputs and selects are 40 px tall (h-10: native date and
+ *  select boxes ignore line height); a textarea keeps its rows. */
+export const field = `rounded-lg border border-border bg-page/60 px-3 py-[9px] [&:not(textarea)]:h-10 text-[13px] leading-5 w-full ${focusRing}`;
 /** Field-level or action-level error text. rose-700 is 6.3:1 on white (red-600 was 4.4:1 on the page tint). */
 export const errorText = "text-[13px] leading-5 text-rose-700";
 

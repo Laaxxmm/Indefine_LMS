@@ -78,9 +78,9 @@ export default async function RunReviewPage({ params }: { params: Promise<{ agen
       />
 
       {/* The job's correction history (who changed which field, when and why, and a fix for a wrong entry), and a client message from this run. */}
-      <div className="mb-6 flex items-center gap-4 flex-wrap">
+      <div className="mb-6 flex items-start justify-between gap-x-4 gap-y-2 flex-wrap">
         <HistoryLink entity="JobTask" id={job.id} />
-        <Link href={`/comms/new?run=${run.id}`} className={`text-[13px] ${linkText}`}>
+        <Link href={`/comms/new?run=${run.id}`} className={`text-[13px] leading-8 ${linkText}`}>
           Draft client message
         </Link>
       </div>

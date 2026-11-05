@@ -76,13 +76,16 @@ const OUT = join(process.cwd(), "test-results", "visual");
 const WIDTHS = [390, 1280, 1440] as const;
 
 type Mod = { default: (props: never) => unknown };
-type Entry = { slug: string; title: string; who: string; session: Session["user"]; env?: Record<string, string>; page: () => Promise<Mod>; layout?: () => Promise<Mod>; props?: Record<string, unknown> };
+type Entry = { slug: string; title: string; who: string; session: Session["user"]; env?: Record<string, string>; page: () => Promise<Mod>; layout?: () => Promise<Mod>; props?: Record<string, unknown>; before?: () => Promise<void> };
 
 const as = (u: Session["user"]) => ({ user: u, expires: "2099-01-01T00:00:00.000Z" });
 const HOOKS = /reading '(useState|useContext|useRef|useEffect|useReducer|useMemo|useCallback|useId|useTransition)'/;
 
 async function render(e: Entry): Promise<string> {
   state.session = as(e.session);
+  // Firm OS switched on (FIRM_OS_ENABLED defaults off: src/lib/workspace/flag.ts); without it every
+  // Firm OS layout redirects to the dashboard and nothing renders.
+  vi.stubEnv("FIRM_OS_ENABLED", "1");
   for (const [k, v] of Object.entries(e.env ?? {})) vi.stubEnv(k, v);
   const props = { params: Promise.resolve({}), searchParams: Promise.resolve({}), ...e.props };
   const mod = await e.page();
@@ -98,8 +101,11 @@ async function render(e: Entry): Promise<string> {
   return (await renderHtml(el as ReactElement)).replace(/<!-- -->/g, "");
 }
 
+// next/font sets --font-sans / --font-display on <html> in the app; without them the font stacks in
+// tailwind.config.ts are invalid and the page falls back to a serif. A system sans stands in here.
+const FONTS = `<style>:root{--font-sans:"Segoe UI",system-ui,-apple-system,sans-serif;--font-display:"Segoe UI",system-ui,-apple-system,sans-serif}</style>`;
 const doc = (title: string, body: string) =>
-  `<!doctype html><html lang="en" class="font-sans"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title><link rel="stylesheet" href="tailwind.css"></head><body class="antialiased text-ink">${body}</body></html>`;
+  `<!doctype html><html lang="en" class="font-sans"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title>${FONTS}<link rel="stylesheet" href="tailwind.css"></head><body class="antialiased text-ink">${body}</body></html>`;
 
 async function compileTailwind(): Promise<string> {
   const css = readFileSync(join(process.cwd(), "src", "app", "globals.css"), "utf8");
@@ -123,6 +129,7 @@ async function seedWorld() {
 
 /** Pages that exist only after the Phase 9–11 merges; rendered when present. */
 const LATER = import.meta.glob(["../../src/app/coach/page.tsx", "../../src/app/comms/page.tsx", "../../src/app/comms/new/page.tsx", "../../src/app/agents/spot-checks/page.tsx", "../../src/app/search/page.tsx", "../../src/app/focus/page.tsx", "../../src/app/companion/page.tsx"]);
+const LAYOUTS = import.meta.glob(["../../src/app/*/layout.tsx"]);
 const LATER_ADMIN = import.meta.glob(["../../src/app/admin/firm-os/workspace/page.tsx", "../../src/app/admin/firm-os/privacy/page.tsx", "../../src/app/admin/firm-os/breaches/page.tsx"]);
 
 function entries(): Entry[] {
@@ -149,12 +156,33 @@ function entries(): Entry[] {
   ];
   for (const [path, load] of Object.entries(LATER)) {
     const route = path.replace("../../src/app", "").replace("/page.tsx", "");
-    list.push({ slug: route.slice(1).replace(/\//g, "-"), title: route, who: "partner", session: partner, page: load as () => Promise<Mod>, layout: undefined });
+    // Each page with its section's layout (the Firm OS header), as a person sees it.
+    const section = route.split("/")[1];
+    const layout = LAYOUTS[`../../src/app/${section}/layout.tsx`] as (() => Promise<Mod>) | undefined;
+    list.push({ slug: route.slice(1).replace(/\//g, "-"), title: route, who: "partner", session: partner, env: echo, page: load as () => Promise<Mod>, layout });
   }
+  list.push(
+    { slug: "workspace-job-1", title: "/workspace/job-1", who: "assignee", session: priya, env: echo, page: () => import("@/app/workspace/[jobId]/page"), layout: () => import("@/app/workspace/layout"), props: { params: Promise.resolve({ jobId: "job-1" }) } },
+    // The /clients header only (its list needs the full client rows): wrap at 390 and the current section.
+    { slug: "lms-clients", title: "/clients (LMS header only)", who: "partner", session: partner, page: async () => ({ default: () => createElement("p", { className: "text-[13px] text-ink-mute" }, "Header check: the list itself is not rendered here.") }), layout: () => import("@/app/clients/layout") },
+    { slug: "lms-engagement-letter", title: "/tools/office-tools/engagement-letter (Outlook draft)", who: "staff", session: priya, page: () => import("@/app/tools/office-tools/engagement-letter/page"), layout: () => import("@/app/tools/layout") },
+  );
   for (const [path, load] of Object.entries(LATER_ADMIN)) {
     const route = path.replace("../../src/app", "").replace("/page.tsx", "");
     list.push({ slug: route.slice(1).replace(/\//g, "-"), title: route, who: "admin", session: admin, page: load as () => Promise<Mod>, layout: () => import("@/app/admin/layout") });
   }
+  // Last, because the reviewer's approval moves the shared run on: the APPROVED screen (Mark filed
+  // for the assignee, the idle bar for the reviewer).
+  const approve = async () => {
+    const { approvePack } = await import("@/lib/agents/service");
+    vi.stubEnv("FIRM_OS_ECHO_AGENT", "1");
+    await approvePack(ravi, "run-1", null, state.world.deps);
+    vi.unstubAllEnvs();
+  };
+  list.push(
+    { slug: "run-approved-assignee", title: "/agents/echo/runs/run-1 (APPROVED, Mark filed)", who: "assignee", session: priya, env: echo, before: approve, page: () => import("@/app/agents/[agent]/runs/[id]/page"), layout: agentsLayout, props: { params: Promise.resolve({ agent: "echo", id: "run-1" }) } },
+    { slug: "run-approved-reviewer", title: "/agents/echo/runs/run-1 (APPROVED, reviewer)", who: "reviewer", session: ravi, env: echo, page: () => import("@/app/agents/[agent]/runs/[id]/page"), layout: agentsLayout, props: { params: Promise.resolve({ agent: "echo", id: "run-1" }) } },
+  );
   return list;
 }
 
@@ -167,6 +195,7 @@ describe("visual render → test-results/visual", () => {
     await seedWorld();
     for (const e of entries()) {
       try {
+        await e.before?.();
         const html = await render(e);
         writeFileSync(join(OUT, `${e.slug}.html`), doc(e.title, html));
         results.push({ e, ok: true, note: `${Math.round(html.length / 1024)} KB` });

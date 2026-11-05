@@ -33,7 +33,7 @@ function MyJobsTable({ jobs }: { jobs: MyJobRow[] }) {
     >
       {jobs.map((j) => (
         <tr key={j.id} className={tr}>
-          <td className={`${td} font-semibold`}>
+          <td className={`${td} font-semibold min-w-[12rem]`}>
             {j.title}
             <span className="ml-2 text-[12px] text-ink-mute font-normal">{j.service}</span>
           </td>

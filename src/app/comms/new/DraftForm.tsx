@@ -148,7 +148,7 @@ export function DraftForm({ ctx }: { ctx: DraftContext }) {
           ))}
           <div className="flex items-center gap-2">
             <input className={field} aria-label="Another document" placeholder="Another document, e.g. Bank statement for October 2026" maxLength={LIMITS.itemChars} value={extra} onChange={(e) => setExtra(e.target.value)} />
-            <button type="button" className={`${btnGhost} shrink-0`} onClick={addItem}>
+            <button type="button" className={`${btnGhost} shrink-0 h-10`} onClick={addItem}>
               Add
             </button>
           </div>

@@ -25,7 +25,7 @@ describe("Button", () => {
       const b = tag(await html(<Button variant={variant}>Go</Button>), "button");
       expect(b).toContain(`class="${cls}`);
       expect(b).toContain("focus-visible:ring-2");
-      expect(b).toContain("py-1.5");
+      expect(b).toContain("py-[5px]"); // 20 line + 2 × 5 + 2 × 1 border = 32
       expect(b).toContain("leading-5");
       expect(b).toContain('type="button"');
     }
@@ -156,6 +156,8 @@ describe("DataTable", () => {
     expect(out).toMatch(/<th scope="col" class="[^"]*text-right[^"]*">Findings<\/th>/);
     expect(out).toContain('<span class="sr-only">Action</span>');
     expect(out).toContain("overflow-x-auto");
+    // The sideways scroll box is a keyboard-reachable region named by the caption, with the focus ring.
+    expect(out).toMatch(/<div role="region" aria-label="Runs" tabindex="0" class="[^"]*overflow-x-auto[^"]*focus-visible:ring-2/);
     expect(out).toContain("h-11");
     expect(out).not.toContain("sticky");
   });

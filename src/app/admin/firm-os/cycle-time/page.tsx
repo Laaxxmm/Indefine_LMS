@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { isAdmin } from "@/lib/access";
-import { btnPrimary, card, field, figure, labelText, sectionTitle, td, tdNum, tr } from "@/components/ui";
+import { btnGhost, card, field, figure, labelText, sectionTitle, td, tdNum, tr } from "@/components/ui";
 import { DataTable, EmptyState, PageHeader, Section } from "@/components/firm-os";
 import { loadCycleJobs } from "@/lib/close-loop/cycle-time-db";
 import {
@@ -115,7 +115,7 @@ export default async function CycleTimePage({ searchParams }: { searchParams: Pr
           To
           <input type="date" name="to" defaultValue={range.toKey} className={`${field} w-auto font-normal text-ink tabular-nums`} />
         </label>
-        <button type="submit" className={`${btnPrimary} h-9`}>
+        <button type="submit" className={`${btnGhost} h-10`}>
           Apply
         </button>
       </form>
