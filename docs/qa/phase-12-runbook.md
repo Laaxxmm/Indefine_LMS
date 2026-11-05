@@ -22,37 +22,27 @@ npx prisma generate
 git status   # clean
 ```
 
-## 1. After-merge fix-ups (written ahead against the briefs — make them real)
+## 1. After-merge fix-ups (done during prep — re-check only if a phase changes again)
 
-1. **Chaos test that waits for Phase 11** — `tests/chaos/after-merge/`:
-   ```sh
-   # Phase 11: the reconciler writes nudges with CoachEvent.dedupeKey keyed by reason → this must now pass
-   git mv tests/chaos/after-merge/duplicate-cron-concurrent.pending.ts tests/chaos/duplicate-cron-concurrent.test.ts
-   # fix the relative imports after the move: "../../fakes" → "../fakes", "../support" → "./support"
-   npx vitest run tests/chaos
-   ```
-   Before Phase 11 its three tests fail on purpose (verified 05–06 Nov 2026): three simultaneous
-   reconciler runs → 3 reminders and 3 escalations per recipient; two simultaneous DONE re-checks →
-   2 alerts per recipient; and a coach pre-filing reminder (reason `internal-due`) suppresses the
-   reconciler's same-day close-loop reminder because `nudgeOnce` matches on kind alone. The expected
-   keys follow the coordinator's note: `reminder:<job>:<user>:close-loop:<istDay>`,
-   `escalation:<job>:<user>:close-loop:<istDay>`, `done-alert:<job>:<istDay>`.
-   The Phase 9 coach chaos test is already live: `tests/chaos/coach-reminders-duplicate-cron.test.ts`.
-2. **E2E selectors for the new pages** — confirm every marked line against the merged UI:
-   ```sh
-   grep -rn "PHASE 11:" tests/e2e-db
-   ```
-   Only `rbac-phase-10-11.spec.ts` still has Phase 11 tests (`@after-merge @phase-11`: spot checks,
-   partner-only SOP decision). Keep the assertions; change selectors / routes only, then drop the
-   `@after-merge` tags. `coach.spec.ts` (@phase-9) and `comms.spec.ts` + the comms denial (@phase-10)
-   were confirmed against the merged UI on 06 Nov 2026.
+Phases 9, 10 and 11 were merged into the prep branch on 06 Nov 2026 and everything written ahead
+against their briefs was made real there:
+
+1. **Chaos** — `tests/chaos/duplicate-cron-concurrent.test.ts` (was `after-merge/*.pending.ts`): it
+   failed on purpose before Phase 11 (three simultaneous reconciler runs → 3 reminders and 3
+   escalations per recipient; two simultaneous DONE re-checks → 2 alerts; a coach pre-filing reminder
+   suppressed the reconciler's same-day close-loop reminder because `nudgeOnce` matched on kind) and
+   passes since Phase 11 writes every nudge with a unique dedupeKey. Phase 9:
+   `tests/chaos/coach-reminders-duplicate-cron.test.ts` against the real `runReminders`.
+2. **E2E** — `coach.spec.ts` (@phase-9), `comms.spec.ts` (@phase-10) and `rbac-phase-10-11.spec.ts`
+   (@phase-10, @phase-11) are confirmed against the merged UI and routes; no `@after-merge` tag remains.
+   Phase 11 also added `done-trigger.spec.ts` (DONE trigger against real Postgres; `npm run e2e:done-trigger`).
 3. **Flags-off regression allowlist** — `tests/regression/firm-os-flags-off.test.ts`. If a phase adds a
    Firm OS entry point to an LMS page (e.g. the coach board card on /dashboard), it must be hidden with
    its flag off; if it is deliberately visible, record that in `docs/go-live.md` §3 first, then extend
    the allowlist. Add any new `FIRM_OS_*` names to `FIRM_OS_FLAGS` in `tests/regression/support/render.ts`.
-4. **Go-live doc** — copy the Phase 11 variables from `.env.example` into `docs/go-live.md` §2.4 / §2.5
-   (Phases 9–10 are in).
-5. **Visual render** picks up `/agents/spot-checks` automatically once it exists (step 14).
+4. **Go-live doc** — Phases 9–11 variables and crons are in `docs/go-live.md` §2.4 / §2.5; re-check
+   against `.env.example` if anything merges later.
+5. **Visual render** includes `/agents/spot-checks` and every merged page (step 14).
 
 ## 2. Lint
 
@@ -98,10 +88,9 @@ npm run verify:firm-os  # no-skip, secrets, no-portal, no-delete, ai-boundary, u
 npm run verify:rbac
 npm run verify:audit-coverage
 ```
-Both are Phase 11 deliverables. If either script is missing, Phase 11 is not complete → red.
-Phase 10 should also have added a no-send guard (no `sendMail` / `/send` path; engagement-letter Send
-became "Create Outlook draft") — run it if it exists under its own name, or confirm it is chained
-into `verify:firm-os`.
+Both exist since the Phase 11 merge and are also chained into `verify:firm-os` (step 6). The Phase 10
+no-send guard is a repo-scan unit test (`tests/unit/no-send.test.ts`, part of step 4): no `sendMail` /
+send path anywhere; engagement-letter Send became "Create Outlook draft".
 
 ## 8. Existing LMS checks (no secrets needed)
 
@@ -145,7 +134,7 @@ npm run build           # prisma generate && next build
 ```sh
 npx playwright test --config playwright.db.config.ts --list
 ```
-At prep: **26 tests in 12 files** (24 runnable now + 2 tagged `@after-merge` for Phase 11). All must load with no
+At prep (after the Phase 9–11 merges): **27 tests in 13 files** (incl. Phase 11's `done-trigger.spec.ts`). All must load with no
 environment set (nothing runs at import time).
 
 ## 14. Visual first look (local)
@@ -154,7 +143,7 @@ environment set (nothing runs at import time).
 npx vitest run --config tests/regression/visual.vitest.config.ts
 # open test-results/visual/index.html — every Firm OS page at 390 / 1280 / 1440
 ```
-Look for overflow and broken layout before the staging UI pass (step 18). At prep (after the Phase 9 and 10 merges): 22/22 pages render (coach, comms, search, focus, companion, admin workspace, privacy, breaches included).
+Look for overflow and broken layout before the staging UI pass (step 18). At prep (after the Phase 9–11 merges): 23/23 pages render (spot checks, coach, comms, search, focus, companion, admin workspace, privacy, breaches included).
 
 ---
 
@@ -190,7 +179,7 @@ npm run e2e:db          # playwright.db.config.ts --repeat-each=3; every test 3/
 ```
 Covers: (a) onboard; (b) gst incl. request changes → re-run → approve → Final; (c) roc, tax, books,
 audit; (d) close-loop negatives + golden-path; (e) coach; (f) comms; (g) rbac + rbac-phase-10-11.
-Before the Phase 9–11 pages exist: `npx playwright test --config playwright.db.config.ts --repeat-each=3 --grep-invert @after-merge`.
+Only the DONE trigger (needs just DATABASE_URL, rolls back): `npm run e2e:done-trigger`.
 
 ### 17. OWASP ZAP baseline — no High
 

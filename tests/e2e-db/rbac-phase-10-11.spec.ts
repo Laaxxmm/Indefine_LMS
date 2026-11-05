@@ -1,8 +1,7 @@
-// The comms denial runs now (Phase 10 merged 06 Nov 2026; routes confirmed). The spot-check and SOP
-// decision tests DEPEND ON THE PHASE 11 MERGE (RBAC hardening, Turia spot checks) and are tagged
-// @after-merge: paths and labels marked "PHASE 11:" are to be confirmed after that merge
-// (docs/qa/phase-12-runbook.md "after-merge e2e fix-ups"). The denials themselves are the
-// acceptance criteria.
+// Written ahead of Phases 10 and 11 against the orchestrator's brief and the owner decisions of
+// 2026-11-05; routes and labels confirmed against the merged code on 06 Nov 2026 (comms: src/app/comms,
+// /api/firm-os/comms/drafts/[id]/outlook; spot checks: src/app/agents/spot-checks,
+// /api/firm-os/spot-checks/[id], canSpotCheck; mistakes: canDecideMistakes = partner only).
 //
 // Golden path (g), the rest of it:
 //   · a staff member cannot open a comms draft on someone else's job (page 404; Outlook route 404) [10]
@@ -19,7 +18,7 @@ import { closeDb, e2eClient, freshJob, openDb, runTag, signedInAll, userByEmail 
 
 const SPEC = "rbac-phase-10-11.spec.ts";
 const SPOT_CHECKS = "/agents/spot-checks";
-const SPOT_CHECK_API = (syncId: string) => `/api/firm-os/close-loop/spot-checks/${syncId}`; // PHASE 11: confirm
+const SPOT_CHECK_API = (syncId: string) => `/api/firm-os/spot-checks/${syncId}`;
 const DRAFT_PAGE = (id: string) => `/comms/${id}`;
 const DRAFT_OUTLOOK = (id: string) => `/api/firm-os/comms/drafts/${id}/outlook`;
 
@@ -46,30 +45,36 @@ test("another staff member cannot open a comms draft on someone else's job", { t
   }
 });
 
-test("only a partner opens Turia spot checks and records one", { tag: ["@after-merge", "@phase-11"] }, async ({ browser }) => {
+test("only a partner opens Turia spot checks and records one; staff and managers can do neither", { tag: ["@phase-11"] }, async ({ browser }) => {
   const db = openDb();
   const job = await freshJob(db, { service: "GST", fy: "2026-27", period: "2026-10", title: "GSTR-3B spot-check", spec: SPEC });
   const sync = await db.turiaSync.create({
     data: { jobTaskId: job.id, operation: "closeTask", mode: "MANUAL", status: "CLOSED", turiaRef: `TT-${runTag()}`, minutesLogged: 40, evidence: { key: `closeTask:${job.id}` } },
   });
+  // As the close gate does for ~10% of manual Turia closes (src/lib/audit/spot-checks.ts SPOT_CHECK_SELECTED).
+  await db.auditEvent.create({ data: { actorId: "system:close-gate", action: "spot-check-selected", entity: "TuriaSync", entityId: sync.id, meta: { jobTaskId: job.id } } });
   const s = await signedInAll(browser, ["other", "manager", "partner"] as const, SPEC);
   try {
     for (const who of [s.other, s.manager]) {
       const r = await who.get(SPOT_CHECKS);
-      expect([302, 303, 307, 308, 404], `${who.role} is sent away from ${SPOT_CHECKS}`).toContain(r.status());
-      expect([403, 404], `${who.role} cannot record a spot check`).toContain((await who.post(SPOT_CHECK_API(sync.id), { result: "ok", note: "not allowed" })).status());
+      expect([302, 303, 307, 308], `${who.role} is sent away from ${SPOT_CHECKS}`).toContain(r.status());
+      expect(new URL(r.headers()["location"] ?? "", "http://x").pathname).toBe("/agents");
+      expect((await who.post(SPOT_CHECK_API(sync.id), { note: "not allowed" })).status(), `${who.role} cannot record a spot check`).toBe(403);
     }
     expect((await db.turiaSync.findUniqueOrThrow({ where: { id: sync.id } })).spotChecked).toBe(false);
 
     const page = await s.partner.page.goto(SPOT_CHECKS);
     expect(page?.status()).toBe(200);
-    await expect(s.partner.page.getByRole("heading", { level: 1 })).toContainText(/Spot check/i); // PHASE 11: heading
+    await expect(s.partner.page.getByRole("heading", { level: 1, name: "Turia spot checks" })).toBeVisible();
+    expect((await s.partner.post(SPOT_CHECK_API(sync.id), { note: "Checked in Turia: time entry matches" })).status()).toBe(200);
+    expect(await db.turiaSync.findUniqueOrThrow({ where: { id: sync.id } })).toMatchObject({ spotChecked: true, spotCheckNote: "Checked in Turia: time entry matches" });
+    expect(await db.auditEvent.count({ where: { action: "spot-check", entity: "TuriaSync", entityId: sync.id } })).toBe(1);
   } finally {
     await s.closeAll();
   }
 });
 
-test("only a partner decides a proposed SOP rule: manager 403, partner's reject recorded", { tag: ["@after-merge", "@phase-11"] }, async ({ browser }) => {
+test("only a partner decides a proposed SOP rule: manager 403, partner's reject recorded", { tag: ["@phase-11"] }, async ({ browser }) => {
   const db = openDb();
   const reviewer = await userByEmail(db, "E2E_REVIEWER_EMAIL", SPEC);
   const proposal = await db.mistakeLog.create({

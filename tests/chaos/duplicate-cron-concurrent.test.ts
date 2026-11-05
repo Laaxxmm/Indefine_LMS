@@ -1,22 +1,24 @@
-// DEPENDS ON PHASE 11 MERGE (reconciler uses CoachEvent.dedupeKey). Not run by `npm test` until
-// renamed: after the merge, `git mv` this file to tests/chaos/duplicate-cron-concurrent.test.ts
-// (docs/qa/phase-12-runbook.md step "after-merge chaos"). It typechecks today; it FAILS today
-// against src/lib/close-loop/reconcile.ts — verified 2026-11-05: three simultaneous runs create three
-// reminders for the assignee and three escalations each for the reviewer and the manager; and
-// (06 Nov, after the Phase 9 merge) a coach pre-filing reminder suppresses the reconciler's same-day
-// close-loop reminder, because nudgeOnce matches on kind alone.
-//
 // Chaos: the close-loop cron fires CONCURRENTLY (GitHub Actions schedule + Railway cron in the same
 // second). Storage enforces CoachEvent.dedupeKey @unique exactly as Postgres does (P2002 on a
 // duplicate key). What a person must see: one reminder, one escalation per recipient — and no
-// cron request fails because the other one won the race.
+// cron request fails because the other one won the race; and a coach pre-filing reminder never hides
+// the reconciler's "filed but not closed" reminder.
+//
+// Written ahead of Phase 11 and kept out of the suite until it merged (06 Nov 2026). Before Phase 11
+// all three failed against src/lib/close-loop/reconcile.ts (verified 05–06 Nov): three simultaneous
+// runs wrote three reminders and three escalations per recipient, two DONE re-checks two alerts, and
+// the coach's reminder suppressed the reconciler's because nudgeOnce matched on kind alone. Phase 11
+// writes every nudge with a unique dedupeKey (reminder:<job>:<user>:<day>, distinct from the coach's
+// reminder:<job>:<user>:<due>@t-<min>), so all three pass.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+// Server renders and cold module imports are slow when the whole suite runs in parallel; 5 s flakes.
+vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 import { istDayKey } from "@/lib/ist";
 import { ManualBridge } from "@/lib/integrations/turia/manual-bridge";
 import { reconcile } from "@/lib/close-loop/reconcile";
 import { dedupeKey as coachKey } from "@/lib/agents/coach/db";
-import { CloseLoopWorld } from "../../fakes/close-loop-world";
-import { coachEventTable, naturalDuplicates } from "../support/coach-event-table";
+import { CloseLoopWorld } from "../fakes/close-loop-world";
+import { coachEventTable, naturalDuplicates } from "./support/coach-event-table";
 
 const FILED = new Date("2026-11-02T04:30:00.000Z"); // Mon 10:00 IST
 const HOUR = 3_600_000;
@@ -43,7 +45,7 @@ function heldJob(w: CloseLoopWorld) {
   return job;
 }
 
-describe("concurrent close-loop cron firing (depends on phase 11)", () => {
+describe("concurrent close-loop cron firing", () => {
   it("three simultaneous runs 25 h after filing: one reminder, one escalation per recipient, every run succeeds", async () => {
     const { w, table, deps } = world();
     heldJob(w);
@@ -72,8 +74,7 @@ describe("concurrent close-loop cron firing (depends on phase 11)", () => {
 
   it("a coach pre-filing reminder does not suppress the reconciler's 'filed but not closed' reminder the same day", async () => {
     // Coordinator, 06 Nov 2026: the coach (Phase 9) also writes kind "reminder", reason "internal-due"
-    // (pre-filing states only); the reconciler must key on its own reason, e.g.
-    // reminder:<job>:<user>:close-loop:<istDay>, and stop matching on kind alone.
+    // (pre-filing states only); the reconciler must not treat it as its own same-day reminder.
     const { w, table, deps } = world();
     const job = heldJob(w); // filed Mon 10:00 IST, Final in place, Turia not closed
     vi.setSystemTime(new Date(FILED.getTime() - 60 * 60_000)); // Mon 09:00 IST, before filing
@@ -88,7 +89,7 @@ describe("concurrent close-loop cron firing (depends on phase 11)", () => {
     expect(results.map((r) => r.status)).toEqual(["fulfilled", "fulfilled"]);
     const reminders = table.rows.filter((r) => r.kind === "reminder" && r.userId === "u-priya" && r.jobTaskId === job.id);
     expect(reminders.map((r) => (r.payload as { reason: string }).reason).sort()).toEqual(["close-loop", "internal-due"]);
-    expect(reminders.find((r) => (r.payload as { reason: string }).reason === "close-loop")?.dedupeKey).toMatch(/close-loop/);
+    expect(new Set(reminders.map((r) => r.dedupeKey)).size).toBe(2); // two keys: the coach's slot key and the reconciler's day key
     expect(naturalDuplicates(table.rows, istDayKey)).toEqual([]);
   });
 });

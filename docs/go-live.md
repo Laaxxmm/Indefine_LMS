@@ -90,7 +90,7 @@ the ensure-* functions.
 | `FIRM_OS_HOLIDAYS` (Phase 9) | set to the firm's holidays | Comma-separated `YYYY-MM-DD` the coach skips when counting working days (the LMS has no holiday table); blank = weekends only. Not a feature flag — set it before Stage 1. |
 | `FIRM_OS_COMPANION_EXTENSION_ORIGIN` (merged with Phase 10) | unset unless the extension id differs | CORS origin the companion API answers besides the extension's fixed id (`src/lib/companion/config.ts`). Not in `.env.example` yet. |
 | Phase 10 comms | no flag | Comms drafts have no `FIRM_OS_*` switch: /comms is reached from the Firm OS pages only (not from LMS pages — `firm-os-flags-off.test.ts`). "Open in Outlook draft" and engagement-letter drafts need the delegated **Mail.ReadWrite** consent (§8). |
-| Phase 11 flags | *fill in after merge* | Rate limits etc. — copy the names from `.env.example` after the merge and add rows here. |
+| `RATE_LIMIT_ONBOARD`, `RATE_LIMIT_AGENT_RUN`, `RATE_LIMIT_COMMS_DRAFT` (Phase 11) | blank | `30/1h`, `20/1h`, `30/1h` per user (`src/lib/hardening/rate-limit.ts`); over the limit → 429 with Retry-After. Changing a limit is a threshold change (partner). |
 
 `FIRM_OS_ONBOARD_CONFIRM`, `FIRM_OS_TURIA_BRIDGE`, `FIRM_OS_TURIA_UI` and the `GUARDRAIL_*` variables are
 read by the code but missing from `.env.example` — add them there (owner of `.env.example`).
@@ -104,6 +104,8 @@ read by the code but missing from `.env.example` — add them there (owner of `.
   `?job=reminders` every 30 min 09:00–19:00 IST Mon–Sat, `?job=summary` Fridays 16:00 IST. Each job
   checks its own IST window; every nudge is written once (CoachEvent.dedupeKey). Delivery is in-app
   only (/coach and the dashboard card) — no Teams or e-mail to staff.
+- `.github/workflows/firm-os-retention.yml` (Phase 11): `/api/cron/firm-os/retention` daily 02:30 IST —
+  the DPDP retention purge (docs/dpdp/retention.md). Confirm its first runs on staging (§1).
 
 ## 3. Rollout gap — decide before Stage 1
 

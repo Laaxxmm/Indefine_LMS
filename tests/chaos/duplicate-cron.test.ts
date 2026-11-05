@@ -6,9 +6,9 @@
 // day, a job that becomes closable is closed once (one DONE event), a DONE job whose Final file
 // vanished raises one alert (never reopened), and an outage produces no false alarm.
 //
-// Sequential duplicate firing is covered here (green today). CONCURRENT firing (two requests in
-// the same instant) double-nudges until CoachEvent.dedupeKey is used by the reconciler — see
-// tests/chaos/after-merge/duplicate-cron-concurrent.pending.ts (depends on phase 11 merge).
+// Sequential duplicate firing is covered here. CONCURRENT firing (two requests in
+// the same instant) double-nudged until the reconciler used CoachEvent.dedupeKey — see
+// tests/chaos/duplicate-cron-concurrent.test.ts (green since the Phase 11 dedupeKey change).
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // Server renders and cold module imports are slow when the whole suite runs in parallel; 5 s flakes.
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });

@@ -1,7 +1,7 @@
 // An in-memory CoachEvent table that enforces `dedupeKey @unique` the way Postgres + Prisma do
 // (prisma/schema.prisma, migration of b1c331c): a second create with the same key throws a P2002
 // error; createMany({ skipDuplicates: true }) skips it; upsert on { dedupeKey } is idempotent.
-// Used by the after-merge chaos tests (concurrent cron firing) so "no duplicate CoachEvents" is
+// Used by tests/chaos/duplicate-cron-concurrent.test.ts (concurrent cron firing) so "no duplicate CoachEvents" is
 // checked against storage semantics, not against the code's own bookkeeping.
 export type CoachEventRow = {
   id: string;
