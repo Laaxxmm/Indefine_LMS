@@ -1,6 +1,6 @@
 // Golden path (Phase 8, orchestrator "E2E CHECKLIST"): onboard a client → the assignee runs the
 // agent on one of its jobs → Submit for review → the reviewer approves → the Final file is in
-// SharePoint → the assignee records "Mark filed" with the acknowledgement (ARN) → "Close in Turia"
+// SharePoint → the assignee records "Mark filed" with the acknowledgement (ARN) → "Record Turia close"
 // with the minutes → the close gate sets DONE. Negative case: filed but the Turia close skipped →
 // the job stays CLOSING and DONE is refused. Firm OS never files anything: the person files on the
 // portal and records it; the spec asserts there is no portal / submit / send action on the way.
@@ -11,7 +11,7 @@
 //   DATABASE_URL         the same staging database (job lookup and the DONE / CLOSING assertions)
 //   E2E_PARTNER_STATE    Playwright storageState JSON of a signed-in PARTNER (onboards the client)
 //   E2E_ASSIGNEE_STATE   storageState of the staff member named E2E_ASSIGNEE_NAME (runs the agent,
-//                        marks filed, closes in Turia)
+//                        marks filed, records the Turia close)
 //   E2E_REVIEWER_STATE   storageState of the staff member named E2E_REVIEWER_NAME (approves)
 //   E2E_ASSIGNEE_NAME    display name the onboarding sentence assigns (default "Priya")
 //   E2E_REVIEWER_NAME    display name the onboarding sentence sets as reviewer (default "Ravi")
@@ -197,7 +197,7 @@ async function markFiled(page: Page, runUrl: string) {
   await bar(page).getByLabel(ACK_LABEL).fill(ARN);
   await bar(page).getByRole("button", { name: "Mark filed" }).click();
   await expect(page.getByTitle("Job state: CLOSING")).toBeVisible();
-  await expect(bar(page).getByRole("button", { name: "Close in Turia" })).toBeVisible();
+  await expect(bar(page).getByRole("button", { name: "Record Turia close" })).toBeVisible();
   await expect(closeCard(page)).toContainText(ARN);
   await expect(bar(page).getByRole("button", { name: "Retract filing" })).toHaveCount(0); // the assignee is staff
   await expectNoPortalAction(page);
@@ -205,7 +205,7 @@ async function markFiled(page: Page, runUrl: string) {
 
 // ------------------------------------------------------------------ tests
 
-test("golden path: run agent → submit → approve → Final file → Mark filed (ARN) → Close in Turia (minutes) → DONE", async () => {
+test("golden path: run agent → submit → approve → Final file → Mark filed (ARN) → Record Turia close (minutes) → DONE", async () => {
   const job = await jobFor(0);
   const runUrl = await prepareApproved(job);
   const page = await staff.newPage();
@@ -213,7 +213,7 @@ test("golden path: run agent → submit → approve → Final file → Mark file
 
   await bar(page).getByLabel("Turia task ref").fill(`TT-${code}`);
   await bar(page).getByLabel("Minutes logged in Turia").fill("75");
-  await bar(page).getByRole("button", { name: "Close in Turia" }).click();
+  await bar(page).getByRole("button", { name: "Record Turia close" }).click();
   await expect(page.getByTitle("Job state: DONE").first()).toBeVisible({ timeout: 60_000 });
   await expect(closeCard(page)).toContainText(/Closed \d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2} IST · cycle time/);
   await expect(bar(page).getByRole("button")).toHaveCount(0);
@@ -264,7 +264,7 @@ test("re-run with a note from AGENT_DONE; a partner retracts a filing recorded b
   await p.goto(runUrl);
   await expect(p.getByTitle("Job state: CLOSING")).toBeVisible();
   await bar(p).getByRole("button", { name: "Retract filing" }).click();
-  await expect(bar(p).getByRole("button", { name: "Close in Turia" })).toHaveCount(0);
+  await expect(bar(p).getByRole("button", { name: "Record Turia close" })).toHaveCount(0);
   await expect(bar(p)).toContainText("is kept in the job's history with your note");
   await bar(p).getByLabel("Why is the filing being retracted?").fill("Filed under the wrong period");
   await bar(p).getByRole("button", { name: "Confirm retraction" }).click();

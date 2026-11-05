@@ -1,7 +1,7 @@
 // Read model for the "Filing and close" part of the /agents run review screen (Phase 8): what the
 // job's close loop looks like now and the one human action that moves it on. Server-side only.
 //   APPROVED                 → "Mark filed" (ack ref: GST ARN / MCA SRN / ITR or TDS ack no.)
-//   FILED_BY_HUMAN, CLOSING  → "Close in Turia" (task ref + minutes), or "Check again" once the
+//   FILED_BY_HUMAN, CLOSING  → "Record Turia close" (task ref + minutes), or "Check again" once the
 //                              Turia close is recorded and the gate still refuses; managers and
 //                              partners may also "Retract filing" (→ APPROVED, note required)
 //   DONE                     → nothing to do; DONE chip with the cycle time

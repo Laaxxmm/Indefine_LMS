@@ -291,7 +291,7 @@ describe("/agents/[agent]/runs/[id] review screen", () => {
     expect(old).not.toContain("Mark filed"); // superseded run: read-only
   });
 
-  it("close loop on the review screen: CLOSING shows Close in Turia and the gate's reasons; DONE shows the chip; admin gets no action", async () => {
+  it("close loop on the review screen: CLOSING shows Record Turia close and the gate's reasons; DONE shows the chip; admin gets no action", async () => {
     await startAgentRun(user("priya"), "echo", "job-1", state.world.deps);
     await submitForReview(user("priya"), "run-1", state.world.deps);
     await approvePack(user("ravi"), "run-1", null, state.world.deps);
@@ -309,7 +309,7 @@ describe("/agents/[agent]/runs/[id] review screen", () => {
     await db.auditEvent.create({ data: { actorId: "u-priya", action: "close-refused", entity: "JobTask", entityId: "job-1", meta: { reasons: ["Turia task not closed: enter the Turia task ref and minutes logged"], state: "CLOSING" } } });
     as(user("priya"));
     const closing = await review("run-1");
-    expect(closing).toMatch(/<button[^>]*>Close in Turia<\/button>/);
+    expect(closing).toMatch(/<button[^>]*>Record Turia close<\/button>/);
     expect(closing).toContain("Still closing: the close gate did not pass");
     expect(closing).toContain("Turia task not closed");
     expect(closing).toContain("BOOKS-1");
@@ -333,7 +333,7 @@ describe("/agents/[agent]/runs/[id] review screen", () => {
     Object.assign(job, { state: "DONE", doneAt: new Date("2026-11-05T09:00:00Z") });
     const done = await review("run-1");
     expect(done).toContain("Closed 05 Nov 2026 14:30 IST · cycle time");
-    expect(done).not.toContain("Close in Turia");
+    expect(done).not.toContain("Record Turia close");
     expect(done).not.toContain("Still closing");
     expect(done).not.toMatch(PORTAL_OR_SEND);
   });

@@ -106,7 +106,7 @@ describe("acknowledgement reference rules", () => {
     });
   });
 
-  it("minutes are a whole number above 0 (and required to close in Turia)", () => {
+  it("minutes are a whole number above 0 (and required to record the Turia close)", () => {
     expect(parseMinutes("", false)).toEqual({ ok: true, minutes: null });
     expect(parseMinutes("", true)).toMatchObject({ ok: false });
     for (const bad of ["0", "-3", "1.5", "abc", "6001"]) expect(parseMinutes(bad, false)).toMatchObject({ ok: false });
@@ -146,7 +146,7 @@ describe("panel per state", () => {
     expect(out).not.toMatch(/<button[^>]*disabled=""[^>]*>Mark filed/);
   });
 
-  it("CLOSING: Close in Turia with ref + minutes required; the gate's reasons are shown", async () => {
+  it("CLOSING: Record Turia close with ref + minutes required; the gate's reasons are shown", async () => {
     const job = approvedJob("GST", false);
     expect(await recordFiling(job.id, ackRefFor("GST"), { ackRef: "AA2710260012345", turiaTaskRef: "", minutes: "" }, send)).toEqual({ ok: true, state: "CLOSING" });
     const before = (await view(job.id))!;
@@ -155,7 +155,7 @@ describe("panel per state", () => {
     expect(out).toContain("Close the task in Turia yourself");
     expect(out).toContain("Filed with GST ARN AA2710260012345.");
     expect(out).toContain("Minutes logged in Turia");
-    expect(out).toMatch(/<button[^>]*disabled=""[^>]*>Close in Turia<\/button>/); // empty ref + minutes
+    expect(out).toMatch(/<button[^>]*disabled=""[^>]*>Record Turia close<\/button>/); // empty ref + minutes
     expect(out).not.toMatch(PORTAL_OR_SEND);
 
     const r = await recordTuriaClose(job.id, { turiaTaskRef: "TT-77", minutes: "60" }, send);
@@ -166,7 +166,7 @@ describe("panel per state", () => {
     const card = await status(after);
     expect(card).toContain("Still closing: the close gate did not pass");
     expect(card).toContain("No Final deliverable recorded");
-    expect(card).toContain("Closed in Turia · TT-77 · 60 min logged");
+    expect(card).toContain("Turia close recorded · TT-77 · 60 min logged");
     expect(card).toMatch(/Checked \d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2} IST/);
     expect(await bar(after)).toMatch(/>Check again<\/button>/);
   });
@@ -215,7 +215,7 @@ describe("Retract filing (FILED_BY_HUMAN / CLOSING → APPROVED)", () => {
       expect(v).toMatchObject({ state: "CLOSING", action: "turia-close", canRetract: true });
       const out = await bar(v);
       expect(out).toMatch(RETRACT_BTN);
-      expect(out).toMatch(/>Close in Turia<\/button>/);
+      expect(out).toMatch(/>Record Turia close<\/button>/);
       expect((out.match(/bg-brand-500/g) ?? []).length).toBe(1);
       expect(out).not.toContain("Confirm retraction");
       expect(out).not.toContain("<textarea");
@@ -311,7 +311,7 @@ describe("panel calls through the routes (mocked call)", () => {
     expect(w.job(job.id).state).toBe("APPROVED");
   });
 
-  it("golden path: Mark filed with ARN → Close in Turia with minutes → DONE", async () => {
+  it("golden path: Mark filed with ARN → Record Turia close with minutes → DONE", async () => {
     const job = approvedJob("GST");
     expect(await recordFiling(job.id, ackRefFor("GST"), { ackRef: "AA2710260012345", turiaTaskRef: "", minutes: "" }, send)).toEqual({ ok: true, state: "CLOSING" });
     expect(await recordTuriaClose(job.id, { turiaTaskRef: "TT-88", minutes: "45" }, send)).toEqual({ ok: true, done: true });

@@ -290,7 +290,7 @@ export function MistakeForm({ runId, checks }: { runId: string; checks: string[]
 // ------------------------------------------------------------------ filing and close
 //
 // After approval a person files on the portal; Firm OS never files, submits or sends anything.
-// "Mark filed" records the acknowledgement (/api/firm-os/jobs/[id]/filed); "Close in Turia"
+// "Mark filed" records the acknowledgement (/api/firm-os/jobs/[id]/filed); "Record Turia close"
 // records the Turia task ref + minutes (/turia-close), which tries the close gate. DONE is set only
 // by the gate. A manager or partner can "Retract filing" (FILED_BY_HUMAN / CLOSING → APPROVED
 // through /state, note required) when the filing was recorded by mistake or with the wrong ack ref.
@@ -322,7 +322,7 @@ export function filedBody(ack: CloseLoopView["ack"], f: FilingForm): { ok: true;
   return { ok: true, body: { ackRef: ackRef || null, turiaTaskRef: f.turiaTaskRef.trim() || null, minutes: m.minutes } };
 }
 
-/** Body for "Close in Turia": both the task ref and minutes (> 0) are required. */
+/** Body for "Record Turia close": both the task ref and minutes (> 0) are required. */
 export function turiaCloseBody(f: Pick<FilingForm, "turiaTaskRef" | "minutes">): { ok: true; body: TuriaCloseBody } | Fail {
   const turiaTaskRef = f.turiaTaskRef.trim();
   if (!turiaTaskRef) return { ok: false, error: "Enter the Turia task ref" };
@@ -377,7 +377,7 @@ export async function retractFiling(jobId: string, from: RetractFrom, note: stri
 }
 
 const turiaLine = (t: CloseLoopView["turia"]) =>
-  t.status === "closed" ? `Closed in Turia · ${t.ref} · ${t.minutes} min logged` : t.status === "issued" ? "Close step issued; not recorded as done yet" : "Not recorded yet";
+  t.status === "closed" ? `Turia close recorded · ${t.ref} · ${t.minutes} min logged` : t.status === "issued" ? "Close step issued; not recorded as done yet" : "Not recorded yet";
 
 /** Where the job's close loop stands: Final file, filing, Turia close, the gate's reasons, DONE. */
 export function CloseLoopStatus({ view }: { view: CloseLoopView }) {
@@ -427,7 +427,7 @@ export function CloseLoopStatus({ view }: { view: CloseLoopView }) {
 
 const fieldLabel = "flex flex-col gap-1 text-[11px] font-bold text-ink-mute";
 
-/** The bar's content for the close-loop action: Mark filed, Close in Turia, or Check again. */
+/** The bar's content for the close-loop action: Mark filed, Record Turia close, or Check again. */
 export function CloseLoopActions({ view }: { view: CloseLoopView }) {
   const router = useRouter();
   const id = useId();
@@ -464,7 +464,7 @@ export function CloseLoopActions({ view }: { view: CloseLoopView }) {
     router.refresh();
   }
 
-  async function closeInTuria(input: Pick<FilingForm, "turiaTaskRef" | "minutes">) {
+  async function recordClose(input: Pick<FilingForm, "turiaTaskRef" | "minutes">) {
     setBusy(view.action);
     setError(null);
     setNotice(null);
@@ -590,7 +590,7 @@ export function CloseLoopActions({ view }: { view: CloseLoopView }) {
           Turia close recorded ({view.turia.ref}, {view.turia.minutes} min). The job closes when every check under Filing and close passes.
         </p>
         {withRetract(
-          <button type="button" disabled={!!busy} onClick={() => closeInTuria({ turiaTaskRef: view.turia.ref ?? "", minutes: String(view.turia.minutes ?? "") })} className={primaryBtn}>
+          <button type="button" disabled={!!busy} onClick={() => recordClose({ turiaTaskRef: view.turia.ref ?? "", minutes: String(view.turia.minutes ?? "") })} className={primaryBtn}>
             {spinner}Check again
           </button>,
         )}
@@ -608,8 +608,8 @@ export function CloseLoopActions({ view }: { view: CloseLoopView }) {
       {refField("Turia task ref", true)}
       {minutesField("Minutes logged in Turia", true)}
       {withRetract(
-        <button type="button" disabled={!!busy || !f.turiaTaskRef.trim() || !f.minutes.trim()} onClick={() => closeInTuria(f)} className={primaryBtn}>
-          {spinner}Close in Turia
+        <button type="button" disabled={!!busy || !f.turiaTaskRef.trim() || !f.minutes.trim()} onClick={() => recordClose(f)} className={primaryBtn}>
+          {spinner}Record Turia close
         </button>,
       )}
       {messages}

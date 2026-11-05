@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 // Agent pack review (DESIGN): left = checklist results with evidence, right = deliverables with
 // preview, comments; bottom bar = the one action the person can take now ("Approve pack",
 // "Request changes", "Submit for review" with "Re-run with a note" beside it, "Run agent"; after
-// approval "Mark filed", then "Close in Turia"). The person files on the portal; there is no
+// approval "Mark filed", then "Record Turia close"). The person files on the portal; there is no
 // portal, submit or send action here.
 
 type Tone = { label: string; box: string; icon: typeof XCircle; iconClass: string };
