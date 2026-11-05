@@ -71,14 +71,30 @@ export function istLocalInputValue(d: Date): string {
 
 // ---------------- display ----------------
 
+/**
+ * Short month names, fixed. The en-IN locale data in current ICU writes September as "Sept"; every
+ * other short month is three letters, and the firm's format (DD MMM YYYY) wants "Sep".
+ */
+export const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
+
+/** en-IN in IST, with a short month always taken from SHORT_MONTHS (the IST calendar month of d). */
+function istFormat(d: Date, opts: Intl.DateTimeFormatOptions): string {
+  const parts = new Intl.DateTimeFormat("en-IN", { timeZone: IST, ...opts }).formatToParts(d);
+  if (opts.month !== "short") return parts.map((p) => p.value).join("");
+  const month = SHORT_MONTHS[shifted(d).getUTCMonth()];
+  // en-IN also puts a comma between a short month and the year ("05 Sept, 2026"): DD MMM YYYY has none.
+  return parts
+    .map((p, i) => (p.type === "month" ? month : p.type === "literal" && parts[i - 1]?.type === "month" && parts[i + 1]?.type === "year" ? " " : p.value))
+    .join("");
+}
+
 /** A date in IST with the given Intl options, en-IN locale. e.g. istLabel(d, { day: "numeric", month: "short" }) → "5 Sep". */
 export function istLabel(d: Date, opts: Intl.DateTimeFormatOptions): string {
-  return d.toLocaleDateString("en-IN", { timeZone: IST, ...opts });
+  return istFormat(d, opts);
 }
 /** Human date-time, e.g. "Tue, 15 Jul 2026, 3:00 pm IST". */
 export function formatIst(d: Date): string {
-  const s = d.toLocaleString("en-IN", {
-    timeZone: IST,
+  const s = istFormat(d, {
     weekday: "short",
     day: "2-digit",
     month: "short",
