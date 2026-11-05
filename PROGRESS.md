@@ -1,6 +1,6 @@
 # PROGRESS — Indefine Firm OS
-Current phase: 5–8 | Branch: firm-os/phase-0-inventory | Last green: 2026-11-05 20:35 IST
-Tests: unit+integration 1324/1324 (55 files; Firm OS coverage 99.7% lines / 97.4% branches) · e2e 4/4 (smoke, local, no DB) · accuracy: echo P=1.00 R=1.00 (code path only — audit C1, harness fix in progress) | GST – | ROC – | TAX – | BOOKS – | AUDIT –
+Current phase: 5–8 | Branch: firm-os/phase-0-inventory | Last green: 2026-11-05 21:00 IST
+Tests: unit+integration 1492/1492 (65 files; Firm OS coverage 99.7% lines / 97.4% branches) · e2e 4/4 (smoke, local, no DB) · accuracy: echo P=1.00 R=1.00 (code path only — audit C1, harness fix in progress) | GST – | ROC – | TAX – | BOOKS – | AUDIT –
 Model mode: CLAUDE_ONLY + LOCAL_STUB(fail-closed) | Turia bridge: MANUAL (ADR-003)
 
 ## Phase checklist (✅ only when QA gate green)
@@ -12,7 +12,7 @@ Model mode: CLAUDE_ONLY + LOCAL_STUB(fail-closed) | Turia bridge: MANUAL (ADR-00
 - [ ] 5 GST Prep
 - [ ] 6 ROC Prep + Tax Prep
 - [ ] 7 Books Close + Audit Assist
-- [ ] 8 Close loop
+- [ ] 8 Close loop — code complete, close-loop tests green; QA gate pending golden-path e2e (needs GST agent + staging DB); review-screen buttons in progress
 - [ ] 9 Daily Coach
 - [ ] 10 Client Comms drafts
 - [ ] 11 Hardening
@@ -45,6 +45,15 @@ Phase 2 (merged, commits 03466a2…dbc8a0e)
 - [x] 3 router decideRoute + run, budget guard (per-run + AI_DAILY_BUDGET_INR), ModelCall logging (masked-prompt sha256), /admin/firm-os/models usage page
 - [x] 4 router tests: 18 decideRoute rows + 28 run cases incl. payload leak spy
 QA gate: router + anonymizer green · verify:ai-boundary OK · src/lib/ai 99.5% lines.
+
+Phase 8 (merged, 6 commits from worktree branch)
+- [x] 1 gate.ts — canClose: Final deliverable in deliverablePath Final folder, live-verified via Graph (exists, same item, size > 0, sha256) · TuriaSync closeTask CLOSED, minutes > 0 · FILED_BY_HUMAN→CLOSING with ack ref where required; closeJob mints the token, CLOSING→DONE as system:close-gate with evidence JSON; AuditEvent per attempt; ~10% deterministic spot-check flag
+- [x] 2 hooks.ts — APPROVED → copyToFinal (finalizeRun, idempotent); FILED_BY_HUMAN → Turia closeTask checklist + CLOSING; cycleTimes()
+- [x] 3 reconcile.ts + /api/cron/firm-os/close-loop (Mon–Sat 09:00–19:00 IST) + .github/workflows/firm-os-close-loop.yml (every 30 min); 15-min reminder, 24-h escalation, once per person/job/day; DONE file re-verified — alert, never reopen; DB backstop check on DONE events
+- [x] 4 /api/firm-os/jobs/[id]/{filed,turia-close,state}; state→DONE returns 403 gate-required
+- [x] 5 /admin/firm-os/cycle-time — median / p90 per service, person, client; bottleneck stage
+- [ ] Mark filed / Close in Turia buttons on /agents review screen + approvePack → close-loop hook + tests/e2e-db/golden-path.spec.ts (agent running)
+- [ ] QA e2e golden path onboard → GST → approve → filed → Turia close → DONE — **Blocked**: staging DB (+ GST agent merge)
 
 Phase 4 (in progress)
 - [x] 2 checklist.ts — rules as data, deterministic registry, LLM rules need quote+location, MistakeLog-promoted rules (source 'mistake')
@@ -100,6 +109,11 @@ Shared foundation (commit c61d885): additive Prisma section "Firm OS: shared spi
 | Mistake promotion loop | src/lib/agents/core/mistakes.test.ts | green |
 | Accuracy scoring + harness self-test | src/lib/agents/core/accuracy*.test.ts | green |
 | /agents pages + API (403/400, no portal button) | tests/unit/routes/agents*.test.ts | green |
+| Close gate (missing file, wrong path, sha mismatch, size 0, Turia open, minutes 0, both present → DONE) | src/lib/close-loop/gate.test.ts | green |
+| Reconciler (thresholds, idempotent cron, out-of-hours no-op, deleted-after-DONE alert) | src/lib/close-loop/reconcile.test.ts | green |
+| Hooks + cycle time | src/lib/close-loop/{hooks,cycle-time}.test.ts | green |
+| Close-loop routes + cron auth | tests/unit/routes/close-loop-api.test.ts | green |
+| Cycle-time admin page | tests/unit/routes/cycle-time.test.ts | green |
 
 ## Accuracy scoreboard     (agent → fixture set → precision → recall → threshold → pass/fail → date)
 | Agent | Fixture set | Block P/R | Warn P/R | Figures | Schema | Replay | 3× | Result | Date |
@@ -137,6 +151,8 @@ Shared foundation (commit c61d885): additive Prisma section "Firm OS: shared spi
 - **Partner verification of calendar defaults** · CA judgement · confirm: QRMP 3B 22nd/24th state groups vs current CBIC notification; AGM day-counting convention; ITR non-audit due date under Income-tax Act 2025 / Finance Act 2026 (kept 31 Jul); DIR-3 KYC frequency (kept annual 30 Sep); 2025-Act form names for TDS/advance tax · 2026-11-05
 - **Partner sign-off on onboarding catalog** · CA judgement · review JOB_CATALOG per entity type (src/lib/agents/onboarding/planner.ts) and PAN 4th-char rule per entity (validators.ts); calendar rules missing for Books close, Audit, Engagement letter, LLP Form 11/8; AGM date not captured at onboarding so AOC-4/MGT-7/ADT-1 stay pending · 2026-11-05
 - **Confirm ADR-007** (Graph upload via create-only PUT) · deviates from Phase 1 "GET/POST only" · approve or reject · 2026-11-05
+- **DB trigger for DONE (ADR-005 backstop)** · reconciler detects, a Postgres trigger would prevent · decide whether to add the proposed additive trigger migration (+ set_config hook in state-db.ts) · 2026-11-05
+- **Close-loop conventions** · partner decisions · who performs the 10% Turia spot checks (no UI yet); confirm "waiting on client" = time after an event note saying "waiting on/for client" · 2026-11-05
 - Push branches / open PRs · no gh CLI on this machine · human approval to push firm-os/* branches · 2026-11-05
 
 ## Known gaps / tech debt
@@ -147,6 +163,7 @@ Shared foundation (commit c61d885): additive Prisma section "Firm OS: shared spi
 - /work is a two-person tech tracker behind an email allow-list — JobTasks will surface on /dashboard + /agents instead (inventory G-7).
 - greytHR is a monthly CSV only — Phase 9 break nudge needs an LMS activity heartbeat (G-6).
 - Workflows hard-code https://lms.indefine.in (staging crons need a variable) (G-11).
+- CoachEvent has no unique constraint: two concurrent reconciler runs could double-nudge (sequential duplicates are handled). Fix needs a schema change.
 - AgentRun.inputs purge job (inputsPurgeAt, ≤ 30 days) not built yet — Phase 11.
 - Accuracy `--provider` reserved for Phase 2b (exits 2).
 - Log times before 20:31 were first written as estimates; corrected from commit timestamps.
@@ -174,3 +191,5 @@ Shared foundation (commit c61d885): additive Prisma section "Firm OS: shared spi
 - 20:37 · 5/6/7 · Agents started: GST Prep; ROC + Tax Prep; Books Close + Audit Assist · –
 - 20:46 · 4 · Independent accuracy audit (fable): echo numbers verified; harness findings C1, H1, H2, M1–M3 · –
 - 20:52 · 4 · Harness-hardening agent started; Phases 5–7 agents briefed on the findings · –
+- 20:58 · 8 · Merged close loop (gate, hooks, reconciler + workflow, routes, cycle-time page); guard scope + cron/firm-os, rbac, audit · 1492/1492
+- 21:00 · 8 · next build green; agent started for review-screen close actions + golden-path e2e spec · 1492/1492
