@@ -182,6 +182,13 @@ function calendarDue(ruleId: string, fy: string, period: string, agmDate?: strin
 
 const late = (due: string | null, filed: string | null) => (due && filed ? Math.max(0, daysBetween(due, filed)) : 0);
 
+const isMonthEnd = (key: string) => addDays(key, 1).endsWith("-01");
+
+/** `n` months after `key`; a month-end stays a month-end (30 Sep + 3 → 31 Dec), any other day is clamped (addMonthsClamped). */
+export function addMonthsFromMonthEnd(key: string, n: number): string {
+  return isMonthEnd(key) ? addDays(addMonthsClamped(addDays(key, 1), n), -1) : addMonthsClamped(key, n);
+}
+
 const cache = new WeakMap<RocExtract, RocAnalysis>();
 
 /** Pure; cached per extracted object (rules, compute and deliverables share one analysis). */
@@ -242,7 +249,10 @@ function analyse(x: RocExtract): RocAnalysis {
   // AGM (s.96).
   const firstAgm = co.firstFinancialYear;
   const regularDue = addMonthsClamped(fyEnd, firstAgm ? AGM_RULES.firstAgmMonths : AGM_RULES.monthsAfterFyEnd);
-  const maxExtended = addMonthsClamped(regularDue, AGM_RULES.maxExtensionMonths);
+  // Registrar's extension of up to three months (s.96(1) proviso), counted from the regular due
+  // date; when that is a month-end (30 Sep) the period ends on a month-end too (31 Dec, not the
+  // clamped 30 Dec). Partner to confirm (AGM_RULES verify note).
+  const maxExtended = addMonthsFromMonthEnd(regularDue, AGM_RULES.maxExtensionMonths);
   const agmDue = opc ? null : co.agmExtendedTo && !firstAgm ? (co.agmExtendedTo < maxExtended ? co.agmExtendedTo : maxExtended) : regularDue;
   const agmBasis = opc
     ? "OPC: no AGM (s.96(1))"
@@ -264,11 +274,17 @@ function analyse(x: RocExtract): RocAnalysis {
   const termYear = fyStart(x.fy) - fyStart(au.termStartFy) + 1;
   const consecutiveYears = au.consecutiveYearsBeforeTerm + termYear;
   const r = AUDITOR_RULES.rotation;
+  // Rule 5 of the Companies (Audit and Auditors) Rules, 2014: the rotation classes exclude One
+  // Person Companies and small companies (classified on the verified limits above). A listed
+  // company is a public company — never small or an OPC — so it stays in the class whatever the
+  // other fields say.
   const rotationClass =
     co.listed ||
-    (co.companyClass === "public" && co.paidUpCapitalPaise >= r.unlistedPublicPaidUpPaise) ||
-    (co.companyClass !== "public" && co.paidUpCapitalPaise >= r.privatePaidUpPaise) ||
-    current.borrowings >= r.borrowingsPaise;
+    (!opc &&
+      !isSmall &&
+      ((co.companyClass === "public" && co.paidUpCapitalPaise >= r.unlistedPublicPaidUpPaise) ||
+        (co.companyClass !== "public" && co.paidUpCapitalPaise >= r.privatePaidUpPaise) ||
+        current.borrowings >= r.borrowingsPaise));
   const rotationLimit = au.type === "individual" ? r.individualMaxYears : r.firmMaxYears;
   const rotationBreached = rotationClass && (consecutiveYears > rotationLimit || (au.reappointedAtThisAgm && consecutiveYears + au.termYears > rotationLimit));
   const termEndsAtThisAgm = termYear === au.termYears;

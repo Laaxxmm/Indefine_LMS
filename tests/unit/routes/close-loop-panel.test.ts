@@ -4,6 +4,8 @@
 // /api/firm-os/jobs/[id]/* route handlers by a mocked call(), over the in-memory close-loop world.
 import { createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+// These routes sit behind the Firm OS master switch (src/lib/workspace/flag.ts); it is on for these tests.
+beforeEach(() => vi.stubEnv("FIRM_OS_ENABLED", "1"));
 import type { FirmService, JobTaskState } from "@prisma/client";
 import type { CallResult } from "@/components/ui";
 import type { CloseLoopDeps } from "@/lib/close-loop/actions";

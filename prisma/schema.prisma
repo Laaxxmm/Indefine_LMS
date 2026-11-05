@@ -1517,6 +1517,7 @@ model AuditEvent {
   @@index([entity, entityId])
   @@index([actorId, createdAt])
   @@index([createdAt])
+  @@index([action, createdAt])
 }
 
 // -------------------- Firm OS: jobs, agents, close loop --------------------
@@ -1623,6 +1624,8 @@ model JobTask {
   @@index([assigneeId, state])
   @@index([state])
   @@index([internalDueOn])
+  @@index([reviewerId, state])
+  @@index([state, doneAt])
 }
 
 // Append-only state history: cycle time (assigned to done, prep, review, wait-on-client).
@@ -1663,6 +1666,8 @@ model AgentRun {
 
   @@index([jobTaskId, startedAt])
   @@index([agent, startedAt])
+  @@index([startedAt])
+  @@index([inputsPurgeAt])
 }
 
 model ChecklistResult {
@@ -1679,6 +1684,7 @@ model ChecklistResult {
   agentRun AgentRun @relation(fields: [agentRunId], references: [id])
 
   @@index([agentRunId])
+  @@index([agentRunId, status])
 }
 
 enum MistakeStatus {
@@ -1707,19 +1713,21 @@ model MistakeLog {
 }
 
 model Deliverable {
-  id          String    @id @default(cuid())
-  jobTaskId   String
-  agentRunId  String?
-  kind        String // Working | Final
-  name        String
-  spPath      String // must equal deliverablePath() for Final
-  driveId     String?
-  driveItemId String?
-  sha256      String
-  sizeBytes   Int
-  version     Int       @default(1)
-  verifiedAt  DateTime?
-  createdAt   DateTime  @default(now())
+  id           String    @id @default(cuid())
+  jobTaskId    String
+  agentRunId   String?
+  kind         String // Working | Final
+  name         String
+  spPath       String // must equal deliverablePath() for Final
+  driveId      String?
+  driveItemId  String?
+  sha256       String
+  quickXorHash String? // SharePoint content hash recorded at upload (verify without download)
+  cTag         String? // SharePoint content tag at upload; any edit changes it
+  sizeBytes    Int
+  version      Int       @default(1)
+  verifiedAt   DateTime?
+  createdAt    DateTime  @default(now())
 
   jobTask  JobTask   @relation(fields: [jobTaskId], references: [id])
   agentRun AgentRun? @relation(fields: [agentRunId], references: [id])
@@ -1804,6 +1812,7 @@ model CoachEvent {
 
   @@index([userId, createdAt])
   @@index([kind, createdAt])
+  @@index([userId, kind, createdAt])
 }
 
 // -------------------- Firm OS: coach + hardening --------------------

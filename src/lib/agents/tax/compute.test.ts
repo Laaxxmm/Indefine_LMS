@@ -192,6 +192,27 @@ describe("interest and fee", () => {
     expect(monthsOrPart("2026-08-15", "2026-09-14")).toBe(1);
     expect(monthsOrPart("2026-08-15", "2026-08-14")).toBe(0);
   });
+  it("month-end pairs follow the documented convention (a month starting on the 31st runs to the end of a shorter month)", () => {
+    // Audit case: 31 Jan → 28 Feb is one month (February has no 31st, so no second month starts in it).
+    expect(monthsOrPart("2027-01-31", "2027-02-28")).toBe(1);
+    expect(monthsOrPart("2027-01-31", "2027-03-01")).toBe(2); // the second month starts on 1 Mar
+    expect(monthsOrPart("2027-01-31", "2027-03-30")).toBe(2);
+    expect(monthsOrPart("2027-01-31", "2027-03-31")).toBe(3); // the third starts on 31 Mar
+    expect(monthsOrPart("2027-03-31", "2027-04-30")).toBe(1);
+    expect(monthsOrPart("2027-03-31", "2027-05-01")).toBe(2);
+    expect(monthsOrPart("2028-01-31", "2028-02-29")).toBe(1); // leap year
+    expect(monthsOrPart("2028-01-30", "2028-02-29")).toBe(1);
+    expect(monthsOrPart("2027-01-30", "2027-02-28")).toBe(1);
+    expect(monthsOrPart("2027-02-28", "2027-03-27")).toBe(1);
+    expect(monthsOrPart("2027-02-28", "2027-03-28")).toBe(2);
+    expect(monthsOrPart("2028-02-29", "2028-03-28")).toBe(1);
+  });
+  it("periods starting on the 1st (every s.234A start after a month-end due date, and s.234B from 1 April) count calendar months", () => {
+    expect(monthsOrPart("2026-08-01", "2026-08-31")).toBe(1);
+    expect(monthsOrPart("2026-08-01", "2026-09-01")).toBe(2);
+    expect(monthsOrPart("2026-11-01", "2027-03-31")).toBe(5);
+    expect(monthsOrPart("2026-12-01", "2027-02-28")).toBe(3);
+  });
   const dates = ["2025-06-15", "2025-09-15", "2025-12-15", "2026-03-15"];
   const base = { payments: [], instalmentDates: dates, presumptiveOnly: false, exempt: false, aprilFirst: "2026-04-01", filingDate: "2026-07-25" };
   it("234C + 234B with nothing paid (typical-gap fixture working)", () => {

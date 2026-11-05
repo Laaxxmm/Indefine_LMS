@@ -7,9 +7,11 @@
 //   1. NextTaskSource.rank(user, now) → RankedJob[]   which jobs, best first (the seam)
 //   2. createCompanionProvider().nextTask()           details for the first job + the response
 //
-// dbNextTaskSource is this module's own selection, until the shared getNextTask
-// (src/lib/workspace/next-task.ts, contract NextTaskView in src/lib/workspace/contract.ts) lands.
-// Its rules:
+// fromNextTaskView is the production source: the shared next-task queue
+// (src/lib/workspace/next-task.ts rankedNextTasks, the same list getNextTask and /focus take the
+// first job from, ranked by the Daily Coach ranking), so the side panel and /focus always agree,
+// "why" text included. dbNextTaskSource is this module's own earlier selection, kept for tests
+// and as a fallback. Its rules:
 //   - jobs the person prepares (assignee) or reviews (reviewer) — a personal queue for every role;
 //     managers and partners see their own jobs here, not the whole firm's;
 //   - only jobs they can act on now: ASSIGNED / IN_PREP / AGENT_DONE / IN_REVIEW by the same
@@ -19,7 +21,7 @@
 //   - order: overdue first (internal or statutory due day before today, IST), then internal due,
 //     then statutory due (earliest first, missing dates last), then oldest job.
 //
-// Mapping NextTaskView → RankedJob (write `fromNextTaskView()` beside dbNextTaskSource on merge):
+// Mapping next task → RankedJob (fromNextTaskView below):
 //   jobId, title, service, period, fy, state, clientName, clientCode → same-named fields
 //   the person's part on the job (assignee / reviewer / both)        → part
 //   internal / statutory due dates                                   → internalDueOn / statutoryDueOn (Date)
@@ -27,9 +29,10 @@
 //   what the person can do now                                       → action (collect · prepare · check ·
 //                                                                       review · file · close; actionFor() below
 //                                                                       derives it from state + role if absent)
-// Its "why" text, if it has one, may replace whyFor(). Everything after rank() stays as is.
+// Its "why" text replaces whyFor() (RankedJob.why). Everything after rank() stays as is.
 import type { FirmService, JobTaskState, PrismaClient } from "@prisma/client";
 import { reviewActions } from "@/lib/agents/access";
+import { rankedNextTasks, whyText, type NextTaskCandidate, type NextTaskDeps as SharedNextTaskDeps } from "@/lib/workspace/next-task";
 import { formatDate } from "@/lib/agents/core/format";
 import { getAgent, visibleAgents } from "@/lib/agents/registry";
 import { istDayKey } from "@/lib/ist";
@@ -58,9 +61,11 @@ export type RankedJob = {
   internalDueOn: Date | null;
   statutoryDueOn: Date | null;
   overdue: boolean;
+  /** Why it is next, when the source says (the shared queue does); otherwise whyFor() writes it. */
+  why?: string;
 };
 
-/** Which jobs, best first. dbNextTaskSource today; the shared getNextTask after merge. */
+/** Which jobs, best first. fromNextTaskView in production; dbNextTaskSource in older tests. */
 export interface NextTaskSource {
   rank(user: CompanionUser, now: Date): Promise<RankedJob[]>;
 }
@@ -204,6 +209,53 @@ export function dbNextTaskSource(db: CompanionDb): NextTaskSource {
   };
 }
 
+// ------------------------------------------------------------------ stage 1: the shared next-task queue
+
+/** The panel's verb for a next-task action. */
+export function companionActionFor(c: Pick<NextTaskCandidate, "state" | "action">): Action {
+  switch (c.action.kind) {
+    case "submit":
+      return "check";
+    case "review":
+      return "review";
+    case "mark-filed":
+      return "file";
+    case "turia-close":
+      return "close";
+    default:
+      return c.state === "ASSIGNED" ? "collect" : "prepare"; // run-agent or prepare-by-hand
+  }
+}
+
+/**
+ * The companion's queue from the shared next-task queue: the first job is getNextTask's choice and
+ * its why is the text /focus shows. Read-only, like everything here.
+ */
+export function fromNextTaskView(deps: Omit<SharedNextTaskDeps, "now">): NextTaskSource {
+  return {
+    async rank(user, now) {
+      if (!user) return [];
+      const ranked = await rankedNextTasks(user, { ...deps, now: () => now });
+      return ranked.map(({ candidate: c, reason }) => ({
+        jobId: c.id,
+        title: c.title,
+        service: c.service,
+        period: c.period,
+        fy: c.fy,
+        state: c.state,
+        clientName: c.clientName,
+        clientCode: c.clientCode,
+        part: c.part,
+        action: companionActionFor(c),
+        internalDueOn: c.internalDueOn,
+        statutoryDueOn: c.statutoryDueOn,
+        overdue: isOverdue(c, now),
+        why: whyText(c, now, reason),
+      }));
+    },
+  };
+}
+
 // ------------------------------------------------------------------ stage 2: details + response
 
 const DETAIL_SELECT = {
@@ -263,7 +315,7 @@ export function createCompanionProvider(deps: CompanionProviderDeps): CompanionP
               clientCode: job.clientCode,
             },
             part: job.part,
-            why: whyFor(job, ranked.length, now),
+            why: job.why ?? whyFor(job, ranked.length, now),
             nextAction: nextActionFor(ctx, job.action),
             due: { internal: dayOrNull(job.internalDueOn), statutory: dayOrNull(job.statutoryDueOn), overdue: job.overdue },
             steps,

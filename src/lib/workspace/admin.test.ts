@@ -1,6 +1,6 @@
 // Workspace settings admin service: saves write the row and an AuditEvent together, non-admins are
 // refused, nothing-changed saves are refused, an admin keeps the Admin module, reset saves nulls.
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Session } from "next-auth";
 import { createWorkspaceDb } from "../../../tests/fakes/workspace-db";
 import {
@@ -20,6 +20,14 @@ import {
 import { FOLLOW_ROLE, moduleDiff, roleDefaultChanges, userSettingChanges } from "./changes";
 import { BUILT_IN_ROLE_MODULES, MODULE_KEYS } from "./registry";
 import { loadWorkspace, type WorkspaceDb } from "./settings";
+
+// Firm OS switched on for these tests (FIRM_OS_ENABLED defaults off: src/lib/workspace/flag.ts).
+beforeEach(() => {
+  vi.stubEnv("FIRM_OS_ENABLED", "1");
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 type U = Session["user"];
 const admin: U = { id: "u-admin", name: "Asha Admin", email: "asha@indefine.test", image: null, role: "ADMIN", active: true, department: "GENERAL", level: "EXECUTIVE" };

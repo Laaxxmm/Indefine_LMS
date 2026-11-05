@@ -38,6 +38,8 @@ function service(sp?: { ensureClientSite: () => Promise<never> }) {
     getTuriaSync: (id) => repo.get(id),
     setTuriaClientRef: async () => {},
     audit: async () => {},
+    aiRestricted: async () => false,
+    viewer: null,
     now: () => NOW,
   });
   return { svc, spec };

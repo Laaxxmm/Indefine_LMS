@@ -23,5 +23,8 @@ export async function parseJson<T>(schema: ZodSchema<T>, req: Request): Promise<
 }
 
 export function toJson<T>(r: ServiceResult<T>, okStatus = 200): NextResponse {
-  return r.ok ? NextResponse.json(r.data, { status: okStatus }) : NextResponse.json({ error: r.error }, { status: r.status });
+  if (r.ok) return NextResponse.json(r.data, { status: okStatus });
+  // 503 from a full agent-run queue: tell the client when to try again.
+  if (r.retryAfterSec !== undefined) return NextResponse.json({ error: r.error, retryAfter: r.retryAfterSec }, { status: r.status, headers: { "Retry-After": String(r.retryAfterSec) } });
+  return NextResponse.json({ error: r.error }, { status: r.status });
 }

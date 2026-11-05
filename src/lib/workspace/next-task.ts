@@ -1,8 +1,9 @@
 // "What should I do now?" — the single most important job for a person, from the same data as the
 // "Waiting for you" list on /agents: jobs they prepare or review on which the state machine (and
-// the close-loop rule) lets them act now. Ranked by internal due date (overdue first), then the
-// statutory due date. The ranking is injectable (deps.rank): the Daily Coach ranking
-// (src/lib/agents/coach/rank.ts) plugs in there after merge.
+// the close-loop rule) lets them act now. Ranked by the Daily Coach ranking (coach-rank.ts over
+// src/lib/agents/coach/rank.ts: statutory overdue, internal overdue, then the coach's score), so
+// /focus, the companion and "My day" agree. The ranking is injectable (deps.rank); defaultRank
+// (overdue first, then internal and statutory due dates) remains for callers that want it.
 //
 // Actions link to the existing screens (agent page, pack review screen); nothing here runs an
 // agent, submits, approves, files or closes. Close-loop steps (Mark filed, Record Turia close)
@@ -18,6 +19,7 @@ import { visibleAgents } from "@/lib/agents/registry";
 import { canActOnJob } from "@/lib/close-loop/actions";
 import { ackRefFor } from "@/lib/close-loop/review";
 import { DAY_MS, istDayStart } from "@/lib/ist";
+import { coachRank } from "./coach-rank";
 import { NEXT_TASK_CONTRACT_VERSION, type NextTask, type NextTaskAction, type NextTaskView } from "./contract";
 import { portalNoteFor, sopSteps, stepChecklist, type SopContext } from "./sop-steps";
 
@@ -56,7 +58,7 @@ export type NextTaskDeps = {
   now?: () => Date;
   /** Agents shown in the UI (default: visibleAgents()). */
   agents?: readonly AnyAgent[];
-  /** Ranking seam (default: defaultRank). */
+  /** Ranking seam (default: coachRank, the Daily Coach ranking). */
   rank?: RankFn;
 };
 
@@ -241,8 +243,18 @@ export async function runOpenQuestions(db: FirmDb, runId: string | null): Promis
 }
 
 /** Ranked queue (ranker output normalised). */
-export function rankCandidates(candidates: readonly NextTaskCandidate[], now: Date, rank: RankFn = defaultRank): { candidate: NextTaskCandidate; reason: string | null }[] {
+export function rankCandidates(candidates: readonly NextTaskCandidate[], now: Date, rank: RankFn = coachRank): { candidate: NextTaskCandidate; reason: string | null }[] {
   return rank(candidates, now).map((x) => ("candidate" in x ? { candidate: x.candidate, reason: x.reason ?? null } : { candidate: x, reason: null }));
+}
+
+/**
+ * Every job waiting for this person, in next-task order: the first one is getNextTask's choice.
+ * The companion side panel reads its queue from here (src/lib/companion/provider.ts
+ * fromNextTaskView), so the panel and /focus always agree.
+ */
+export async function rankedNextTasks(user: SessionUser, deps: NextTaskDeps): Promise<{ candidate: NextTaskCandidate; reason: string | null }[]> {
+  const now = deps.now?.() ?? new Date();
+  return rankCandidates(await listNextTaskCandidates(user, { ...deps, now: () => now }), now, deps.rank);
 }
 
 async function buildTask(c: NextTaskCandidate, reason: string | null, deps: NextTaskDeps, now: Date): Promise<NextTask> {
@@ -289,7 +301,7 @@ async function buildTask(c: NextTaskCandidate, reason: string | null, deps: Next
 /** The full view: the next task (or "clear") and how many more are waiting. */
 export async function getNextTaskView(user: SessionUser, deps: NextTaskDeps): Promise<NextTaskView> {
   const now = deps.now?.() ?? new Date();
-  const ranked = rankCandidates(await listNextTaskCandidates(user, { ...deps, now: () => now }), now, deps.rank);
+  const ranked = await rankedNextTasks(user, { ...deps, now: () => now });
   const top = ranked[0];
   return {
     version: NEXT_TASK_CONTRACT_VERSION,

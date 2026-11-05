@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { baseExtract, CUR } from "./__fixtures__/base";
-import { analyseRoc, columnFromTrialBalance, finTotals, multipleAdditionalFee, normalFeePaise, perDayAdditionalFee } from "./analyse";
+import { addMonthsFromMonthEnd, analyseRoc, columnFromTrialBalance, finTotals, multipleAdditionalFee, normalFeePaise, perDayAdditionalFee } from "./analyse";
 import { inForce, inForceVerified, rocVerifyNotes, SMALL_COMPANY_LIMITS } from "./data";
 
 const CR = 1_00_00_000_00;
@@ -171,9 +171,24 @@ describe("AGM and filing dates", () => {
     expect(a.agm.dueDate).toBe("2026-12-31");
     expect(a.agm.delayDays).toBe(0);
   });
-  it("an extension is capped at three months", () => {
-    expect(analyseRoc(baseExtract({ company: { agmExtendedTo: "2027-03-31" } })).agm.dueDate).toBe("2026-12-30");
+  it("an extension is capped at three months, running to the month-end from the 30 Sep due date (31 Dec, not 30 Dec)", () => {
+    expect(analyseRoc(baseExtract({ company: { agmExtendedTo: "2027-03-31" } })).agm.dueDate).toBe("2026-12-31");
     expect(analyseRoc(baseExtract({ company: { agmExtendedTo: "2026-11-30" } })).agm.dueDate).toBe("2026-11-30");
+  });
+  it("boundary: extension to 31 Dec is allowed in full, 1 Jan is capped to 31 Dec; an AGM on 31 Dec under it is in time", () => {
+    expect(analyseRoc(baseExtract({ company: { agmExtendedTo: "2026-12-31" } })).agm.dueDate).toBe("2026-12-31");
+    expect(analyseRoc(baseExtract({ company: { agmExtendedTo: "2026-12-30" } })).agm.dueDate).toBe("2026-12-30");
+    expect(analyseRoc(baseExtract({ company: { agmExtendedTo: "2027-01-01" } })).agm.dueDate).toBe("2026-12-31");
+    const held = analyseRoc(baseExtract({ company: { agmExtendedTo: "2026-12-31", agmDate: "2026-12-31", previousAgmDate: "2025-12-20" } }));
+    expect(held.agm.delayDays).toBe(0); // the old 30 Dec cap made this one day late
+    expect(analyseRoc(baseExtract({ company: { agmExtendedTo: "2026-12-31", agmDate: "2027-01-01", previousAgmDate: "2025-12-20" } })).agm.delayDays).toBe(1);
+  });
+  it("month-end anchoring helper: a month-end stays a month-end; other days clamp as before", () => {
+    expect(addMonthsFromMonthEnd("2026-09-30", 3)).toBe("2026-12-31");
+    expect(addMonthsFromMonthEnd("2026-11-30", 3)).toBe("2027-02-28");
+    expect(addMonthsFromMonthEnd("2027-12-31", 2)).toBe("2028-02-29");
+    expect(addMonthsFromMonthEnd("2026-09-29", 3)).toBe("2026-12-29");
+    expect(addMonthsFromMonthEnd("2026-11-29", 3)).toBe("2027-02-28");
   });
   it("no AGM held: filing counted from the AGM due date", () => {
     const a = analyseRoc(baseExtract({ company: { agmDate: null } }));
@@ -225,10 +240,23 @@ describe("directors, auditor, MSME-1, DPT-3", () => {
     expect(firm.auditor).toMatchObject({ rotationClass: true, consecutiveYears: 10, rotationBreached: false });
     const firmOver = analyseRoc(baseExtract({ company: { listed: true }, auditor: { termStartFy: "2021-22", consecutiveYearsBeforeTerm: 6 } }));
     expect(firmOver.auditor.rotationBreached).toBe(true);
-    const borrowings = analyseRoc(baseExtract({ current: { longTermBorrowings: 50 * CR }, auditor: { type: "individual", termStartFy: "2021-22", reappointedAtThisAgm: true } }));
+    const borrowings = analyseRoc(baseExtract({ company: { companyClass: "public" }, current: { longTermBorrowings: 50 * CR }, auditor: { type: "individual", termStartFy: "2021-22", reappointedAtThisAgm: true } }));
     expect(borrowings.auditor).toMatchObject({ rotationClass: true, rotationBreached: true });
     const below = analyseRoc(baseExtract({ company: { companyClass: "public", paidUpCapitalPaise: 10 * CR - 1 }, auditor: { type: "individual", termStartFy: "2021-22", reappointedAtThisAgm: true } }));
     expect(below.auditor.rotationClass).toBe(false);
+  });
+  it("rotation never applies to a small company or an OPC, even with borrowings ≥ ₹50 crore (rule 5 exclusion)", () => {
+    const reappointed = { type: "individual" as const, termStartFy: "2021-22", reappointedAtThisAgm: true };
+    // Base company is small on the verified limits (paid-up ₹10 lakh, preceding-year turnover ₹2 crore).
+    const small = analyseRoc(baseExtract({ current: { longTermBorrowings: 50 * CR }, auditor: reappointed }));
+    expect(small.small.isSmall).toBe(true);
+    expect(small.auditor).toMatchObject({ rotationClass: false, rotationBreached: false });
+    const opc = analyseRoc(baseExtract({ company: { companyClass: "opc", agmDate: null }, current: { longTermBorrowings: 60 * CR }, auditor: reappointed }));
+    expect(opc.auditor).toMatchObject({ rotationClass: false, rotationBreached: false });
+    // Same private company one paisa over the verified turnover limit: not small → the borrowings class applies.
+    const notSmall = analyseRoc(baseExtract({ previous: { revenueFromOperations: 40 * CR + 1 }, current: { longTermBorrowings: 50 * CR }, auditor: reappointed }));
+    expect(notSmall.small.isSmall).toBe(false);
+    expect(notSmall.auditor).toMatchObject({ rotationClass: true, rotationBreached: true });
   });
   it("MSME-1: 45 days is fine, 46 is not; zero amounts ignored", () => {
     expect(analyseRoc(baseExtract({ msme: [{ vendor: "V", halfYear: "H1", amountPaise: 100, daysOutstanding: 45 }] })).msme1.applicable).toBe(false);

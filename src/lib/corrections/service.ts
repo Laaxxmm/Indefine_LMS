@@ -5,15 +5,16 @@
 //   value → database checks (uniqueness, active people) → UPDATE the one column →
 //   AuditEvent { action: "correct", entity, entityId, meta: { field, label, before, after, reason } }
 //
-// before / after are masked for class A data and the reason passes the anonymizer (ADR-006: the
+// before / after are masked for class A data (the field's class in src/lib/privacy/inventory.ts)
+// and the reason passes the anonymizer with the client's names as its dictionary (ADR-006: the
 // audit keeps no raw client personal data). Nothing is ever removed: a correction is an UPDATE plus
 // an audit row, and the history view reads those audit rows back.
 //
-// The audit row is written directly with prisma.auditEvent.create. When the hardening branch's
-// logAudit() (src/lib/audit) is merged, switch the single write in writeCorrectionAudit() to it.
+// The audit row is written with logAudit() (src/lib/audit/log.ts), inside the same transaction.
 import type { Prisma } from "@prisma/client";
 import type { prisma as prismaClient } from "@/lib/prisma";
 import { isActive, type SessionUser } from "@/lib/access";
+import { logAudit } from "@/lib/audit/log";
 import { turnoverBand } from "@/lib/clients/core";
 import {
   ALLOW_LIST,
@@ -27,7 +28,8 @@ import {
   type Row,
 } from "./allowlist";
 import { NOT_ALLOWED_MESSAGE, mayCorrect, type PermissionContext } from "./access";
-import { maskForAudit, scrubFreeText, type AuditValue } from "./mask";
+import type { DictionaryEntry } from "@/lib/ai/types";
+import { clientDictionary, maskForAudit, scrubFreeText, type AuditValue, type ClientNames } from "./mask";
 import { Refusal, fail, isUniqueViolation, ok, type ServiceResult } from "./result";
 
 export type CorrectionsDb = Pick<typeof prismaClient, "client" | "firmClient" | "jobTask" | "engagement" | "commsDraft" | "user" | "auditEvent" | "$transaction">;
@@ -119,8 +121,29 @@ function uniqueMessage(entity: CorrectionEntity, field: string): string {
   return "Another record already has that value. Check the value and try again.";
 }
 
+/**
+ * Masking dictionary for the reason: the names of the client the record belongs to, and — when a
+ * name itself is corrected — the old and new name (DPDP: the audit keeps no person's name).
+ */
+async function reasonDictionary(tx: Tx, entity: CorrectionEntity, record: Row, names: unknown[]): Promise<DictionaryEntry[]> {
+  let client: ClientNames | null = null;
+  if (entity === "Client") client = record as ClientNames;
+  else {
+    const firmClientId = entity === "FirmClient" ? null : (record.firmClientId as string | null | undefined);
+    const lmsClientId =
+      entity === "FirmClient"
+        ? (record.lmsClientId as string | null | undefined)
+        : firmClientId
+          ? (await tx.firmClient.findUnique({ where: { id: firmClientId }, select: { lmsClientId: true } }))?.lmsClientId
+          : null;
+    client = lmsClientId ? await tx.client.findUnique({ where: { id: lmsClientId }, select: { name: true, contactName: true, entityType: true } }) : null;
+  }
+  const typed = names.filter((v): v is string => typeof v === "string" && v.trim().length > 0).map((v) => ({ contactName: v }));
+  return clientDictionary(client, ...typed);
+}
+
 async function writeCorrectionAudit(tx: Tx, data: { actorId: string; entity: CorrectionEntity; entityId: string; meta: Prisma.InputJsonObject }): Promise<string> {
-  const ev = await tx.auditEvent.create({ data: { action: "correct", ...data }, select: { id: true } });
+  const ev = await logAudit(tx, { action: "correct", ...data });
   return ev.id;
 }
 
@@ -158,6 +181,7 @@ export async function correctField(user: SessionUser, input: CorrectionInput, de
 
       const maskedBefore = maskForAudit(spec.pii, before);
       const maskedAfter = maskForAudit(spec.pii, parsed.value);
+      const dictionary = await reasonDictionary(tx, entity, record, spec.pii === "name" ? [before, parsed.value] : []);
       const auditEventId = await writeCorrectionAudit(tx, {
         actorId: user.id,
         entity,
@@ -167,7 +191,7 @@ export async function correctField(user: SessionUser, input: CorrectionInput, de
           label: spec.label,
           before: maskedBefore,
           after: maskedAfter,
-          reason: scrubFreeText(reason),
+          reason: scrubFreeText(reason, dictionary),
           ...(input.privacyRequestId ? { privacyRequestId: input.privacyRequestId } : {}),
         },
       });

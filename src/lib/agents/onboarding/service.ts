@@ -9,6 +9,7 @@
 //
 // Every function returns the same RunView so the panel renders one shape. All I/O is injected.
 import type { TuriaMode } from "@/lib/integrations/turia/adapter";
+import { auditDbFromSink, logAudit } from "@/lib/audit/log";
 import type { TuriaChecklist } from "@/lib/integrations/turia/adapter";
 import type { ManualBridge, TuriaSyncRecord } from "@/lib/integrations/turia/manual-bridge";
 import { applyAnswers, clarify, type Answers, type Question } from "./clarify";
@@ -19,9 +20,16 @@ import type { JobPlanner } from "./planner";
 import { initialSteps, normalizeSteps, type RunRecord, type RunStatus, type Saga, type SagaStep } from "./saga";
 import { OnboardingSpec, partialSpecZ, type PartialSpec } from "./spec";
 import { gstStateCode, issuesByField, validateSpec, type Issue, type ValidationPorts } from "./validators";
+import type { OnboardingSubject } from "./restriction";
+import { AI_RESTRICTED_MESSAGE } from "@/lib/privacy/consent";
+import type { SessionUser } from "@/lib/access";
+import { canOpenOnboardingRun } from "@/lib/rbac/policy";
+
+/** Shown when the sentence is about a client whose AI processing is restricted (DPDP, src/lib/privacy/consent.ts). */
+export const ONBOARDING_AI_RESTRICTED = AI_RESTRICTED_MESSAGE;
 
 export class OnboardingError extends Error {
-  constructor(public readonly code: "not-found" | "conflict" | "invalid", message: string) {
+  constructor(public readonly code: "not-found" | "conflict" | "invalid" | "restricted", message: string) {
     super(message);
     this.name = "OnboardingError";
   }
@@ -48,8 +56,22 @@ export interface OnboardingDeps {
   getTuriaSync: (id: string) => Promise<TuriaSyncRecord | null>;
   setTuriaClientRef: (firmClientId: string, ref: string) => Promise<void>;
   audit: (event: { actorId: string; action: string; entity: string; entityId: string | null; meta?: Record<string, unknown> }) => Promise<void>;
+  /**
+   * DPDP: is this onboarding about an existing client whose AI processing is restricted? Asked
+   * before every extractor (model) call; production: isOnboardingAiRestricted (restriction.ts).
+   */
+  aiRestricted: (subject: OnboardingSubject) => Promise<boolean>;
+  /**
+   * Who is acting (security audit finding C): every step on an existing run is refused unless they
+   * started it or are a partner (canOpenOnboardingRun). null only for system callers and tests
+   * that act on a run with no person behind them.
+   */
+  viewer: SessionUser | null;
   now?: () => Date;
 }
+
+/** Shown for a run that does not exist or that the person may not open (the same answer, so nothing leaks). */
+export const RUN_NOT_YOURS = "That onboarding wasn't found, or someone else started it. Only the person who started it or a partner can open it.";
 
 export interface TuriaItem {
   syncId: string;
@@ -84,6 +106,7 @@ export function createOnboardingService(deps: OnboardingDeps) {
   async function load(runId: string): Promise<RunRecord> {
     const run = await deps.runs.get(runId);
     if (!run) throw new OnboardingError("not-found", "Onboarding run not found");
+    if (deps.viewer !== null && !canOpenOnboardingRun(deps.viewer, run)) throw new OnboardingError("not-found", RUN_NOT_YOURS);
     return run;
   }
 
@@ -120,7 +143,13 @@ export function createOnboardingService(deps: OnboardingDeps) {
     if (run.status !== "DRAFT") throw new OnboardingError("conflict", "This onboarding has already been confirmed; it can only be resumed");
   }
 
+  /** DPDP: refuse before the model reads anything about a restricted client (and before any write). */
+  async function refuseIfRestricted(subject: OnboardingSubject): Promise<void> {
+    if (await deps.aiRestricted(subject)) throw new OnboardingError("restricted", ONBOARDING_AI_RESTRICTED);
+  }
+
   async function start(prompt: string, actorId: string): Promise<RunView> {
+    await refuseIfRestricted({ text: prompt });
     const run = await deps.runs.create({ createdById: actorId, prompt, spec: {} });
     const people = await deps.people();
     const x = await extractSpec(prompt, { router: deps.router, runId: run.id, people });
@@ -135,6 +164,12 @@ export function createOnboardingService(deps: OnboardingDeps) {
     const notes: string[] = [];
     let needsReview = false;
     if (input.message?.trim()) {
+      // The run's client, the spec so far and the sentence itself; then identifiers typed in this same turn.
+      await refuseIfRestricted({ firmClientId: run.firmClientId, spec, text: input.message });
+      const typed = (k: string) => [input.answers?.[k] ?? []].flat().map(String);
+      if (typed("pan").length || typed("gstins").length || typed("clientCode").length) {
+        await refuseIfRestricted({ spec: { pan: typed("pan")[0] ?? null, gstins: typed("gstins"), clientCode: typed("clientCode")[0] ?? null } });
+      }
       const x = await extractSpec(input.message, { router: deps.router, runId, people: await deps.people(), base: spec });
       spec = x.spec;
       notes.push(...x.notes);
@@ -183,7 +218,7 @@ export function createOnboardingService(deps: OnboardingDeps) {
     if (!run.plan) throw new OnboardingError("invalid", "Build the plan first");
     if (run.status === "DRAFT") {
       await deps.runs.update(runId, { status: "CONFIRMED", steps: initialSteps() });
-      await deps.audit({ actorId, action: "onboarding.confirm", entity: "OnboardingRun", entityId: runId, meta: { clientCode: run.plan.clientCode } });
+      await logAudit(auditDbFromSink(deps), { actorId, action: "onboarding.confirm", entity: "OnboardingRun", entityId: runId, meta: { clientCode: run.plan.clientCode } });
     }
     return view(await deps.saga.execute(runId, actorId));
   }
@@ -200,7 +235,7 @@ export function createOnboardingService(deps: OnboardingDeps) {
     if (!sync || !run.firmClientId || sync.firmClientId !== run.firmClientId) throw new OnboardingError("not-found", "That Turia checklist is not part of this onboarding");
     const rec = await deps.manual.confirm(input.syncId, { turiaRef: input.turiaRef, minutes: input.minutes ?? null, confirmedBy: actorId });
     if (rec.operation === "createClient") await deps.setTuriaClientRef(run.firmClientId, rec.turiaRef as string);
-    await deps.audit({ actorId, action: "turia.confirm", entity: "TuriaSync", entityId: rec.id, meta: { operation: rec.operation, runId } });
+    await logAudit(auditDbFromSink(deps), { actorId, action: "turia.confirm", entity: "TuriaSync", entityId: rec.id, meta: { operation: rec.operation, runId } });
     const settled = await deps.saga.settleWaiting(runId, async (id) => {
       const s = await deps.getTuriaSync(id);
       return s?.status === "CONFIRMED" || s?.status === "CLOSED";

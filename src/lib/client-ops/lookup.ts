@@ -1,5 +1,6 @@
 // Public metadata only — no accounts, no API keys, no credentials in this file.
 import tls from "node:tls";
+import { HostRefusedError, resolvePublicHost, type Lookup } from "@/lib/hardening/net";
 
 const UA = "indefine-lms/1.0 (client-ops renewal tracker)";
 
@@ -24,21 +25,36 @@ export async function rdapExpiry(domain: string): Promise<LookupResult> {
   }
 }
 
+export type SslDeps = { lookup?: Lookup; connect?: typeof tls.connect };
+
 /**
  * Certificate expiry for a host.
  * `rejectUnauthorized` is off deliberately: an expired or mismatched certificate is exactly
  * the case worth reporting, and a rejected handshake would hide the date we came for.
  * Nothing is sent over this socket — it reads the presented certificate and hangs up.
+ *
+ * The host is staff-typed, so it is checked first (security audit #23): a plain DNS name only
+ * (no IP literal, port or path), resolved here, and refused if any address is loopback,
+ * private, link-local / cloud metadata or otherwise reserved. The socket then goes to the
+ * resolved address (SNI = the name), so a second DNS answer cannot redirect it.
  */
-export function sslExpiry(host: string): Promise<LookupResult> {
+export async function sslExpiry(hostInput: string, deps: SslDeps = {}): Promise<LookupResult> {
+  let target: { host: string; address: string };
+  try {
+    target = await resolvePublicHost(hostInput, deps.lookup);
+  } catch (e) {
+    if (e instanceof HostRefusedError) return { error: e.message };
+    throw e;
+  }
+  const connect = deps.connect ?? tls.connect;
   return new Promise((resolve) => {
     const finish = (result: LookupResult) => {
       socket.removeAllListeners();
       socket.destroy();
       resolve(result);
     };
-    const socket = tls.connect(
-      { host, port: 443, servername: host, rejectUnauthorized: false, timeout: 8000 },
+    const socket = connect(
+      { host: target.address, port: 443, servername: target.host, rejectUnauthorized: false, timeout: 8000 },
       () => {
         const cert = socket.getPeerCertificate();
         const cn = cert?.subject?.CN;

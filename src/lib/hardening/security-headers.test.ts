@@ -19,10 +19,11 @@ describe("Content-Security-Policy", () => {
     expect(contentSecurityPolicy()).not.toMatch(/unsafe-eval|\*(?!\.sharepoint\.com)|http:/);
   });
 
-  it("allows exactly what the app loads: Google Fonts, SharePoint images and video, data:/blob: images", () => {
+  it("allows exactly what the app loads: self-hosted fonts (next/font, no Google host), SharePoint images and video, data:/blob: images", () => {
     const d = directives(contentSecurityPolicy());
-    expect(d.get("style-src")).toContain("https://fonts.googleapis.com");
-    expect(d.get("font-src")).toEqual(["'self'", "https://fonts.gstatic.com", "data:"]);
+    expect(d.get("style-src")).toEqual(["'self'", "'unsafe-inline'"]);
+    expect(d.get("font-src")).toEqual(["'self'", "data:"]);
+    expect(contentSecurityPolicy()).not.toMatch(/googleapis|gstatic/);
     expect(d.get("img-src")).toEqual(["'self'", "data:", "blob:", "https://*.sharepoint.com"]);
     expect(d.get("media-src")).toEqual(["'self'", "blob:", "https://*.sharepoint.com"]);
     expect(d.get("worker-src")).toEqual(["'self'", "blob:"]);
@@ -52,6 +53,8 @@ describe("next.config.ts headers", () => {
     expect(h["Referrer-Policy"]).toBe("strict-origin-when-cross-origin");
     expect(h["Permissions-Policy"]).toMatch(/^camera=\(\), microphone=\(\), geolocation=\(\), payment=\(\)/);
     expect(h["Cross-Origin-Opener-Policy"]).toBe("same-origin-allow-popups");
+    // Security audit: no Cross-Origin-Resource-Policy was sent; now same-origin on every path.
+    expect(h["Cross-Origin-Resource-Policy"]).toBe("same-origin");
     expect(nextConfig.poweredByHeader).toBe(false);
   });
 

@@ -3,11 +3,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Session } from "next-auth";
 import { canAccessModule } from "./access";
-import { MODULE_OFF_PARAM, moduleOffHref, moduleOffMessage, moduleOffNotice, requireModule } from "./guard";
-import { BUILT_IN_ROLE_MODULES, MODULE_KEYS, MODULES, isFirmRole, isModuleKey, moduleForPath, sortModules } from "./registry";
+import { FIRM_OS_OFF_MESSAGE, firmOsEnabled, firmOsOffCronResponse, firmOsOffResponse } from "./flag";
+import { MODULE_OFF_PARAM, moduleOffHref, moduleOffMessage, moduleOffNotice, requireFirmOs, requireModule } from "./guard";
+import { BUILT_IN_ROLE_MODULES, FIRM_OS_MODULES, LMS_MODULES, MODULE_KEYS, MODULES, isFirmRole, isModuleKey, moduleForPath, sortModules } from "./registry";
 import {
   companionAllowedFor,
   effectiveModules,
+  firmOsOffWorkspace,
   focusModeFor,
   isModuleEnabled,
   loadWorkspace,
@@ -17,6 +19,14 @@ import {
   type SettingRow,
   type WorkspaceDb,
 } from "./settings";
+
+// Firm OS switched on for these tests (FIRM_OS_ENABLED defaults off: src/lib/workspace/flag.ts).
+beforeEach(() => {
+  vi.stubEnv("FIRM_OS_ENABLED", "1");
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 vi.mock("next/navigation", () => ({
   redirect: (url: string): never => {
@@ -212,5 +222,55 @@ describe("requireModule", () => {
     const target = (u: U | null) => requireModule(u, "admin", db).then(() => "rendered", (e: Error) => e.message);
     expect(await target(staff)).toBe("REDIRECT /dashboard");
     expect(await target(null)).toBe("REDIRECT /");
+  });
+});
+
+describe("the Firm OS master switch (FIRM_OS_ENABLED, default off)", () => {
+  it("reads 1 / true / on / yes as on, anything else (unset included) as off", () => {
+    for (const v of ["1", "true", "ON", " yes "]) expect(firmOsEnabled({ FIRM_OS_ENABLED: v })).toBe(true);
+    for (const v of [undefined, "", "0", "false", "off", "no", "enabled"]) expect(firmOsEnabled({ FIRM_OS_ENABLED: v })).toBe(false);
+  });
+
+  it("off: the LMS modules the role may use, no Firm OS module, no focus mode, no companion — and nothing is read", async () => {
+    vi.stubEnv("FIRM_OS_ENABLED", "");
+    const { db, reads } = fakeDb({ u1: { modules: [...MODULE_KEYS], focusMode: true, companionEnabled: true } }, { staff: { modules: ["agents"], focusMode: true } });
+    expect(await effectiveModules(staff, db)).toEqual(["learning", "leaderboard", "clients", "tools"]); // the work tracker keeps its allow-list
+    expect(await effectiveModules(admin, db)).toEqual(LMS_MODULES.filter((k) => k !== "work"));
+    for (const k of FIRM_OS_MODULES) expect(await isModuleEnabled(partner, k, db)).toBe(false);
+    expect(await focusModeFor(staff, db)).toBe(false);
+    expect(await companionAllowedFor(staff, db)).toBe(false);
+    expect(reads).toEqual([]);
+    expect(firmOsOffWorkspace(staff)).toMatchObject({ focusMode: false, companionEnabled: false, modulesFrom: "built-in" });
+  });
+
+  it("off: a Firm OS module sends everyone to the dashboard with the Firm OS sentence; an LMS module still follows its rules", async () => {
+    vi.stubEnv("FIRM_OS_ENABLED", "");
+    const { db } = fakeDb();
+    await expect(requireModule(partner, "agents", db)).rejects.toThrow("REDIRECT /dashboard?module-off=firm-os");
+    await expect(requireModule(staff, "onboard", db)).rejects.toThrow("REDIRECT /dashboard"); // the role rule comes first
+    await expect(requireModule(staff, "clients", db)).resolves.toBeUndefined();
+    expect(() => requireFirmOs(admin)).toThrow("REDIRECT /dashboard?module-off=firm-os");
+    expect(moduleOffNotice("firm-os")).toBe(FIRM_OS_OFF_MESSAGE);
+  });
+
+  it("on: the saved settings decide again", async () => {
+    const { db } = fakeDb({ u1: { modules: ["agents"], focusMode: true, companionEnabled: false } });
+    expect(await effectiveModules(staff, db)).toEqual(["agents"]);
+    expect(() => requireFirmOs(admin)).not.toThrow();
+  });
+
+  it("the API answer while off: 404 with the plain sentence; a cron skips with 200", async () => {
+    const res = firmOsOffResponse();
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: FIRM_OS_OFF_MESSAGE });
+    const cron = firmOsOffCronResponse();
+    expect(cron.status).toBe(200);
+    expect(await cron.json()).toEqual({ ok: true, skipped: FIRM_OS_OFF_MESSAGE });
+  });
+
+  it("splits the registry: Firm OS modules and the LMS, every module in exactly one", () => {
+    expect([...FIRM_OS_MODULES].sort()).toEqual(["agents", "coach", "comms", "onboard", "search"]);
+    expect(sortModules([...FIRM_OS_MODULES, ...LMS_MODULES])).toEqual([...MODULE_KEYS]);
+    expect(FIRM_OS_MODULES.some((k) => LMS_MODULES.includes(k))).toBe(false);
   });
 });

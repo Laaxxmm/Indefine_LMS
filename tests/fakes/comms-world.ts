@@ -5,7 +5,14 @@ import type { FirmService, JobTaskState } from "@prisma/client";
 import type { CommsDb } from "@/lib/agents/comms/service";
 
 type Row = Record<string, unknown>;
-export type MemClient = { id: string; clientCode: string; preferredLanguage: string; client: { name: string; contactName: string | null; contactEmail: string | null } };
+export type MemClient = {
+  id: string;
+  clientCode: string;
+  preferredLanguage: string;
+  /** LMS Client.id (DPDP restrictions are recorded against it). */
+  lmsClientId?: string;
+  client: { name: string; contactName: string | null; contactEmail: string | null; primaryHandlerId?: string | null };
+};
 export type MemJob = {
   id: string;
   firmClientId: string;
@@ -75,6 +82,9 @@ export class CommsWorld {
         if (!(v as unknown[]).every((w) => this.matches(row, w, model))) return false;
       } else if (k === "OR") {
         if (!(v as unknown[]).some((w) => this.matches(row, w, model))) return false;
+      } else if (model === "firmClient" && k === "client" && v && typeof v === "object") {
+        // FirmClient → Client (to-one): every field given must equal the LMS client's.
+        if (!this.matches((row.client ?? {}) as Row, v, "client")) return false;
       } else if (v && typeof v === "object" && "some" in (v as Row)) {
         if (!(model === "firmClient" && k === "jobTasks")) throw new Error(`comms-world: unsupported relation filter ${model}.${k}`);
         if (!this.jobs.filter((j) => j.firmClientId === row.id).some((j) => this.matches(j as unknown as Row, (v as Row).some, "jobTask"))) return false;
@@ -124,6 +134,7 @@ export class CommsWorld {
           return e;
         },
         findFirst: async (a: { where?: unknown }) => [...this.audits].reverse().find((e) => this.matches(e as unknown as Row, a.where, "auditEvent")) ?? null,
+        findMany: async (a: { where?: unknown } = {}) => this.audits.filter((e) => this.matches(e as unknown as Row, a.where, "auditEvent")),
       },
       user: {
         findMany: async (a: { where?: unknown } = {}) => this.users.filter((u) => this.matches(u as unknown as Row, a.where, "user")),

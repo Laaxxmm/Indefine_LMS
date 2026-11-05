@@ -2,8 +2,17 @@
 // are copied to {Period}/Final. Every write is create-only (conflict "fail"); when a name is taken
 // the `_v{n}` suffix is bumped, so a Final file is never replaced, only joined by a higher version.
 // Paths come from paths.ts (deliverablePath); this module never assembles a Path A URL itself.
+//
+// Graph economy (docs/qa/efficiency-report.md): the Compliance drive id of a client is looked up
+// once per store and kept (a library is never deleted or recreated under Path A); a folder's names
+// are listed with one children GET (a missing folder is a 404, not a separate item GET), and kept
+// for a few seconds so the several deliverables of one run are numbered from one listing (a stale
+// name is harmless: the upload is create-only and a 409 bumps the version, as for any race); and
+// every upload records what SharePoint now holds (content-registry.ts) so later checks of the same
+// file can be answered from its metadata instead of a download.
 import { createHash } from "node:crypto";
-import { ConflictError, NotProvisionedError } from "./errors";
+import { defaultContentRegistry, factsFromBytes, type ContentRegistry } from "./content-registry";
+import { ConflictError, GraphError, NotProvisionedError } from "./errors";
 import type { GraphItem, SharePointClient } from "./graph-client";
 import { COMPLIANCE_LIBRARY, DEFAULT_TENANT_HOST, clSiteUrl } from "./paths";
 
@@ -57,32 +66,62 @@ export interface DeliverableStore {
   read(driveId: string, folder: string, fileName: string): Promise<Buffer | null>;
   /**
    * Does the stored file still have this sha256? Uses Graph's sha256Hash when the drive reports one
-   * (SharePoint libraries usually do not), otherwise downloads and hashes the bytes.
+   * (SharePoint libraries usually do not), else what this process knows about the item's current
+   * content (cTag + quickXorHash + size unchanged since we hashed it), otherwise downloads and
+   * hashes the bytes.
    */
   verify(driveId: string, folder: string, fileName: string, sha256: string): Promise<boolean>;
 }
 
 const join = (folder: string, name: string) => `${folder.replace(/\/+$/, "")}/${name}`;
 
-export function createDeliverableStore(client: SharePointClient, opts: { host?: string } = {}): DeliverableStore {
-  const host = opts.host ?? DEFAULT_TENANT_HOST;
+/** How long a client's Compliance drive id is kept (it does not change; the bound only limits staleness). */
+export const DRIVE_ID_TTL_MS = 6 * 60 * 60 * 1000;
+/** How long a folder listing is reused for numbering the next upload into the same folder. */
+export const LISTING_TTL_MS = 30_000;
 
-  async function existingNames(driveId: string, folder: string): Promise<string[]> {
-    const folderItem = await client.getItemByPath(driveId, folder);
-    if (!folderItem) return [];
-    return (await client.listChildren(driveId, folder)).map((c) => c.name);
+export type DeliverableStoreOptions = { host?: string; registry?: ContentRegistry; now?: () => number };
+
+export function createDeliverableStore(client: SharePointClient, opts: DeliverableStoreOptions = {}): DeliverableStore {
+  const host = opts.host ?? DEFAULT_TENANT_HOST;
+  const registry = opts.registry ?? defaultContentRegistry;
+  const now = opts.now ?? Date.now;
+  const drives = new Map<string, { id: string; at: number }>();
+  const listings = new Map<string, { names: Set<string>; at: number }>();
+  const listingKey = (driveId: string, folder: string) => `${driveId}\u0000${folder.replace(/\/+$/, "")}`;
+
+  /** Names in `folder` (empty when it does not exist yet), from one children GET. */
+  async function existingNames(driveId: string, folder: string): Promise<Set<string>> {
+    const key = listingKey(driveId, folder);
+    const hit = listings.get(key);
+    if (hit && now() - hit.at < LISTING_TTL_MS) return hit.names;
+    let names: Set<string>;
+    try {
+      names = new Set((await client.listChildren(driveId, folder)).map((c) => c.name));
+    } catch (e) {
+      if (!(e instanceof GraphError && e.status === 404)) throw e;
+      names = new Set();
+    }
+    listings.set(key, { names, at: now() });
+    return names;
   }
 
   /** Upload with conflict "fail", bumping the version on every 409 (bounded). */
   async function uploadFrom(driveId: string, folder: string, fileName: string, bytes: Uint8Array): Promise<StoredFile> {
-    const start = nextFreeVersion(fileName, await existingNames(driveId, folder), versionOf(fileName) ?? 1);
+    const taken = await existingNames(driveId, folder);
+    const start = nextFreeVersion(fileName, taken, versionOf(fileName) ?? 1);
     for (let v = start; v < start + MAX_VERSION_ATTEMPTS; v++) {
       const name = withVersion(fileName, v);
       try {
         const item = await client.uploadFile(driveId, join(folder, name), bytes, { conflict: "fail" });
-        return { item, driveId, folder, fileName: name, version: v, sha256: sha256Hex(bytes), sizeBytes: bytes.byteLength };
+        taken.add(name);
+        const sha256 = sha256Hex(bytes);
+        const facts = factsFromBytes(item, bytes, sha256);
+        if (facts) registry.remember(driveId, item.id, facts);
+        return { item, driveId, folder, fileName: name, version: v, sha256, sizeBytes: bytes.byteLength };
       } catch (e) {
         if (!(e instanceof ConflictError)) throw e;
+        taken.add(name);
       }
     }
     throw new ConflictError(`${join(folder, fileName)} (no free version within ${MAX_VERSION_ATTEMPTS} attempts)`);
@@ -90,11 +129,14 @@ export function createDeliverableStore(client: SharePointClient, opts: { host?: 
 
   return {
     async complianceDrive(clientCode) {
+      const known = drives.get(clientCode);
+      if (known && now() - known.at < DRIVE_ID_TTL_MS) return known.id;
       const siteUrl = clSiteUrl(clientCode, host);
       const site = await client.getSiteByUrl(siteUrl);
       if (!site) throw new NotProvisionedError(`Client site ${siteUrl} does not exist yet; run onboarding (ensureClientSite) first`);
       const drive = await client.getDriveByName(site.id, COMPLIANCE_LIBRARY);
       if (!drive) throw new NotProvisionedError(`Library ${COMPLIANCE_LIBRARY} on ${siteUrl} does not exist yet; run ensureFyTree first`);
+      drives.set(clientCode, { id: drive.id, at: now() });
       return drive.id;
     },
     putNew(driveId, folder, fileName, bytes) {
@@ -114,8 +156,14 @@ export function createDeliverableStore(client: SharePointClient, opts: { host?: 
       if (!item) return false;
       const reported = item.file?.hashes?.sha256Hash;
       if (reported) return reported.toLowerCase() === want;
+      const known = registry.knownSha256(driveId, item);
+      if (known) return known === want;
       const bytes = await client.downloadFile(driveId, join(folder, fileName));
-      return !!bytes && sha256Hex(bytes) === want;
+      if (!bytes) return false;
+      const actual = sha256Hex(bytes);
+      const facts = factsFromBytes(item, bytes, actual);
+      if (facts) registry.remember(driveId, item.id, facts);
+      return actual === want;
     },
   };
 }

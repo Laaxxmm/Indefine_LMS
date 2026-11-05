@@ -175,6 +175,21 @@ describe("purchase registers", () => {
     expect(docs[0]).toMatchObject({ number: "TS/88", gstin: "36AALCY6505Y1Z1", pos: "29", ledger: "Wheat flour" });
   });
 
+  it("optional supplier-state column (Tally 'Supplier State', Zoho 'Source of Supply'); absent column or blank cell → no field", () => {
+    const csv = [
+      "Date,Particulars,Voucher Type,Supplier Invoice No.,Supplier Invoice Date,GSTIN/UIN,Supplier State,Place of Supply,Purchase Ledger,Item Description,GST Rate,Taxable Value,IGST,CGST,SGST/UTGST,Cess,Gross Total,Reverse Charge",
+      "14-10-2026,Adv. K Deshmukh,Purchase,KD/77,14-10-2026,,27-Maharashtra,29-Karnataka,Legal Fees,Arbitration,,50000,,,,,50000,No",
+      "15-10-2026,Sunrise Steel,Purchase,SS/3003,15-10-2026,29AAGCS6101U1ZN,,29-Karnataka,Raw Material Purchases,MS rods,18,100000,,9000,9000,,118000,No",
+    ].join("\n");
+    const { docs } = parsePurchaseTable(table(csv, "purchases.csv"));
+    expect(docs[0]).toMatchObject({ number: "KD/77", gstin: null, supplierState: "27", pos: "29" });
+    expect("supplierState" in docs[1]).toBe(false);
+    const zoho = parsePurchaseTable(table(["Bill Date,Bill Number,Vendor Name,Vendor GSTIN,Source of Supply,Place of Supply,Account,Item Total,IGST,CGST,SGST,Total", "02/10/2026,LG/1,Lex Partners,,Maharashtra,Karnataka (29),Legal Fees,50000,,,,50000"].join("\n"), "purchases.csv")).docs;
+    expect(zoho[0]).toMatchObject({ supplierState: "27", pos: "29" });
+    const none = parsePurchaseTable(table(["Date,Supplier Invoice No.,Particulars,Taxable Value", "14-10-2026,X/1,A,100"].join("\n"), "purchases.csv")).docs;
+    expect("supplierState" in none[0]).toBe(false);
+  });
+
   it("payables ageing and e-invoice registers", () => {
     const pay = table(["Party Name,GSTIN,Invoice No,Invoice Date,Invoice Value,Amount Paid,IGST,CGST,SGST,Cess,ITC Reversed Earlier", "Coastal,33AAKCX6404X1ZD,CC/450,03-05-2026,118000,0,18000,0,0,0,No", "Total,,,,,,,,,,", "Old,33AAKCX6404X1ZD,CC/1,01-01-2026,100,0,10,0,0,0,Yes"].join("\n"), "payables.csv");
     const rows = parsePayablesTable(pay);

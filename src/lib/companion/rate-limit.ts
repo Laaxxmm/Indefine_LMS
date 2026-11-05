@@ -1,9 +1,12 @@
-// Per-token request limit for GET next-task. RateLimiter is the seam: memoryRateLimiter (fixed
-// window, in this server process) today; Phase 11's database limiter on RateLimitBucket
-// (key "companion:<token hash>") implements the same interface and replaces it in defaults.ts.
+// Per-token request limit for GET next-task. RateLimiter is the seam. Production (defaults.ts)
+// uses the database limiter on RateLimitBucket (src/lib/hardening/rate-limit.ts, scope
+// "companion", key "companion:<token hash>", 20 a minute by default, RATE_LIMIT_COMPANION to
+// change it), shared by every app instance; memoryRateLimiter (fixed window, this process) is its
+// fallback when the bucket table cannot be reached, and what tests use.
 //
 // No entries are ever removed one by one: when the table reaches maxKeys it is replaced by a fresh
 // one (every window starts over), which bounds memory without per-key deletion.
+import { scopedRateLimiter } from "@/lib/hardening/rate-limit";
 import { COMPANION_RATE_LIMIT } from "./config";
 
 export type RateDecision = { ok: true; remaining: number } | { ok: false; retryAfterSec: number };
@@ -33,5 +36,8 @@ export function memoryRateLimiter(opts: { limit: number; windowMs: number; maxKe
   };
 }
 
-/** The process-wide limiter the route uses (one per server instance). */
+/** The in-process limiter (one per server instance): the database limiter's fallback. */
 export const companionRateLimiter: RateLimiter = memoryRateLimiter();
+
+/** What the route uses: the shared database count per token, falling back to companionRateLimiter. */
+export const databaseCompanionRateLimiter: RateLimiter = scopedRateLimiter("companion", { fallback: companionRateLimiter });

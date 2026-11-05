@@ -8,7 +8,10 @@ import {
   memoryRateLimitStore,
   parseRule,
   prismaRateLimitStore,
+  rateLimitSentence,
   ruleFor,
+  scopedRateLimiter,
+  windowWords,
   type RawQueryDb,
   type RateLimitStore,
 } from "./rate-limit";
@@ -38,8 +41,18 @@ describe("configuration", () => {
     expect(warn).toHaveBeenCalledWith(expect.stringMatching(/RATE_LIMIT_COMMS_DRAFT="lots" is not/));
   });
 
-  it("ships limits for /onboard, agent runs and comms drafting", () => {
-    expect(DEFAULT_LIMITS).toEqual({ onboard: { limit: 30, windowMs: 3_600_000 }, "agent-run": { limit: 20, windowMs: 3_600_000 }, "comms-draft": { limit: 30, windowMs: 3_600_000 } });
+  it("ships limits for /onboard, agent runs, comms drafting, identifier lookups and the Companion", () => {
+    expect(DEFAULT_LIMITS).toEqual({
+      onboard: { limit: 30, windowMs: 3_600_000 },
+      "agent-run": { limit: 20, windowMs: 3_600_000 },
+      "comms-draft": { limit: 30, windowMs: 3_600_000 },
+      "identifier-search": { limit: 10, windowMs: 600_000 },
+      companion: { limit: 20, windowMs: 60_000 },
+    });
+    expect(envName("identifier-search")).toBe("RATE_LIMIT_IDENTIFIER_SEARCH");
+    expect(envName("companion")).toBe("RATE_LIMIT_COMPANION");
+    expect(ruleFor("identifier-search", { RATE_LIMIT_IDENTIFIER_SEARCH: "5/30m" })).toEqual({ limit: 5, windowMs: 1_800_000 });
+    expect(ruleFor("companion", { RATE_LIMIT_COMPANION: "40/1m" })).toEqual({ limit: 40, windowMs: 60_000 });
   });
 });
 
@@ -62,7 +75,7 @@ describe("fixed window (fake timers)", () => {
     expect(res?.headers.get("Retry-After")).toBe("360");
     expect(res?.headers.get("RateLimit-Limit")).toBe("3");
     expect(res?.headers.get("RateLimit-Remaining")).toBe("0");
-    expect(await res?.json()).toEqual({ error: "Too many agent runs: the limit is 3 per window. Try again in 6 minutes.", retryAfter: 360 });
+    expect(await res?.json()).toEqual({ error: "You have made too many agent runs in 10 minutes (the limit is 3). Wait 6 minutes, then try again.", retryAfter: 360 });
 
     vi.advanceTimersByTime(6 * MIN - 1000);
     expect((await checkRateLimit("agent-run", "u-1", { store, rule })).retryAfterSec).toBe(1);
@@ -86,11 +99,60 @@ describe("fixed window (fake timers)", () => {
     expect(burst.filter((d) => d.allowed)).toHaveLength(3);
   });
 
-  it("fails open, with an error logged, when the bucket store is unavailable", async () => {
+  it("fails CLOSED (503 + Retry-After, plain message), with an error logged, when the bucket store is unavailable", async () => {
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
     const broken: RateLimitStore = { hit: async () => Promise.reject(new Error("connection refused")) };
-    expect(await enforceRateLimit("onboard", "u-1", { store: broken, rule })).toBeNull();
-    expect(err).toHaveBeenCalledWith(expect.stringMatching(/onboard: store unavailable, request allowed: connection refused/));
+    const res = await enforceRateLimit("onboard", "u-1", { store: broken, rule });
+    expect(res?.status).toBe(503);
+    expect(res?.headers.get("Retry-After")).toBe("60");
+    expect(await res?.json()).toEqual({ error: "The system is busy — try again in a minute.", retryAfter: 60 });
+    expect(err).toHaveBeenCalledWith(expect.stringMatching(/onboard: store unavailable, request refused with 503 \(fail closed\): connection refused/));
+  });
+});
+
+describe("scopedRateLimiter (the seam for search and the Companion)", () => {
+  it("counts the subject in the shared store under the scope's rule and answers in both modules' shapes", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const store = memoryRateLimitStore();
+    const lim = scopedRateLimiter("identifier-search", { store, rule });
+    for (let i = 0; i < 3; i++) expect(await lim.hit("identifier-search:u-1", T0)).toEqual({ ok: true, remaining: 2 - i });
+    expect(await lim.hit("identifier-search:u-1", new Date(T0.getTime() + MIN))).toEqual({ ok: false, retryAfterSec: 540, retryAfterSeconds: 540 });
+    expect(await lim.hit("u-2", T0)).toEqual({ ok: true, remaining: 2 }); // a bare subject works too
+    expect([...store.buckets.keys()].sort()).toEqual(["identifier-search:u-1", "identifier-search:u-2"]);
+    // A second instance sharing the store sees the same count (one database for every instance).
+    expect((await scopedRateLimiter("identifier-search", { store, rule }).hit("identifier-search:u-1", T0)).ok).toBe(false);
+  });
+
+  it("uses the env override for its scope", async () => {
+    const store = memoryRateLimitStore();
+    const lim = scopedRateLimiter("companion", { store, env: { RATE_LIMIT_COMPANION: "1/1m" } });
+    expect((await lim.hit("companion:abc", T0)).ok).toBe(true);
+    expect(await lim.hit("companion:abc", T0)).toEqual({ ok: false, retryAfterSec: 60, retryAfterSeconds: 60 });
+  });
+
+  it("falls back to the module's in-process limiter (not to no limit) when the bucket table is unreachable", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const broken: RateLimitStore = { hit: async () => Promise.reject(new Error("relation does not exist")) };
+    let n = 0;
+    const fallback = { hit: () => (++n > 1 ? { ok: false as const, retryAfterSeconds: 30 } : { ok: true as const, remaining: 0 }) };
+    const lim = scopedRateLimiter("identifier-search", { store: broken, rule, fallback });
+    expect(await lim.hit("identifier-search:u-1", T0)).toEqual({ ok: true, remaining: 0 });
+    expect(await lim.hit("identifier-search:u-1", T0)).toEqual({ ok: false, retryAfterSec: 30, retryAfterSeconds: 30 });
+    expect(err).toHaveBeenCalledWith(expect.stringMatching(/identifier-search: store unavailable, using the in-process limit/));
+  });
+
+  it("writes plain 429 sentences with the window in words", () => {
+    expect(windowWords(3_600_000)).toBe("an hour");
+    expect(windowWords(7_200_000)).toBe("2 hours");
+    expect(windowWords(60_000)).toBe("a minute");
+    expect(windowWords(600_000)).toBe("10 minutes");
+    expect(windowWords(90_000)).toBe("90 seconds");
+    expect(rateLimitSentence({ scope: "comms-draft", limit: 30, retryAfterSec: 61, windowMs: 3_600_000 })).toBe(
+      "You have made too many draft messages in an hour (the limit is 30). Wait 2 minutes, then try again.",
+    );
+    expect(rateLimitSentence({ scope: "identifier-search", limit: 10, retryAfterSec: 5, windowMs: 600_000 })).toBe(
+      "You have made too many searches by PAN, GSTIN, phone or email in 10 minutes (the limit is 10). Wait 1 minute, then try again.",
+    );
   });
 });
 

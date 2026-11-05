@@ -1,9 +1,9 @@
 "use client";
 
 // Command palette: Ctrl+K (⌘+K on a Mac) anywhere opens a search dialog over the page, backed by
-// the same API as /search (/api/firm-os/search). Not mounted by any layout yet — mount
-// <CommandPalette /> once, inside <body> in src/app/layout.tsx (it renders nothing until opened).
-// A header button can open it with openCommandPalette().
+// the same API as /search (/api/firm-os/search). Mounted once, inside <body> in src/app/layout.tsx,
+// for people with the Search module on (it renders nothing until opened). The Search button in the
+// Firm OS header and on the dashboard opens it with openCommandPalette() (src/components/SearchButton.tsx).
 //
 // Keyboard: typing searches (a PAN, GSTIN, phone or email only on Enter); Up / Down move through
 // the results and wrap; Enter opens the highlighted result; Esc closes; Tab stays inside the dialog;

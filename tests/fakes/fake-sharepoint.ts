@@ -6,11 +6,16 @@
 // `@microsoft.graph.conflictBehavior=fail` (409 when the file exists) or on an upload-session
 // URL this fake issued (sessions are created with conflictBehavior "fail"). Every other PUT —
 // including a content PUT without conflictBehavior=fail, which could overwrite — is a 405
-// violation like DELETE/PATCH.
+// violation like DELETE/PATCH. POST /$batch (Graph JSON batching) runs each sub-request through the
+// same handlers; only GET sub-requests are allowed (anything else is a violation), and a GET-only
+// batch is a read, not a mutation. Files report a real quickXorHash and a cTag that changes when
+// their content changes (replaceFile), as SharePoint does.
 
 import { createHash } from "node:crypto";
+import { quickXorHash } from "@/lib/integrations/sharepoint/quick-xor-hash";
 
-type Item = { id: string; name: string; content?: Buffer; mimeType?: string };
+/** `version` bumps on every content change (the item's cTag), as SharePoint does. */
+type Item = { id: string; name: string; content?: Buffer; mimeType?: string; version?: number };
 type UploadSession = { drive: Drive; key: string; name: string; parts: Buffer[]; received: number };
 type Drive = { id: string; name: string; items: Map<string, Item> }; // key: "a/b/c" ("" = root)
 type List = { id: string; displayName: string; template: string; columns: unknown[] };
@@ -48,6 +53,12 @@ export class FakeSharePoint {
   reportSha256Hash = false;
   /** Upload-session PUTs that wrongly carried an Authorization header (session URLs are pre-authenticated). */
   readonly sessionAuthLeaks: Call[] = [];
+  /** Sub-requests carried inside POST /$batch calls (each still counts against Graph throttling). */
+  readonly batchedCalls: Call[] = [];
+  /** Statuses served to the next batch sub-requests before normal handling (throttling tests). */
+  readonly queuedSub: Array<{ status: number; headers?: Record<string, string> }> = [];
+  /** $batch calls whose sub-requests were all GETs: reads, not mutations. */
+  private readOnlyBatches = new Set<Call>();
   private seq = 0;
   private pendingSites = new Map<string, number>();
   private sessions = new Map<string, UploadSession>();
@@ -116,6 +127,14 @@ export class FakeSharePoint {
     drive.items.set(parts.join("/"), { id: this.id("item"), name: parts[parts.length - 1], content: Buffer.from(content), mimeType });
   }
 
+  /** Someone edits a file in SharePoint outside Firm OS: new bytes, same item id, a new cTag. */
+  replaceFile(drive: Drive, path: string, content: Buffer | string) {
+    const item = drive.items.get(path.split("/").filter(Boolean).join("/"));
+    if (!item?.content) throw new Error(`fake: no file at ${path}`);
+    item.content = Buffer.from(content);
+    item.version = (item.version ?? 1) + 1;
+  }
+
   /** Bytes of a stored file, or undefined. */
   fileContent(drive: Drive, path: string): Buffer | undefined {
     return drive.items.get(path.split("/").filter(Boolean).join("/"))?.content;
@@ -140,9 +159,9 @@ export class FakeSharePoint {
 
   // ---------------- inspection ----------------
 
-  /** Calls that would change state (every POST, and the allowed create-only upload PUTs). */
+  /** Calls that would change state (every POST except a GET-only $batch, and the allowed create-only upload PUTs). */
   get mutations(): Call[] {
-    return this.calls.filter((c) => c.method === "POST" || (c.method === "PUT" && !this.violations.includes(c)));
+    return this.calls.filter((c) => (c.method === "POST" && !this.readOnlyBatches.has(c)) || (c.method === "PUT" && !this.violations.includes(c)));
   }
 
   /** Stable, comparable picture of all state. */
@@ -183,6 +202,7 @@ export class FakeSharePoint {
     }
     const body = init.body ? JSON.parse(String(init.body)) : undefined;
     try {
+      if (url === `${GRAPH}/$batch` && method === "POST") return await this.batch(call, body);
       return url.startsWith(GRAPH) ? this.graph(method, url.slice(GRAPH.length), body) : this.rest(method, url, body);
     } catch (e) {
       return json(500, { error: (e as Error).message });
@@ -204,9 +224,37 @@ export class FakeSharePoint {
 
   private itemJson(item: Item) {
     if (!item.content) return { id: item.id, name: item.name, folder: {} };
-    const hashes: Record<string, string> = { quickXorHash: `qx-${createHash("sha1").update(item.content).digest("base64")}` };
+    const hashes: Record<string, string> = { quickXorHash: quickXorHash(item.content) };
     if (this.reportSha256Hash) hashes.sha256Hash = createHash("sha256").update(item.content).digest("hex").toUpperCase();
-    return { id: item.id, name: item.name, size: item.content.length, file: { mimeType: item.mimeType ?? "application/octet-stream", hashes } };
+    return { id: item.id, name: item.name, size: item.content.length, cTag: `"c:{${item.id}},${item.version ?? 1}"`, file: { mimeType: item.mimeType ?? "application/octet-stream", hashes } };
+  }
+
+  /** POST /$batch: each sub-request handled like a call of its own (GET only; anything else is a violation). */
+  private async batch(call: Call, body: { requests?: { id: string; method: string; url: string }[] } | undefined): Promise<Response> {
+    const requests = body?.requests ?? [];
+    if (requests.length > 20) return json(400, { error: "fake: at most 20 requests per batch" });
+    let readOnly = requests.length > 0;
+    const responses: { id: string; status: number; headers?: Record<string, string>; body: unknown }[] = [];
+    for (const r of requests) {
+      const sub = { method: r.method.toUpperCase(), url: `${GRAPH}${r.url}` };
+      this.batchedCalls.push(sub);
+      if (sub.method !== "GET") {
+        readOnly = false;
+        this.violations.push(sub);
+        responses.push({ id: r.id, status: 405, body: { error: "method not allowed in fake batch" } });
+        continue;
+      }
+      const q = this.queuedSub.shift();
+      if (q) {
+        responses.push({ id: r.id, status: q.status, headers: q.headers ?? {}, body: { error: "queued" } });
+        continue;
+      }
+      const res = this.graph("GET", r.url, undefined);
+      const text = await res.text();
+      responses.push({ id: r.id, status: res.status, body: text ? JSON.parse(text) : null });
+    }
+    if (readOnly) this.readOnlyBatches.add(call);
+    return json(200, { responses });
   }
 
   /** Allowed upload PUT targets; null means the PUT is a violation. */

@@ -1,5 +1,7 @@
 // /api/firm-os/onboard/* route handlers: auth → zod → one service call → JSON.
 import { beforeEach, describe, expect, it, vi } from "vitest";
+// These routes sit behind the Firm OS master switch (src/lib/workspace/flag.ts); it is on for these tests.
+beforeEach(() => vi.stubEnv("FIRM_OS_ENABLED", "1"));
 import { activeSession } from "./harness";
 
 const svc = {
@@ -115,7 +117,7 @@ describe("/api/firm-os/onboard — happy path and errors", () => {
     expect(r.status).toBe(201);
     expect(await r.json()).toEqual({ run: { id: "run-1", status: "DRAFT" } });
     expect(svc.start).toHaveBeenCalledWith("Onboard Acme Pvt Ltd, GST monthly", "u-partner");
-    expect(factory).toHaveBeenCalledWith({ actorIsPartner: true });
+    expect(factory).toHaveBeenCalledWith({ actorIsPartner: true, viewer: expect.objectContaining({ id: expect.any(String) }) }); // the viewer gates every step on an existing run (creator or partner)
 
     r = await routes.answer(req({ runId: "run-1", message: "reviewer Anita" }));
     expect(r.status).toBe(200);
@@ -149,7 +151,7 @@ describe("/api/firm-os/onboard — happy path and errors", () => {
     expect(Number(r.headers.get("Retry-After"))).toBeGreaterThan(39 * 60);
     expect(Number(r.headers.get("Retry-After"))).toBeLessThanOrEqual(40 * 60);
     expect(r.headers.get("RateLimit-Limit")).toBe("30");
-    expect((await r.json()).error).toMatch(/Too many onboarding requests: the limit is 30 per window\. Try again in 40 minutes\./);
+    expect((await r.json()).error).toMatch(/You have made too many onboarding requests in an hour \(the limit is 30\)\. Wait 40 minutes, then try again\./);
     expect(svc.start).not.toHaveBeenCalled();
     for (const name of ["answer", "plan", "create", "resume"] as const) expect((await routes[name](req(VALID[name]))).status).toBe(429);
     expect((await routes["turia-confirm"](req(VALID["turia-confirm"]))).status).toBe(200);
@@ -166,7 +168,7 @@ describe("/api/firm-os/onboard — happy path and errors", () => {
   it("managers and admins may onboard too (not as partner)", async () => {
     signedIn(activeSession({ level: "MANAGER" }));
     expect((await routes.plan(req(VALID.plan))).status).toBe(200);
-    expect(factory).toHaveBeenLastCalledWith({ actorIsPartner: false });
+    expect(factory).toHaveBeenLastCalledWith({ actorIsPartner: false, viewer: expect.objectContaining({ id: expect.any(String) }) });
     signedIn(activeSession({ role: "ADMIN" }));
     expect((await routes.plan(req(VALID.plan))).status).toBe(200);
   });

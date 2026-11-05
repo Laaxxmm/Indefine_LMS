@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { LogoMark } from "@/components/Logo";
 import { canUseCertificateTool } from "@/lib/certificates/access";
+import { requireModule } from "@/lib/workspace/guard";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,7 @@ export default async function ToolsLayout({ children }: { children: React.ReactN
   if (!session?.user) redirect("/");
   // Internal-active users only (§2). No `!!user` fallback.
   if (!canUseCertificateTool(session.user)) redirect("/dashboard");
+  await requireModule(session.user, "tools");
 
   return (
     <div className="min-h-screen">

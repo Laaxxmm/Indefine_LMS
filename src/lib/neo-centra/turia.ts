@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { isSealed, keyFromEnv, open, seal } from "@/lib/secret-box";
+import { PlaintextSecretError, isSealed, keyFromEnv, open, seal } from "@/lib/secret-box";
 
 // Turia Practice Management client — calls Turia's internal API with the firm's
 // session cookie (captured from a logged-in Turia tab, stored in NeoTuriaSession).
@@ -19,20 +19,50 @@ export class TuriaSessionError extends Error {}
 
 // The cookie is a live bearer credential for the firm's practice-management system,
 // so it is encrypted at rest with NEO_TURIA_COOKIE_KEY (see src/lib/secret-box.ts).
-// A row written before the key existed is plaintext and still readable; the next
-// push from the extension (every 5 minutes) rewrites it encrypted.
+// Only a sealed row is used (security audit #15): a plaintext row — written before the
+// key existed, or swapped in by anyone with database write access — is refused unless
+// LEGACY_PLAINTEXT_SECRETS=true; the next push from the extension (every 5 minutes)
+// rewrites it encrypted. Without the key nothing is stored and nothing is read.
 const COOKIE_KEY_ENV = "NEO_TURIA_COOKIE_KEY";
 
 export async function getTuriaCookie(): Promise<string | null> {
   const row = await prisma.neoTuriaSession.findUnique({ where: { id: 1 } });
   if (!row?.cookie) return null;
-  return open(row.cookie, keyFromEnv(COOKIE_KEY_ENV));
+  const key = keyFromEnv(COOKIE_KEY_ENV);
+  if (!key) throw new TuriaSessionError(`${COOKIE_KEY_ENV} is not set on the server, so the stored Turia session is not used. Ask the admin to set it, then push a fresh cookie from the extension.`);
+  try {
+    return open(row.cookie, key, "Turia cookie");
+  } catch (e) {
+    if (e instanceof PlaintextSecretError) throw new TuriaSessionError("The stored Turia session is not encrypted, so it was not used. Push a fresh cookie from the extension (it is encrypted on arrival).");
+    throw e;
+  }
+}
+
+const TOKEN_COOKIE = "accessToken";
+
+/**
+ * "accessToken=<value>" from a Cookie header (the extension sends only that; a director may paste
+ * a whole header). Every other Turia cookie is dropped: the server's Turia calls need only the
+ * token, so nothing else is stored (security audit #17). Null when there is no usable token.
+ */
+export function turiaAccessTokenCookie(header: string): string | null {
+  for (const part of header.split(";")) {
+    const eq = part.indexOf("=");
+    if (eq < 0 || part.slice(0, eq).trim() !== TOKEN_COOKIE) continue;
+    const value = part.slice(eq + 1).trim();
+    // RFC 6265 cookie-octets only: no spaces, quotes, commas, semicolons, backslashes or control characters.
+    if (!/^[\x21\x23-\x2B\x2D-\x3A\x3C-\x5B\x5D-\x7E]{8,8192}$/.test(value)) return null;
+    return `${TOKEN_COOKIE}=${value}`;
+  }
+  return null;
 }
 
 export async function storeTuriaCookie(cookie: string, byId?: string, byName?: string): Promise<void> {
   const key = keyFromEnv(COOKIE_KEY_ENV);
   if (!key) throw new TuriaSessionError(`${COOKIE_KEY_ENV} is not set on the server, refusing to store the Turia cookie in plaintext.`);
-  const sealed = seal(cookie, key);
+  const token = turiaAccessTokenCookie(cookie);
+  if (!token) throw new TuriaSessionError("No Turia accessToken in what was sent, so nothing was stored. Log into practice.turia.in and sync again.");
+  const sealed = seal(token, key);
   await prisma.neoTuriaSession.upsert({
     where: { id: 1 },
     create: { id: 1, cookie: sealed, updatedById: byId, updatedByName: byName },

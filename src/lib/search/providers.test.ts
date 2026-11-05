@@ -165,7 +165,7 @@ describe("comms drafts", () => {
     const [chase] = await find(draftsProvider, PEOPLE.manager, "october");
     expect(chase.label).toBe("Documents needed for October GSTR-3B");
     expect(chase.context).toBe("Document request · English · ACME01 · drafted 03 Nov 2026 · Saved to Outlook drafts");
-    expect(chase.href).toBe("/clients/c-acme");
+    expect(chase.href).toBe("/comms/draft-chase"); // the draft's own page
   });
 
   it("never reads, searches or returns the body", async () => {
@@ -229,7 +229,7 @@ describe("client jobs and documents", () => {
 
 describe("links", () => {
   it("every hit links to a page pattern that exists", async () => {
-    const PAGES = [/^\/clients\/[^/#?]+(#firm-os-jobs)?$/, /^\/agents\/[^/]+\/runs\/[^/]+$/, /^\/onboard\?run=[^&]+$/];
+    const PAGES = [/^\/clients\/[^/#?]+(#firm-os-jobs)?$/, /^\/agents\/[^/]+\/runs\/[^/]+$/, /^\/onboard\?run=[^&]+$/, /^\/comms\/[^/#?]+$/];
     for (const p of PROVIDERS) {
       for (const q of ["acme", "zenith", "bharat", "xlsx", "pan"]) {
         for (const h of await find(p, PEOPLE.admin, q)) expect(PAGES.some((re) => re.test(h.href)), `${p.type} ${h.href}`).toBe(true);

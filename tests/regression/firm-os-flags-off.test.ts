@@ -1,23 +1,19 @@
 // LMS regression (Phase 12 §4): with every FIRM_OS_* flag OFF — the default production state until
 // the go-live rollout (docs/go-live.md) — nothing of Firm OS leaks into the LMS pages beyond the
-// entry points listed below, no LMS page WRITES a Firm OS table, and the only Firm OS reads are the
-// dashboard's morning-board lookup.
+// entry points listed below, and no LMS page reads or writes a Firm OS table (nor the workspace
+// settings: the master switch FIRM_OS_ENABLED closes Firm OS before anything is read).
 //
-// ALLOWLIST (the Firm OS surface that is visible with every flag off — each is role-gated, NOT
-// flag-gated; recorded in docs/go-live.md §3 "Rollout gap"):
-//   /dashboard  "Agents" → /agents, "My day" → /coach   every active user (canUseAgents)
-//   /dashboard  morning board card (CoachCard)          every active user with open Firm OS jobs (Phase 9);
-//                                                       it reads jobTask for the signed-in person
-//   /tools      "Firm OS onboarding" → /onboard          partners, managers, admins (canOnboard)
-//   /clients    "Firm OS onboarding" → /onboard          partners, managers, admins (canOnboard)
-//   /admin      Firm OS group → /admin/firm-os/*         LMS admins (models, mistakes, cycle time, workspace,
-//                                                       privacy requests, breaches)
+// ALLOWLIST (the Firm OS surface that is visible with every flag off; docs/go-live.md §3):
+//   /admin      Firm OS group → /admin/firm-os/workspace only   LMS admins: Workspace settings stays open
+//                                                              so the rollout can be prepared before the
+//                                                              switch goes on; the other admin Firm OS pages
+//                                                              are closed
 // Adding to this list is a go-live decision, not a test fix: record it in docs/go-live.md first.
 // The break nudge is flag-gated (FIRM_OS_BREAK_NUDGE): off → no heartbeat is stored.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // Server renders and cold module imports are slow when the whole suite runs in parallel; 5 s flakes.
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
-import { FIRM_OS_FLAGS, FIRM_OS_MODELS, PEOPLE, TEST_EMAIL, firmOsHrefs, prismaCalls, renderPage, textOf } from "./support/render";
+import { FIRM_OS_FLAGS, FIRM_OS_MODELS, PEOPLE, TEST_EMAIL, firmOsHrefs, prismaCalls, redirectTarget, renderPage, textOf } from "./support/render";
 
 vi.mock("@/lib/auth", () => ({ auth: vi.fn(), signIn: vi.fn(), signOut: vi.fn(), handlers: {} }));
 vi.mock("next/navigation", async () => (await import("../unit/routes/harness")).navigationMock);
@@ -48,6 +44,8 @@ vi.mock("@/lib/prisma", async () => {
 const { auth } = await import("@/lib/auth");
 const signedIn = (s: unknown) => (auth as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(s);
 const firmOsQueries = () => [...new Set(prismaCalls.filter((c) => FIRM_OS_MODELS.has(c.model)).map((c) => `${c.model}.${c.method}`))].sort();
+/** The workspace-settings tables: read only while Firm OS is switched on. */
+const settingsReads = () => prismaCalls.filter((c) => c.model === "workspaceSetting" || c.model === "roleWorkspaceDefault");
 
 beforeEach(() => {
   for (const f of FIRM_OS_FLAGS) vi.stubEnv(f, ""); // production default: every flag off
@@ -62,29 +60,37 @@ afterEach(() => {
 });
 
 describe("Firm OS surface on LMS pages with every FIRM_OS_* flag off", () => {
-  it("/dashboard: only the role-gated Agents and My day links, for every role; no board without jobs; Firm OS reads only, no writes", async () => {
+  it("/dashboard: no Firm OS link, card or query for any role (no Agents, My day, Next task, Client messages or Search)", async () => {
     for (const who of [PEOPLE.staff, PEOPLE.manager, PEOPLE.partner, PEOPLE.admin]) {
       signedIn(who);
       prismaCalls.length = 0;
       const html = await renderPage(await import("@/app/dashboard/page"));
-      expect(firmOsHrefs(html), `dashboard for ${who.user.level}/${who.user.role}`).toEqual(["/agents", "/coach"]);
-      expect(textOf(html)).not.toMatch(/Must today|Firm OS|Take a break|break reminder/i); // no open jobs → no board card; no break nudge
-      const firmOs = firmOsQueries();
-      expect(firmOs.filter((q) => !/\.(findMany|findFirst|findUnique|count|aggregate|groupBy)$/.test(q)), "no Firm OS writes from the dashboard").toEqual([]);
-      expect(firmOs.every((q) => q.startsWith("jobTask.")), `Firm OS reads: ${firmOs.join(", ")}`).toBe(true); // the morning board's own-jobs lookup
+      expect(firmOsHrefs(html), `dashboard for ${who.user.level}/${who.user.role}`).toEqual([]);
+      expect(textOf(html)).not.toMatch(/Must today|Firm OS|Take a break|break reminder|Your next task/i);
+      expect(firmOsQueries(), "LMS pages make zero Firm OS queries while Firm OS is off").toEqual([]);
+      expect(settingsReads()).toEqual([]);
       expect(prismaCalls.some((c) => c.model === "activityHeartbeat")).toBe(false); // FIRM_OS_BREAK_NUDGE off: nothing collected
     }
   });
 
-  it("/tools: no Firm OS entry for staff; partners and managers get the onboarding card only", async () => {
+  it("a Firm OS page sends people to the dashboard, which says Firm OS is not switched on", async () => {
+    signedIn(PEOPLE.partner);
+    for (const layout of ["agents", "onboard", "coach", "comms", "search", "focus", "workspace", "companion"]) {
+      const mod = await import(`@/app/${layout}/layout`);
+      expect(await redirectTarget(() => mod.default({ children: null })), layout).toBe("/dashboard?module-off=firm-os");
+    }
+    const html = await renderPage(await import("@/app/dashboard/page"), { searchParams: Promise.resolve({ "module-off": "firm-os" }) });
+    expect(textOf(html)).toContain("Firm OS is not switched on for the firm yet. Everything else works as before; ask an admin if you expected to use it.");
+  });
+
+  it("/tools: no Firm OS entry for anyone, partners and managers included", async () => {
     const tools = async () => renderPage(await import("@/app/tools/page"), {}, await import("@/app/tools/layout"));
-    signedIn(PEOPLE.staff);
-    expect(firmOsHrefs(await tools())).toEqual([]);
-    for (const who of [PEOPLE.manager, PEOPLE.partner]) {
+    for (const who of [PEOPLE.staff, PEOPLE.manager, PEOPLE.partner, PEOPLE.admin]) {
       signedIn(who);
-      expect(firmOsHrefs(await tools())).toEqual(["/onboard"]);
+      expect(firmOsHrefs(await tools()), `tools for ${who.user.level}/${who.user.role}`).toEqual([]);
     }
     expect(firmOsQueries()).toEqual([]);
+    expect(settingsReads()).toEqual([]);
   });
 
   it("/clients and /clients/[id]: no Firm OS jobs card and no FirmClient / JobTask query while FIRM_OS_CL_PATHS is off", async () => {
@@ -93,12 +99,13 @@ describe("Firm OS surface on LMS pages with every FIRM_OS_* flag off", () => {
     expect(firmOsHrefs(list)).toEqual([]);
     signedIn(PEOPLE.partner);
     const listP = await renderPage(await import("@/app/clients/page"), {}, await import("@/app/clients/layout"));
-    expect(firmOsHrefs(listP)).toEqual(["/onboard"]);
+    expect(firmOsHrefs(listP)).toEqual([]); // no Firm OS onboarding link while Firm OS is off
     const detail = await renderPage(await import("@/app/clients/[id]/page"), { params: Promise.resolve({ id: "c1" }) });
     expect(textOf(detail)).toContain("Acme Pvt Ltd");
     expect(textOf(detail)).not.toMatch(/Firm OS jobs|CL-[A-Z0-9]{3,10}/);
     expect(firmOsHrefs(detail)).toEqual([]);
     expect(firmOsQueries()).toEqual([]);
+    expect(settingsReads()).toEqual([]);
   });
 
   it("/work (the tech tracker): no Firm OS link or query at all", async () => {
@@ -110,17 +117,20 @@ describe("Firm OS surface on LMS pages with every FIRM_OS_* flag off", () => {
     expect(firmOsQueries()).toEqual([]);
   });
 
-  it("/admin: the Firm OS group is shown to LMS admins only (models, mistakes, cycle time, workspace, privacy, breaches)", async () => {
+  it("/admin: the Firm OS group keeps Workspace settings (rollout prep) and the DPDP privacy/breach registers (owner decision 2026-11-06: DPDP covers all client data); the other admin Firm OS pages are closed", async () => {
     signedIn(PEOPLE.admin);
     const html = await renderPage(await import("@/app/admin/page"), {}, await import("@/app/admin/layout"));
-    expect(firmOsHrefs(html)).toEqual([
-      "/admin/firm-os/breaches",
-      "/admin/firm-os/cycle-time",
-      "/admin/firm-os/mistakes",
-      "/admin/firm-os/models",
-      "/admin/firm-os/privacy",
-      "/admin/firm-os/workspace",
-    ]);
+    expect(firmOsHrefs(html).sort()).toEqual(["/admin/firm-os/breaches", "/admin/firm-os/privacy", "/admin/firm-os/workspace"]);
+    for (const page of ["privacy", "breaches"]) {
+      const layout = await import(`@/app/admin/firm-os/${page}/layout`);
+      // Renders (no redirect): the admin layout still limits these pages to admins.
+      await expect(Promise.resolve(layout.default({ children: null })), page).resolves.toBeDefined();
+    }
+    for (const page of ["models", "mistakes", "cycle-time"]) {
+      const layout = await import(`@/app/admin/firm-os/${page}/layout`);
+      expect(await redirectTarget(() => layout.default({ children: null })), page).toBe("/dashboard?module-off=firm-os");
+    }
+    expect(settingsReads()).toEqual([]);
   });
 
   it("the Echo test agent stays hidden from /agents navigation", async () => {

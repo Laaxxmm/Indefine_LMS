@@ -21,8 +21,8 @@ export const COMPANION_LABEL_MAX = 60;
 /**
  * Requests per token per window for GET next-task. The side panel polls once a minute while it is
  * visible, plus manual refreshes, so 20 a minute is generous for a person and tight for a script.
- * In-process only (each server instance counts on its own); Phase 11's database limiter
- * (RateLimitBucket) plugs into the RateLimiter interface in rate-limit.ts.
+ * This is the in-process fallback's limit; production counts in the database (RateLimitBucket,
+ * scope "companion" in src/lib/hardening/rate-limit.ts, same default, RATE_LIMIT_COMPANION).
  */
 export const COMPANION_RATE_LIMIT = { limit: 20, windowMs: 60_000 } as const;
 

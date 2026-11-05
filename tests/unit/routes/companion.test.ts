@@ -1,9 +1,17 @@
 // /companion page and its pairing routes: who may pair, what the page shows, and the 401/403/400
 // answers of POST /api/firm-os/companion/tokens and …/tokens/[id]/revoke.
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
 import { activeSession, redirectTarget, renderHtml } from "./harness";
 import type { FakeDb } from "@/lib/companion/__tests__/fakes";
+
+// Firm OS switched on for these tests (FIRM_OS_ENABLED defaults off: src/lib/workspace/flag.ts).
+beforeEach(() => {
+  vi.stubEnv("FIRM_OS_ENABLED", "1");
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 const state = vi.hoisted(() => ({ fake: null as unknown as FakeDb }));
 
@@ -80,9 +88,15 @@ describe("/companion page", () => {
     expect(html).not.toContain(sha("p1")); // hashes never reach the page
   });
 
-  it("tells people without companion access why, and reads no pairings for them", async () => {
+  it("people without companion access: the layout sends them to the dashboard, which says why", async () => {
     signedIn(staff());
-    const html = await page();
+    expect(await redirectTarget(() => CompanionLayout({ children: null }))).toBe("/dashboard?module-off=companion");
+    expect(state.fake.calls.some((c) => c.model === "companionToken")).toBe(false);
+  });
+
+  it("the page itself also tells people without companion access why, and reads no pairings for them", async () => {
+    signedIn(staff());
+    const html = await renderHtml(await CompanionPage());
     expect(html).toContain("Not turned on for you");
     expect(html).toContain(MSG.noAccess.replace("'", "&#x27;"));
     expect(html).not.toContain("Create pairing token");

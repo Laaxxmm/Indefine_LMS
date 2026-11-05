@@ -15,7 +15,7 @@ const { onboardingService } = await import("./defaults");
 
 describe("production wiring", () => {
   it("builds the service from env defaults (ManualBridge, confirm required) without touching the network", async () => {
-    const svc = onboardingService();
+    const svc = onboardingService({ viewer: null });
     expect(Object.keys(svc).sort()).toEqual(["answer", "create", "get", "plan", "resume", "start", "turiaConfirm"]);
     await expect(svc.get("missing")).rejects.toMatchObject({ code: "not-found" });
     await expect(svc.resume("missing", "u")).rejects.toMatchObject({ code: "not-found" });

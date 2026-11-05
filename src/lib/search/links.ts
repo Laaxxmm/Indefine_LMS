@@ -1,8 +1,5 @@
 // The page each search result opens. Written as `href:` objects so `npm run verify:ui-links`
 // checks every pattern against src/app. Server- and client-safe.
-//
-// Comms drafts have no page of their own yet (Phase 10 adds /comms); until it lands a draft opens
-// its client's page. Switch draftLink() to the comms page in one place when it exists.
 
 export const clientLink = (clientId: string) => ({ href: `/clients/${encodeURIComponent(clientId)}` });
 
@@ -13,7 +10,8 @@ export const runLink = (agent: string, runId: string) => ({ href: `/agents/${enc
 
 export const onboardingLink = (runId: string) => ({ href: `/onboard?run=${encodeURIComponent(runId)}` });
 
-export const draftLink = (clientId: string) => clientLink(clientId);
+/** A comms draft opens its own page (/comms/[id]), which checks the draft's access again. */
+export const draftLink = (draftId: string) => ({ href: `/comms/${encodeURIComponent(draftId)}` });
 
 /**
  * A Firm OS job opens its latest agent run (the review page shows the job), or its client's page

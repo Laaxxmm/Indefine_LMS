@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logAudit } from "@/lib/audit/log";
 import { cronUnauthorized } from "@/lib/cron-auth";
+import { firmOsEnabled, firmOsOffCronResponse } from "@/lib/workspace/flag";
 import { closeLoopDeps } from "@/lib/close-loop/defaults";
 import { reconcile } from "@/lib/close-loop/reconcile";
 
@@ -15,6 +16,7 @@ export const maxDuration = 120;
 export async function GET(req: NextRequest) {
   const denied = cronUnauthorized(req);
   if (denied) return denied;
+  if (!firmOsEnabled()) return firmOsOffCronResponse(); // master switch off: nothing to do, 200 so the scheduler stays green
   const deps = closeLoopDeps();
   const s = await reconcile(deps);
   const changed = s.movedToClosing.length + s.closed.length + s.reminders + s.escalations + s.alerts.length;

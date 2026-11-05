@@ -3,11 +3,13 @@ import { auth } from "@/lib/auth";
 import { markFiled } from "@/lib/close-loop/actions";
 import { closeLoopDeps } from "@/lib/close-loop/defaults";
 import { errorResponse, filedBodyZ, guard, jobIdZ, parse, readJson } from "@/lib/close-loop/http";
+import { firmOsEnabled, firmOsOffResponse } from "@/lib/workspace/flag";
 
 // "Mark filed": the person who filed on the portal confirms it, with the ARN / SRN / ack no. where
 // the service has one (stored, never checked against a portal). The hook then issues the Turia close
 // step and moves the job to CLOSING.
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (!firmOsEnabled()) return firmOsOffResponse();
   const g = guard(await auth());
   if (!g.ok) return g.res;
   const id = parse(jobIdZ, (await params).id);

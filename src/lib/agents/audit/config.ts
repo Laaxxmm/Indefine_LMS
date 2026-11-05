@@ -75,7 +75,8 @@ export const INTERNAL_AUDIT = {
 export type LeadArea = { wp: string; name: string; side: "dr" | "cr"; groups: string[]; ledgers?: string[] };
 export const LEAD_AREAS: LeadArea[] = [
   { wp: "L-A", name: "Share capital and reserves", side: "cr", groups: ["capital account", "share capital", "reserves", "surplus", "equity", "partners"] },
-  { wp: "L-B", name: "Borrowings", side: "cr", groups: ["loans \\(liability\\)", "secured loans", "unsecured loans", "borrowings", "bank od", "cash credit"] },
+  // "^long[- ]term liabilit": Zoho account type "Long Term Liability" (term loans) — before L-D's catch-all "liabilit".
+  { wp: "L-B", name: "Borrowings", side: "cr", groups: ["loans \\(liability\\)", "secured loans", "unsecured loans", "borrowings", "bank od", "cash credit", "^long[- ]term liabilit"] },
   { wp: "L-C", name: "Trade payables", side: "cr", groups: ["sundry creditors", "trade payables", "accounts payable"] },
   { wp: "L-D", name: "Other current liabilities and provisions", side: "cr", groups: ["current liabilities", "provisions", "duties (&|and) taxes", "other liabilit", "liabilit"] },
   { wp: "L-E", name: "Property, plant and equipment and intangibles", side: "dr", groups: ["fixed assets", "property", "plant", "intangible", "capital work"] },
@@ -83,7 +84,14 @@ export const LEAD_AREAS: LeadArea[] = [
   { wp: "L-G", name: "Inventories", side: "dr", groups: ["stock[- ]in[- ]hand", "inventor", "closing stock"] },
   { wp: "L-H", name: "Trade receivables", side: "dr", groups: ["sundry debtors", "trade receivables", "accounts receivable"] },
   { wp: "L-I", name: "Cash and bank balances", side: "dr", groups: ["cash[- ]in[- ]hand", "bank accounts", "^bank$", "^cash$"] },
-  { wp: "L-J", name: "Loans, advances and other assets", side: "dr", groups: ["loans (&|and) advances", "deposits \\(asset\\)", "current assets", "other assets", "prepaid", "advances"] },
+  // Tally primary group "Misc. Expenses (ASSET)" (expenditure not written off — an asset, before L-N's "expenses") and
+  // Zoho account type "Other Current Asset" (singular, which "current assets" does not match).
+  {
+    wp: "L-J",
+    name: "Loans, advances and other assets",
+    side: "dr",
+    groups: ["loans (&|and) advances", "deposits \\(asset\\)", "current assets", "other assets", "prepaid", "advances", "^misc(\\.|ellaneous)? expenses \\(asset\\)$", "^other current asset$"],
+  },
   { wp: "L-K", name: "Revenue from operations", side: "cr", groups: ["sales accounts", "revenue", "^sales$", "^direct incomes", "operating income"] },
   { wp: "L-L", name: "Other income", side: "cr", groups: ["indirect incomes", "other income", "^income$"] },
   { wp: "L-M", name: "Purchases and direct costs", side: "dr", groups: ["purchase accounts", "^direct expenses", "cost of goods", "cost of sales", "purchases"] },

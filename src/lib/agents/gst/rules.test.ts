@@ -254,6 +254,23 @@ describe("gst.credit-note-linked (warn)", () => {
   });
 });
 
+describe("gst.negative-outward-tax (warn)", () => {
+  const inv = sale({ lines: [line(R(500000))] }); // CGST 45,000 + SGST 45,000
+  const cn = (taxable: number) => sale({ number: "CN/1", docType: "CRN", gstin: GSTIN.mh, pos: "27", lines: [line(taxable, 1800, true)], origNumber: "INV/9", origDate: "2026-08-20" });
+  it("fails with the amount carried forward and the credit note when credit notes exceed a head's invoices", () => {
+    const o = check("gst.negative-outward-tax", extract({ sales: [inv, cn(R(200000))] }));
+    expect(o).toMatchObject({ status: "fail", evidence: { quote: "CN/1: IGST 36000.00, CGST 0.00, SGST 0.00", location: expect.stringMatching(/^sales\.csv row/) } });
+    expect(o.message).toMatch(/IGST ₹36000\.00/);
+    expect(o.message).toMatch(/carried forward/);
+  });
+  it("boundary: credit notes equal to the head's invoices leave nil, nothing to carry forward → pass", () => {
+    const igstInv = sale({ number: "INV/2", gstin: GSTIN.mh, pos: "27", lines: [line(R(200000), 1800, true)] });
+    expect(status(check("gst.negative-outward-tax", extract({ sales: [inv, igstInv, cn(R(200000))] })))).toBe("pass");
+    expect(status(check("gst.negative-outward-tax", extract({ sales: [inv, igstInv, cn(R(200001))] })))).toBe("fail");
+    expect(status(check("gst.negative-outward-tax", extract({ sales: [inv] })))).toBe("pass");
+  });
+});
+
 describe("gst.late-fee-interest (warn)", () => {
   const prof = (d: string | null) => ({ ...extract().profile, expectedFilingDate: d });
   it("fails when filing is expected after the due date, with interest and fee", () => {

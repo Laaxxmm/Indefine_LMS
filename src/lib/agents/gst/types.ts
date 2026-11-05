@@ -52,6 +52,12 @@ export type PurchaseDoc = {
   /** Free-text ledger / expense account; the model maps it to s.17(5) and RCM categories. */
   ledger: string;
   paidOn: string | null;
+  /**
+   * Supplier's state code from an optional register column (absent when the register has none).
+   * Used only for an unregistered supplier's reverse-charge tax: a registered supplier's state is
+   * its GSTIN prefix; with neither, the supplier is taken to be in the client's state.
+   */
+  supplierState?: string | null;
 };
 
 /** Open payables as on period end (rule 37 ageing). */

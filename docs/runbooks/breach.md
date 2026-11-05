@@ -31,7 +31,7 @@ Do the steps that fit the incident; each is reversible.
 | A secret may have leaked | Rotate it (table below), redeploy, then check its use in the provider's console |
 | A SharePoint client site is exposed | SharePoint admin: remove the sharing link / external user; Purview audit log for that site |
 | Suspected database exposure | Rotate the Postgres password (Railway → Postgres → Variables → regenerate), update `DATABASE_URL` everywhere, redeploy |
-| Abuse of an API (bulk requests) | Lower the limit at once: `RATE_LIMIT_ONBOARD`, `RATE_LIMIT_AGENT_RUN`, `RATE_LIMIT_COMMS_DRAFT` (e.g. `1/1h`), redeploy. Note: the limiter lets requests through if its table is unreachable (fail-open), so also block the account |
+| Abuse of an API (bulk requests) | Lower the limit at once: `RATE_LIMIT_ONBOARD`, `RATE_LIMIT_AGENT_RUN`, `RATE_LIMIT_COMMS_DRAFT` (e.g. `1/1h`), redeploy. The limiter fails closed: if its table is unreachable, onboarding, agent runs and comms drafting answer 503 "The system is busy" until the database is back. Agent runs are also capped per process (`AGENT_RUN_CONCURRENCY`, default 2; `AGENT_RUN_QUEUE`, default 6 waiting) — set `AGENT_RUN_CONCURRENCY=1` to slow a burst further. Block the account as well |
 
 **Secrets to rotate** (names only; values live in Railway and GitHub secrets): `AUTH_SECRET`,
 `AUTH_MICROSOFT_ENTRA_ID_SECRET`, `MS_CLIENT_SECRET` (Graph app-only), the PnP certificate (SharePoint
@@ -50,8 +50,26 @@ query tab or `psql` against a restored copy where possible):
 SELECT "createdAt", "actorId", action, entity, "entityId", meta
 FROM "AuditEvent" WHERE "createdAt" BETWEEN '<from>' AND '<to>' ORDER BY "createdAt";
 
--- Downloads (exports) of client deliverables in the window
+-- Downloads (exports) of client deliverables, client reports, the client workbook and privacy exports in the window
 SELECT * FROM "AuditEvent" WHERE action = 'export' AND "createdAt" > '<from>';
+
+-- Who looked at client data (reads are audited as action 'view': client detail, agent run review,
+-- deliverable preview, comms draft). One row per person per record per hour, so a row means
+-- "opened at least once in that hour". meta carries ids/codes only (clientCode, jobTaskId, agent).
+SELECT "createdAt", "actorId", entity, "entityId", meta
+FROM "AuditEvent" WHERE action IN ('view', 'export') AND "createdAt" BETWEEN '<from>' AND '<to>'
+ORDER BY "createdAt";
+
+-- Who accessed client X (by its Firm OS code, e.g. ACME01, or its LMS client id)
+SELECT "createdAt", "actorId", action, entity, "entityId"
+FROM "AuditEvent"
+WHERE action IN ('view', 'export')
+  AND (meta->>'clientCode' = '<CODE>' OR (entity = 'Client' AND "entityId" = '<clientId>'))
+ORDER BY "createdAt";
+
+-- Everything one person read or exported in the window
+SELECT "createdAt", action, entity, "entityId", meta FROM "AuditEvent"
+WHERE "actorId" = '<userId>' AND action IN ('view', 'export') AND "createdAt" > '<from>' ORDER BY "createdAt";
 
 -- Model calls in the window (prompts are stored only as hashes of masked text)
 SELECT "createdAt", agent, task, provider, tier, anonymized, status FROM "ModelCall" WHERE "createdAt" > '<from>';
@@ -59,6 +77,11 @@ SELECT "createdAt", agent, task, provider, tier, anonymized, status FROM "ModelC
 -- Sessions active in the window
 SELECT "userId", expires FROM "Session" WHERE expires > '<from>';
 ```
+
+Read auditing (src/lib/audit/reads.ts) is deduplicated in each app process: with several Railway
+instances a person may appear once per instance per hour. Bulk exports (client reports, the client
+workbook) name no single client: treat every client in the export as accessed by that person. Reads
+that happen outside the app (SharePoint opened directly, Graph) are in Microsoft Purview, not here.
 
 Also check: Entra sign-in logs (risky sign-ins, unfamiliar locations), Microsoft Purview audit for the
 affected `CL-{Code}` sites, Railway deploy history (unexpected deploys), GitHub audit log (secrets,
@@ -68,6 +91,23 @@ Classify each affected record with the [inventory](../dpdp/data-inventory.md) cl
 sent to a cloud model is masked by design; confirm `ModelCall.anonymized = true` for the calls in
 question. A virus-scan engine is not configured (uploads are "not scanned — allowed with warning",
 logged as `[upload]` lines): if malware is suspected, collect those log lines.
+
+### What we can reconstruct (and what is no longer there)
+
+Retention and erasure remove copies on purpose ([retention](../dpdp/retention.md),
+[rights](../dpdp/rights.md)), so the live database cannot answer every question about the past.
+Say so in the report rather than guess; the step-0 snapshot and Railway's own backups hold the state
+as it was when they were taken.
+
+| Question | Where the answer is | Limits |
+|---|---|---|
+| Who did what, when | `AuditEvent` (actor, action, record, time) — kept | Typed notes and comments are stored masked (identifiers as `⟨PAN_1⟩`, the client's names as `⟨NAME_1⟩` where the writer knew the client) and older rows are swept nightly; correction values are masked (last four, initials, first letter). The audit shows *that* a note was written and on which record, not the identifiers in it |
+| What a model provider received | `ModelCall` (time, agent, task, provider, `anonymized`, `promptHash`) | Prompts are never stored and token maps live only in memory for the call: we can show a call was masked, not replay what was sent. `ModelCall.error` has identifiers masked by the nightly sweep |
+| Which cached agent inputs existed | `AgentRun.inputs` | Held at most 30 days after the run; older runs show `null`. For an older window, list the job's ClientDocs and deliverables in SharePoint instead |
+| What was typed at onboarding | `OnboardingRun.prompt` / `spec` / `plan` | Cleared 30 days after the run last changed (`[cleared by retention]`); the client master holds the details that were kept |
+| Break-nudge activity | `ActivityHeartbeat` | Only the last 7 days exist |
+| Whether an erased person was affected | `PrivacyRequest` (masked label, `identifierHash`, outcome) and the `anonymise` / `legal-hold` AuditEvents | Their rows read `[erased]`. To check a specific person, hash their identifiers the same way (`identifierHash()` in `src/lib/privacy/locator.ts`, keyed with `AUTH_SECRET`) and compare with `PrivacyRequest.identifierHash`. Their data still exists in backups taken before the erasure until those expire: if a backup is restored ([backup restore](backup-restore.md)), run the erasure plan again on the restored rows before anyone uses them |
+| Files that were read or shared | Microsoft Purview audit for the `CL-{Code}` site; `AuditEvent` `export` rows for downloads through Firm OS | Files are never in Postgres: Purview is the record of who opened them in SharePoint |
 
 ## 3. Notify
 

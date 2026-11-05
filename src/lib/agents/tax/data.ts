@@ -182,7 +182,7 @@ const FY_2025_26: TaxRuleSet = {
     s44ADOtherBp: 800,
     s44ADABp: 5000,
     verify:
-      "s.44AD: resident individual / HUF / firm (not LLP), turnover â‰¤ â‚¹2 crore or â‚¹3 crore if cash receipts â‰¤ 5% (a cheque or draft that is not account payee counts as cash); 6% on banking-channel receipts received by the s.139(1) due date, 8% on the rest; s.44AD(4) five-year lock. s.44ADA: resident, specified profession, receipts â‰¤ â‚¹50 lakh or â‚¹75 lakh if cash â‰¤ 5%; 50%.",
+      "s.44AD: resident individual / HUF / firm (not LLP), turnover â‰¤ â‚¹2 crore or â‚¹3 crore if cash receipts â‰¤ 5% (a cheque or draft that is not account payee counts as cash); 6% on banking-channel receipts received by the s.139(1) due date, 8% on the rest; s.44AD(4) five-year lock. An income declared BELOW the deemed income (s.44AD or s.44ADA) is used as declared; the profit is then not declared under sub-section (1), so ITR-3, the regular advance-tax instalments, and a tax audit u/s 44AB(d) (s.44ADA(4)) or u/s 44AB(e) (s.44AD(4)-(5)) when total income exceeds the basic exemption (new-regime limit) - for s.44AD the agent assumes s.44AD(4) applies (profit declared under s.44AD in one of the five preceding years): PARTNER TO CONFIRM from the prior returns. s.44ADA: resident, specified profession, receipts â‰¤ â‚¹50 lakh or â‚¹75 lakh if cash â‰¤ 5%; 50%.",
   },
   audit44AB: {
     businessLimitPaise: 1 * CR,
@@ -201,7 +201,7 @@ const FY_2025_26: TaxRuleSet = {
     interestBpPerMonth: 100,
     roundDownToPaise: 100_00,
     verify:
-      "ss.208-211, 234B, 234C, 234A: no advance tax below â‚¹10,000; resident seniors without business income exempt (s.207(2)); 15/45/75/100% (12%/36% relief) and presumptive 100% by 15 Mar; 1% per month or part, amounts rounded down to â‚¹100 (rule 119A). The 234C proviso for capital gains / dividends arising after an instalment date is NOT modelled; self-assessment tax is taken as paid on the filing date.",
+      "ss.208-211, 234B, 234C, 234A: no advance tax below â‚¹10,000; resident seniors without business income exempt (s.207(2)); 15/45/75/100% (12%/36% relief) and presumptive 100% by 15 Mar; 1% per month or part, amounts rounded down to â‚¹100 (rule 119A). The 234C proviso for capital gains / dividends arising after an instalment date is NOT modelled. s.234A: the base is assessed tax less tax paid on or before the s.139(1) due date (advance tax and self-assessment tax u/s 140A; later payments do not reduce it) - s.234A(1) lists advance tax, TDS/TCS and reliefs but does not name self-assessment tax: PARTNER TO CONFIRM FIRM PRACTICE. s.234B: self-assessment tax is taken as paid on the filing date (the s.234B(2) step-down from the date of payment is NOT modelled). Month or part of a month (rule 269(b) of the 2026 Rules / rule 119A(b) of the 1962 Rules: a fraction counts as a full month): the n-th month begins on the start's day-of-month n - 1 months later, or on the 1st of the following month when that month has no such day (31 Jan to 28 Feb = 1 month, to 1 Mar = 2). Periods starting on the 1st (234A after a month-end due date, 234B from 1 April) count calendar months under any reading; PARTNER TO CONFIRM the convention for a mid-month start (an extended due date).",
   },
   lateFee234F: { feePaise: 5_000_00, smallIncomeFeePaise: 1_000_00, smallIncomeLimitPaise: 5 * L, verify: "s.234F: â‚¹5,000 for a return after the s.139(1) due date; â‚¹1,000 where total income â‰¤ â‚¹5,00,000." },
   lossCarryForwardYears: 8,

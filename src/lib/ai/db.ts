@@ -5,9 +5,17 @@ import type { ModelCallRepo, ModelCallRow } from "./router";
 import type { UsageCall } from "./usage";
 
 type Db = Pick<typeof prisma, "modelCall">;
+/** The AgentRun read behind the response-cache scope (optional: without it the scope is the run). */
+type RunDb = Partial<Pick<typeof prisma, "agentRun">>;
 
-export function prismaModelCallRepo(db: Db = prisma): ModelCallRepo {
+export function prismaModelCallRepo(db: Db & RunDb = prisma): ModelCallRepo {
   return {
+    /** "job:<JobTask id>" for an AgentRun, else null (comms / onboarding run ids are not AgentRuns). */
+    async cacheScopeOf(runId: string) {
+      if (!db.agentRun) return null;
+      const run = await db.agentRun.findUnique({ where: { id: runId }, select: { jobTaskId: true } });
+      return run?.jobTaskId ? `job:${run.jobTaskId}` : null;
+    },
     async record(row: ModelCallRow) {
       await db.modelCall.create({ data: { ...row } });
     },

@@ -158,7 +158,7 @@ describe("one transaction: update + masked audit", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const r = await correctField(USERS.admin, { entity: "Client", id: "c-prop", field: "industry", newValue: "Wholesale", reason: REASON }, deps(db, { afterCommit }));
     expect(r.ok).toBe(true);
-    expect(afterCommit).toHaveBeenCalledWith(expect.objectContaining({ entity: "Client", field: "industry", before: "Retail", after: "Wholesale" }));
+    expect(afterCommit).toHaveBeenCalledWith(expect.objectContaining({ entity: "Client", field: "industry", before: "R…", after: "W…" }));
   });
 
   it("returns 404 with a plain sentence for a missing record", async () => {
@@ -309,5 +309,48 @@ describe("record rules", () => {
     expect(removalCalls(db.calls)).toEqual([]);
     expect(db.tables.client).toHaveLength(3);
     expect(audits(db)).toHaveLength(4);
+  });
+});
+
+describe("the correction audit masks per the inventory's data class (audit finding #30)", () => {
+  // Ported from .audit-sec/dpdp/corrections-allowlist.test.ts: city / industry were stored raw and
+  // the reason kept a person's name.
+  it("masks PAN, phone, contact name, city and industry, and the client's names in the reason", async () => {
+    const db = world();
+    const PAN_PROP = "ABCPK1234F";
+    const pan = await correctField(USERS.admin, { entity: "Client", id: "c-prop", field: "pan", newValue: "ABCPK4321F", reason: `Kiran Kumar typed PAN ${PAN_PROP} wrongly, phone 9876543210` }, deps(db));
+    expect(pan.ok).toBe(true);
+    for (const [field, newValue, reason] of [
+      ["contactPhone", "9000000001", "digit swapped"],
+      ["contactName", "Kiran Kumar Reddy", "surname missing; Kiran Kumar Reddy confirmed"],
+      ["city", "Mysuru", "moved house in October"],
+      ["industry", "Wholesale", "Kumar Traders now sells to shops"],
+    ] as const) {
+      expect((await correctField(USERS.admin, { entity: "Client", id: "c-prop", field, newValue, reason }, deps(db))).ok, field).toBe(true);
+    }
+    const metas = audits(db)
+      .filter((e) => e.action === "correct")
+      .map((e) => e.meta as Row);
+    const text = JSON.stringify(metas);
+    for (const raw of [PAN_PROP, "ABCPK4321F", "9876543210", "9000000001", "Kiran", "Kumar", "Reddy", "Bengaluru", "Mysuru", "Retail", "Wholesale"]) expect(text, raw).not.toContain(raw);
+    expect(metas[0]).toMatchObject({ before: "****234F", after: "****321F", reason: "⟨NAME_1⟩ typed PAN ⟨PAN_1⟩ wrongly, phone ⟨PHONE_1⟩" });
+    expect(metas[2]).toMatchObject({ before: "K. K.", after: "K. K. R.", reason: "surname missing; ⟨NAME_1⟩ confirmed" });
+    expect(metas[3]).toMatchObject({ field: "city", before: "B…", after: "M…" });
+    expect(metas[4]).toMatchObject({ field: "industry", before: "R…", after: "W…", reason: "⟨ORG_1⟩ now sells to shops" });
+  });
+
+  it("masks the client's names in reasons on jobs too", async () => {
+    const db = world();
+    const r = await correctField(USERS.partner, { entity: "JobTask", id: "j-assigned", field: "title", newValue: "GSTR-3B (Oct)", reason: "Kiran Kumar asked for the October label" }, deps(db));
+    expect(r.ok).toBe(true);
+    expect((audits(db)[0].meta as Row).reason).toBe("⟨NAME_1⟩ asked for the October label");
+  });
+
+  it("every class A field of the client master on the allow-list is masked in the audit", async () => {
+    const { DATASETS } = await import("@/lib/privacy/inventory");
+    const classA = DATASETS.filter((d) => d.model === "client").flatMap((d) => d.fields.filter((f) => f.cls === "A").map((f) => f.name));
+    const onList = classA.filter((f) => f in ALLOW_LIST.Client);
+    expect(onList.length).toBeGreaterThan(5);
+    for (const f of onList) expect(ALLOW_LIST.Client[f].pii, f).toBeDefined();
   });
 });

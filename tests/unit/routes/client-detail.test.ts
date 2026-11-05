@@ -31,7 +31,7 @@ vi.mock("@/lib/prisma", async () => {
         get: (_t, key: string | symbol) => {
           if (key === "client") return { findUnique: async (args: unknown) => (record("client", "findUnique", args), CLIENT) };
           if (key === "firmClient") {
-            return { findUnique: async (args: unknown) => (record("firmClient", "findUnique", args), state.firmCode ? { clientCode: state.firmCode } : null) };
+            return { findUnique: async (args: unknown) => (record("firmClient", "findUnique", args), state.firmCode ? { id: "fc1", clientCode: state.firmCode } : null) };
           }
           // Firm OS tables: the in-memory db (real where / select / orderBy semantics).
           if (key === "jobTask") return { findMany: async (args: never) => (record("jobTask", "findMany", args), state.mem.jobTask.findMany(args)) };
@@ -122,6 +122,38 @@ describe("/clients/[id] folder links", () => {
     expect(html).toContain('href="https://srcaassociate.sharepoint.com/sites/CL-ACME01/Compliance/FY2026-27/GST"');
     expect(html.match(/Open Path A folder/g)?.length).toBe(2); // title + aria-label of the one GST link; Tech job has none
     expect(html).not.toContain("SharePoint: Clients /");
+  });
+});
+
+describe("/clients/[id] correction history (a Firm OS service)", () => {
+  const HISTORY = /<button[^>]*aria-expanded="false"[^>]*>[\s\S]*?History<\/button>/;
+  beforeEach(() => {
+    as({});
+    prismaCalls.length = 0;
+    state.firmCode = "ACME01";
+    state.mem = seedFirmOs();
+  });
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("Firm OS off (the default): no History link and nothing extra read", async () => {
+    vi.stubEnv("FIRM_OS_CL_PATHS", "1");
+    const html = await render();
+    expect(html).not.toMatch(HISTORY);
+    expect(html).not.toContain("history and corrections");
+    expect(prismaCalls.filter((c) => c.model === "firmClient")).toHaveLength(1); // the page's own lookup only
+  });
+
+  it("Firm OS on: the client's History link near the header; with a linked FirmClient both, named as on the privacy page", async () => {
+    vi.stubEnv("FIRM_OS_ENABLED", "1");
+    const plain = await render();
+    expect(plain).toMatch(HISTORY);
+    expect(plain).not.toContain("Firm OS client"); // FIRM_OS_CL_PATHS off: no FirmClient to show or read
+    expect(plain.indexOf("History</button>")).toBeLessThan(plain.indexOf("<dl"));
+    expect(prismaCalls.some((c) => c.model === "firmClient")).toBe(false);
+    vi.stubEnv("FIRM_OS_CL_PATHS", "1");
+    const linked = await render();
+    expect(linked).toContain("Client master: history and corrections</button>");
+    expect(linked).toContain("Firm OS client ACME01: history and corrections</button>");
   });
 });
 
