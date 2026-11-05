@@ -199,6 +199,14 @@ function gstr3bSheets(a: Analysis, x: GstExtract): SheetSpec[] {
         { topic: "Set-off order", note: GST_VERIFY_NOTES.find((n) => n.key === "setoffOrder")!.value + ". Reverse-charge tax is paid in cash. IGST credit left after IGST is applied first to the part of CGST/SGST their own credit cannot cover, then CGST, then SGST." },
         { topic: "ITC basis", note: "Table 4(A)(5) is ITC on documents present in both the purchase register and GSTR-2B (ITC available), at the lower of the two per tax head. Documents not in 2B are deferred, not claimed." },
         { topic: "Interest and late fee", note: "Estimates only, computed from the expected filing date in profile.json. s.50(3) interest on ITC wrongly availed and utilised is not estimated." },
+        ...(a.timeBarredNotes.length
+          ? [
+              {
+                topic: "Time-barred credit notes",
+                note: `Left out of Table 3.1 and the GSTR-1 note tables: issued after the s.34(2) time limit, so they cannot reduce output tax (block finding gst.credit-note-time-limit). ${a.timeBarredNotes.map((d) => `${d.number.trim()} dated ${d.date}, note value ${rupees(d.value).toFixed(2)}`).join("; ")}.`,
+              },
+            ]
+          : []),
         { topic: "Not covered in v1.0.0", note: "Exports/SEZ (3.1(b)), imports, ISD, amendments (B2BA/CDNRA), CDNUR, GSTR-2B ISD/IMPG sections, e-way bills, 30-day IRN limit." },
         { topic: "Status", note: "Draft prepared for human review. Firm OS never files a return or pays tax; staff file on the government portal after partner approval." },
       ],

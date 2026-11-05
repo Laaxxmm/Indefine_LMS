@@ -129,6 +129,20 @@ describe("gst.credit-note-time-limit (block)", () => {
     expect(status(check("gst.credit-note-time-limit", extract({ sales: [cn("2026-11-30", "2025-06-01")] })))).toBe("pass");
     expect(status(check("gst.credit-note-time-limit", extract({ sales: [cn("2026-12-01", "2025-06-01")] })))).toBe("fail");
   });
+  it("lists each note as a reviewer item: time-barred credit note excluded: <no>, ₹<value>", () => {
+    // Note value 10,000 + 18% = 11,800; tax 1,800.
+    const o = check("gst.credit-note-time-limit", extract({ sales: [sale({ docType: "CRN", number: "CN/26/012", date: "2026-10-26", lines: [line(R(10000))], origNumber: "INV/24/990", origDate: "2025-03-15", loc: "sales.csv row 4" })] }));
+    expect(o).toMatchObject({ status: "fail", evidence: { quote: "CN/26/012 2026-10-26", location: "sales.csv row 4" } });
+    expect(o.message).toMatch(/the draft leaves them out of Table 3\.1/);
+    expect(o.message).toContain("time-barred credit note excluded: CN/26/012, ₹11800.00 (taxable ₹10000.00, tax ₹1800.00; dated 2026-10-26 against invoice INV/24/990 of 2025-03-15; time limit 2025-11-30)");
+  });
+  it("a pack limit set apart from the computation's lists the notes the two treat differently", () => {
+    const x = extract({ sales: [cn("2026-12-15", "2025-06-01")] }); // past 30 Nov 2026: excluded by the computation; the pack says 31 Dec
+    expect(check("gst.credit-note-time-limit", x, { deadlineMonthDay: "12-31" }).message).toMatch(/excluded from the draft figures by the computation's time limit \(2026-11-30\) although the SOP pack allows it/);
+    const y = extract({ sales: [cn("2026-11-15", "2025-06-01")] }); // in time for the computation (30 Nov 2026)
+    expect(check("gst.credit-note-time-limit", y, { deadlineMonthDay: "10-31" }).message).toMatch(/past the SOP pack's time limit but the computation's limit \(2026-11-30\) keeps it in the draft figures/);
+    expect(status(check("gst.credit-note-time-limit", y))).toBe("pass");
+  });
 });
 
 describe("gst.period-lock (block)", () => {
@@ -162,6 +176,10 @@ describe("gst.pack-config (block)", () => {
     expect(o.message).toMatch(/disagree/);
     expect(o.evidence?.quote).toMatch(/b2clThresholdPaise: pack 25000000, module 10000000/);
     expect(packConfigParams().interestRateBps).toBe(GST_CONFIG.interestRateBps);
+  });
+  it("states the s.34(2) credit-note limit the computation uses", () => {
+    expect(packConfigParams().creditNoteDeadlineMonthDay).toBe("11-30");
+    expect(check("gst.pack-config", extract(), { creditNoteDeadlineMonthDay: "12-31" }).message).toMatch(/creditNoteDeadlineMonthDay differs/);
   });
 });
 

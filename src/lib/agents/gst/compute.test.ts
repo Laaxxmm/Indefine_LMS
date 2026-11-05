@@ -152,6 +152,30 @@ describe("analysis: GSTR-1 tables, 3.1, 4, set-off", () => {
     ]);
   });
 
+  it("a credit note past the s.34(2) time limit does not reduce 3.1, CDNR, B2CS or HSN; one in time does; Table 13 still counts both", () => {
+    // Invoice 2,00,000 (CGST/SGST 18,000). In-time note 20,000 (no original date). Time-barred notes: 10,000 to a
+    // registered customer (invoice of 15 Mar 2025, limit 30 Nov 2025) and 5,000 to an unregistered one (invoice of
+    // 1 Apr 2024, limit 30 Nov 2025). Boundary: a note dated 30 Nov 2026 against a 2025-26 invoice is in time.
+    const x = extract({
+      sales: [
+        sale({ number: "INV/26/601", lines: [line(R(200000))] }),
+        sale({ number: "CN/26/011", docType: "CRN", lines: [line(R(20000))] }),
+        sale({ number: "CN/26/012", docType: "CRN", date: "2026-10-26", lines: [line(R(10000))], origNumber: "INV/24/990", origDate: "2025-03-15" }),
+        sale({ number: "CN/26/013", docType: "CRN", date: "2026-10-27", gstin: null, pos: "29", lines: [line(R(5000))], origNumber: "INV/24/100", origDate: "2024-04-01" }),
+      ],
+    });
+    const a = analyse(x);
+    expect(a.timeBarredNotes.map((d) => d.number)).toEqual(["CN/26/012", "CN/26/013"]);
+    // 3.1(a): 2,00,000 − 20,000 = 1,80,000; CGST 18,000 − 1,800 = 16,200.
+    const f = computeFigures(x);
+    expect(f).toMatchObject({ outwardTaxablePaise: R(180000), outwardCgstPaise: R(16200), outwardSgstPaise: R(16200), cdnrNoteCount: 1, cdnrNetTaxablePaise: -R(20000), b2csTaxablePaise: 0, salesDocCount: 4 });
+    expect(a.gstr1.hsn.map((h) => [h.supply, h.taxable])).toEqual([["B2B", R(180000)]]);
+    expect(f.docsIssuedCount).toBe(4); // the notes were issued: Table 13 counts them
+    // Without the limit passing, the same note reduces liability as booked.
+    const inTime = computeFigures(extract({ sales: [sale({ lines: [line(R(200000))] }), sale({ docType: "CRN", date: "2026-11-30", lines: [line(R(10000))], origNumber: "X", origDate: "2025-06-01" })] }));
+    expect(inTime).toMatchObject({ outwardTaxablePaise: R(190000), cdnrNoteCount: 1 });
+  });
+
   it("4(A)(5) is lower of books and 2B; deferred, unavailable, not-booked memos; credit notes reduce", () => {
     const p1 = purchase({ number: "M1" }); // CGST/SGST 5,400
     const p2 = purchase({ number: "D1", lines: [lineTax(R(24000), { cgst: R(2250), sgst: R(2250) })] }); // books higher than 2B

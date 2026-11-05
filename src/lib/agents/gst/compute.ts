@@ -18,13 +18,20 @@
 //   net-negative head of 4(A)(5)). 4(C) = 4(A) − 4(B). 4(D)(2) memo = 2B documents with ITC not available.
 // - B2CL: unregistered recipient, inter-state, invoice value > GST_CONFIG.b2clThresholdPaise.
 //   Notes to unregistered persons are netted into B2CS (CDNUR is not produced in v1.0.0).
+// - Time-barred credit notes (owner-approved 2026-11-05): a credit note dated after the s.34(2)
+//   time limit (GST_CONFIG.creditNoteDeadlineMonthDay after the FY of its original invoice) does
+//   NOT reduce outward liability: it is left out of 3.1(a)/(c), the GSTR-1 CDNR / B2CS rows and the
+//   HSN summary. Rule gst.credit-note-time-limit still blocks and lists each excluded note; the
+//   GSTR-3B Notes sheet repeats them. GSTR-1 Table 13 still counts the note (it was issued).
 import { BLOCKED_CATEGORIES, GST_CONFIG, RCM_SERVICES, type BlockedCategory, type RcmService } from "./config";
 import { hsnFromText, ledgerKeyOf } from "./classify";
 import {
   HEADS,
   addTax,
+  dayAfterFyEnd,
   dayOfNextMonth,
   daysBetween,
+  fyOfDay,
   minTax,
   mulDivRound,
   periodInfo,
@@ -46,7 +53,15 @@ export const sign = (t: DocType) => (t === "CRN" ? -1 : 1);
 export type HsnSource = "register" | "text" | "model" | null;
 export type LineA = Line & { hsnSource: HsnSource };
 export type Gstr1Table = "B2B" | "B2CL" | "B2CS" | "CDNR";
-export type SalesA = Omit<SalesDoc, "lines"> & { posResolved: string; interState: boolean; registered: boolean; table: Gstr1Table; lines: LineA[] };
+export type SalesA = Omit<SalesDoc, "lines"> & {
+  posResolved: string;
+  interState: boolean;
+  registered: boolean;
+  table: Gstr1Table;
+  lines: LineA[];
+  /** Credit note past the s.34(2) time limit: kept out of 3.1 and the GSTR-1 value tables. */
+  timeBarred: boolean;
+};
 
 export type ReconStatus = "matched" | "value-diff" | "missing-in-2b" | "missing-in-books" | "itc-unavailable";
 export type ReconRow = {
@@ -96,7 +111,10 @@ export type DocsRow = { nature: string; prefix: string; from: string; to: string
 export type Analysis = {
   clientState: string;
   periodInfo: PeriodInfo;
+  /** Every sales document in the register (time-barred credit notes included). */
   sales: SalesA[];
+  /** Credit notes past the s.34(2) time limit, excluded from 3.1 and the GSTR-1 value tables. */
+  timeBarredNotes: SalesA[];
   purchases: PurchaseA[];
   gstr1: { b2b: SalesA[]; b2cl: SalesA[]; b2cs: B2csRow[]; cdnr: SalesA[]; hsn: HsnRow[]; docs: DocsRow[] };
   outward: { taxable: number; tax: TaxSplit; nilExempt: number };
@@ -146,6 +164,20 @@ function resolveLines(d: SalesDoc, reads: Map<string, string | null>): LineA[] {
   });
 }
 
+/**
+ * s.34(2) time limit of a credit note: `monthDay` (default GST_CONFIG) after the end of the FY of
+ * its original invoice. Null for invoices, debit notes and notes without an original invoice date.
+ */
+export function creditNoteDeadline(d: Pick<SalesDoc, "docType" | "origDate">, monthDay: string = GST_CONFIG.creditNoteDeadlineMonthDay): string | null {
+  return d.docType === "CRN" && d.origDate ? dayAfterFyEnd(fyOfDay(d.origDate), monthDay) : null;
+}
+
+/** True when the credit note is dated after its s.34(2) time limit (the limit day itself is in time). */
+export function isTimeBarredNote(d: Pick<SalesDoc, "docType" | "origDate" | "date">, monthDay: string = GST_CONFIG.creditNoteDeadlineMonthDay): boolean {
+  const deadline = creditNoteDeadline(d, monthDay);
+  return deadline !== null && d.date > deadline;
+}
+
 function analyseSales(x: GstExtract, clientState: string): SalesA[] {
   const reads = new Map(x.hsnReads.map((r) => [r.description, r.hsn]));
   return x.sales.map((d) => {
@@ -156,7 +188,7 @@ function analyseSales(x: GstExtract, clientState: string): SalesA[] {
     if (d.docType !== "INV") table = registered ? "CDNR" : "B2CS";
     else if (registered) table = "B2B";
     else table = interState && d.value > GST_CONFIG.b2clThresholdPaise ? "B2CL" : "B2CS";
-    return { ...d, posResolved, interState, registered, table, lines: resolveLines(d, reads) };
+    return { ...d, posResolved, interState, registered, table, lines: resolveLines(d, reads), timeBarred: isTimeBarredNote(d) };
   });
 }
 
@@ -370,12 +402,14 @@ export function analyse(x: GstExtract): Analysis {
   const clientState = clientStateOf(x);
   const pi = periodInfo(x.period, x.fy);
   const sales = analyseSales(x, clientState);
+  // Documents the return reports: everything except credit notes past the s.34(2) time limit.
+  const reported = sales.filter((s) => !s.timeBarred);
 
   // 3.1(a) / (c)
   let taxable = 0;
   let nilExempt = 0;
   let outTax = zeroTax();
-  for (const d of sales) {
+  for (const d of reported) {
     if (d.reverseCharge) continue;
     const k = sign(d.docType);
     for (const l of d.lines) {
@@ -425,13 +459,14 @@ export function analyse(x: GstExtract): Analysis {
     clientState,
     periodInfo: pi,
     sales,
+    timeBarredNotes: sales.filter((s) => s.timeBarred),
     purchases,
     gstr1: {
-      b2b: sales.filter((s) => s.table === "B2B"),
-      b2cl: sales.filter((s) => s.table === "B2CL"),
-      b2cs: b2csRows(sales),
-      cdnr: sales.filter((s) => s.table === "CDNR"),
-      hsn: hsnRows(sales),
+      b2b: reported.filter((s) => s.table === "B2B"),
+      b2cl: reported.filter((s) => s.table === "B2CL"),
+      b2cs: b2csRows(reported),
+      cdnr: reported.filter((s) => s.table === "CDNR"),
+      hsn: hsnRows(reported),
       docs: docsRows(x.sales),
     },
     outward: { taxable, tax: outTax, nilExempt },
