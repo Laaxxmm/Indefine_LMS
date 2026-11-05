@@ -34,6 +34,12 @@ describe("/dashboard", () => {
     expect(html.length).toBeGreaterThan(1000);
   });
 
+  it("shows the Agents link only to people the /agents guard lets in (active users)", async () => {
+    expect(await renderHtml(await Dashboard())).toContain('href="/agents"');
+    signedIn(activeSession({ active: false }));
+    expect(await renderHtml(await Dashboard())).not.toContain('href="/agents"');
+  });
+
   it("redirects a signed-out visitor to sign-in", async () => {
     signedIn(null);
     expect(await redirectTarget(() => Dashboard())).toBe("/");

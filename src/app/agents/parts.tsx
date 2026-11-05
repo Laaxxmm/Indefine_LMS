@@ -2,11 +2,27 @@
 // the runs table. Colours follow src/components/ui.ts (emerald / amber / rose -50 fills with
 // -800 text, AA on white) and the brand theme; nothing here introduces a second palette.
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import type { JobTaskState } from "@prisma/client";
 import type { RunRow } from "@/lib/agents/views";
 
 /** Visible keyboard focus (the Firm OS models page's ring). */
 export const focusRing = "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2";
+
+/**
+ * Title of /agents, used verbatim by its nav link and by every back link to it, so the three
+ * always agree (managers, partners and admins see every run; staff see their own).
+ */
+export const runsListLabel = (seesAll: boolean) => (seesAll ? "Agent runs" : "My agent runs");
+
+/** Back link to the parent page (the LMS detail-page pattern: arrow + the parent's label, top left). */
+export function BackLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <Link href={href} className={`inline-flex items-center gap-1.5 text-sm font-semibold text-ink-mute hover:text-ink transition mb-4 rounded ${focusRing}`}>
+      <ArrowLeft className="w-4 h-4" aria-hidden="true" /> {children}
+    </Link>
+  );
+}
 
 // ink-mute, not the family's ink-faint: ink-faint on white is ~2:1, below the AA the spec requires.
 export const eyebrow = "text-[10.5px] font-extrabold tracking-[0.14em] text-ink-mute uppercase";

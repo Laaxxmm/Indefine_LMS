@@ -2,11 +2,10 @@
 // decided ones (with the diff they made). Rendered at /agents/mistakes (partners, managers and
 // admins) and /admin/firm-os/mistakes (admin area). Only partners and managers get the buttons.
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import type { RuleDefinition } from "@/lib/agents/core/checklist";
 import type { MistakeRow } from "@/lib/agents/views";
 import { card } from "@/components/ui";
-import { chip, eyebrow, focusRing, pageTitle, sectionTitle } from "../parts";
+import { BackLink, chip, eyebrow, focusRing, pageTitle, sectionTitle } from "../parts";
 import { MistakeDecision } from "./MistakeDecision";
 
 function RuleLines({ rule }: { rule: RuleDefinition }) {
@@ -66,19 +65,19 @@ function Row({ row, canDecide, names }: { row: MistakeRow; canDecide: boolean; n
         <div className="min-w-0 flex-1">
           <p className="text-[13.5px] font-semibold">{row.pattern}</p>
           <p className="text-[11.5px] text-ink-mute mt-0.5">
-            {row.agent} · {row.ruleTitle} ({row.severity}) · logged by {names.get(row.createdBy) ?? row.createdBy} on {row.createdAt}
+            {row.agentTitle} · {row.ruleTitle} ({row.severity}) · logged by {names.get(row.createdBy) ?? row.createdBy} on {row.createdAt}
             {row.status !== "PROPOSED" && ` · decided ${row.decidedAt}`}
             {row.runId && (
               <>
                 {" · "}
                 <Link href={`/agents/${row.agent}/runs/${row.runId}`} className={`text-brand-600 hover:underline rounded ${focusRing}`}>
-                  run
+                  View the run
                 </Link>
               </>
             )}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className={`${chip} ${STATUS_TONE[row.status]}`}>
             {row.status}
             {row.promotedToVersion && ` → v${row.promotedToVersion}`}
@@ -91,21 +90,47 @@ function Row({ row, canDecide, names }: { row: MistakeRow; canDecide: boolean; n
   );
 }
 
-export function MistakesView({ data, names, backHref }: { data: { canDecide: boolean; proposed: MistakeRow[]; decided: MistakeRow[] }; names: Map<string, string>; backHref?: { href: string; label: string } }) {
+const INTRO =
+  "Findings reviewers say an agent missed or got wrong. Approving one adds its rule to a new minor version of the SOP pack; the next runs use it. Nothing is promoted without a partner or manager.";
+
+/** The admin area's page header (eyebrow "Admin · …", title, "← Admin" on the right), as on the models and cycle-time pages. */
+function AdminHeader() {
+  return (
+    <div className="mb-6 flex items-end justify-between flex-wrap gap-4">
+      <div>
+        <p className={`${eyebrow} mb-1.5`}>Admin · Firm OS</p>
+        <h1 className="font-display text-[32px] font-extrabold tracking-[-0.02em] leading-none">Mistake log</h1>
+        <p className="text-sm text-ink-mute mt-2 max-w-2xl">{INTRO}</p>
+      </div>
+      <Link
+        href="/admin"
+        className={`text-sm text-ink-mute hover:text-ink inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white hover:bg-muted border border-border shadow-soft transition shrink-0 ${focusRing}`}
+      >
+        ← Admin
+      </Link>
+    </div>
+  );
+}
+
+/**
+ * `back` renders the agents-area header (back link to the runs list, eyebrow "Firm OS"); `admin`
+ * renders the admin-area header instead, so each copy matches the pages around it.
+ */
+export function MistakesView({ data, names, back, admin = false }: { data: { canDecide: boolean; proposed: MistakeRow[]; decided: MistakeRow[] }; names: Map<string, string>; back?: { href: string; label: string }; admin?: boolean }) {
   return (
     <div>
-      {backHref && (
-        <Link href={backHref.href} className={`inline-flex items-center gap-1.5 text-sm font-semibold text-ink-mute hover:text-ink transition mb-4 rounded ${focusRing}`}>
-          <ArrowLeft className="w-4 h-4" aria-hidden="true" /> {backHref.label}
-        </Link>
+      {admin ? (
+        <AdminHeader />
+      ) : (
+        <>
+          {back && <BackLink href={back.href}>{back.label}</BackLink>}
+          <div className="mb-6">
+            <p className={eyebrow}>Firm OS · supervised learning</p>
+            <h1 className={pageTitle}>Mistake log</h1>
+            <p className="text-ink-mute text-[15px] mt-1.5 max-w-2xl">{INTRO}</p>
+          </div>
+        </>
       )}
-      <div className="mb-6">
-        <p className={eyebrow}>Firm OS · supervised learning</p>
-        <h1 className={pageTitle}>Mistake log</h1>
-        <p className="text-ink-mute text-[15px] mt-1.5 max-w-2xl">
-          Findings reviewers say an agent missed or got wrong. Approving one adds its rule to a new minor version of the SOP pack; the next runs use it. Nothing is promoted without a partner or manager.
-        </p>
-      </div>
       <section aria-labelledby="proposed" className={`${card} mb-6`}>
         <h2 id="proposed" className={sectionTitle}>
           Waiting for a decision ({data.proposed.length})

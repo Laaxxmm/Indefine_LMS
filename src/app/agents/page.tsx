@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { canSeeAllRuns } from "@/lib/agents/access";
 import type { FirmDb } from "@/lib/agents/core/runner";
 import { listRuns } from "@/lib/agents/views";
-import { EmptyState, RunsTable, eyebrow, pageTitle } from "./parts";
+import { EmptyState, RunsTable, eyebrow, pageTitle, runsListLabel } from "./parts";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +19,7 @@ export default async function AgentsPage() {
     <div>
       <div className="mb-6">
         <p className={eyebrow}>Firm OS</p>
-        <h1 className={pageTitle}>{all ? "Agent runs" : "My agent runs"}</h1>
+        <h1 className={pageTitle}>{runsListLabel(all)}</h1>
         <p className="text-ink-mute text-[15px] mt-1.5 max-w-2xl">
           Draft packs prepared by task agents for review. A person checks every finding, approves the pack and files it; the app never files or sends anything.
         </p>

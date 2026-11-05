@@ -61,15 +61,28 @@ describe("signed out / no access", () => {
 });
 
 describe("/agents", () => {
-  it("layout: nav with the visible agents; staff see 'My runs' and no mistake log", async () => {
+  it("layout: nav with the visible agents; staff see 'My agent runs' and no mistake log", async () => {
     as(user("priya"));
     const html = await renderHtml(await Layout({ children: null }));
     expect(html).toContain('aria-label="Agents"');
-    expect(html).toContain("My runs");
+    expect(html).toContain(">My agent runs<");
     expect(html).toContain('href="/agents/echo"');
     expect(html).not.toContain("Mistake log");
     as(user("partner"));
-    expect(await renderHtml(await Layout({ children: null }))).toContain("Mistake log");
+    const partner = await renderHtml(await Layout({ children: null }));
+    expect(partner).toContain("Mistake log");
+    expect(partner).toContain(">Agent runs<");
+  });
+
+  it("nav label, page title and back links to /agents use the same words", async () => {
+    as(user("priya"));
+    expect(await renderHtml(await RunsPage())).toContain(">My agent runs</h1>");
+    const agentPage = await renderHtml(await AgentPage({ params: Promise.resolve({ agent: "echo" }) }));
+    expect(agentPage).toMatch(/href="\/agents"[^>]*>.*My agent runs<\/a>/);
+    expect(agentPage).toContain(">Echo (framework test)</h1>");
+    as(user("meera"));
+    expect(await renderHtml(await RunsPage())).toContain(">Agent runs</h1>");
+    expect(await renderHtml(await MistakesPage())).toMatch(/href="\/agents"[^>]*>.*Agent runs<\/a>/);
   });
 
   it("empty run list", async () => {
@@ -187,10 +200,18 @@ describe("mistake log pages", () => {
     expect(html).toContain("echo.amount-over");
     expect(html).toContain("Approve rule");
     expect(html).toContain("Ravi Kumar");
+    expect(html).toContain("Echo (framework test) · Big invoices"); // the agent's title, not its key
+    expect(html).toContain('href="/agents/echo/runs/run-1"');
+    expect(html).toContain("View the run");
     as(user("admin"));
     const admin = await renderHtml(await AdminMistakesPage());
     expect(admin).toContain("Missed the big invoice");
     expect(admin).not.toContain("Approve rule");
     expect(admin).toContain("Only a partner or manager can approve or reject.");
+    // The admin copy uses the admin area's header, like /admin/firm-os/models and cycle-time.
+    expect(admin).toContain("Admin · Firm OS");
+    expect(admin).toContain('href="/admin"');
+    expect(admin).toContain("← Admin");
+    expect(admin).not.toContain(">Agent runs<");
   });
 });

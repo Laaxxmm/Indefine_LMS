@@ -28,6 +28,8 @@ describe("/onboard", () => {
     expect(html).toContain('for="onboard-prompt"');
     expect(html).toContain("Continue");
     expect(html).toContain('href="/dashboard"');
+    expect(html).toContain('href="/agents"'); // where the new jobs are worked on
+    expect(html).toContain('href="/clients"');
     expect(html).not.toMatch(/submit to portal/i);
   });
 

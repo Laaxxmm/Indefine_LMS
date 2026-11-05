@@ -37,6 +37,8 @@ const has = (user: SessionUser, ...want: FirmRole[]) => firmRolesOf(user).some((
 export const canUseAgents = (user: SessionUser) => isActive(user);
 export const canSeeAllRuns = (user: SessionUser) => has(user, "manager", "partner", "admin");
 export const canDecideMistakes = (user: SessionUser) => has(user, "manager", "partner");
+/** /agents/mistakes: the deciders plus admins, who may look. The nav link and the page guard both use this. */
+export const canSeeMistakeLog = (user: SessionUser) => canDecideMistakes(user) || canSeeAllRuns(user);
 
 export type JobAccessView = { id: string; state: JobTaskState; service: FirmService; assigneeId: string | null; reviewerId: string | null };
 

@@ -1,13 +1,12 @@
 import { auth } from "@/lib/auth";
 import { notFound, redirect } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { canSeeAllRuns } from "@/lib/agents/access";
 import type { FirmDb } from "@/lib/agents/core/runner";
 import { getAgent, visibleAgents } from "@/lib/agents/registry";
 import { listRunnableJobs, listRuns } from "@/lib/agents/views";
 
-import { EmptyState, RunsTable, StateChip, eyebrow, focusRing, pageTitle, tableWrap, td, th, thead, sectionTitle } from "../parts";
+import { BackLink, EmptyState, RunsTable, StateChip, eyebrow, pageTitle, runsListLabel, tableWrap, td, th, thead, sectionTitle } from "../parts";
 import { RunAgentButton } from "./RunAgentButton";
 
 export const dynamic = "force-dynamic";
@@ -24,9 +23,7 @@ export default async function AgentPage({ params }: { params: Promise<{ agent: s
 
   return (
     <div>
-      <Link href="/agents" className={`inline-flex items-center gap-1.5 text-sm font-semibold text-ink-mute hover:text-ink transition mb-4 rounded ${focusRing}`}>
-        <ArrowLeft className="w-4 h-4" aria-hidden="true" /> Runs
-      </Link>
+      <BackLink href="/agents">{runsListLabel(canSeeAllRuns(session.user))}</BackLink>
       <div className="mb-6">
         <p className={eyebrow}>Agent · {def.service}</p>
         <h1 className={pageTitle}>{def.title}</h1>

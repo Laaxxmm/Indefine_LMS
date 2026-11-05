@@ -210,6 +210,8 @@ export async function loadRunReview(db: FirmDb, user: SessionUser, runId: string
 export type MistakeRow = {
   id: string;
   agent: string;
+  /** The agent's display title (the key when the agent is no longer registered). */
+  agentTitle: string;
   status: "PROPOSED" | "APPROVED" | "REJECTED";
   pattern: string;
   ruleId: string;
@@ -261,6 +263,7 @@ export async function listMistakes(db: FirmDb, user: SessionUser): Promise<{ can
     rows.push({
       id: m.id,
       agent: m.agent,
+      agentTitle: def?.title ?? m.agent,
       status: m.status,
       pattern: m.pattern,
       ruleId: proposal.id ?? "—",
