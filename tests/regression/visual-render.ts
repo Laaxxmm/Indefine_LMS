@@ -123,7 +123,7 @@ async function seedWorld() {
 
 /** Pages that exist only after the Phase 9–11 merges; rendered when present. */
 const LATER = import.meta.glob(["../../src/app/coach/page.tsx", "../../src/app/comms/page.tsx", "../../src/app/comms/new/page.tsx", "../../src/app/agents/spot-checks/page.tsx", "../../src/app/search/page.tsx", "../../src/app/focus/page.tsx", "../../src/app/companion/page.tsx"]);
-const LATER_ADMIN = import.meta.glob(["../../src/app/admin/firm-os/workspace/page.tsx"]);
+const LATER_ADMIN = import.meta.glob(["../../src/app/admin/firm-os/workspace/page.tsx", "../../src/app/admin/firm-os/privacy/page.tsx", "../../src/app/admin/firm-os/breaches/page.tsx"]);
 
 function entries(): Entry[] {
   const partner = user("partner");
@@ -182,7 +182,7 @@ describe("visual render → test-results/visual", () => {
     const rows = results
       .map(({ e, ok, note }) => `<tr><td><a href="${e.slug}.html">${e.title}</a></td><td>${e.who}</td><td>${ok ? "rendered" : "FAILED"} · ${note.replace(/</g, "&lt;")}</td><td>${WIDTHS.map((w) => `<a href="frame.html#${e.slug}@${w}">${w}</a>`).join(" · ")}</td></tr>`)
       .join("");
-    const later = ["/coach", "/comms", "/comms/new", "/agents/spot-checks", "/search", "/focus", "/companion", "/admin/firm-os/workspace"].filter((r) => !results.some((x) => x.e.title === r));
+    const later = ["/coach", "/comms", "/comms/new", "/agents/spot-checks", "/search", "/focus", "/companion", "/admin/firm-os/workspace", "/admin/firm-os/privacy", "/admin/firm-os/breaches"].filter((r) => !results.some((x) => x.e.title === r));
     writeFileSync(
       join(OUT, "index.html"),
       `<!doctype html><meta charset="utf-8"><title>Firm OS visual render</title><body style="font:14px system-ui;padding:24px"><h1>Firm OS visual render</h1><p>First paint (SSR) with compiled Tailwind. Check each page against docs/qa/ui-checklist.md.</p><table cellpadding="6" border="1" style="border-collapse:collapse"><tr><th>Page</th><th>As</th><th>Result</th><th>Width</th></tr>${rows}</table>${later.length ? `<p>Not built yet (Phases 9–11): ${later.join(", ")}</p>` : ""}</body>`,

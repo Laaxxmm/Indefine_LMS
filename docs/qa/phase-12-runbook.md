@@ -154,7 +154,7 @@ environment set (nothing runs at import time).
 npx vitest run --config tests/regression/visual.vitest.config.ts
 # open test-results/visual/index.html — every Firm OS page at 390 / 1280 / 1440
 ```
-Look for overflow and broken layout before the staging UI pass (step 18). At prep (after the Phase 9 and 10 merges): 20/20 pages render (coach, comms, search, focus, companion, admin workspace included).
+Look for overflow and broken layout before the staging UI pass (step 18). At prep (after the Phase 9 and 10 merges): 22/22 pages render (coach, comms, search, focus, companion, admin workspace, privacy, breaches included).
 
 ---
 

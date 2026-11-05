@@ -51,6 +51,8 @@ Phase column: pages marked 9 / 10 / 11 exist only after that phase is merged.
 | 17 | Focus | `/focus` | staff | owner request, merged with 10 |
 | 18 | Companion (browser-extension pairing) | `/companion` | staff | owner request, merged with 10 |
 | 19 | Admin — Workspace modules | `/admin/firm-os/workspace` | LMS admin | owner request, merged with 10 |
+| 20 | Admin — Privacy requests (DPDP rights: access, correction, erasure, nomination) | `/admin/firm-os/privacy`, `/admin/firm-os/privacy/<id>` | LMS admin | DPDP rights, merged 06 Nov |
+| 21 | Admin — Breach register | `/admin/firm-os/breaches`, `/admin/firm-os/breaches/<id>` | LMS admin | DPDP rights, merged 06 Nov |
 
 ## Results
 
@@ -123,6 +125,12 @@ Tester: ________________________  Date: ____ ___ 2026  Build / commit: _________
 | 19 Admin — Workspace modules | 1280 | | | | | | | | | | |
 | 19 Admin — Workspace modules | 1440 | | | | | | | | | | |
 | 19 Admin — Workspace modules | 390 | | | | | | | | | | |
+| 20 Admin — Privacy requests | 1280 | | | | | | | | | | |
+| 20 Admin — Privacy requests | 1440 | | | | | | | | | | |
+| 20 Admin — Privacy requests | 390 | | | | | | | | | | |
+| 21 Admin — Breach register | 1280 | | | | | | | | | | |
+| 21 Admin — Breach register | 1440 | | | | | | | | | | |
+| 21 Admin — Breach register | 390 | | | | | | | | | | |
 
 ## Known before the staging pass
 
@@ -132,7 +140,7 @@ From the UI audit (PROGRESS "UI audit", "Known gaps") — check that each is sti
 - LMS (not Firm OS) pages: `/clients`, `/work`, `/tools` headers do not wrap at 390 px; `ink-faint` text
   ≈ 2:1 contrast across the LMS; dashboard emoji. These are LMS debts, not Firm OS failures — note them
   but do not fail a Firm OS row for them.
-- Local visual render (2026-11-06, after the Phase 9 and 10 merges, `tests/regression/visual-render.ts`): all 20
+- Local visual render (2026-11-06, after the Phase 9 and 10 merges, `tests/regression/visual-render.ts`): all 22
   current Firm OS / comparison pages render with the compiled CSS. /agents/spot-checks appears automatically after Phase 11. (Workspace job pages need a job id; check them on staging.)
 
 Sign-off: UI checklist complete and passing — ________________________ (owner) date ____________

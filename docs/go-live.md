@@ -114,7 +114,8 @@ because they are gated by role, not by a flag (`tests/regression/firm-os-flags-o
   active user, plus the **My day** morning-board card to everyone with open Firm OS jobs — so the
   dashboard queries Firm OS jobs for every signed-in person even with all flags off;
 - `/tools` and `/clients` show **Firm OS onboarding** (→ /onboard) to partners, managers and admins;
-- `/admin` shows the **Firm OS** group (models, mistakes, cycle time, workspace modules) to LMS admins.
+- `/admin` shows the **Firm OS** group (models, mistakes, cycle time, workspace modules, privacy requests,
+  breach register) to LMS admins.
 - /comms, /workspace, /search, /focus and /companion are linked only from Firm OS pages, never from an
   LMS page (pinned by `tests/regression/firm-os-flags-off.test.ts`).
 
