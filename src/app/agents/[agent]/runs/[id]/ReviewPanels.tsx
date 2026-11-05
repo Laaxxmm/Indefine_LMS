@@ -84,7 +84,7 @@ export function DeliverablesPanel({ deliverables }: { deliverables: DeliverableV
               ))}
             </div>
           )}
-          <div className="overflow-auto max-h-[480px] rounded-lg border border-border" role="region" tabIndex={0} aria-label={`Preview of sheet ${current.name}`}>
+          <div className={`relative overflow-auto max-h-[480px] rounded-lg border border-border ${focusRing}`} role="region" tabIndex={0} aria-label={`Preview of sheet ${current.name}`}>
             <table className="text-[12px] tabular-nums">
               <caption className="sr-only">Sheet {current.name}, read-only</caption>
               <tbody>
@@ -472,13 +472,16 @@ export function CloseLoopActions({ view }: { view: CloseLoopView }) {
           <span className="font-bold text-ink">Filed by you on the portal — record the acknowledgement here.</span>{" "}
           {view.hasFinal ? "Pack approved and in Final." : "Pack approved; no Final file is recorded yet, and the job cannot close without one."} Firm OS never files anything.
         </p>
+        <p id={`${id}-filed`} className="text-[12.5px] text-ink-mute w-full">
+          Mark filed records the filing against your name and moves the job on to closing; it cannot be undone from this screen.
+        </p>
         <label htmlFor={`${id}-ack`} className={`${fieldLabel} w-full sm:w-[240px]`}>
           {ack.label} {ack.required ? "(required)" : "(optional)"}
           <input id={`${id}-ack`} value={f.ackRef} onChange={set("ackRef")} maxLength={64} required={ack.required} autoComplete="off" className={`${field} font-mono ${focusRing}`} />
         </label>
         {refField("Turia task ref (optional)", false)}
         {minutesField("Minutes logged in Turia (optional)", false)}
-        <button type="button" disabled={!!busy || (ack.required && !f.ackRef.trim())} onClick={markFiled} className={primary}>
+        <button type="button" disabled={!!busy || (ack.required && !f.ackRef.trim())} onClick={markFiled} aria-describedby={`${id}-filed`} className={primary}>
           {spinner}Mark filed
         </button>
         {messages}
@@ -520,12 +523,25 @@ export function CloseLoopActions({ view }: { view: CloseLoopView }) {
 
 /** What the bar says when this person has no action (never a file, submit or send action). */
 const IDLE: Partial<Record<JobTaskState, string>> = {
+  ASSIGNED: "Assigned. The preparer runs the agent when the documents are ready.",
+  IN_PREP: "In preparation. The preparer runs the agent again when the documents are ready.",
+  AGENT_DONE: "The agent has prepared the pack. The preparer checks it and submits it for review.",
+  IN_REVIEW: "Submitted for review. The reviewer approves the pack or requests changes.",
   APPROVED: "Pack approved and in Final. A person files it on the portal and records the acknowledgement.",
   FILED_BY_HUMAN: "Filed by a person on the portal. The job closes when the Final file and the Turia close are confirmed.",
   CLOSING: "Filed by a person on the portal. The job closes when the Final file and the Turia close are confirmed.",
   DONE: "Done: filed, Final file in SharePoint and the Turia task closed.",
 };
 const IDLE_APPROVED_NO_FINAL = "Pack approved; no Final file is recorded yet. A person files it on the portal and records the acknowledgement.";
+
+/** What "Approve pack" does, shown before the approval is sent (it cannot be undone from this screen). */
+export function approveConsequence(deliverables: number): string {
+  const copy =
+    deliverables === 0
+      ? "This run has no files to copy to Final."
+      : `It copies ${deliverables === 1 ? "the file" : `the ${deliverables} files`} to Final as a new version (nothing is overwritten).`;
+  return `Approving moves the job to APPROVED. ${copy} A person then files it on the portal; Firm OS never files anything.`;
+}
 
 export function ActionBar({
   agent,
@@ -534,6 +550,7 @@ export function ActionBar({
   jobState,
   actions,
   blockFails,
+  deliverables = 0,
   closeLoop = null,
 }: {
   agent: string;
@@ -542,6 +559,8 @@ export function ActionBar({
   jobState: JobTaskState;
   actions: RunReview["actions"];
   blockFails: number;
+  /** Working files the run produced (what approval copies to Final). */
+  deliverables?: number;
   closeLoop?: CloseLoopView | null;
 }) {
   const router = useRouter();
@@ -556,12 +575,15 @@ export function ActionBar({
     setBusy(true);
     setError(null);
     const r = await call(url, body);
-    setBusy(false);
-    if (!r.ok) return setError(r.error);
-    setMode("idle");
+    if (!r.ok) {
+      setBusy(false);
+      return setError(r.error);
+    }
     setNote("");
-    if (after) after(r.data);
-    else router.refresh();
+    if (after) return after(r.data); // navigating: stay busy so nothing is sent twice
+    setBusy(false);
+    setMode("idle");
+    router.refresh();
   }
 
   const spinner = busy && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />;
@@ -579,6 +601,16 @@ export function ActionBar({
       <>
         {mode === "changes" && noteBox("What needs to change? The agent re-runs with this note.")}
         {mode === "approve" && actions.approveNeedsNote && noteBox(`Partner note: approving over ${blockFails} block finding(s)`)}
+        {mode === "approve" && (
+          <p id={`${id}-approve`} className="text-[13px] text-ink-soft w-full sm:w-auto sm:max-w-[520px]">
+            {approveConsequence(deliverables)}
+          </p>
+        )}
+        {mode === "idle" && !actions.approve && blockFails > 0 && jobState === "IN_REVIEW" && (
+          <p className="text-[13px] text-ink-soft">
+            {blockFails} block finding{blockFails === 1 ? "" : "s"}: only a partner can approve over {blockFails === 1 ? "it" : "them"}. Request changes, or ask a partner to review.
+          </p>
+        )}
         <div className="flex items-center gap-2 ml-auto">
           {mode !== "idle" && (
             <button type="button" onClick={() => setMode("idle")} className={`${btnGhost} ${focusRing}`}>
@@ -597,14 +629,16 @@ export function ActionBar({
             </button>
           )}
           {actions.approve && mode !== "changes" && (
+            // First click shows what approval does (and the partner note box when needed); the second sends it.
             <button
               type="button"
               disabled={busy || (mode === "approve" && actions.approveNeedsNote && !note.trim())}
-              onClick={() => (actions.approveNeedsNote && mode !== "approve" ? setMode("approve") : go(`${base}/approve`, { note: note || null }))}
+              onClick={() => (mode !== "approve" ? setMode("approve") : go(`${base}/approve`, { note: note || null }))}
+              aria-describedby={mode === "approve" ? `${id}-approve` : undefined}
               className={primary}
             >
               {mode === "approve" && spinner}
-              Approve pack
+              {mode === "approve" ? "Confirm approval" : "Approve pack"}
             </button>
           )}
         </div>
@@ -646,9 +680,13 @@ export function ActionBar({
     content = <p className="text-[13px] text-ink-mute">{idle ?? "No action for you on this job right now."}</p>;
   }
 
+  // Sticky, not fixed: the bar sticks to the bottom of the window while the page scrolls but keeps
+  // its own place at the end, so a tall bar never hides the last panels. On a phone it is not sticky
+  // at all (the Mark filed form would cover most of the screen); it sits at the end of the page.
+  // It bleeds to the edges of the layout's padding, and scrolls itself if taller than 70vh.
   return (
-    <div className="fixed bottom-0 inset-x-0 z-20 border-t border-border bg-card/95 backdrop-blur" role="region" aria-label="Review actions">
-      <div className="max-w-[1280px] mx-auto px-5 sm:px-8 py-3 flex items-end gap-3 flex-wrap">
+    <div className="sticky max-sm:static bottom-0 z-20 -mx-5 sm:-mx-8 -mb-8 mt-8 max-h-[70vh] max-sm:max-h-none overflow-y-auto border-t border-border bg-card/95 backdrop-blur" role="region" aria-label="Review actions">
+      <div className="px-5 sm:px-8 py-3 flex items-end gap-3 flex-wrap">
         {content}
         {error && (
           <p role="alert" className={`${errorText} w-full`}>

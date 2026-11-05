@@ -4,10 +4,11 @@
 //   describe → answer (≤ 5 questions) → plan preview ("Create") → progress (+ Turia checklists).
 // Every action goes through /api/firm-os/onboard/* with the shared call() helper.
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Check, Copy, Loader2 } from "lucide-react";
-import { btnGhost, btnPrimary, btnSm, call, card, errorText, field, h2 } from "@/components/ui";
-import { istLabel } from "@/lib/ist";
+import { btnGhost, btnPrimary, btnSm, call, card, errorText, field } from "@/components/ui";
+import { formatDate } from "@/lib/agents/core/format";
 import type { Question } from "@/lib/agents/onboarding/clarify";
 import { summarizeJobs, type OnboardingPlan } from "@/lib/agents/onboarding/plan";
 import type { SagaStep, StepStatus } from "@/lib/agents/onboarding/saga";
@@ -21,9 +22,12 @@ const input = `${field} ${focusField}`;
 const label = "text-[11px] font-bold text-ink-mute";
 const primary = `${btnPrimary} ${focusBtn} inline-flex items-center gap-2`;
 const ghost = `${btnGhost} ${focusBtn} inline-flex items-center gap-1.5`;
+const summaryLink = `underline font-semibold text-ink ${focusBtn} rounded`;
+/** Section title: ui.ts h2 with ink-mute instead of ink-faint (~2:1 on white, below AA), as on /agents. */
+const h2 = "text-[10.5px] font-extrabold tracking-[0.12em] text-ink-mute uppercase mb-3";
 
-/** DD MMM YYYY in IST. */
-const day = (iso: string | null | undefined) => (iso ? istLabel(new Date(iso), { day: "2-digit", month: "short", year: "numeric" }) : null);
+/** DD MMM YYYY in IST, with fixed month names (en-IN locale data writes September as "Sept"). */
+const day = (iso: string | null | undefined) => (iso ? formatDate(new Date(iso)) : null);
 
 type Answers = Record<string, string | string[]>;
 /** The action in flight (its button shows the spinner) and the last failure (shown beside the action that failed). */
@@ -326,7 +330,7 @@ function PlanPreview({ plan, busy, error, onCreate, onEdit }: { plan: Onboarding
           <p className="text-ink-mute mb-2">{plan.plannerSource}.{plan.datesPending > 0 && ` ${plan.datesPending} without a date yet.`}</p>
           <div className="overflow-x-auto">
             <table className="w-full text-[13px] tabular-nums">
-              <thead className="text-[11px] uppercase tracking-wide text-ink-faint text-left">
+              <thead className="text-[11px] uppercase tracking-wide text-ink-mute text-left">
                 <tr>
                   <th scope="col" className="py-2 pr-3">Job</th>
                   <th scope="col" className="py-2 pr-3">Periods</th>
@@ -354,8 +358,11 @@ function PlanPreview({ plan, busy, error, onCreate, onEdit }: { plan: Onboarding
       </ol>
 
       <ErrorBox error={error} keys={["create"]} />
-      <div className="mt-6 flex items-center gap-3">
-        <button type="button" onClick={onCreate} disabled={!!busy} className={primary}>
+      <p className="mt-6 text-[12.5px] text-ink-soft" id="create-consequence">
+        Create starts all of the above now: the client record, {plan.turia.mode === "MANUAL" ? "the Turia checklists" : "the Turia client and tasks"}, the SharePoint site and {plan.jobs.length} job{plan.jobs.length === 1 ? "" : "s"}. If a step fails, it stops there and Retry carries on; nothing is deleted.
+      </p>
+      <div className="mt-3 flex items-center gap-3 flex-wrap">
+        <button type="button" onClick={onCreate} disabled={!!busy} aria-describedby="create-consequence" className={primary}>
           <Spin busy={busy} k="create">Create</Spin>
         </button>
         <button type="button" onClick={onEdit} disabled={!!busy} className={ghost}>Change answers</button>
@@ -408,12 +415,22 @@ function Progress({ run, busy, error, onResume, onConfirm }: { run: RunView; bus
         <p className="font-display font-bold text-xl">{heading}</p>
         <ol className="mt-2 divide-y divide-border">{steps.map((s) => <StepRow key={s.key} step={s} />)}</ol>
         {run.status === "DONE" && summary && (
-          <p className="text-[13px] text-ink-mute mt-3">
-            {summary.jobTasks} jobs assigned.
-            {summary.nextInternalDue && ` Next internal due: ${summary.nextInternalDue.title} ${summary.nextInternalDue.period} on ${day(summary.nextInternalDue.on)}.`}{" "}
-            {summary.clientUrl && <a href={summary.clientUrl} className={`underline font-semibold text-ink ${focusBtn} rounded`}>Open client</a>}
-            {summary.siteUrl && <> · <a href={summary.siteUrl} target="_blank" rel="noreferrer" className={`underline font-semibold text-ink ${focusBtn} rounded`}>SharePoint site</a></>}
-          </p>
+          <div className="text-[13px] text-ink-mute mt-3">
+            <p>
+              {summary.jobTasks} job{summary.jobTasks === 1 ? "" : "s"} assigned{run.plan && ` to ${run.plan.people.assignee.name}, reviewer ${run.plan.people.reviewer.name}`}.
+              {summary.nextInternalDue && ` Next internal due: ${summary.nextInternalDue.title} ${summary.nextInternalDue.period} on ${day(summary.nextInternalDue.on)}.`}
+            </p>
+            {/* Where each created thing lives: the client record, its CL- site, and Agents, where the jobs are worked on. */}
+            <ul className="mt-2 flex flex-wrap gap-x-5 gap-y-1">
+              {summary.clientUrl && (
+                <li><Link href={summary.clientUrl} className={summaryLink}>{run.plan ? `${run.plan.legalName} in Clients` : "The client in Clients"}</Link></li>
+              )}
+              {summary.siteUrl && (
+                <li><a href={summary.siteUrl} target="_blank" rel="noopener noreferrer" className={summaryLink}>{run.plan ? `CL-${run.plan.clientCode} SharePoint site` : "SharePoint site"}</a></li>
+              )}
+              <li><Link href="/agents" className={summaryLink}>Jobs on Agents</Link></li>
+            </ul>
+          </div>
         )}
         <ErrorBox error={error} keys={["resume", "create"]} />
         {canResume && (

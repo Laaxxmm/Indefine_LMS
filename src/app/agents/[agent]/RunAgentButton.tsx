@@ -16,8 +16,11 @@ export function RunAgentButton({ agent, jobId, label }: { agent: string; jobId: 
     setBusy(true);
     setError(null);
     const r = await call(`/api/firm-os/agents/${encodeURIComponent(agent)}/jobs/${encodeURIComponent(jobId)}/run`);
-    setBusy(false);
-    if (!r.ok) return setError(r.error);
+    if (!r.ok) {
+      setBusy(false);
+      return setError(r.error);
+    }
+    // Stays busy until the review screen opens, so a second click cannot start a second run.
     router.push(`/agents/${agent}/runs/${String(r.data.runId)}`);
   }
 

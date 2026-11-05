@@ -1,13 +1,12 @@
 import { auth } from "@/lib/auth";
 import { notFound, redirect } from "next/navigation";
-import Link from "next/link";
-import { AlertTriangle, ArrowLeft, CheckCircle2, CircleHelp, Info, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, CircleHelp, Info, XCircle } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import type { FirmDb } from "@/lib/agents/core/runner";
 import { loadRunReview, type ChecklistView } from "@/lib/agents/views";
 import { loadCloseLoopView, type CloseLoopViewDb } from "@/lib/close-loop/review";
 import { card } from "@/components/ui";
-import { PartnerChip, RunStatusChip, StateChip, eyebrow, focusRing, pageTitle, sectionTitle } from "../../../parts";
+import { BackLink, PartnerChip, RunStatusChip, StateChip, eyebrow, focusRing, pageTitle, sectionTitle } from "../../../parts";
 import { ActionBar, CloseLoopStatus, CommentsPanel, DeliverablesPanel, MistakeForm } from "./ReviewPanels";
 
 export const dynamic = "force-dynamic";
@@ -44,10 +43,8 @@ export default async function RunReviewPage({ params }: { params: Promise<{ agen
   const comments = review.comments.map((c) => ({ ...c, author: nameOf.get(c.author) ?? c.author }));
 
   return (
-    <div className="pb-28">
-      <Link href={`/agents/${agent}`} className={`inline-flex items-center gap-1.5 text-sm font-semibold text-ink-mute hover:text-ink transition mb-4 rounded ${focusRing}`}>
-        <ArrowLeft className="w-4 h-4" aria-hidden="true" /> {run.agentTitle}
-      </Link>
+    <div>
+      <BackLink href={`/agents/${agent}`}>{run.agentTitle}</BackLink>
 
       <div className="flex items-start justify-between gap-4 flex-wrap mb-5">
         <div>
@@ -87,7 +84,7 @@ export default async function RunReviewPage({ params }: { params: Promise<{ agen
       )}
 
       {review.figures.length > 0 && (
-        <dl className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           {review.figures.map((f) => (
             <div key={f.key} className={card}>
               <dt className={sectionTitle}>{f.label}</dt>
@@ -131,7 +128,7 @@ export default async function RunReviewPage({ params }: { params: Promise<{ agen
                             {c.location && (
                               <figcaption className="text-[11.5px] text-ink-mute mt-0.5">
                                 {c.link ? (
-                                  <a href={c.link} target="_blank" rel="noreferrer" className={`text-brand-600 hover:underline rounded ${focusRing}`}>
+                                  <a href={c.link} target="_blank" rel="noopener noreferrer" className={`text-brand-600 hover:underline rounded ${focusRing}`}>
                                     {c.location}
                                   </a>
                                 ) : (
@@ -158,7 +155,7 @@ export default async function RunReviewPage({ params }: { params: Promise<{ agen
         </div>
       </div>
 
-      <ActionBar agent={agent} runId={run.id} jobId={job.id} jobState={job.state} actions={actions} blockFails={counts.block} closeLoop={closeLoop} />
+      <ActionBar agent={agent} runId={run.id} jobId={job.id} jobState={job.state} actions={actions} blockFails={counts.block} deliverables={review.deliverables.filter((d) => d.kind === "Working").length} closeLoop={closeLoop} />
     </div>
   );
 }

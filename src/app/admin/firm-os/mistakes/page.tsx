@@ -16,7 +16,7 @@ export default async function AdminMistakesPage() {
   const { data, names } = await loadMistakesPage(session.user);
   return (
     <main className="min-h-screen px-6 py-10 max-w-6xl mx-auto">
-      <MistakesView data={data} names={names} backHref={{ href: "/admin", label: "Admin" }} />
+      <MistakesView data={data} names={names} admin />
     </main>
   );
 }

@@ -3,7 +3,7 @@
 // grouping, DD MMM YYYY, IST) happens here so pages stay declarative.
 import type { JobTaskState } from "@prisma/client";
 import type { SessionUser } from "@/lib/access";
-import { canDecideMistakes, canViewJob, jobScopeWhere, reviewActions, runScopeWhere, type ReviewActions } from "@/lib/agents/access";
+import { canDecideMistakes, canUseAgents, canViewJob, jobScopeWhere, reviewActions, runScopeWhere, type ReviewActions } from "@/lib/agents/access";
 import { ChecklistPackSchema, withPromotedRule, type ChecklistPack } from "@/lib/agents/core/checklist";
 import { formatDate, formatDateTimeIst, formatInr } from "@/lib/agents/core/format";
 import { diffPacks, type PackDiff } from "@/lib/agents/core/mistakes";
@@ -73,6 +73,82 @@ export async function listRunnableJobs(db: FirmDb, user: SessionUser, def: AnyAg
   return jobs
     .filter((j) => reviewActions(user, j, 0, now).run)
     .map((j) => ({ id: j.id, title: j.title, period: j.period, fy: j.fy, clientCode: j.firmClient.clientCode, state: j.state, internalDue: j.internalDueOn ? formatDate(j.internalDueOn) : "—" }));
+}
+
+/** What the person can do on a job from the /agents list: start the agent, or open the latest pack. */
+export type MyJobAction =
+  | { kind: "run"; agent: string }
+  | { kind: "no-agent" }
+  | { kind: "open"; agent: string; runId: string; label: "Open pack to submit" | "Review pack" };
+
+export type MyJobRow = {
+  id: string;
+  title: string;
+  service: string;
+  period: string;
+  fy: string;
+  clientCode: string;
+  clientName: string;
+  state: JobTaskState;
+  internalDue: string;
+  part: "Preparer" | "Reviewer" | "Preparer and reviewer";
+  action: MyJobAction;
+};
+
+const OPEN_STATES: JobTaskState[] = ["ASSIGNED", "IN_PREP", "AGENT_DONE", "IN_REVIEW"];
+
+/**
+ * The person's own queue for /agents ("Waiting for you"): jobs they prepare or review on which the
+ * state machine lets them act now, soonest internal due first. A job with nothing for them to do
+ * (e.g. the preparer while it is IN_REVIEW) is left out. `agents` = the agents shown in the UI.
+ */
+export async function listMyJobs(db: FirmDb, user: SessionUser, agents: AnyAgent[], now: Date): Promise<MyJobRow[]> {
+  if (!user || !canUseAgents(user)) return [];
+  const jobs = await db.jobTask.findMany({
+    where: { AND: [{ OR: [{ assigneeId: user.id }, { reviewerId: user.id }] }, { state: { in: OPEN_STATES } }] },
+    orderBy: [{ internalDueOn: "asc" }, { createdAt: "asc" }],
+    take: 50,
+    select: {
+      id: true,
+      title: true,
+      service: true,
+      period: true,
+      fy: true,
+      state: true,
+      assigneeId: true,
+      reviewerId: true,
+      internalDueOn: true,
+      firmClient: { select: { clientCode: true, client: { select: { name: true } } } },
+      agentRuns: { orderBy: { startedAt: "desc" }, take: 1, select: { id: true, agent: true, checklist: { where: { status: "fail", severity: "block" }, select: { id: true } } } },
+    },
+  });
+  const rows: MyJobRow[] = [];
+  for (const j of jobs) {
+    const latest = j.agentRuns[0] ?? null;
+    const can = reviewActions(user, j, latest?.checklist.length ?? 0, now);
+    const agent = (latest && agents.find((a) => a.key === latest.agent)) ?? agents.find((a) => a.service === j.service) ?? null;
+    let action: MyJobAction | null = null;
+    if (can.run) action = agent ? { kind: "run", agent: agent.key } : { kind: "no-agent" };
+    else if (latest && can.submit) action = { kind: "open", agent: latest.agent, runId: latest.id, label: "Open pack to submit" };
+    else if (latest && (can.approve || can.requestChanges)) action = { kind: "open", agent: latest.agent, runId: latest.id, label: "Review pack" };
+    if (!action) continue;
+    const prepares = j.assigneeId === user.id;
+    const reviews = j.reviewerId === user.id;
+    rows.push({
+      id: j.id,
+      title: j.title,
+      service: j.service,
+      period: j.period,
+      fy: j.fy,
+      clientCode: j.firmClient.clientCode,
+      clientName: j.firmClient.client?.name ?? "",
+      state: j.state,
+      internalDue: j.internalDueOn ? formatDate(j.internalDueOn) : "—",
+      part: prepares && reviews ? "Preparer and reviewer" : prepares ? "Preparer" : "Reviewer",
+      action,
+    });
+  }
+  return rows;
 }
 
 export type ChecklistView = {
@@ -210,6 +286,8 @@ export async function loadRunReview(db: FirmDb, user: SessionUser, runId: string
 export type MistakeRow = {
   id: string;
   agent: string;
+  /** The agent's display title (the key when the agent is no longer registered). */
+  agentTitle: string;
   status: "PROPOSED" | "APPROVED" | "REJECTED";
   pattern: string;
   ruleId: string;
@@ -261,6 +339,7 @@ export async function listMistakes(db: FirmDb, user: SessionUser): Promise<{ can
     rows.push({
       id: m.id,
       agent: m.agent,
+      agentTitle: def?.title ?? m.agent,
       status: m.status,
       pattern: m.pattern,
       ruleId: proposal.id ?? "—",

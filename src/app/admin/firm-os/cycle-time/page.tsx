@@ -36,7 +36,7 @@ function Bottleneck({ g }: { g: GroupStats }) {
 
 function GroupTable({ title, label, rows }: { title: string; label: string; rows: GroupStats[] }) {
   return (
-    <section className={card}>
+    <section className={`${card} min-w-0`}>
       <h2 className={sectionTitle}>{title}</h2>
       {rows.length === 0 ? (
         <p className="text-sm text-ink-mute">No jobs reached DONE in this range.</p>
@@ -74,7 +74,7 @@ function GroupTable({ title, label, rows }: { title: string; label: string; rows
 
 function StageTable({ rows, empty }: { rows: StageStats[]; empty: boolean }) {
   return (
-    <section className={card}>
+    <section className={`${card} min-w-0`}>
       <h2 className={sectionTitle}>Time in each stage</h2>
       {empty ? (
         <p className="text-sm text-ink-mute">No jobs reached DONE in this range.</p>
@@ -152,7 +152,7 @@ export default async function CycleTimePage({ searchParams }: { searchParams: Pr
         <button className={`px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold ${focusRing}`}>Apply</button>
       </form>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {stats.map((s) => (
           <div key={s.label} className={card}>
             <p className={sectionTitle}>{s.label}</p>

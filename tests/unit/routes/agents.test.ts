@@ -25,6 +25,8 @@ const { default: AgentPage } = await import("@/app/agents/[agent]/page");
 const { default: ReviewPage } = await import("@/app/agents/[agent]/runs/[id]/page");
 const { default: MistakesPage } = await import("@/app/agents/mistakes/page");
 const { default: AdminMistakesPage } = await import("@/app/admin/firm-os/mistakes/page");
+const { decisionConsequence } = await import("@/app/agents/mistakes/MistakeDecision");
+const { approveConsequence } = await import("@/app/agents/[agent]/runs/[id]/ReviewPanels");
 
 const as = (u: Session["user"] | null) => (auth as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(u ? { user: u, expires: "2099-01-01" } : null);
 const review = async (id: string) => renderHtml(await ReviewPage({ params: Promise.resolve({ agent: "echo", id }) }));
@@ -63,20 +65,81 @@ describe("signed out / no access", () => {
 });
 
 describe("/agents", () => {
-  it("layout: nav with the visible agents; staff see 'My runs' and no mistake log", async () => {
+  it("layout: nav with the visible agents; staff see 'My agent runs' and no mistake log", async () => {
     as(user("priya"));
     const html = await renderHtml(await Layout({ children: null }));
     expect(html).toContain('aria-label="Agents"');
-    expect(html).toContain("My runs");
+    expect(html).toContain(">My agent runs<");
     expect(html).toContain('href="/agents/echo"');
     expect(html).not.toContain("Mistake log");
     as(user("partner"));
-    expect(await renderHtml(await Layout({ children: null }))).toContain("Mistake log");
+    const partner = await renderHtml(await Layout({ children: null }));
+    expect(partner).toContain("Mistake log");
+    expect(partner).toContain(">Agent runs<");
+  });
+
+  it("nav label, page title and back links to /agents use the same words", async () => {
+    as(user("priya"));
+    expect(await renderHtml(await RunsPage())).toContain(">My agent runs</h1>");
+    const agentPage = await renderHtml(await AgentPage({ params: Promise.resolve({ agent: "echo" }) }));
+    expect(agentPage).toMatch(/href="\/agents"[^>]*>.*My agent runs<\/a>/);
+    expect(agentPage).toContain(">Echo (framework test)</h1>");
+    as(user("meera"));
+    expect(await renderHtml(await RunsPage())).toContain(">Agent runs</h1>");
+    expect(await renderHtml(await MistakesPage())).toMatch(/href="\/agents"[^>]*>.*Agent runs<\/a>/);
   });
 
   it("empty run list", async () => {
     as(user("priya"));
     expect(await renderHtml(await RunsPage())).toContain("No agent runs yet");
+  });
+
+  it("Waiting for you: the assignee finds a new job and its Run agent entry point on /agents", async () => {
+    as(user("priya"));
+    const html = await renderHtml(await RunsPage());
+    expect(html).toContain("Waiting for you");
+    expect(html).toContain("Echo register");
+    expect(html).toContain("ACME01");
+    expect(html).toContain("Acme Pvt Ltd");
+    expect(html).toContain(">Preparer<");
+    expect(html).toContain("Run agent");
+    expect(html).toContain('aria-label="Run agent on Echo register for ACME01"');
+    // The table's scroll box is `relative`, so its sr-only cells cannot escape and widen the page on a phone.
+    expect(html).toContain('class="relative overflow-x-auto');
+    // The reviewer has nothing to do until the pack is submitted; outsiders and partners not on the job see nothing.
+    for (const who of ["ravi", "outsider", "partner"] as const) {
+      as(user(who));
+      expect(await renderHtml(await RunsPage())).toContain("Nothing waiting for you");
+    }
+  });
+
+  it("Waiting for you follows the job: preparer submits, then the reviewer reviews, then it leaves both queues", async () => {
+    await startAgentRun(user("priya"), "echo", "job-1", state.world.deps);
+    as(user("priya"));
+    let html = await renderHtml(await RunsPage());
+    expect(html).toContain('href="/agents/echo/runs/run-1"');
+    expect(html).toContain(">Open pack to submit<");
+    expect(html).not.toContain('aria-label="Run agent on'); // AGENT_DONE: no run button, re-run needs a note on the review screen
+
+    await submitForReview(user("priya"), "run-1", state.world.deps);
+    expect(await renderHtml(await RunsPage())).toContain("Nothing waiting for you");
+    as(user("ravi"));
+    html = await renderHtml(await RunsPage());
+    expect(html).toContain(">Review pack<");
+    expect(html).toContain(">Reviewer<");
+
+    await approvePack(user("ravi"), "run-1", null, state.world.deps);
+    expect(await renderHtml(await RunsPage())).toContain("Nothing waiting for you");
+  });
+
+  it("Waiting for you says when no agent exists for the job's service yet", async () => {
+    vi.stubEnv("FIRM_OS_ECHO_AGENT", "");
+    // Books now has a production agent; TDS still has none.
+    state.world = echoWorld({ service: "TDS" });
+    as(user("priya"));
+    const html = await renderHtml(await RunsPage());
+    expect(html).toContain("No agent for TDS yet");
+    expect(html).not.toContain('aria-label="Run agent on');
   });
 
   it("staff see only their runs; partners see all", async () => {
@@ -90,7 +153,7 @@ describe("/agents", () => {
     as(user("partner"));
     const html = await renderHtml(await RunsPage());
     expect(html).toContain("Agent runs");
-    expect(html).toContain("AGENT DONE");
+    expect(html).toContain(">AGENT_DONE<"); // the exact state name, not "AGENT DONE"
     expect(html).toContain("05 Nov 2026");
     expect(html).toContain("IST");
   });
@@ -102,7 +165,13 @@ describe("/agents", () => {
     expect(html).toContain("Run agent");
     expect(html).toContain("ASSIGNED");
     as(user("ravi"));
-    expect(await renderHtml(await AgentPage({ params: Promise.resolve({ agent: "echo" }) }))).toContain("Nothing to run");
+    const ravi = await renderHtml(await AgentPage({ params: Promise.resolve({ agent: "echo" }) }));
+    expect(ravi).toContain("Nothing to run");
+    expect(ravi).toContain("Books jobs assigned to you appear here when they are ASSIGNED or IN_PREP.");
+    state.world = echoWorld({ jobState: "APPROVED" });
+    as(user("meera")); // a manager's list is every runnable job of the service, not only theirs
+    expect(await renderHtml(await AgentPage({ params: Promise.resolve({ agent: "echo" }) }))).toContain("Books jobs appear here when they are ASSIGNED or IN_PREP.");
+    state.world = echoWorld();
     await expect(AgentPage({ params: Promise.resolve({ agent: "no-such-agent" }) })).rejects.toBeInstanceOf(NotFoundSignal);
     vi.stubEnv("FIRM_OS_ECHO_AGENT", "");
     await expect(AgentPage({ params: Promise.resolve({ agent: "echo" }) })).rejects.toBeInstanceOf(NotFoundSignal);
@@ -137,6 +206,27 @@ describe("/agents/[agent]/runs/[id] review screen", () => {
     expect(html).toContain("1 block");
     expect(html).toContain("Check by hand"); // the LLM rule had no recording
     expect(html).not.toMatch(PORTAL_OR_SEND);
+    // Approve pack asks first: the first click shows what approval does, the second sends it.
+    expect(html).not.toContain("Confirm approval");
+    expect(approveConsequence(1)).toBe(
+      "Approving moves the job to APPROVED. It copies the file to Final as a new version (nothing is overwritten). A person then files it on the portal; Firm OS never files anything.",
+    );
+    expect(approveConsequence(0)).toContain("no files to copy");
+    // The bar keeps its own place at the end of the page (sticky; in flow on a phone), so nothing is hidden under it.
+    expect(html).toMatch(/class="sticky max-sm:static bottom-0[^"]*"[^>]*aria-label="Review actions"/);
+    expect(html).not.toMatch(/class="fixed[^"]*"[^>]*aria-label="Review actions"/);
+
+    // A reviewer who is not a partner cannot approve over block findings, and the bar says why.
+    as(user("ravi"));
+    const ravi = await review("run-1");
+    expect(ravi).not.toContain("Approve pack");
+    expect(ravi).toContain("Request changes");
+    expect(ravi).toContain("1 block finding: only a partner can approve over it.");
+    // The preparer, waiting on review, is told what happens next rather than "No action".
+    as(user("priya"));
+    const priya = await review("run-1");
+    expect(priya).toContain("Submitted for review. The reviewer approves the pack or requests changes.");
+    expect(priya).not.toContain("Request changes");
   });
 
   it("superseded run is read-only; approved run says a person files it; comments show names", async () => {
@@ -159,6 +249,7 @@ describe("/agents/[agent]/runs/[id] review screen", () => {
     expect(done).toContain("Filing and close");
     expect(done).toContain("Filed by you on the portal — record the acknowledgement here.");
     expect(done).toMatch(/<button[^>]*>Mark filed<\/button>/);
+    expect(done).toContain("Mark filed records the filing against your name and moves the job on to closing; it cannot be undone from this screen.");
     expect(done).not.toMatch(PORTAL_OR_SEND);
     expect(old).not.toContain("Mark filed"); // superseded run: read-only
   });
@@ -230,11 +321,22 @@ describe("mistake log pages", () => {
     expect(html).toContain("v1.0.0 → v1.1.0");
     expect(html).toContain("echo.amount-over");
     expect(html).toContain("Approve rule");
+    expect(html).not.toContain("Confirm approval"); // the first click only asks; the second decides
+    expect(decisionConsequence("approve", "1.1.0")).toBe("Adds the rule to SOP pack v1.1.0; every run after this uses it.");
+    expect(decisionConsequence("reject", null)).toContain("not added");
     expect(html).toContain("Ravi Kumar");
+    expect(html).toContain("Echo (framework test) · Big invoices"); // the agent's title, not its key
+    expect(html).toContain('href="/agents/echo/runs/run-1"');
+    expect(html).toContain("View the run");
     as(user("admin"));
     const admin = await renderHtml(await AdminMistakesPage());
     expect(admin).toContain("Missed the big invoice");
     expect(admin).not.toContain("Approve rule");
     expect(admin).toContain("Only a partner or manager can approve or reject.");
+    // The admin copy uses the admin area's header, like /admin/firm-os/models and cycle-time.
+    expect(admin).toContain("Admin · Firm OS");
+    expect(admin).toContain('href="/admin"');
+    expect(admin).toContain("← Admin");
+    expect(admin).not.toContain(">Agent runs<");
   });
 });

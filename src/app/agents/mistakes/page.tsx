@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { canDecideMistakes, canSeeAllRuns } from "@/lib/agents/access";
+import { canSeeAllRuns, canSeeMistakeLog } from "@/lib/agents/access";
+import { runsListLabel } from "../parts";
 import { loadMistakesPage } from "./load";
 import { MistakesView } from "./MistakesView";
 
@@ -11,7 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function AgentMistakesPage() {
   const session = await auth();
   if (!session?.user) redirect("/");
-  if (!canDecideMistakes(session.user) && !canSeeAllRuns(session.user)) redirect("/agents");
+  if (!canSeeMistakeLog(session.user)) redirect("/agents");
   const { data, names } = await loadMistakesPage(session.user);
-  return <MistakesView data={data} names={names} backHref={{ href: "/agents", label: "Runs" }} />;
+  return <MistakesView data={data} names={names} back={{ href: "/agents", label: runsListLabel(canSeeAllRuns(session.user)) }} />;
 }

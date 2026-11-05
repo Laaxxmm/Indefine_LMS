@@ -2,11 +2,27 @@
 // the runs table. Colours follow src/components/ui.ts (emerald / amber / rose -50 fills with
 // -800 text, AA on white) and the brand theme; nothing here introduces a second palette.
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import type { JobTaskState } from "@prisma/client";
 import type { RunRow } from "@/lib/agents/views";
 
 /** Visible keyboard focus (the Firm OS models page's ring). */
 export const focusRing = "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2";
+
+/**
+ * Title of /agents, used verbatim by its nav link and by every back link to it, so the three
+ * always agree (managers, partners and admins see every run; staff see their own).
+ */
+export const runsListLabel = (seesAll: boolean) => (seesAll ? "Agent runs" : "My agent runs");
+
+/** Back link to the parent page (the LMS detail-page pattern: arrow + the parent's label, top left). */
+export function BackLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <Link href={href} className={`inline-flex items-center gap-1.5 text-sm font-semibold text-ink-mute hover:text-ink transition mb-4 rounded ${focusRing}`}>
+      <ArrowLeft className="w-4 h-4" aria-hidden="true" /> {children}
+    </Link>
+  );
+}
 
 // ink-mute, not the family's ink-faint: ink-faint on white is ~2:1, below the AA the spec requires.
 export const eyebrow = "text-[10.5px] font-extrabold tracking-[0.14em] text-ink-mute uppercase";
@@ -14,7 +30,9 @@ export const pageTitle = "font-display font-extrabold text-3xl tracking-[-0.03em
 
 /** Section title: ui.ts h2 with ink-mute instead of ink-faint (AA contrast on white). */
 export const sectionTitle = "text-[10.5px] font-extrabold tracking-[0.12em] text-ink-mute uppercase mb-3";
-export const tableWrap = "overflow-x-auto rounded-2xl bg-card border border-border shadow-lift";
+// `relative` keeps sr-only cells (position: absolute) inside the scroll box; without it they
+// escape to the page and widen it (756px on a 390px phone, a sideways-scrolling page).
+export const tableWrap = "relative overflow-x-auto rounded-2xl bg-card border border-border shadow-lift";
 export const thead = "text-[11px] uppercase tracking-wide text-ink-mute text-left";
 export const th = "px-4 py-3 font-bold";
 export const td = "px-4 py-3";
@@ -34,11 +52,11 @@ const STATE_TONE: Record<JobTaskState, string> = {
   DONE: "border-ink-soft bg-ink text-white",
 };
 
-/** JobTask state, shown by its state-machine name. */
+/** JobTask state, shown by its exact state-machine name (IN_PREP, AGENT_DONE, …), as DESIGN asks. */
 export function StateChip({ state }: { state: JobTaskState }) {
   return (
     <span className={`${chip} ${STATE_TONE[state]}`} title={`Job state: ${state}`}>
-      {state.replace(/_/g, " ")}
+      {state}
     </span>
   );
 }
