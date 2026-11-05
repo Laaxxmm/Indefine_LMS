@@ -361,6 +361,64 @@ describe("independent formula audit: blocked credit notes, negative outward tax,
     expect(analyse(extract({ sales: [sale()] })).outward.carryForward).toEqual(zeroTax());
   });
 
+  describe("reverse-charge credit notes above the reverse-charge bills (audit round 2: the excess was dropped silently)", () => {
+    // Fixture 30 working: RCM bill 20,000 (CGST 1,800 + SGST 1,800), RCM credit note 50,000 (CGST 4,500 + SGST 4,500).
+    const legal = { ledger: "Legal Fees", blockedCategory: "none" as const, rcmService: "legal" as const, evidence: null, note: "" };
+    const bill = (taxable: number) => purchase({ number: "KD/91", gstin: null, reverseCharge: true, ledger: "Legal Fees", lines: [line(taxable)] });
+    const note = (taxable: number) => purchase({ number: "KD/CN/12", gstin: null, reverseCharge: true, docType: "CRN", ledger: "Legal Fees", lines: [line(taxable)] });
+    const raw = purchase({ number: "SS/RAW", lines: [line(R(100000))] }); // CGST 9,000 + SGST 9,000
+    it("3.1(d) and 4(A)(3) are entered as nil for the negative head; the excess is carried, not dropped (cash unchanged)", () => {
+      const x = extract({ sales: [sale({ lines: [line(R(200000))] })], purchases: [bill(R(20000)), raw, note(R(50000))], gstr2b: [twin(raw)], ledgers: [legal] });
+      const a = analyse(x);
+      expect(a.rcm.tax).toEqual(T(0, R(-2700), R(-2700)));
+      expect(a.rcm.carryForward).toEqual(T(0, R(2700), R(2700)));
+      expect(a.itc.a3).toEqual(zeroTax());
+      expect(a.itc.a3CarryForward).toEqual(T(0, R(2700), R(2700)));
+      expect(a.setoff.rcm).toEqual(zeroTax()); // no reverse-charge cash on a negative head (as before)
+      expect(computeFigures(x)).toMatchObject({
+        rcmTaxablePaise: R(-30000),
+        rcmTaxPaise: R(-5400),
+        rcmCarryForwardPaise: R(5400),
+        itcRcmCarryForwardPaise: R(5400),
+        itcAvailablePaise: R(18000),
+        itcNetPaise: R(18000),
+        cashTaxPaise: R(18000),
+      });
+      const rows = sheetsOf(x)("3.1 Outward");
+      expect(rows.find((r) => String(r.nature).startsWith("(d)"))).toMatchObject({ igst: 0, cgst: 0, sgst: 0 }); // as entered (old: −2,700 / −2,700)
+      expect(rows.find((r) => String(r.nature).startsWith("Memo: reverse-charge"))).toMatchObject({ cgst: 2700, sgst: 2700 });
+      expect(sheetsOf(x)("4 ITC").find((r) => String(r.details).startsWith("Memo: reverse-charge"))).toMatchObject({ cgst: 2700, sgst: 2700 });
+      expect(sheetsOf(x)("Notes").find((r) => r.topic === "Reverse charge carried forward")?.note).toMatch(/3\.1\(d\) excess CGST ₹2,700\.00, SGST ₹2,700\.00; Table 4\(A\)\(3\) excess CGST ₹2,700\.00, SGST ₹2,700\.00.*KD\/CN\/12/);
+    });
+    it("boundary: a note equal to the bill leaves nil and nothing to carry; one rupee more carries ₹0.09 per head (9% of ₹1)", () => {
+      const eq = analyse(extract({ purchases: [bill(R(20000)), note(R(20000))], ledgers: [legal] }));
+      expect(eq.rcm.carryForward).toEqual(zeroTax());
+      expect(eq.itc.a3CarryForward).toEqual(zeroTax());
+      expect(sheetsOf(extract({ purchases: [bill(R(20000)), note(R(20000))], ledgers: [legal] }))("Notes").map((r) => r.topic)).not.toContain("Reverse charge carried forward");
+      const over = analyse(extract({ purchases: [bill(R(20000)), note(R(20001))], ledgers: [legal] }));
+      expect(over.rcm.carryForward).toEqual(T(0, 9, 9));
+      expect(over.itc.a3CarryForward).toEqual(T(0, 9, 9));
+    });
+    it("only the negative head is carried: an IGST bill and a CGST/SGST note", () => {
+      const igstBill = purchase({ number: "KD/92", gstin: null, reverseCharge: true, ledger: "Legal Fees", supplierState: "27", lines: [line(R(20000), 1800, true)] }); // IGST 3,600
+      const a = analyse(extract({ purchases: [igstBill, note(R(10000))], ledgers: [legal] })); // CGST −900 / SGST −900
+      expect(a.rcm.tax).toEqual(T(R(3600), R(-900), R(-900)));
+      expect(a.rcm.carryForward).toEqual(T(0, R(900), R(900)));
+      expect(a.itc.a3).toEqual(T(R(3600), 0, 0));
+      expect(a.setoff.rcm).toEqual(T(R(3600), 0, 0));
+    });
+    it("a held-back RCM bill: the credit note's 4(A)(3) excess is carried even though 3.1(d) stays positive", () => {
+      // Abstained ledger "Labour" bill 10,000 (CGST 900 / SGST 900) held back; Legal note 5,000 (CGST −450 / SGST −450).
+      const labour = { ledger: "Labour", blockedCategory: "none" as const, rcmService: "insufficient_evidence" as const, evidence: null, note: "" };
+      const held = purchase({ number: "LB/1", gstin: null, reverseCharge: true, ledger: "Labour", lines: [line(R(10000))] });
+      const a = analyse(extract({ purchases: [held, note(R(5000))], ledgers: [legal, labour] }));
+      expect(a.rcm.tax).toEqual(T(0, R(450), R(450)));
+      expect(a.rcm.carryForward).toEqual(zeroTax());
+      expect(a.itc.heldBack).toEqual(T(0, R(900), R(900)));
+      expect(a.itc.a3CarryForward).toEqual(T(0, R(450), R(450))); // 450 − 900 = −450 per head (was dropped)
+    });
+  });
+
   it("RCM from an unregistered supplier: IGST when the register's supplier state differs; client state when the column is absent; GSTIN state wins", () => {
     const legal = (over: Parameters<typeof purchase>[0] = {}) => purchase({ number: "L1", gstin: null, ledger: "Legal Fees", lines: [lineTax(R(50000), {}, { rateBps: 0 })], ...over });
     const ledgers = [{ ledger: "Legal Fees", blockedCategory: "none" as const, rcmService: "legal" as const, evidence: null, note: "" }];

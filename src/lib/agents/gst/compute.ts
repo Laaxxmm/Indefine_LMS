@@ -24,6 +24,13 @@
 // - A head whose outward tax is negative (credit notes above invoices) is nil in the liability
 //   set off; the excess is carried forward to a later period's output tax (rule
 //   gst.negative-outward-tax, warn; memo row under Table 3.1). It is never ITC.
+// - Reverse charge the same way: a head whose reverse-charge credit notes exceed this period's
+//   reverse-charge bills is entered as nil in 3.1(d) (and paid as nil in cash), and the 4(A)(3)
+//   head it would make negative is nil too. Neither excess is dropped silently: rcm.carryForward
+//   (3.1(d)) and itc.a3CarryForward (4(A)(3)) carry them, rule gst.negative-rcm (warn) lists the
+//   amounts and the credit notes, and Tables 3.1 / 4 and the Notes sheet show memo rows. The
+//   liability excess is carried forward to reduce a later period's reverse-charge liability of
+//   the same head, together with the matching 4(A)(3) credit — partner to verify.
 // - B2CL: unregistered recipient, inter-state, invoice value > GST_CONFIG.b2clThresholdPaise.
 //   Notes to unregistered persons are netted into B2CS (CDNUR is not produced in v1.0.0).
 // - Time-barred credit notes (owner-approved 2026-11-05): a credit note dated after the s.34(2)
@@ -146,7 +153,8 @@ export type Analysis = {
   gstr1: { b2b: SalesA[]; b2cl: SalesA[]; b2cs: B2csRow[]; cdnr: SalesA[]; hsn: HsnRow[]; docs: DocsRow[] };
   /** `tax` is signed; `carryForward` = the negative part of each head (credit notes above invoices), not set off this period. */
   outward: { taxable: number; tax: TaxSplit; nilExempt: number; carryForward: TaxSplit };
-  rcm: { taxable: number; tax: TaxSplit };
+  /** `tax` is signed; `carryForward` = the negative part of each head (reverse-charge credit notes above the bills), entered as nil in 3.1(d). */
+  rcm: { taxable: number; tax: TaxSplit; carryForward: TaxSplit };
   recon: ReconRow[];
   itc: {
     a3: TaxSplit;
@@ -163,6 +171,8 @@ export type Analysis = {
     notBooked: TaxSplit;
     /** Credit notes on s.17(5) blocked purchases above this period's blocked ITC: kept out of 4(A) (never availed). */
     blockedNoteExcess: TaxSplit;
+    /** The negative part of each 4(A)(3) head (reverse-charge credit notes above this period's reverse-charge ITC): entered as nil, carried forward. */
+    a3CarryForward: TaxSplit;
     rule37Rows: Rule37Row[];
   };
   liability: TaxSplit;
@@ -489,7 +499,11 @@ export function analyse(x: GstExtract): Analysis {
   const excessFromA5 = minTax(blockedNoteExcess, neg0(blockedClaimed));
   const excessFromA3 = subTax(blockedNoteExcess, excessFromA5);
   // 4(A)(3): RCM tax paid is credit, except on a bill whose ledger the model abstained on (held back).
-  const a3 = pos0(addTax(subTax(rcmTax, sumTax(rcmDocs.map((p) => p.heldBack))), excessFromA3));
+  // A head the reverse-charge credit notes make negative is entered as nil; the excess is kept
+  // (a3CarryForward, rule gst.negative-rcm), not dropped.
+  const a3Raw = addTax(subTax(rcmTax, sumTax(rcmDocs.map((p) => p.heldBack))), excessFromA3);
+  const a3 = pos0(a3Raw);
+  const a3CarryForward = neg0(a3Raw);
   const claimedA5 = addTax(claimedAll, excessFromA5);
   const a5 = pos0(claimedA5);
   const r37 = rule37Rows(x.payables, pi.end);
@@ -533,9 +547,10 @@ export function analyse(x: GstExtract): Analysis {
       docs: docsRows(x.sales),
     },
     outward: { taxable, tax: outTax, nilExempt, carryForward: outwardCarryForward },
-    rcm: { taxable: rcmTaxable, tax: rcmTax },
+    // 3.1(d) is entered (and the reverse-charge cash paid, setOff above) at pos0(rcmTax); the negative part is carried forward.
+    rcm: { taxable: rcmTaxable, tax: rcmTax, carryForward: neg0(rcmTax) },
     recon,
-    itc: { a3, a5, available, b1, b2, rule37, net, heldBack, deferred, unavailable2b, notBooked, blockedNoteExcess, rule37Rows: r37 },
+    itc: { a3, a5, available, b1, b2, rule37, net, heldBack, deferred, unavailable2b, notBooked, blockedNoteExcess, a3CarryForward, rule37Rows: r37 },
     liability,
     openingCredit,
     setoff: so,
@@ -575,6 +590,8 @@ export function computeFigures(x: GstExtract): Record<string, number> {
     nilExemptPaise: a.outward.nilExempt,
     rcmTaxablePaise: a.rcm.taxable,
     rcmTaxPaise: taxTotal(a.rcm.tax),
+    rcmCarryForwardPaise: taxTotal(a.rcm.carryForward),
+    itcRcmCarryForwardPaise: taxTotal(a.itc.a3CarryForward),
     itcAvailablePaise: taxTotal(a.itc.available),
     itcBlockedPaise: taxTotal(a.itc.b1),
     itcOtherReversalPaise: taxTotal(a.itc.b2),

@@ -1,12 +1,12 @@
 // GST Prep inputs. The runner's input schema is synchronous, so it only sorts the gathered files
-// into roles (by file name) and checks the required ones are there; parsing â€” including the
-// asynchronous XLSX reader â€” happens in extract via loadGstData().
+// into roles (by file name) and checks the required ones are there; parsing — including the
+// asynchronous XLSX reader — happens in extract via loadGstData().
 //
 // File-name contract for the job's ClientDocs folder (case-insensitive, first match wins):
 //   profile.json / gst-profile.json   client GSTIN, AATO, filing frequency, expected filing date  (required)
 //   *prev*.json / *previous*.json      previous period return figures                             (optional)
 //   *payable*.csv|xlsx                 open payables ageing as at period end (rule 37)             (optional)
-//   *einvoice* / *e-invoice* / *irn*   e-invoice register (doc no â†’ IRN), csv|xlsx|json            (optional)
+//   *einvoice* / *e-invoice* / *irn*   e-invoice register (doc no → IRN), csv|xlsx|json            (optional)
 //   *eway* / *e-way*                   e-way bill data: received, not used by v1.0.0               (optional)
 //   *2b*.json|xlsx                     GSTR-2B as downloaded by staff                              (required)
 //   *sales* / *outward*  .csv|xlsx     sales register (Tally or Zoho export)                       (required)

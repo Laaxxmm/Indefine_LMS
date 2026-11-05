@@ -1,0 +1,144 @@
+{
+  "description": "Trap (Cr / Dr markers on transaction amounts). The bank statement has ONE signed Amount column written the bank's way - Cr = money in (+), Dr = money out (-) - and a Balance column with the same Cr / Dr wording; the bank ledger (books) has Debit / Credit columns whose cells repeat the marker (\"1,50,000.00 Dr\" in Debit, \"1,00,000.00 Cr\" in Credit), which must not flip the sign a second time. Same month as trap-bank-statement-cr-dr-balances, so the same figures: statement deposits 1,50,000 Cr + 2,40,000 Cr = 3,90,000; withdrawals 1,00,000 Dr + 54,000 Dr + 1,26,000 Dr + 12,000 Dr + 1,250 Dr = 2,93,250. No opening row: opening per bank = first balance 2,00,000.00 Cr (+2,00,000) less that row's amount 1,50,000.00 Cr (+1,50,000) = +50,000; balance per bank 50,000 + 3,90,000 - 2,93,250 = 1,46,750 (= last row 1,46,750.00 Cr; 14675000 paise); on 10-10 the account is overdrawn (80,000.00 Dr). Ledger: opening 50,000.00 Dr in the Debit column = +50,000; receipts 1,50,000 + 2,40,000 = 3,90,000; payments 1,00,000 + 54,000 + 1,26,000 + 12,000 + 4,250 + 1,250 = 2,97,500; balance per books 1,42,500 (14250000 paise) = TB HDFC Bank. 7 matched (UTR001, 451, NEFT9902 by reference; salary, Gamma UTR002, electricity, bank charges by amount and date - same as the base fixture), cheque 452 (4,250) unpresented: 1,42,500 + 4,250 = 1,46,750 -> difference 0, no flag. Old code (ledger reading everywhere): statement amounts flipped (1,50,000.00 Cr read as -1,50,000) so the derived opening was 2,00,000 + 1,50,000 = 3,50,000, and ledger Credit cells marked Cr read as receipts (+), giving balance per books 7,37,500 and a false BRS difference of 3,50,000 - 50,000 = 3,00,000 (block). TB, TDS, GST, cash and prior TB as the clean month (TB debits = credits = 13,96,600).",
+  "category": "trap",
+  "flags": [],
+  "figures": {
+    "tbDebitPaise": 139660000,
+    "tbCreditPaise": 139660000,
+    "tbDifferencePaise": 0,
+    "tbLedgerCount": 17,
+    "priorTbDebitPaise": 20710000,
+    "priorTbCreditPaise": 20710000,
+    "priorTbDifferencePaise": 0,
+    "bankMatchedCount": 7,
+    "bankUnmatchedStatementCount": 0,
+    "bankUnmatchedLedgerCount": 1,
+    "balancePerBankPaise": 14675000,
+    "balancePerBooksPaise": 14250000,
+    "bankReconDifferencePaise": 0,
+    "tdsDeductedPaise": 2000000,
+    "tdsDepositedPaise": 2000000,
+    "tdsShortfallPaise": 0,
+    "gstAbsDifferencePaise": 0,
+    "suspensePaise": 0,
+    "cashBalancePaise": 1825000,
+    "suggestionCount": 0,
+    "classificationQuestionCount": 0,
+    "parseIssueCount": 0,
+    "bankAmountOnlyCount": 0
+  },
+  "deliverables": [
+    {
+      "name": "Month-end pack",
+      "sheets": [
+        {
+          "name": "Summary",
+          "columns": [
+            "Item",
+            "Amount",
+            "Count",
+            "Note"
+          ]
+        },
+        {
+          "name": "Trial balance",
+          "columns": [
+            "Ledger",
+            "Group",
+            "Debit",
+            "Credit"
+          ]
+        },
+        {
+          "name": "Bank reconciliation",
+          "columns": [
+            "Particulars",
+            "Amount",
+            "Note"
+          ]
+        },
+        {
+          "name": "Bank matching",
+          "columns": [
+            "Side",
+            "Line",
+            "Date",
+            "Reference",
+            "Narration",
+            "Amount",
+            "Status",
+            "Matched with",
+            "Note"
+          ]
+        },
+        {
+          "name": "Expense suggestions",
+          "columns": [
+            "Line",
+            "Date",
+            "Narration",
+            "Amount",
+            "Suggested ledger",
+            "Confidence",
+            "Reason",
+            "Status"
+          ]
+        },
+        {
+          "name": "Suspense and unreconciled",
+          "columns": [
+            "Item",
+            "Source",
+            "Date",
+            "Amount",
+            "Age (days)",
+            "Note"
+          ]
+        },
+        {
+          "name": "Accrual-prepaid reminders",
+          "columns": [
+            "Type",
+            "Item",
+            "Ledger",
+            "Amount",
+            "Note"
+          ]
+        },
+        {
+          "name": "TDS check",
+          "columns": [
+            "Section",
+            "Month",
+            "Deducted",
+            "Deposited",
+            "Shortfall",
+            "Due date",
+            "Last deposit",
+            "Status"
+          ]
+        },
+        {
+          "name": "GST tie-out",
+          "columns": [
+            "Head",
+            "Per books",
+            "Per return",
+            "Difference",
+            "Status"
+          ]
+        },
+        {
+          "name": "Checklist",
+          "columns": [
+            "Rule",
+            "Severity",
+            "Status",
+            "Message",
+            "Evidence"
+          ]
+        }
+      ]
+    }
+  ]
+}

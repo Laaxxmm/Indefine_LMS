@@ -243,6 +243,70 @@ describe("interest and fee", () => {
     expect(advanceTaxInterest({ ...base, assessedTaxPaise: rs(5_00_000), exempt: true }, R)).toMatchObject({ liable: false, i234B: 0, i234C: 0 });
     expect(advanceTaxInterest({ ...base, assessedTaxPaise: rs(9_999) }, R).liable).toBe(false);
   });
+  describe("s.234B(2): self-assessment tax paid before filing reduces the shortfall from the next month", () => {
+    // Audit counterexample: assessed tax 1,92,400, no advance tax, self-assessment tax 1,92,400 paid
+    // 1 May 2026, return 1 Aug 2026. Old code: 1,92,400 x 1% x 5 (Apr-Aug) = 9,620. s.234B(2)(i):
+    // interest up to the date of payment — April and (part of) May — on 1,92,400 = 3,848; (ii)
+    // thereafter on the shortfall left, nil.
+    const sa = (assessed: number, payments: { date: string; amount: number }[], filingDate: string) =>
+      advanceTaxInterest({ ...base, assessedTaxPaise: rs(assessed), payments: payments.map((p) => ({ date: p.date, amountPaise: rs(p.amount) })), filingDate }, R);
+    it("audit counterexample: 3,848, not 9,620", () => {
+      const r = sa(1_92_400, [{ date: "2026-05-01", amount: 1_92_400 }], "2026-08-01");
+      expect(r.i234B).toBe(rs(3_848));
+      expect(r.stages234B).toEqual([
+        { from: "2026-04-01", to: "2026-05-01", paidPaise: 0, shortfallPaise: rs(1_92_400), months: 2, interestPaise: rs(3_848) },
+        { from: "2026-06-01", to: "2026-08-01", paidPaise: rs(1_92_400), shortfallPaise: 0, months: 3, interestPaise: 0 },
+      ]);
+    });
+    it("no tax paid after 31 March: one stage, the s.234B(1) amount (unchanged)", () => {
+      const r = sa(1_92_400, [], "2026-08-01");
+      expect(r.i234B).toBe(rs(9_620));
+      expect(r.stages234B).toEqual([{ from: "2026-04-01", to: "2026-08-01", paidPaise: 0, shortfallPaise: rs(1_92_400), months: 5, interestPaise: rs(9_620) }]);
+    });
+    it("boundary: paid on the 1st of a month vs the last day — the month of payment always carries the old shortfall", () => {
+      expect(sa(1_92_400, [{ date: "2026-04-30", amount: 1_92_400 }], "2026-08-01").i234B).toBe(rs(1_924)); // April only
+      expect(sa(1_92_400, [{ date: "2026-05-01", amount: 1_92_400 }], "2026-08-01").i234B).toBe(rs(3_848)); // April + May
+      expect(sa(1_92_400, [{ date: "2026-05-31", amount: 1_92_400 }], "2026-08-01").i234B).toBe(rs(3_848)); // April + May
+      expect(sa(1_92_400, [{ date: "2026-06-01", amount: 1_92_400 }], "2026-08-01").i234B).toBe(rs(5_772)); // April - June
+    });
+    it("multiple payments: fixture trap-234b-self-assessment-staging (2,40,500 short; 1,92,400 on 25 Apr, 48,100 on 25 Jul; filed 28 Jul)", () => {
+      // April on 2,40,500 = 2,405; May-July on 48,100 = 1,443 → 3,848 (old: 2,40,500 x 4 = 9,620).
+      const r = sa(2_50_500, [{ date: "2025-06-15", amount: 10_000 }, { date: "2026-07-25", amount: 48_100 }, { date: "2026-04-25", amount: 1_92_400 }], "2026-07-28");
+      expect(r.i234B).toBe(rs(3_848));
+      expect(r.stages234B.map((s) => [s.from, s.to, s.paidPaise, s.shortfallPaise, s.months])).toEqual([
+        ["2026-04-01", "2026-04-25", rs(10_000), rs(2_40_500), 1],
+        ["2026-05-01", "2026-07-28", rs(2_02_400), rs(48_100), 3],
+      ]);
+    });
+    it("three stages; two payments in one month take effect together the next month", () => {
+      // Apr-May on 1,92,400 = 3,848; Jun-Jul on 92,400 = 1,848; Aug nil → 5,696.
+      expect(sa(1_92_400, [{ date: "2026-05-10", amount: 1_00_000 }, { date: "2026-07-10", amount: 92_400 }], "2026-08-01").i234B).toBe(rs(5_696));
+      // 1,00,000 on 5 May + 92,400 on 20 May: Apr + May on 1,92,400, June onwards nil → 3,848.
+      const r = sa(1_92_400, [{ date: "2026-05-05", amount: 1_00_000 }, { date: "2026-05-20", amount: 92_400 }], "2026-08-01");
+      expect(r.i234B).toBe(rs(3_848));
+      expect(r.stages234B.map((s) => s.to)).toEqual(["2026-05-20", "2026-08-01"]);
+    });
+    it("self-assessment tax covering the whole shortfall (or more): nothing after the month of payment", () => {
+      expect(sa(1_92_400, [{ date: "2026-05-15", amount: 2_50_000 }], "2026-09-30").i234B).toBe(rs(3_848));
+      // with advance tax: 1,00,000 short of 1,50,000 assessed (50,000 < 90%); 1,00,000 paid 10 Jun; filed 25 Jul
+      // → Apr-Jun 1,00,000 x 3 = 3,000; July nil (old: 1,00,000 x 4 = 4,000).
+      expect(sa(1_50_000, [{ date: "2026-03-15", amount: 50_000 }, { date: "2026-06-10", amount: 1_00_000 }], "2026-07-25").i234B).toBe(rs(3_000));
+    });
+    it("each stage's amount is rounded down to ₹100 separately", () => {
+      // 1,92,450 short; 1,00,000 on 15 May; filed 31 Jul: Apr-May 1,92,400 x 2 = 3,848; Jun-Jul 92,450 → 92,400 x 2 = 1,848.
+      expect(sa(1_92_450, [{ date: "2026-05-15", amount: 1_00_000 }], "2026-07-31").i234B).toBe(rs(5_696));
+    });
+    it("tax paid on or after the filing date, or in the filing month, does not reduce 234B", () => {
+      expect(sa(1_92_400, [{ date: "2026-08-02", amount: 1_92_400 }], "2026-08-01").i234B).toBe(rs(9_620));
+      expect(sa(1_92_400, [{ date: "2026-08-01", amount: 1_92_400 }], "2026-08-01").i234B).toBe(rs(9_620));
+      expect(sa(1_92_400, [{ date: "2026-08-01", amount: 1_92_400 }], "2026-08-01").stages234B).toHaveLength(1);
+    });
+    it("tax paid after 31 March does not count towards the 90% test, and 234B stays nil when advance tax met it", () => {
+      // 85,000 by 31 March < 90,000 (90% of 1,00,000); 15,000 on 1 Apr → April on 15,000 = 150, then nil.
+      expect(sa(1_00_000, [{ date: "2026-03-31", amount: 85_000 }, { date: "2026-04-01", amount: 15_000 }], "2026-07-25").i234B).toBe(rs(150));
+      expect(sa(1_00_000, [{ date: "2026-03-31", amount: 90_000 }, { date: "2026-04-01", amount: 10_000 }], "2026-07-25")).toMatchObject({ i234B: 0, stages234B: [] });
+    });
+  });
   it("234A and 234F", () => {
     expect(interest234A(rs(1_00_050), "2026-07-31", "2026-09-15", R, "2026-08-01")).toBe(rs(2_000));
     expect(interest234A(rs(1_00_050), "2026-07-31", "2026-07-31", R, "2026-08-01")).toBe(0);

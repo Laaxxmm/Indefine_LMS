@@ -291,6 +291,28 @@ function negativeOutward(ci: GstCheckInput): CheckOutcome {
   return hits.length ? listFail(hits, head) : fail(head, heads.map((h) => `${h.toUpperCase()} ${plainRupees(-a.outward.tax[h])}`).join(", "), ci.extracted.sources.sales.file);
 }
 
+/**
+ * Reverse-charge credit notes above this period's reverse-charge bills for a tax head: Table 3.1(d)
+ * and 4(A)(3) cannot be negative, so the head is entered as nil in both and the excess is carried
+ * forward (compute.ts rcm.carryForward / itc.a3CarryForward; memo rows in Tables 3.1 and 4 and a
+ * Notes row) — never dropped silently. Partner to verify the carry-forward treatment.
+ */
+function negativeRcm(ci: GstCheckInput): CheckOutcome {
+  const a = A(ci);
+  const cf = a.rcm.carryForward;
+  const itcCf = a.itc.a3CarryForward;
+  const heads = HEADS.filter((h) => cf[h] > 0 || itcCf[h] > 0);
+  if (!heads.length) return ok();
+  const notes = a.purchases.filter((p) => p.rcm && p.docType === "CRN" && heads.some((h) => p.rcmTax[h] < 0));
+  const noteTax = (p: (typeof notes)[number]): TaxSplit => ({ igst: -p.rcmTax.igst, cgst: -p.rcmTax.cgst, sgst: -p.rcmTax.sgst, cess: -p.rcmTax.cess });
+  const hits = notes.map((p) => ({ quote: `${p.number}: ${taxText(noteTax(p))}`, loc: p.loc, text: `reverse-charge credit note ${p.number} from ${p.supplier || "supplier"} on "${p.key}" (${taxText(noteTax(p))})` }));
+  const amounts = (t: TaxSplit) => heads.filter((h) => t[h] > 0).map((h) => `${h.toUpperCase()} ${inr(t[h])}`).join(", ") || "nil";
+  const head =
+    `Reverse-charge credit notes exceed this period's reverse-charge bills: Table 3.1(d) excess ${amounts(cf)} and Table 4(A)(3) excess ${amounts(itcCf)} are entered as nil (not paid, not claimed) and carried forward` +
+    ` to reduce the same head's reverse-charge liability and its 4(A)(3) credit in a later return (partner to verify)`;
+  return hits.length ? listFail(hits, head) : fail(head, heads.map((h) => `${h.toUpperCase()} ${plainRupees(cf[h] || itcCf[h])}`).join(", "), ci.extracted.sources.purchases.file);
+}
+
 function rule37(ci: GstCheckInput, rule: RuleDefinition): CheckOutcome {
   const days = num(rule.params?.days, GST_CONFIG.rule37Days);
   const a = A(ci);
@@ -424,6 +446,7 @@ export const gstRegistry = createRuleRegistry<GstCheckInput>({
   "gst.pos-tax-type": posTaxType,
   "gst.rule37-180-days": rule37,
   "gst.negative-outward-tax": negativeOutward,
+  "gst.negative-rcm": negativeRcm,
   "gst.late-fee-interest": lateness,
   "gst.period-lock": periodLock,
   "gst.einvoice-irn": einvoice,
@@ -470,6 +493,15 @@ export const GST_CHECKLIST: ChecklistPack = {
     { id: "gst.invoice-gaps", title: "Gaps in document series", severity: "warn", kind: "deterministic", check: "gst.invoice-gaps", evidence: "missing numbers and series", params: { maxListed: 20 } },
     { id: "gst.credit-note-linked", title: "Credit/debit notes linked to original invoices", severity: "warn", kind: "deterministic", check: "gst.credit-note-linked", evidence: "note number and row" },
     { id: "gst.negative-outward-tax", title: "Output tax not negative for any head (credit notes above invoices carried forward)", severity: "warn", kind: "deterministic", check: "gst.negative-outward-tax", evidence: "tax head, amount carried forward and the credit notes" },
+    {
+      id: "gst.negative-rcm",
+      title: "Reverse-charge tax not negative for any head (reverse-charge credit notes above the bills carried forward)",
+      severity: "warn",
+      kind: "deterministic",
+      check: "gst.negative-rcm",
+      evidence: "tax head, amounts carried forward (3.1(d) and 4(A)(3)) and the credit notes",
+      params: { verify: "Table 3.1(d) / 4(A)(3) cannot take a negative figure: the head is entered as nil and the excess carried forward to a later period's reverse-charge liability and 4(A)(3) credit of the same head. Partner to verify the treatment (carry forward vs. adjusting the earlier return's figures)." },
+    },
     { id: "gst.late-fee-interest", title: "Late fee and interest exposure", severity: "warn", kind: "deterministic", check: "gst.late-fee-interest", evidence: "expected filing date or previous filing date", params: { verify: [verify("interestRateBps"), verify("lateFee.caps")] } },
     { id: "gst.b2cl-threshold", title: "B2C large (inter-state above threshold) invoices", severity: "info", kind: "deterministic", check: "gst.b2cl-threshold", evidence: "invoice number and row", params: { verify: verify("b2clThresholdPaise") } },
     {

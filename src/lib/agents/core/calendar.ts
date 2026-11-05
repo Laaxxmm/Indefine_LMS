@@ -2,7 +2,7 @@
 // SopPack.calendar; defaults in calendar-defaults.ts); this engine is generic and knows no form.
 //
 //   statutory due = anchor (end of the period, or the AGM date) + offset, per rule / variant
-//   internal due  = statutory âˆ’ bufferDays (SopPack.bufferDays, default 3), then moved back to the
+//   internal due  = statutory − bufferDays (SopPack.bufferDays, default 3), then moved back to the
 //                   previous working day while it falls on a weekend or a holiday (hook)
 //
 // The statutory date itself is never moved: law, not the firm's calendar, decides it; the result
@@ -29,7 +29,7 @@ const DueSchema = z.discriminatedUnion("anchor", [
     .strict(),
   z
     .object({
-      /** `days` from the AGM. countAgmDay: the AGM day is day 1 (AGM 30 Sep + 30 days â†’ 29 Oct). */
+      /** `days` from the AGM. countAgmDay: the AGM day is day 1 (AGM 30 Sep + 30 days → 29 Oct). */
       anchor: z.literal("agm"),
       days: z.number().int().min(1).max(366),
       countAgmDay: z.boolean(),
@@ -127,7 +127,7 @@ export type ParsedPeriod = {
   monthOfQuarter: 1 | 2 | 3 | null;
 };
 
-/** "2026-27" â†’ 2026, or null. */
+/** "2026-27" → 2026, or null. */
 export function parseFy(fy: string): number | null {
   const m = /^(\d{4})-(\d{2})$/.exec(fy);
   if (!m) return null;
@@ -135,7 +135,7 @@ export function parseFy(fy: string): number | null {
   return (start + 1) % 100 === Number(m[2]) ? start : null;
 }
 
-/** "2026-10" | "Q1".."Q4" | "H1" | "H2" | "Annual", within the FY (Aprilâ€“March). */
+/** "2026-10" | "Q1".."Q4" | "H1" | "H2" | "Annual", within the FY (April–March). */
 export function parsePeriod(fy: string, period: string): ParsedPeriod | null {
   const start = parseFy(fy);
   if (start === null) return null;
@@ -198,7 +198,7 @@ function periodEndDue(p: ParsedPeriod, due: Extract<DueSpec, { anchor: "period-e
 export type WorkingDayOptions = {
   /** Holiday hook: true when the IST day "YYYY-MM-DD" is a firm/bank holiday. */
   isHoliday?: (dayKey: string) => boolean;
-  /** Weekday numbers treated as non-working (0 = Sunday â€¦ 6 = Saturday). Default Saturday + Sunday. */
+  /** Weekday numbers treated as non-working (0 = Sunday … 6 = Saturday). Default Saturday + Sunday. */
   weekendDays?: readonly number[];
 };
 

@@ -14,8 +14,14 @@ describe("probeCsvAmount (input-sensitivity probe)", () => {
     expect(out).not.toBe(files);
   });
   it("negative / Cr amounts move away from zero; totals, opening and zero rows are skipped", () => {
+    // A Dr / Cr marker is kept and the magnitude raised: "500.00 Cr" → "501.00 Cr" (−501 in the books reading, as before).
     const out = probeCsvAmount([f("tb.csv", "Ledger,Closing Balance\nGrand Total,100\nOpening Balance,5\nZero,0\nLoan,500.00 Cr")], [TB_PROBE]);
-    expect(text(out, "tb.csv")).toContain("Loan,-501.00");
+    expect(text(out, "tb.csv")).toContain("Loan,501.00 Cr");
+    expect(text(probeCsvAmount([f("tb.csv", "Ledger,Closing Balance\nLoan,-500.00")], [TB_PROBE]), "tb.csv")).toContain("Loan,-501.00");
+  });
+  it("a bank statement's signed Amount keeps its marker (statement Cr = money in): +₹1 in magnitude, never a sign flip", () => {
+    const out = probeCsvAmount([f("bank-statement.csv", 'Date,Narration,Amount\n03/10/2026,NEFT IN,"1,50,000.00 Cr"\n05/10/2026,CHQ,"500.00 Dr"')], [BOOKS_PROBE_TARGETS[1]]);
+    expect(text(out, "bank-statement.csv")).toBe('Date,Narration,Amount\n03/10/2026,NEFT IN,150001.00 Cr\n05/10/2026,CHQ,500.00 Dr\n');
   });
   it("honours column-map.json for unusual TB headers", () => {
     const files = [f("column-map.json", JSON.stringify({ tb: { ledger: "Account Head", debit: "Dr Total", credit: "Cr Total" } })), f("trial-balance.csv", "Account Head,Dr Total,Cr Total\nCash,10.00,")];

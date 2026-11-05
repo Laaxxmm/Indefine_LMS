@@ -1,0 +1,43 @@
+{
+  "profile": {
+    "name": "Fixture Salaried",
+    "status": "individual",
+    "dateOfBirth": "1985-06-15",
+    "residentialStatus": "resident",
+    "regimeClaimed": "new",
+    "businessKind": "none",
+    "plannedFilingDate": "2026-07-28",
+    "itrFormPlanned": "ITR-1",
+    "notes": "Salaried employee of Fixture Tech Pvt Ltd, Bengaluru. No foreign assets, accounts or income."
+  },
+  "salary": {
+    "gross": "24,00,000",
+    "professionalTax": "2,400",
+    "basicDa": "12,00,000"
+  },
+  "otherSources": [
+    {
+      "id": "B1",
+      "nature": "deposit-interest",
+      "payer": "Canara Bank Fixed Deposit",
+      "amount": "5,00,000"
+    }
+  ],
+  "tdsInBooks": [
+    {
+      "tan": "BLRF00001A",
+      "deductor": "Fixture Tech Pvt Ltd",
+      "amount": "1,44,100"
+    },
+    {
+      "tan": "BLRC00003D",
+      "deductor": "Canara Bank",
+      "amount": "50,000"
+    }
+  ],
+  "advanceTax": [
+    { "date": "2025-06-15", "amount": "10,000" },
+    { "date": "2026-04-25", "amount": "1,92,400" },
+    { "date": "2026-07-25", "amount": "48,100" }
+  ]
+}

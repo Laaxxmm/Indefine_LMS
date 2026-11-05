@@ -56,7 +56,11 @@ export const auditRegistry = createRuleRegistry<AuditCheckInput>(
     "audit.lead-tie": (ci) => {
       const l = A(ci).leads;
       if (!l) return na("Trial balance not readable");
-      if (!l.unmapped.length && l.tie.cyLeadsPaise === l.tie.cyTbNetPaise && (l.tie.pyLeadsPaise === null || l.tie.pyLeadsPaise === l.tie.pyTbNetPaise)) return pass();
+      if (!l.unmapped.length && l.tie.cyLeadsPaise === l.tie.cyTbNetPaise && (l.tie.pyLeadsPaise === null || l.tie.pyLeadsPaise === l.tie.pyTbNetPaise)) {
+        // Groups mapped through a noted pattern (Zoho account types): the partner confirms the grouping.
+        if (!l.groupingNotes.length) return pass();
+        return { status: "pass", message: `Lead schedules tie. Groupings to confirm: ${l.groupingNotes.map((n) => `"${n.group}" → ${n.wp} (${n.verify})`).join("; ")}` };
+      }
       const u = l.unmapped[0];
       const file = u?.year === "PY" ? ci.extracted.priorTb!.file : ci.extracted.tb!.file;
       return {

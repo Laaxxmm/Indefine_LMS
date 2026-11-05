@@ -14,6 +14,17 @@ export type ProbeTarget = { matches: (name: string) => boolean; mapKey: string; 
 const csvCell = (s: string) => (/[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
 const paiseText = (p: number) => `${p < 0 ? "-" : ""}${Math.floor(Math.abs(p) / 100)}.${String(Math.abs(p) % 100).padStart(2, "0")}`;
 
+/**
+ * The cell raised by `deltaPaise` away from zero. A Dr / Cr marker is kept and the magnitude raised
+ * ("1,000.00 Cr" → "1001.00 Cr"): the marker's meaning differs by file (a bank statement's Cr is
+ * money in, a ledger's Cr a decrease), so rewriting it as a sign could flip the direction.
+ */
+function bumped(text: string, paise: number, deltaPaise: number): string {
+  const m = /\s*(dr|cr)\.?$/i.exec(text.trim()) ?? /^(dr|cr)\.?\s*/i.exec(text.trim());
+  if (m) return `${paiseText(Math.abs(paise) + deltaPaise)} ${m[1]}`;
+  return paiseText(paise + (paise > 0 ? deltaPaise : -deltaPaise));
+}
+
 function columnMap(files: InputFile[]): Record<string, Record<string, string>> {
   const f = files.find((x) => /^column[-_ ]?map\.json$/i.test(x.name));
   if (!f) return {};
@@ -41,7 +52,7 @@ export function probeCsvAmount(files: InputFile[], targets: ProbeTarget[], delta
           const p = parseAmountPaise(rows[r][c] ?? "");
           if (!p.ok || p.paise === 0 || /total|opening|closing/i.test(rows[r].join(" "))) continue;
           const next = rows.map((row) => [...row]);
-          next[r][c] = paiseText(p.paise + (p.paise > 0 ? deltaPaise : -deltaPaise));
+          next[r][c] = bumped(rows[r][c] ?? "", p.paise, deltaPaise);
           const bytes = Buffer.from(next.map((row) => row.map(csvCell).join(",")).join("\n") + "\n", "utf8");
           return files.map((x) => (x === f ? { ...x, bytes } : x));
         }

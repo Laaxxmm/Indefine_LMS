@@ -174,7 +174,8 @@ export const GST_MODEL_TASKS: readonly GstModelTask[] = Object.freeze([
     systemPrompt: LEDGER_SYSTEM,
     system: LEDGER_SYSTEM,
     difficulty: "judgement",
-    ruleIds: ["gst.blocked-credit", "gst.rcm-liability", "gst.model-questions"],
+    // gst.negative-rcm too: a credit note is reverse charge when the books mark it or the model classifies its ledger as an RCM service.
+    ruleIds: ["gst.blocked-credit", "gst.rcm-liability", "gst.model-questions", "gst.negative-rcm"],
     builtBy: "agent",
     privacy: "anonymize-then-cloud",
     profile: {
