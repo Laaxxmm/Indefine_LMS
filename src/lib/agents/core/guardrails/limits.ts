@@ -79,7 +79,8 @@ export const TRUNCATION_FLAG = "input-truncated" as const;
 /** Warn row the runner adds when any call's documents were cut at the task's input limit; null when none were. */
 export function truncationResult(cuts: readonly Truncation[]): ChecklistResultItem | null {
   if (!cuts.length) return null;
-  const parts = cuts.slice(0, 5).map((c) => `${c.task}: ${c.linesNotSent} line${c.linesNotSent === 1 ? "" : "s"} from ${c.firstLocation} onwards`);
+  // Plain words for the reviewer: where the cut starts, not the task identifier (that stays in the run record).
+  const parts = cuts.slice(0, 5).map((c) => `${c.linesNotSent} line${c.linesNotSent === 1 ? "" : "s"} from ${c.firstLocation} onwards`);
   return {
     ruleId: TRUNCATION_RULE_ID,
     title: "Documents longer than the per-call limit for the AI",

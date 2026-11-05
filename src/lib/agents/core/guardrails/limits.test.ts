@@ -44,7 +44,7 @@ describe("the per-task limits table", () => {
     const row = truncationResult([{ task: "gst.classify-ledgers@2", linesNotSent: 40, firstLocation: "purchase-register.csv row 812" }])!;
     expect(row).toMatchObject({ ruleId: TRUNCATION_RULE_ID, severity: "warn", status: "fail", flags: ["input-truncated"], evidence: { location: "purchase-register.csv row 812" } });
     expect(row.message).toBe(
-      "Some documents were longer than the AI may read in one call, so part of them was not sent (gst.classify-ledgers@2: 40 lines from purchase-register.csv row 812 onwards). Those items have no AI answer: check them by hand, or split the job into smaller periods and run it again.",
+      "Some documents were longer than the AI may read in one call, so part of them was not sent (40 lines from purchase-register.csv row 812 onwards). Those items have no AI answer: check them by hand, or split the job into smaller periods and run it again.",
     );
   });
 });
@@ -68,7 +68,8 @@ describe("the session applies the limits on every scoped call", () => {
     expect(sent).not.toContain("Party number 0700");
     const row = rows(w.db, "checklistResult").find((r) => r.ruleId === TRUNCATION_RULE_ID)!;
     expect(row).toMatchObject({ severity: "warn", status: "fail", evidence: { flags: ["input-truncated"] } });
-    expect(row.message).toMatch(/^Some documents were longer than the AI may read in one call, so part of them was not sent \(echo\.check:echo\.related-party@2: \d+ lines from register\.csv row \d+ onwards\)/);
+    expect(row.message).toMatch(/^Some documents were longer than the AI may read in one call, so part of them was not sent \(\d+ lines from register\.csv row \d+ onwards\)/);
+    expect(row.message).not.toMatch(/echo\.check|@\d/); // plain words: no task identifiers
     expect(rows(w.db, "checklistResult").find((r) => r.ruleId === "echo.related-party")).toMatchObject({ status: "na", evidence: { flags: ["llm-evidence-missing"] } });
     expect(meta(w)).toMatchObject({ truncatedCalls: 1, tasks: { [taskLabel(ECHO_RELATED_PARTY_SPEC)]: { checked: 1, ungrounded: 1 } } });
   });
