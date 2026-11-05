@@ -4,10 +4,12 @@
 // (privacy anonymize-then-cloud: names masked through the dictionary, identifiers by the
 // anonymizer, unmasked before validation). If the model is unavailable (no key, outage, budget)
 // or its wording fails the checks, the draft is the template text and says so in its notes.
+// ADR-009: every part is screened for prompt injection first (a hit keeps the template wording /
+// the English, with a staff note) and the session fences what it sends as untrusted data.
 // No I/O of its own: the router is injected (default: the env-configured ModelRouter).
 import type { FirmService } from "@prisma/client";
 import { BudgetExceededError, NoProviderAvailableError, type DictionaryEntry, type ModelRequest, type RouterResult } from "@/lib/ai/router";
-import { INSUFFICIENT_EVIDENCE, createGuardrailSession, emptyGuardrailStats, type GuardrailStats } from "@/lib/agents/core/guardrails";
+import { INSUFFICIENT_EVIDENCE, createGuardrailSession, emptyGuardrailStats, patternLabel, screenForModel, type GuardrailStats, type WithheldItem } from "@/lib/agents/core/guardrails";
 import { factsIn, type Fact } from "./facts";
 import type { PolishOutput, TranslateOutput } from "./grounding";
 import { COMMS_SCOPES, polishTaskName, translateTaskName } from "./tasks";
@@ -46,13 +48,22 @@ export function fallbackNote(step: "wording" | "translation", e: unknown): strin
   return `${what}: the drafting model failed (${e instanceof Error ? e.name : "error"}).`;
 }
 
+const lowerCap = (a: number | undefined, b: number | undefined) => (a === undefined ? b : b === undefined ? a : Math.min(a, b));
+
+/** A staff-facing note when the injection screen kept a draft away from the model (ADR-009). */
+export function withheldPartNote(step: "wording" | "translation", w: Pick<WithheldItem, "location" | "patterns">): string {
+  const what = step === "wording" ? "Template wording" : "No translation";
+  return `${what}: the ${w.location} ${patternLabel(w.patterns[0])}, so the message was not sent to the AI${step === "translation" ? " and the English is used on its own" : ""}. Check that text before sending.`;
+}
+
 /** One guardrail session per draft: the department's comms scope, the router bound to the draft's runId. */
 export function commsSession(department: FirmService, deps: DraftModelDeps) {
   const owner = COMMS_SCOPES[department];
   return createGuardrailSession({
     agent: owner,
     scope: owner.scope!,
-    route: <T>(req: Omit<ModelRequest<T>, "runId">) => deps.router.run<T>({ ...req, runId: deps.runId, maxCostInr: req.maxCostInr ?? deps.maxCostInr }),
+    // The session always sends the agent run budget (ADR-009); the per-draft cap is stricter, so the lower one applies.
+    route: <T>(req: Omit<ModelRequest<T>, "runId">) => deps.router.run<T>({ ...req, runId: deps.runId, maxCostInr: lowerCap(req.maxCostInr, deps.maxCostInr) }),
     unwrap: <T>(res: RouterResult<T>): T => {
       if (res.status === "ok") return res.output;
       throw new CommsModelRejected(res.status === "queued" ? res.reason : res.issues.join("; "));
@@ -65,6 +76,11 @@ export type CommsSession = ReturnType<typeof commsSession>;
 export async function polishTemplate(t: Template, session: CommsSession, department: FirmService, dictionary: DictionaryEntry[]): Promise<Polished> {
   const template: Polished = { subject: t.subject, paragraphs: [...t.paragraphs], source: "template", note: null };
   const facts = factsIn([t.subject, ...t.paragraphs].join("\n"), t.facts).map((f) => f.value);
+  // ADR-009: staff-written text (query topic and answer, document names) is inside the template;
+  // a part that reads like an instruction to the AI is never sent — the template wording stays.
+  const parts = [{ where: "subject", text: t.subject }, ...t.paragraphs.map((text, i) => ({ where: `paragraph ${i + 1}`, text }))];
+  const screened = screenForModel(session, polishTaskName(department), parts, { text: (p) => p.text, location: (p) => `message ${p.where}` });
+  if (screened.withheld.length) return { ...template, note: withheldPartNote("wording", screened.withheld[0]) };
   session.setInput({ template: t });
   try {
     const out = await session.model<PolishOutput>({
@@ -126,6 +142,9 @@ export async function translateMessage(
   dictionary: DictionaryEntry[],
 ): Promise<{ parts: MessageParts | null; note: string | null }> {
   const { segments, fromSegments } = toSegments(parts);
+  // ADR-009: a segment that reads like an instruction to the AI is never sent — the English stays on its own.
+  const screened = screenForModel(session, translateTaskName(department), segments.map((text, i) => ({ i, text })), { text: (s) => s.text, location: (s) => `message segment ${s.i + 1}` });
+  if (screened.withheld.length) return { parts: null, note: withheldPartNote("translation", screened.withheld[0]) };
   session.setInput({ language, segments, facts });
   try {
     const out = await session.model<TranslateOutput>({

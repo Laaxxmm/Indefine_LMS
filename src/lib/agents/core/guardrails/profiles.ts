@@ -23,7 +23,7 @@ export type TaskProfile = {
   internal: boolean;
   department: string;
   task: string;
-  kind: "extraction" | "checklist rule";
+  kind: "extraction" | "checklist rule" | "drafting (wording only)";
   documents: string;
   inputFence: string;
   injectionScreen: string;
@@ -162,17 +162,21 @@ function profileOf(agent: ProfileAgent, t: AnyTaskSpec): TaskProfile {
     internal: agent.internal === true,
     department: DEPARTMENT_LABELS[scope.department],
     task: taskLabel(t),
-    kind: check ? "checklist rule" : "extraction",
+    kind: check ? "checklist rule" : agent.key === "comms" ? "drafting (wording only)" : "extraction",
     documents: t.profile?.documents ?? "not declared",
     inputFence: "yes — every message is wrapped in the untrusted-documents fence by the guardrail session; FIRM_PREAMBLE says fenced text is data, never instructions",
-    injectionScreen: check
-      ? `framework: every line of the rule's documents is screened before the call (${SCREEN_PATTERNS}); a hit is withheld and raises the block flag possible-prompt-injection with its location`
-      : `agent: each item is screened before the prompt is built (screenForModel) and a withheld item becomes a reviewer question; framework: every message line is screened again as a backstop (${SCREEN_PATTERNS}); any hit raises the block flag possible-prompt-injection`,
+    injectionScreen: t.profile?.screen
+      ? `${t.profile.screen} (${SCREEN_PATTERNS})`
+      : check
+        ? `framework: every line of the rule's documents is screened before the call (${SCREEN_PATTERNS}); a hit is withheld and raises the block flag possible-prompt-injection with its location`
+        : `agent: each item is screened before the prompt is built (screenForModel) and a withheld item becomes a reviewer question; framework: every message line is screened again as a backstop (${SCREEN_PATTERNS}); any hit raises the block flag possible-prompt-injection`,
     output: `${schemaSummary(schema)}${open.length ? ` — OPEN TEXT: ${open.join("; ")}` : ""}${t.schemaPerCall ? " (closed enums built per call from the client's own data)" : ""}`,
     validators: validators.join("; "),
-    grounding: check
-      ? "verdict quote checked against the screened documents; a quote of withheld text is rejected (na + llm-evidence-missing)"
-      : `every { quote, location } must occur in the screened text sent${grounded.length ? `; grounded numbers (${grounded.map((g) => g.path).join(", ")}) must appear in their quote` : ""}; ungrounded items are dropped and counted`,
+    grounding:
+      t.profile?.grounding ??
+      (check
+        ? "verdict quote checked against the screened documents; a quote of withheld text is rejected (na + llm-evidence-missing)"
+        : `every { quote, location } must occur in the screened text sent${grounded.length ? `; grounded numbers (${grounded.map((g) => g.path).join(", ")}) must appear in their quote` : ""}; ungrounded items are dropped and counted`),
     agreement,
     limits: limitsText(t.name),
     privacy: t.privacy ?? "per call (not declared)",
@@ -246,10 +250,10 @@ export function guardrailProfilesMarkdown(agents: Readonly<Record<string, Profil
     "- **Drift** (LLM09): per agent per day schema-fail, escalation, abstain, ungrounded, disagreement and reviewer-override rates, plus each task's hallucination rate against its budget, on /admin/firm-os/models.",
     "",
   );
-  let agent = "";
+  let section = "";
   for (const p of ps) {
-    if (p.agent !== agent) {
-      agent = p.agent;
+    if (`${p.agent}|${p.agentTitle}` !== section) {
+      section = `${p.agent}|${p.agentTitle}`;
       lines.push(`## ${p.agentTitle} (\`${p.agent}\`) — ${p.department}`, "");
     }
     lines.push(

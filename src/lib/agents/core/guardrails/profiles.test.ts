@@ -7,25 +7,29 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
+import { COMMS_PROMPT_OWNERS } from "@/lib/agents/comms/tasks";
 import { AGENTS } from "@/lib/agents/registry";
+
+/** Every scoped task owner: the task agents and the comms drafter (as verify-prompts locks them). */
+const OWNERS = { ...AGENTS, ...COMMS_PROMPT_OWNERS };
 import { PROFILES_DOC, guardrailProfilesMarkdown, schemaSummary, taskProfiles } from "./profiles";
 import { abstainable, evidence, groundedNumber, note } from "./schema";
 import { taskLabel } from "./scope";
 
 describe("the generated document", () => {
   it(`${PROFILES_DOC} is current (run npx tsx scripts/ai-guardrail-profiles.ts otherwise)`, () => {
-    expect(readFileSync(PROFILES_DOC, "utf8").replace(/\r\n/g, "\n")).toBe(guardrailProfilesMarkdown(AGENTS));
+    expect(readFileSync(PROFILES_DOC, "utf8").replace(/\r\n/g, "\n")).toBe(guardrailProfilesMarkdown(OWNERS));
   });
-  it("lists every declared task once, plus the onboarding extractor", () => {
-    const labels = Object.values(AGENTS).flatMap((a) => (a.scope?.tasks ?? []).map(taskLabel));
-    const ps = taskProfiles(AGENTS);
+  it("lists every declared task once (task agents and comms), plus the onboarding extractor", () => {
+    const labels = Object.values(OWNERS).flatMap((a) => (a.scope?.tasks ?? []).map(taskLabel));
+    const ps = taskProfiles(OWNERS);
     expect(ps.map((p) => p.task)).toEqual([...labels, "onboarding.extract-spec"]);
-    const doc = guardrailProfilesMarkdown(AGENTS);
+    const doc = guardrailProfilesMarkdown(OWNERS);
     for (const l of labels) expect(doc).toContain(`### \`${l}\``);
     expect(doc).not.toMatch(/\d{4}-\d{2}-\d{2}T|\b\d{2} [A-Z][a-z]{2} \d{4}\b|\bIST\b/); // no dates: --check is stable
   });
   it("every production task declares its documents, privacy and limits, and meets the LLM01/02/05/06/09/10 controls", () => {
-    for (const p of taskProfiles(AGENTS).filter((x) => !x.internal && x.agent !== "onboarding")) {
+    for (const p of taskProfiles(OWNERS).filter((x) => !x.internal && x.agent !== "onboarding")) {
       expect([p.task, p.documents]).not.toEqual([p.task, "not declared"]);
       expect([p.task, p.privacy]).toEqual([p.task, "anonymize-then-cloud"]);
       expect([p.task, p.limits]).toEqual([p.task, expect.stringMatching(/^input ≤ /)]);
@@ -34,7 +38,7 @@ describe("the generated document", () => {
     }
   });
   it("the onboarding extractor is shown honestly: fenced and screened, open text by design, no quote grounding", () => {
-    const o = taskProfiles(AGENTS).find((p) => p.agent === "onboarding")!;
+    const o = taskProfiles(OWNERS).find((p) => p.agent === "onboarding")!;
     expect(o.owasp).toEqual(["LLM01", "LLM02", "LLM03", "LLM06", "LLM07", "LLM10"]);
     expect(o.grounding).toMatch(/^none/);
     expect(o.output).toMatch(/open text fields by design$/);

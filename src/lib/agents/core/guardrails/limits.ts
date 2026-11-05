@@ -32,6 +32,14 @@ export const TASK_LIMITS: Readonly<Record<string, TaskLimits>> = Object.freeze({
   "books.classify-expenses": LIST,
   "audit.check:audit.related-party-disclosure": { ...CHECK, maxInputTokens: 40_000 },
   "onboarding.extract-spec": { maxInputTokens: 1_000, maxOutputTokens: 1_024, hallucinationBudget: 0.05 },
+  // Comms (Phase 10): one polish and one translate task per department. A polish answer is ≤ 7
+  // strings of ≤ 300 characters; a translation ≤ 40 segments of ≤ 300 characters in an Indic script.
+  ...Object.fromEntries(
+    ["gst", "roc", "incometax", "tds", "books", "audit", "engagement"].flatMap((d) => [
+      [`comms.polish.${d}`, { maxInputTokens: 4_000, maxOutputTokens: 1_536, hallucinationBudget: 0.02 }],
+      [`comms.translate.${d}`, { maxInputTokens: 6_000, maxOutputTokens: 4_096, hallucinationBudget: 0.02 }],
+    ]),
+  ),
 });
 
 /** A task without an entry (tests require one for every declared task). */

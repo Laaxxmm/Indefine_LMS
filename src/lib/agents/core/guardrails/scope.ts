@@ -58,6 +58,10 @@ export interface ModelTaskSpec<T = unknown, I = unknown, K extends string = stri
     documents: string;
     /** Call-level validators passed as `contradictions` (the task's own `validate` is listed automatically). */
     validators?: string;
+    /** How the task's documents are screened, when it differs from the default description. */
+    screen?: string;
+    /** How the output is grounded, when it carries no { quote, location } (e.g. fact-copy validators). */
+    grounding?: string;
   };
 }
 

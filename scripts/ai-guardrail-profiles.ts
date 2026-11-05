@@ -9,6 +9,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { PROFILES_DOC, guardrailProfilesMarkdown } from "@/lib/agents/core/guardrails/profiles";
+import { COMMS_PROMPT_OWNERS } from "@/lib/agents/comms/tasks";
 import { AGENTS } from "@/lib/agents/registry";
 
 function main(argv: string[]): number {
@@ -22,7 +23,8 @@ function main(argv: string[]): number {
       return 2;
     }
   }
-  const doc = guardrailProfilesMarkdown(AGENTS);
+  // Every scoped task: the task agents and the comms drafter (the same owners verify-prompts locks).
+  const doc = guardrailProfilesMarkdown({ ...AGENTS, ...COMMS_PROMPT_OWNERS });
   if (check) {
     const current = existsSync(out) ? readFileSync(out, "utf8").replace(/\r\n/g, "\n") : null;
     if (current !== doc) {

@@ -19,7 +19,11 @@ import { DEFAULT_FIXTURES_ROOT, loadApprovedMistakes, loadFixtures, packWithMist
 import { createRecordedRouter } from "../recorded-router";
 import { runAgent } from "../runner";
 import { echoAgent, ECHO_RELATED_PARTY_TASK } from "@/lib/agents/echo";
-import { composeSystemPrompt, taskLabel } from "./scope";
+import { composeSystemPrompt, taskLabel, type ScopedAgentLike } from "./scope";
+import { draftMessage, type DraftRequest } from "@/lib/agents/comms/compose";
+import { COMMS_PROMPT_OWNERS } from "@/lib/agents/comms/tasks";
+import { SAMPLES } from "../../../../../tests/fakes/comms-fixtures";
+import { scriptedRouter } from "../../../../../tests/fakes/comms-router";
 import { MODEL_SUPPLY_CHAIN } from "./supply-chain";
 
 const ROOT = join(__dirname, "..", "..", "..", "..", "..");
@@ -58,7 +62,10 @@ const hits = (files: string[], re: RegExp) => files.flatMap((f) => codeLines(rea
 
 const scoped = Object.values(AGENTS).filter((a) => a.scope);
 const production = scoped.filter((a) => !a.internal);
-const allTasks = scoped.flatMap((a) => a.scope!.tasks.map((t) => ({ agent: a, task: t })));
+const allTasks = scoped.flatMap((a) => a.scope!.tasks.map((t) => ({ agent: a as ScopedAgentLike, task: t })));
+/** The comms drafter's tasks (one scoped owner per department, locked like the agents'). */
+const commsOwners = Object.values(COMMS_PROMPT_OWNERS);
+const commsTasks = commsOwners.flatMap((a) => a.scope!.tasks.map((t) => ({ agent: a, task: t })));
 
 // ------------------------------------------------------------------ LLM05
 
@@ -175,6 +182,8 @@ describe("LLM02 / LLM07: no secret or environment value can enter a prompt", () 
       "src/lib/agents/audit/tasks.ts",
       "src/lib/agents/audit/rules.ts",
       "src/lib/agents/echo/index.ts",
+      "src/lib/agents/comms/tasks.ts",
+      "src/lib/agents/comms/drafting.ts",
     ];
     expect(hits(builders, /process\.env|secret-box|@\/lib\/prisma|@\/lib\/ai\/config|@\/lib\/env\b/)).toEqual([]);
   });
@@ -184,7 +193,7 @@ describe("LLM02 / LLM07: no secret or environment value can enter a prompt", () 
     const look = (where: string, text: string) => {
       for (const n of CANARY_ENV) if (text.includes(canary(n))) leaks.push(`${where}: ${n}`);
     };
-    for (const { agent, task } of allTasks) look(taskLabel(task), composeSystemPrompt(agent.scope!.department, task));
+    for (const { agent, task } of [...allTasks, ...commsTasks]) look(taskLabel(task), composeSystemPrompt(agent.scope!.department, task));
     for (const def of scoped) {
       const pack = packWithMistakes(def, loadApprovedMistakes(DEFAULT_FIXTURES_ROOT, def.key));
       for (const fx of loadFixtures(DEFAULT_FIXTURES_ROOT, def.key).filter((f) => !f.expected.error).slice(0, 3)) {
@@ -200,12 +209,17 @@ describe("LLM02 / LLM07: no secret or environment value can enter a prompt", () 
     });
     look("onboarding.extract-spec", JSON.stringify(calls.map((c) => c.messages)));
     expect(calls).toHaveLength(1);
+    // The comms drafter: polish and translate calls of a doc-chase draft in Kannada.
+    const comms = scriptedRouter([(_r: unknown, i: Record<string, unknown>) => ({ status: "polished", subject: i.subject, paragraphs: i.paragraphs }), { status: "insufficient_evidence", language: "kn", segments: ["x"] }]);
+    await draftMessage({ ...SAMPLES["doc-chase"], department: "GST", language: "kn", clientRequestedIds: false } as DraftRequest, { router: comms.router, runId: "comms:canary", maxCostInr: 10 });
+    expect(comms.calls).toHaveLength(2);
+    look("comms drafts", JSON.stringify(comms.calls.map((c) => [c.system, c.messages])));
     expect(leaks).toEqual([]);
   }, 120_000);
 
   it("every production task declares privacy anonymize-then-cloud (or local-only), so the anonymiser runs on every cloud call", () => {
-    const tasks = production.flatMap((a) => a.scope!.tasks.map((t) => [taskLabel(t), t.privacy ?? "(not declared)"]));
-    expect(tasks.length).toBeGreaterThanOrEqual(9);
+    const tasks = [...production, ...commsOwners].flatMap((a) => a.scope!.tasks.map((t) => [taskLabel(t), t.privacy ?? "(not declared)"]));
+    expect(tasks.length).toBeGreaterThanOrEqual(9 + 14);
     for (const [label, privacy] of tasks) expect([label, privacy]).toEqual([label, expect.stringMatching(/^(anonymize-then-cloud|local-only)$/)]);
     for (const p of ["claude", "grok"] as const) {
       const d = decideRoute({ difficulty: "sop", privacy: "anonymize-then-cloud", escalationLevel: 0, available: { claude: p === "claude", grok: p === "grok", local: false } });

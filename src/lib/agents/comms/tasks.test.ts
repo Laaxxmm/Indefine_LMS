@@ -20,12 +20,12 @@ describe("comms task specs", () => {
     }
   });
 
-  it("names are comms.<task>.<department>, version 1, with a tier hint", () => {
+  it("names are comms.<task>.<department>, version 2 (ADR-009 preamble), with a tier hint", () => {
     const names = allSpecs().map(({ s }) => `${s.name}@${s.version}`);
     expect(new Set(names).size).toBe(names.length);
     for (const { s } of allSpecs()) {
       expect(s.name).toMatch(/^comms\.(polish|translate)\.(gst|roc|incometax|tds|books|audit|engagement)$/);
-      expect(s.version).toBe(1);
+      expect(s.version).toBe(2);
       expect(s.difficulty).toBeDefined();
       expect(typeof s.validate).toBe("function");
     }

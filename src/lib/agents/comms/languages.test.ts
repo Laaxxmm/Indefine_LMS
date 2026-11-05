@@ -6,7 +6,7 @@ import { ENGLISH_DIVIDER, bilingual, draftMessage, splitBilingual, type DraftReq
 import { toSegments } from "./drafting";
 import { validateTranslation, type TranslateOutput } from "./grounding";
 import { SAMPLES } from "../../../../tests/fakes/comms-fixtures";
-import { scriptedRouter, sentText } from "../../../../tests/fakes/comms-router";
+import { scriptedRouter, sentText, unfence } from "../../../../tests/fakes/comms-router";
 
 const req = (kind: keyof typeof SAMPLES, over: Partial<DraftRequest> = {}): DraftRequest => ({ ...SAMPLES[kind], department: "GST", language: "kn", clientRequestedIds: false, ...over }) as DraftRequest;
 const deps = (router: ReturnType<typeof scriptedRouter>["router"]) => ({ router, runId: "comms:test-kn", maxCostInr: 10 });
@@ -38,11 +38,11 @@ describe("translation", () => {
 
     // Two scoped calls, both anonymised; the translation task is its own task (smart tier).
     expect(r.rows.map((x) => [x.task, x.tier, x.anonymized, x.status])).toEqual([
-      ["comms.polish.gst@1", "FAST", true, "OK"],
-      ["comms.translate.gst@1", "SMART", true, "OK"],
+      ["comms.polish.gst@2", "FAST", true, "OK"],
+      ["comms.translate.gst@2", "SMART", true, "OK"],
     ]);
     expect(sentText(r.calls)).not.toMatch(/Acme Traders|Ravi Kumar/);
-    expect(JSON.parse(r.calls[1].messages[0].content)).toEqual({
+    expect(JSON.parse(unfence(r.calls[1].messages[0].content))).toEqual({
       language: "kn",
       segments: [
         "GSTR-3B for October 2026 (⟨ORG_1⟩): status update",

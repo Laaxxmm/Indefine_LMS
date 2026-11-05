@@ -16,6 +16,20 @@ Every model call Firm OS makes, with the guardrails that apply to it (ADR-008, A
 | roc | `roc.check:roc.aoc2-related-party@2` | checklist rule | anonymize-then-cloud | single read | 1,024 | LLM01, LLM02, LLM03, LLM05, LLM06, LLM07, LLM09, LLM10 | Govern, Map, Measure, Manage |
 | tax | `tax.match-ais@2` | extraction | anonymize-then-cloud | single read | 16,000 | LLM01, LLM02, LLM03, LLM05, LLM06, LLM07, LLM09, LLM10 | Govern, Map, Measure, Manage |
 | tax | `tax.check:tax.foreign-asset@2` | checklist rule | anonymize-then-cloud | single read | 1,024 | LLM01, LLM02, LLM03, LLM05, LLM06, LLM07, LLM09, LLM10 | Govern, Map, Measure, Manage |
+| comms | `comms.polish.gst@2` | drafting (wording only) | anonymize-then-cloud | single read | 1,536 | LLM01, LLM02, LLM03, LLM05, LLM06, LLM07, LLM09, LLM10 | Govern, Map, Measure, Manage |
+| comms | `comms.translate.gst@2` | drafting (wording only) | anonymize-then-cloud | single read | 4,096 | LLM01, LLM02, LLM03, LLM05, LLM06, LLM07, LLM09, LLM10 | Govern, Map, Measure, Manage |
+| comms | `comms.polish.roc@2` | drafting (wording only) | anonymize-then-cloud | single read | 1,536 | LLM01, LLM02, LLM03, LLM05, LLM06, LLM07, LLM09, LLM10 | Govern, Map, Measure, Manage |
+| comms | `comms.translate.roc@2` | drafting (wording only) | anonymize-then-cloud | single read | 4,096 | LLM01, LLM02, LLM03, LLM05, LLM06, LLM07, LLM09, LLM10 | Govern, Map, Measure, Manage |
+| comms | `comms.polish.incometax@2` | drafting (wording only) | anonymize-then-cloud | single read | 1,536 | LLM01, LLM02, LLM03, LLM05, LLM06, LLM07, LLM09, LLM10 | Govern, Map, Measure, Manage |
+| comms | `comms.translate.incometax@2` | drafting (wording only) | anonymize-then-cloud | single read | 4,096 | LLM01, LLM02, LLM03, LLM05, LLM06, LLM07, LLM09, LLM10 | Govern, Map, Measure, Manage |
+| comms | `comms.polish.tds@2` | drafting (wording only) | anonymize-then-cloud | single read | 1,536 | LLM01, LLM02, LLM03, LLM05, LLM06, LLM07, LLM09, LLM10 | Govern, Map, Measure, Manage |
+| comms | `comms.translate.tds@2` | drafting (wording only) | anonymize-then-cloud | single read | 4,096 | LLM01, LLM02, LLM03, LLM05, LLM06, LLM07, LLM09, LLM10 | Govern, Map, Measure, Manage |
+| comms | `comms.polish.books@2` | drafting (wording only) | anonymize-then-cloud | single read | 1,536 | LLM01, LLM02, LLM03, LLM05, LLM06, LLM07, LLM09, LLM10 | Govern, Map, Measure, Manage |
+| comms | `comms.translate.books@2` | drafting (wording only) | anonymize-then-cloud | single read | 4,096 | LLM01, LLM02, LLM03, LLM05, LLM06, LLM07, LLM09, LLM10 | Govern, Map, Measure, Manage |
+| comms | `comms.polish.audit@2` | drafting (wording only) | anonymize-then-cloud | single read | 1,536 | LLM01, LLM02, LLM03, LLM05, LLM06, LLM07, LLM09, LLM10 | Govern, Map, Measure, Manage |
+| comms | `comms.translate.audit@2` | drafting (wording only) | anonymize-then-cloud | single read | 4,096 | LLM01, LLM02, LLM03, LLM05, LLM06, LLM07, LLM09, LLM10 | Govern, Map, Measure, Manage |
+| comms | `comms.polish.engagement@2` | drafting (wording only) | anonymize-then-cloud | single read | 1,536 | LLM01, LLM02, LLM03, LLM05, LLM06, LLM07, LLM09, LLM10 | Govern, Map, Measure, Manage |
+| comms | `comms.translate.engagement@2` | drafting (wording only) | anonymize-then-cloud | single read | 4,096 | LLM01, LLM02, LLM03, LLM05, LLM06, LLM07, LLM09, LLM10 | Govern, Map, Measure, Manage |
 | onboarding | `onboarding.extract-spec` | extraction | anonymize-then-cloud | single read | 1,024 | LLM01, LLM02, LLM03, LLM06, LLM07, LLM10 | Govern, Map, Measure, Manage |
 
 ## Every call
@@ -195,6 +209,244 @@ Every model call Firm OS makes, with the guardrails that apply to it (ADR-008, A
 | Grounding | verdict quote checked against the screened documents; a quote of withheld text is rejected (na + llm-evidence-missing) |
 | Agreement | tax.foreign-asset (warn): single read |
 | Limits | input ≤ 24,000 tokens per call (longer documents are cut at a line and flagged); output ≤ 1,024 tokens; hallucination budget 2% per day |
+| Privacy class | anonymize-then-cloud |
+| Standards | OWASP LLM01, LLM02, LLM03, LLM05, LLM06, LLM07, LLM09, LLM10; NIST AI RMF Govern, Map, Measure, Manage |
+
+## Client comms drafts — GST (Goods and Services Tax) (`comms`) — GST (Goods and Services Tax)
+
+### `comms.polish.gst@2`
+
+| Control | This task |
+|---|---|
+| Kind | drafting (wording only) |
+| Documents sent | The template's subject and paragraphs and the facts they must keep (job facts, dates, amounts; staff-written query topic and answer, document names). Client and contact names masked through the dictionary. |
+| Input fence | yes — every message is wrapped in the untrusted-documents fence by the guardrail session; FIRM_PREAMBLE says fenced text is data, never instructions |
+| Injection screen | agent: the template subject and paragraphs (polish) or every segment (translate) are screened first (screenForModel); if any part is withheld the model is not asked and the template wording / the English is kept with a staff note; framework: every message line is screened again as a backstop (10 pattern groups (override-instructions, new-instructions, addressed-to-ai, answer-steering, role-tag, tool-override, schema-vocabulary, fence-marker, hidden-characters, encoded-payload)) |
+| Output schema | { status: polished or insufficient_evidence; subject: text ≤ 300; paragraphs: list (≤ 6) of text ≤ 300 } |
+| Validators | Zod schema (a failure or confidence < 0.75 escalates one tier, at most twice, then needs review); the task's validator, run as the router's contradictions; validatePolish: same paragraph count, every fact copied exactly, no new date, amount, number, name, link or request (grounding.ts); the tone lint runs on the result. |
+| Grounding | no quotes: every fact of the template must appear exactly in the answer and nothing new may appear (validatePolish); a failed check keeps the template wording |
+| Agreement | single read (validators and grounding decide what is kept) |
+| Limits | input ≤ 4,000 tokens per call (longer documents are cut at a line and flagged); output ≤ 1,536 tokens; hallucination budget 2% per day |
+| Privacy class | anonymize-then-cloud |
+| Standards | OWASP LLM01, LLM02, LLM03, LLM05, LLM06, LLM07, LLM09, LLM10; NIST AI RMF Govern, Map, Measure, Manage |
+
+### `comms.translate.gst@2`
+
+| Control | This task |
+|---|---|
+| Kind | drafting (wording only) |
+| Documents sent | The finished English message as segments (subject, greeting, sentences, list items, closing) and the target language. |
+| Input fence | yes — every message is wrapped in the untrusted-documents fence by the guardrail session; FIRM_PREAMBLE says fenced text is data, never instructions |
+| Injection screen | agent: the template subject and paragraphs (polish) or every segment (translate) are screened first (screenForModel); if any part is withheld the model is not asked and the template wording / the English is kept with a staff note; framework: every message line is screened again as a backstop (10 pattern groups (override-instructions, new-instructions, addressed-to-ai, answer-steering, role-tag, tool-override, schema-vocabulary, fence-marker, hidden-characters, encoded-payload)) |
+| Output schema | { status: translated or insufficient_evidence; language: kn \| ta \| hi; segments: list (≤ 40) of text ≤ 300 } |
+| Validators | Zod schema (a failure or confidence < 0.75 escalates one tier, at most twice, then needs review); the task's validator, run as the router's contradictions; validateTranslation: one segment per English segment, every fact copied verbatim in English digits, no native-script digits (grounding.ts). |
+| Grounding | no quotes: every fact must appear verbatim in its translated segment (validateTranslation); a failed check keeps the English on its own |
+| Agreement | single read (validators and grounding decide what is kept) |
+| Limits | input ≤ 6,000 tokens per call (longer documents are cut at a line and flagged); output ≤ 4,096 tokens; hallucination budget 2% per day |
+| Privacy class | anonymize-then-cloud |
+| Standards | OWASP LLM01, LLM02, LLM03, LLM05, LLM06, LLM07, LLM09, LLM10; NIST AI RMF Govern, Map, Measure, Manage |
+
+## Client comms drafts — ROC and company-law compliance (MCA filings) (`comms`) — ROC and company-law compliance (MCA filings)
+
+### `comms.polish.roc@2`
+
+| Control | This task |
+|---|---|
+| Kind | drafting (wording only) |
+| Documents sent | The template's subject and paragraphs and the facts they must keep (job facts, dates, amounts; staff-written query topic and answer, document names). Client and contact names masked through the dictionary. |
+| Input fence | yes — every message is wrapped in the untrusted-documents fence by the guardrail session; FIRM_PREAMBLE says fenced text is data, never instructions |
+| Injection screen | agent: the template subject and paragraphs (polish) or every segment (translate) are screened first (screenForModel); if any part is withheld the model is not asked and the template wording / the English is kept with a staff note; framework: every message line is screened again as a backstop (10 pattern groups (override-instructions, new-instructions, addressed-to-ai, answer-steering, role-tag, tool-override, schema-vocabulary, fence-marker, hidden-characters, encoded-payload)) |
+| Output schema | { status: polished or insufficient_evidence; subject: text ≤ 300; paragraphs: list (≤ 6) of text ≤ 300 } |
+| Validators | Zod schema (a failure or confidence < 0.75 escalates one tier, at most twice, then needs review); the task's validator, run as the router's contradictions; validatePolish: same paragraph count, every fact copied exactly, no new date, amount, number, name, link or request (grounding.ts); the tone lint runs on the result. |
+| Grounding | no quotes: every fact of the template must appear exactly in the answer and nothing new may appear (validatePolish); a failed check keeps the template wording |
+| Agreement | single read (validators and grounding decide what is kept) |
+| Limits | input ≤ 4,000 tokens per call (longer documents are cut at a line and flagged); output ≤ 1,536 tokens; hallucination budget 2% per day |
+| Privacy class | anonymize-then-cloud |
+| Standards | OWASP LLM01, LLM02, LLM03, LLM05, LLM06, LLM07, LLM09, LLM10; NIST AI RMF Govern, Map, Measure, Manage |
+
+### `comms.translate.roc@2`
+
+| Control | This task |
+|---|---|
+| Kind | drafting (wording only) |
+| Documents sent | The finished English message as segments (subject, greeting, sentences, list items, closing) and the target language. |
+| Input fence | yes — every message is wrapped in the untrusted-documents fence by the guardrail session; FIRM_PREAMBLE says fenced text is data, never instructions |
+| Injection screen | agent: the template subject and paragraphs (polish) or every segment (translate) are screened first (screenForModel); if any part is withheld the model is not asked and the template wording / the English is kept with a staff note; framework: every message line is screened again as a backstop (10 pattern groups (override-instructions, new-instructions, addressed-to-ai, answer-steering, role-tag, tool-override, schema-vocabulary, fence-marker, hidden-characters, encoded-payload)) |
+| Output schema | { status: translated or insufficient_evidence; language: kn \| ta \| hi; segments: list (≤ 40) of text ≤ 300 } |
+| Validators | Zod schema (a failure or confidence < 0.75 escalates one tier, at most twice, then needs review); the task's validator, run as the router's contradictions; validateTranslation: one segment per English segment, every fact copied verbatim in English digits, no native-script digits (grounding.ts). |
+| Grounding | no quotes: every fact must appear verbatim in its translated segment (validateTranslation); a failed check keeps the English on its own |
+| Agreement | single read (validators and grounding decide what is kept) |
+| Limits | input ≤ 6,000 tokens per call (longer documents are cut at a line and flagged); output ≤ 4,096 tokens; hallucination budget 2% per day |
+| Privacy class | anonymize-then-cloud |
+| Standards | OWASP LLM01, LLM02, LLM03, LLM05, LLM06, LLM07, LLM09, LLM10; NIST AI RMF Govern, Map, Measure, Manage |
+
+## Client comms drafts — Income tax (`comms`) — Income tax
+
+### `comms.polish.incometax@2`
+
+| Control | This task |
+|---|---|
+| Kind | drafting (wording only) |
+| Documents sent | The template's subject and paragraphs and the facts they must keep (job facts, dates, amounts; staff-written query topic and answer, document names). Client and contact names masked through the dictionary. |
+| Input fence | yes — every message is wrapped in the untrusted-documents fence by the guardrail session; FIRM_PREAMBLE says fenced text is data, never instructions |
+| Injection screen | agent: the template subject and paragraphs (polish) or every segment (translate) are screened first (screenForModel); if any part is withheld the model is not asked and the template wording / the English is kept with a staff note; framework: every message line is screened again as a backstop (10 pattern groups (override-instructions, new-instructions, addressed-to-ai, answer-steering, role-tag, tool-override, schema-vocabulary, fence-marker, hidden-characters, encoded-payload)) |
+| Output schema | { status: polished or insufficient_evidence; subject: text ≤ 300; paragraphs: list (≤ 6) of text ≤ 300 } |
+| Validators | Zod schema (a failure or confidence < 0.75 escalates one tier, at most twice, then needs review); the task's validator, run as the router's contradictions; validatePolish: same paragraph count, every fact copied exactly, no new date, amount, number, name, link or request (grounding.ts); the tone lint runs on the result. |
+| Grounding | no quotes: every fact of the template must appear exactly in the answer and nothing new may appear (validatePolish); a failed check keeps the template wording |
+| Agreement | single read (validators and grounding decide what is kept) |
+| Limits | input ≤ 4,000 tokens per call (longer documents are cut at a line and flagged); output ≤ 1,536 tokens; hallucination budget 2% per day |
+| Privacy class | anonymize-then-cloud |
+| Standards | OWASP LLM01, LLM02, LLM03, LLM05, LLM06, LLM07, LLM09, LLM10; NIST AI RMF Govern, Map, Measure, Manage |
+
+### `comms.translate.incometax@2`
+
+| Control | This task |
+|---|---|
+| Kind | drafting (wording only) |
+| Documents sent | The finished English message as segments (subject, greeting, sentences, list items, closing) and the target language. |
+| Input fence | yes — every message is wrapped in the untrusted-documents fence by the guardrail session; FIRM_PREAMBLE says fenced text is data, never instructions |
+| Injection screen | agent: the template subject and paragraphs (polish) or every segment (translate) are screened first (screenForModel); if any part is withheld the model is not asked and the template wording / the English is kept with a staff note; framework: every message line is screened again as a backstop (10 pattern groups (override-instructions, new-instructions, addressed-to-ai, answer-steering, role-tag, tool-override, schema-vocabulary, fence-marker, hidden-characters, encoded-payload)) |
+| Output schema | { status: translated or insufficient_evidence; language: kn \| ta \| hi; segments: list (≤ 40) of text ≤ 300 } |
+| Validators | Zod schema (a failure or confidence < 0.75 escalates one tier, at most twice, then needs review); the task's validator, run as the router's contradictions; validateTranslation: one segment per English segment, every fact copied verbatim in English digits, no native-script digits (grounding.ts). |
+| Grounding | no quotes: every fact must appear verbatim in its translated segment (validateTranslation); a failed check keeps the English on its own |
+| Agreement | single read (validators and grounding decide what is kept) |
+| Limits | input ≤ 6,000 tokens per call (longer documents are cut at a line and flagged); output ≤ 4,096 tokens; hallucination budget 2% per day |
+| Privacy class | anonymize-then-cloud |
+| Standards | OWASP LLM01, LLM02, LLM03, LLM05, LLM06, LLM07, LLM09, LLM10; NIST AI RMF Govern, Map, Measure, Manage |
+
+## Client comms drafts — TDS and TCS (`comms`) — TDS and TCS
+
+### `comms.polish.tds@2`
+
+| Control | This task |
+|---|---|
+| Kind | drafting (wording only) |
+| Documents sent | The template's subject and paragraphs and the facts they must keep (job facts, dates, amounts; staff-written query topic and answer, document names). Client and contact names masked through the dictionary. |
+| Input fence | yes — every message is wrapped in the untrusted-documents fence by the guardrail session; FIRM_PREAMBLE says fenced text is data, never instructions |
+| Injection screen | agent: the template subject and paragraphs (polish) or every segment (translate) are screened first (screenForModel); if any part is withheld the model is not asked and the template wording / the English is kept with a staff note; framework: every message line is screened again as a backstop (10 pattern groups (override-instructions, new-instructions, addressed-to-ai, answer-steering, role-tag, tool-override, schema-vocabulary, fence-marker, hidden-characters, encoded-payload)) |
+| Output schema | { status: polished or insufficient_evidence; subject: text ≤ 300; paragraphs: list (≤ 6) of text ≤ 300 } |
+| Validators | Zod schema (a failure or confidence < 0.75 escalates one tier, at most twice, then needs review); the task's validator, run as the router's contradictions; validatePolish: same paragraph count, every fact copied exactly, no new date, amount, number, name, link or request (grounding.ts); the tone lint runs on the result. |
+| Grounding | no quotes: every fact of the template must appear exactly in the answer and nothing new may appear (validatePolish); a failed check keeps the template wording |
+| Agreement | single read (validators and grounding decide what is kept) |
+| Limits | input ≤ 4,000 tokens per call (longer documents are cut at a line and flagged); output ≤ 1,536 tokens; hallucination budget 2% per day |
+| Privacy class | anonymize-then-cloud |
+| Standards | OWASP LLM01, LLM02, LLM03, LLM05, LLM06, LLM07, LLM09, LLM10; NIST AI RMF Govern, Map, Measure, Manage |
+
+### `comms.translate.tds@2`
+
+| Control | This task |
+|---|---|
+| Kind | drafting (wording only) |
+| Documents sent | The finished English message as segments (subject, greeting, sentences, list items, closing) and the target language. |
+| Input fence | yes — every message is wrapped in the untrusted-documents fence by the guardrail session; FIRM_PREAMBLE says fenced text is data, never instructions |
+| Injection screen | agent: the template subject and paragraphs (polish) or every segment (translate) are screened first (screenForModel); if any part is withheld the model is not asked and the template wording / the English is kept with a staff note; framework: every message line is screened again as a backstop (10 pattern groups (override-instructions, new-instructions, addressed-to-ai, answer-steering, role-tag, tool-override, schema-vocabulary, fence-marker, hidden-characters, encoded-payload)) |
+| Output schema | { status: translated or insufficient_evidence; language: kn \| ta \| hi; segments: list (≤ 40) of text ≤ 300 } |
+| Validators | Zod schema (a failure or confidence < 0.75 escalates one tier, at most twice, then needs review); the task's validator, run as the router's contradictions; validateTranslation: one segment per English segment, every fact copied verbatim in English digits, no native-script digits (grounding.ts). |
+| Grounding | no quotes: every fact must appear verbatim in its translated segment (validateTranslation); a failed check keeps the English on its own |
+| Agreement | single read (validators and grounding decide what is kept) |
+| Limits | input ≤ 6,000 tokens per call (longer documents are cut at a line and flagged); output ≤ 4,096 tokens; hallucination budget 2% per day |
+| Privacy class | anonymize-then-cloud |
+| Standards | OWASP LLM01, LLM02, LLM03, LLM05, LLM06, LLM07, LLM09, LLM10; NIST AI RMF Govern, Map, Measure, Manage |
+
+## Client comms drafts — Bookkeeping and accounts (`comms`) — Bookkeeping and accounts
+
+### `comms.polish.books@2`
+
+| Control | This task |
+|---|---|
+| Kind | drafting (wording only) |
+| Documents sent | The template's subject and paragraphs and the facts they must keep (job facts, dates, amounts; staff-written query topic and answer, document names). Client and contact names masked through the dictionary. |
+| Input fence | yes — every message is wrapped in the untrusted-documents fence by the guardrail session; FIRM_PREAMBLE says fenced text is data, never instructions |
+| Injection screen | agent: the template subject and paragraphs (polish) or every segment (translate) are screened first (screenForModel); if any part is withheld the model is not asked and the template wording / the English is kept with a staff note; framework: every message line is screened again as a backstop (10 pattern groups (override-instructions, new-instructions, addressed-to-ai, answer-steering, role-tag, tool-override, schema-vocabulary, fence-marker, hidden-characters, encoded-payload)) |
+| Output schema | { status: polished or insufficient_evidence; subject: text ≤ 300; paragraphs: list (≤ 6) of text ≤ 300 } |
+| Validators | Zod schema (a failure or confidence < 0.75 escalates one tier, at most twice, then needs review); the task's validator, run as the router's contradictions; validatePolish: same paragraph count, every fact copied exactly, no new date, amount, number, name, link or request (grounding.ts); the tone lint runs on the result. |
+| Grounding | no quotes: every fact of the template must appear exactly in the answer and nothing new may appear (validatePolish); a failed check keeps the template wording |
+| Agreement | single read (validators and grounding decide what is kept) |
+| Limits | input ≤ 4,000 tokens per call (longer documents are cut at a line and flagged); output ≤ 1,536 tokens; hallucination budget 2% per day |
+| Privacy class | anonymize-then-cloud |
+| Standards | OWASP LLM01, LLM02, LLM03, LLM05, LLM06, LLM07, LLM09, LLM10; NIST AI RMF Govern, Map, Measure, Manage |
+
+### `comms.translate.books@2`
+
+| Control | This task |
+|---|---|
+| Kind | drafting (wording only) |
+| Documents sent | The finished English message as segments (subject, greeting, sentences, list items, closing) and the target language. |
+| Input fence | yes — every message is wrapped in the untrusted-documents fence by the guardrail session; FIRM_PREAMBLE says fenced text is data, never instructions |
+| Injection screen | agent: the template subject and paragraphs (polish) or every segment (translate) are screened first (screenForModel); if any part is withheld the model is not asked and the template wording / the English is kept with a staff note; framework: every message line is screened again as a backstop (10 pattern groups (override-instructions, new-instructions, addressed-to-ai, answer-steering, role-tag, tool-override, schema-vocabulary, fence-marker, hidden-characters, encoded-payload)) |
+| Output schema | { status: translated or insufficient_evidence; language: kn \| ta \| hi; segments: list (≤ 40) of text ≤ 300 } |
+| Validators | Zod schema (a failure or confidence < 0.75 escalates one tier, at most twice, then needs review); the task's validator, run as the router's contradictions; validateTranslation: one segment per English segment, every fact copied verbatim in English digits, no native-script digits (grounding.ts). |
+| Grounding | no quotes: every fact must appear verbatim in its translated segment (validateTranslation); a failed check keeps the English on its own |
+| Agreement | single read (validators and grounding decide what is kept) |
+| Limits | input ≤ 6,000 tokens per call (longer documents are cut at a line and flagged); output ≤ 4,096 tokens; hallucination budget 2% per day |
+| Privacy class | anonymize-then-cloud |
+| Standards | OWASP LLM01, LLM02, LLM03, LLM05, LLM06, LLM07, LLM09, LLM10; NIST AI RMF Govern, Map, Measure, Manage |
+
+## Client comms drafts — Audit working papers (`comms`) — Audit working papers
+
+### `comms.polish.audit@2`
+
+| Control | This task |
+|---|---|
+| Kind | drafting (wording only) |
+| Documents sent | The template's subject and paragraphs and the facts they must keep (job facts, dates, amounts; staff-written query topic and answer, document names). Client and contact names masked through the dictionary. |
+| Input fence | yes — every message is wrapped in the untrusted-documents fence by the guardrail session; FIRM_PREAMBLE says fenced text is data, never instructions |
+| Injection screen | agent: the template subject and paragraphs (polish) or every segment (translate) are screened first (screenForModel); if any part is withheld the model is not asked and the template wording / the English is kept with a staff note; framework: every message line is screened again as a backstop (10 pattern groups (override-instructions, new-instructions, addressed-to-ai, answer-steering, role-tag, tool-override, schema-vocabulary, fence-marker, hidden-characters, encoded-payload)) |
+| Output schema | { status: polished or insufficient_evidence; subject: text ≤ 300; paragraphs: list (≤ 6) of text ≤ 300 } |
+| Validators | Zod schema (a failure or confidence < 0.75 escalates one tier, at most twice, then needs review); the task's validator, run as the router's contradictions; validatePolish: same paragraph count, every fact copied exactly, no new date, amount, number, name, link or request (grounding.ts); the tone lint runs on the result. |
+| Grounding | no quotes: every fact of the template must appear exactly in the answer and nothing new may appear (validatePolish); a failed check keeps the template wording |
+| Agreement | single read (validators and grounding decide what is kept) |
+| Limits | input ≤ 4,000 tokens per call (longer documents are cut at a line and flagged); output ≤ 1,536 tokens; hallucination budget 2% per day |
+| Privacy class | anonymize-then-cloud |
+| Standards | OWASP LLM01, LLM02, LLM03, LLM05, LLM06, LLM07, LLM09, LLM10; NIST AI RMF Govern, Map, Measure, Manage |
+
+### `comms.translate.audit@2`
+
+| Control | This task |
+|---|---|
+| Kind | drafting (wording only) |
+| Documents sent | The finished English message as segments (subject, greeting, sentences, list items, closing) and the target language. |
+| Input fence | yes — every message is wrapped in the untrusted-documents fence by the guardrail session; FIRM_PREAMBLE says fenced text is data, never instructions |
+| Injection screen | agent: the template subject and paragraphs (polish) or every segment (translate) are screened first (screenForModel); if any part is withheld the model is not asked and the template wording / the English is kept with a staff note; framework: every message line is screened again as a backstop (10 pattern groups (override-instructions, new-instructions, addressed-to-ai, answer-steering, role-tag, tool-override, schema-vocabulary, fence-marker, hidden-characters, encoded-payload)) |
+| Output schema | { status: translated or insufficient_evidence; language: kn \| ta \| hi; segments: list (≤ 40) of text ≤ 300 } |
+| Validators | Zod schema (a failure or confidence < 0.75 escalates one tier, at most twice, then needs review); the task's validator, run as the router's contradictions; validateTranslation: one segment per English segment, every fact copied verbatim in English digits, no native-script digits (grounding.ts). |
+| Grounding | no quotes: every fact must appear verbatim in its translated segment (validateTranslation); a failed check keeps the English on its own |
+| Agreement | single read (validators and grounding decide what is kept) |
+| Limits | input ≤ 6,000 tokens per call (longer documents are cut at a line and flagged); output ≤ 4,096 tokens; hallucination budget 2% per day |
+| Privacy class | anonymize-then-cloud |
+| Standards | OWASP LLM01, LLM02, LLM03, LLM05, LLM06, LLM07, LLM09, LLM10; NIST AI RMF Govern, Map, Measure, Manage |
+
+## Client comms drafts — Engagement letters (`comms`) — Engagement letters
+
+### `comms.polish.engagement@2`
+
+| Control | This task |
+|---|---|
+| Kind | drafting (wording only) |
+| Documents sent | The template's subject and paragraphs and the facts they must keep (job facts, dates, amounts; staff-written query topic and answer, document names). Client and contact names masked through the dictionary. |
+| Input fence | yes — every message is wrapped in the untrusted-documents fence by the guardrail session; FIRM_PREAMBLE says fenced text is data, never instructions |
+| Injection screen | agent: the template subject and paragraphs (polish) or every segment (translate) are screened first (screenForModel); if any part is withheld the model is not asked and the template wording / the English is kept with a staff note; framework: every message line is screened again as a backstop (10 pattern groups (override-instructions, new-instructions, addressed-to-ai, answer-steering, role-tag, tool-override, schema-vocabulary, fence-marker, hidden-characters, encoded-payload)) |
+| Output schema | { status: polished or insufficient_evidence; subject: text ≤ 300; paragraphs: list (≤ 6) of text ≤ 300 } |
+| Validators | Zod schema (a failure or confidence < 0.75 escalates one tier, at most twice, then needs review); the task's validator, run as the router's contradictions; validatePolish: same paragraph count, every fact copied exactly, no new date, amount, number, name, link or request (grounding.ts); the tone lint runs on the result. |
+| Grounding | no quotes: every fact of the template must appear exactly in the answer and nothing new may appear (validatePolish); a failed check keeps the template wording |
+| Agreement | single read (validators and grounding decide what is kept) |
+| Limits | input ≤ 4,000 tokens per call (longer documents are cut at a line and flagged); output ≤ 1,536 tokens; hallucination budget 2% per day |
+| Privacy class | anonymize-then-cloud |
+| Standards | OWASP LLM01, LLM02, LLM03, LLM05, LLM06, LLM07, LLM09, LLM10; NIST AI RMF Govern, Map, Measure, Manage |
+
+### `comms.translate.engagement@2`
+
+| Control | This task |
+|---|---|
+| Kind | drafting (wording only) |
+| Documents sent | The finished English message as segments (subject, greeting, sentences, list items, closing) and the target language. |
+| Input fence | yes — every message is wrapped in the untrusted-documents fence by the guardrail session; FIRM_PREAMBLE says fenced text is data, never instructions |
+| Injection screen | agent: the template subject and paragraphs (polish) or every segment (translate) are screened first (screenForModel); if any part is withheld the model is not asked and the template wording / the English is kept with a staff note; framework: every message line is screened again as a backstop (10 pattern groups (override-instructions, new-instructions, addressed-to-ai, answer-steering, role-tag, tool-override, schema-vocabulary, fence-marker, hidden-characters, encoded-payload)) |
+| Output schema | { status: translated or insufficient_evidence; language: kn \| ta \| hi; segments: list (≤ 40) of text ≤ 300 } |
+| Validators | Zod schema (a failure or confidence < 0.75 escalates one tier, at most twice, then needs review); the task's validator, run as the router's contradictions; validateTranslation: one segment per English segment, every fact copied verbatim in English digits, no native-script digits (grounding.ts). |
+| Grounding | no quotes: every fact must appear verbatim in its translated segment (validateTranslation); a failed check keeps the English on its own |
+| Agreement | single read (validators and grounding decide what is kept) |
+| Limits | input ≤ 6,000 tokens per call (longer documents are cut at a line and flagged); output ≤ 4,096 tokens; hallucination budget 2% per day |
 | Privacy class | anonymize-then-cloud |
 | Standards | OWASP LLM01, LLM02, LLM03, LLM05, LLM06, LLM07, LLM09, LLM10; NIST AI RMF Govern, Map, Measure, Manage |
 
