@@ -59,9 +59,16 @@ describe("runAgent — happy path", () => {
     expect(d.sizeBytes).toBe(file.length);
     expect(w.fake.violations).toEqual([]);
 
-    // The register is parsed by code: the only model call is the related-party LLM rule.
-    expect(w.router.calls.map((c) => [c.task, c.runId, c.privacy])).toEqual([[RELATED_TASK, "run-1", "anonymize-then-cloud"]]);
+    // The register is parsed by code: the only model calls are the related-party LLM rule, read
+    // twice because echo marks it high-stakes (ADR-008): the second read pinned to HARD.
+    expect(w.router.calls.map((c) => [c.task, c.taskVersion, c.runId, c.privacy, c.secondOpinion ?? false, c.forceTier ?? null])).toEqual([
+      [RELATED_TASK, 1, "run-1", "anonymize-then-cloud", false, null],
+      [RELATED_TASK, 1, "run-1", "anonymize-then-cloud", true, "HARD"],
+    ]);
     expect(w.router.calls[0].messages[1].content).toContain("register.csv row 2: INV-1 | Acme Traders | 2026-10-05 | 15000.00");
+    expect(rows(w.db, "auditEvent")).toEqual([
+      expect.objectContaining({ action: "guardrail-run", entity: "AgentRun", entityId: "run-1", meta: expect.objectContaining({ agent: "echo", outcome: "ok", judgements: 1, agreementChecks: 1, disagreements: 0, scopeViolations: 0 }) }),
+    ]);
   });
 
   it("raises block / warn / info failures and still finishes (approval is gated later)", async () => {
@@ -90,7 +97,7 @@ describe("runAgent — happy path", () => {
     w.deps.router = {
       async run(req) {
         const base = { provider: "claude", model: "m", confidence: 0.5, escalated: true, anonymized: true, tokensIn: 1, tokensOut: 1, costInr: 0, attempts: 3, needsPartnerReview: true } as const;
-        if (req.task === RELATED_TASK) return { ...base, status: "needs-review", output: PASS_VERDICT as never, issues: ["low confidence"] };
+        if ((req.task as string) === RELATED_TASK) return { ...base, status: "needs-review", output: PASS_VERDICT as never, issues: ["low confidence"] };
         throw new Error(`unexpected task ${req.task}`);
       },
     };

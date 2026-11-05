@@ -12,9 +12,18 @@
 // (database, router, SharePoint store, input source, clock, ids) is injected; production wiring
 // lives in src/lib/agents/service.ts. Nothing here deletes anything: files from a failed run stay
 // in Working and the next run takes the next free `_v{n}`.
+//
+// ADR-008 guardrails: an agent with an AgentScope runs through a guardrail session
+// (guardrails/session.ts) — its inputs are sniffed before any model call, ctx.model accepts only
+// declared tasks (ScopeViolationError → run FAILED), every system prompt carries the firm and
+// department preambles, outputs are grounded, LLM rules may abstain and high-stakes rules are read
+// twice; a `guardrail-run` AuditEvent records the counts. Agents that are not `internal` must
+// declare a scope (precondition NO_SCOPE).
 import type { FirmService, JobTaskState, PrismaClient } from "@prisma/client";
 import { z, type ZodType, type ZodTypeDef } from "zod";
 import type { AgentName, AgentTask, ModelRequest, RouterResult } from "@/lib/ai/router";
+import { validateScope, type AgentScope } from "./guardrails/scope";
+import { createGuardrailSession, type GuardrailSession, type ModelCallRequest } from "./guardrails/session";
 import type { DeliverableStore, StoredFile } from "@/lib/integrations/sharepoint/deliverable-store";
 import { deliverablePath, parsePeriod, type DeliverableKind, type DeliverablePath } from "@/lib/integrations/sharepoint/paths";
 import {
@@ -92,8 +101,12 @@ export type JobContext = {
   reviewerId: string | null;
 };
 
-/** Model call bound to the current run. Returns the schema-valid output or throws. */
-export type ModelCaller = <T>(req: Omit<ModelRequest<T>, "runId">) => Promise<T>;
+/**
+ * Model call bound to the current run. Returns the schema-valid output or throws. For a scoped
+ * agent the task must be declared in its scope (the schema and system prompt come from the task
+ * spec) and the output comes back grounded (`source`: the documents text, default the user messages).
+ */
+export type ModelCaller = <T>(req: ModelCallRequest<T>) => Promise<T>;
 
 export type ExtractContext<I> = {
   input: I;
@@ -143,7 +156,34 @@ export interface AgentDefinition<I = unknown, E = unknown> {
    * is not `internal` and does not declare it.
    */
   probeMutation?(files: InputFile[]): InputFile[];
+  /**
+   * Per-input-file sensitivity probes (second audit, M2): one per input file kind, each changing
+   * one material value in THAT file. The harness runs every probe on every fixture with the same
+   * recordings; a probe that changes the files must change a figure or flag. Supersedes
+   * probeMutation for the harness when declared.
+   */
+  inputProbes?: readonly InputProbe[];
+  /** Input files the agent's inputSchema requires (names as in inputProbes); every one needs a probe (production agents). */
+  requiredInputs?: readonly string[];
+  /**
+   * Rules the per-rule coverage row may skip (ruleId → why it cannot both fail and pass in a
+   * recorded fixture). Listed, never silent.
+   */
+  coverageExemptions?: Readonly<Record<string, string>>;
+  /**
+   * ADR-008 department scope: declared model tasks (`<key>.<task>`, version, schema, prompt,
+   * validators), owned rule ids and a deterministic input sniff. Optional in the type; the runner
+   * and the accuracy harness refuse an agent that is not `internal` and does not declare it.
+   */
+  scope?: AgentScope;
 }
+
+/** One input-sensitivity probe: change one material value in one input file (copy; never modify `files`). */
+export type InputProbe = {
+  /** Input file kind, e.g. "sales register", "trial balance". */
+  input: string;
+  mutate(files: InputFile[]): InputFile[] | Promise<InputFile[]>;
+};
 
 /** Erases the generic parameters for registries and the service layer. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -151,7 +191,7 @@ export type AnyAgent = AgentDefinition<any, any>;
 
 // ------------------------------------------------------------------ outcome
 
-export type PreconditionCode = "NOT_FOUND" | "WRONG_SERVICE" | "NOT_READY" | "NO_SOP_PACK";
+export type PreconditionCode = "NOT_FOUND" | "WRONG_SERVICE" | "NOT_READY" | "NO_SOP_PACK" | "NO_SCOPE" | "INVALID_SCOPE";
 
 export type RunOutcome =
   | {
@@ -208,6 +248,12 @@ const JOB_SELECT = {
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e)).slice(0, 2000);
 
+/** An unscoped (internal) agent's call as the router takes it: `source` is a scoped-agent field. */
+function legacyRequest<T>({ source, ...rest }: ModelCallRequest<T>): Omit<ModelRequest<T>, "runId"> {
+  void source;
+  return rest as Omit<ModelRequest<T>, "runId">;
+}
+
 /** Path A folder of a job: CL-{Code}/Compliance/FY…/{Service}/{Period}/{Kind}. Throws PathError on bad parts. */
 export function jobFolder(job: { clientCode: string; fy: string; service: FirmService; period: string }, kind: DeliverableKind): DeliverablePath {
   return deliverablePath(job.clientCode, job.fy, job.service, parsePeriod(job.period), kind);
@@ -225,6 +271,9 @@ export function latestPackQuery(key: string) {
 
 export async function runAgent<I, E>(def: AgentDefinition<I, E>, jobTaskId: string, deps: RunnerDeps, opts: RunOptions = {}): Promise<RunOutcome> {
   const { db } = deps;
+  if (!def.scope && !def.internal) return { ok: false, code: "NO_SCOPE", reason: `scope: not declared — ${def.title} must declare an AgentScope (ADR-008) before it can run` };
+  const scopeProblems = def.scope ? validateScope(def) : [];
+  if (scopeProblems.length) return { ok: false, code: "INVALID_SCOPE", reason: scopeProblems.join("; ") };
   const row = await db.jobTask.findUnique({ where: { id: jobTaskId }, select: JOB_SELECT });
   if (!row) return { ok: false, code: "NOT_FOUND", reason: `JobTask ${jobTaskId} not found` };
   if (row.service !== def.service) return { ok: false, code: "WRONG_SERVICE", reason: `${def.title} prepares ${def.service} jobs; this job is ${row.service}` };
@@ -261,9 +310,19 @@ export async function runAgent<I, E>(def: AgentDefinition<I, E>, jobTaskId: stri
     },
   });
   const agentActor = { kind: "agent", runId } as const;
+  let guard: GuardrailSession | null = null;
+  let guardRecorded = false;
 
   const fail = async (reason: string): Promise<RunOutcome> => {
     await db.agentRun.update({ where: { id: runId }, data: { status: "FAILED", error: reason, finishedAt: deps.now() } });
+    if (guard && !guardRecorded) {
+      guardRecorded = true;
+      try {
+        await db.auditEvent.create(guard.auditEvent(runId, "failed"));
+      } catch {
+        // The run is already FAILED with its reason; a lost guardrail record must not hide that.
+      }
+    }
     return { ok: false, code: "FAILED", runId, reason };
   };
 
@@ -274,8 +333,7 @@ export async function runAgent<I, E>(def: AgentDefinition<I, E>, jobTaskId: stri
 
   try {
     let needsPartnerReview = false;
-    const model: ModelCaller = async <T>(req: Omit<ModelRequest<T>, "runId">): Promise<T> => {
-      const res = await deps.router.run<T>({ ...req, runId } as ModelRequest<T>);
+    const unwrap = <T>(res: RouterResult<T>): T => {
       if (res.status === "ok") {
         if (res.needsPartnerReview) needsPartnerReview = true;
         return res.output;
@@ -286,6 +344,12 @@ export async function runAgent<I, E>(def: AgentDefinition<I, E>, jobTaskId: stri
       }
       throw new AgentRunError(res.status === "queued" ? `Model call queued for a human: ${res.reason}` : `Model output not usable: ${res.issues.join("; ")}`);
     };
+    const route = <T>(req: Omit<ModelRequest<T>, "runId">) => deps.router.run<T>({ ...req, runId } as ModelRequest<T>);
+    guard = def.scope ? createGuardrailSession({ agent: def, scope: def.scope, route, unwrap }) : null;
+    const session = guard;
+    const model: ModelCaller = session
+      ? session.model
+      : async <T>(req: ModelCallRequest<T>): Promise<T> => unwrap(await route<T>(legacyRequest(req)));
 
     // Rules: the pack, plus approved mistake rules the pack does not already carry.
     const mistakes = await db.mistakeLog.findMany({
@@ -308,12 +372,16 @@ export async function runAgent<I, E>(def: AgentDefinition<I, E>, jobTaskId: stri
       period: job.period,
       clientDocsFolder: jobFolder(job, "ClientDocs").path,
     });
+    // Wrong-department input stops here, before any model call (ADR-008 §7).
+    await session?.sniff(files);
     const parsed = def.inputSchema.safeParse(files);
     if (!parsed.success) throw new AgentRunError(`Inputs incomplete: ${parsed.error.issues.map((i) => i.message).join("; ")}`);
     const input = parsed.data;
+    session?.setInput(input);
 
     // Extract (model), compute (code), check (engine).
     const extracted = await def.extract({ input, files, job, runId, notes, model });
+    session?.assertNoViolation();
     const figures = def.compute(extracted, input);
     for (const [k, v] of Object.entries(figures)) {
       if (!Number.isSafeInteger(v)) throw new AgentRunError(`compute returned a non-integer figure ${k}=${String(v)} (amounts must be integer paise)`);
@@ -321,21 +389,25 @@ export async function runAgent<I, E>(def: AgentDefinition<I, E>, jobTaskId: stri
     const checkInput: CheckInput<I, E> = { input, extracted, figures, job };
     // The documents text an LLM rule sees is also what its quote is verified against (engine).
     const llmContext: LlmContextFn<CheckInput<I, E>> = (_rule, ci) => (def.llmContext ? def.llmContext(ci) : JSON.stringify(ci.extracted, null, 2));
-    const llmCheck: LlmCheck<CheckInput<I, E>> = (rule, _ci, documents) =>
-      model({
-        task: `${def.modelAgent}.check:${rule.id}` as AgentTask,
-        privacy: "anonymize-then-cloud",
-        difficulty: "judgement",
-        schema: LlmVerdictOutputSchema,
-        messages: [
-          { role: "system", content: LLM_CHECK_SYSTEM },
-          {
-            role: "user",
-            content: `Question: ${rule.check}\nEvidence to cite: ${rule.evidence}\n\nDocuments:\n${documents}`,
-          },
-        ],
-      });
+    const llmCheck: LlmCheck<CheckInput<I, E>> = session
+      ? (rule, ci, documents) => session.llmCheck(rule, ci, documents)
+      : (rule, _ci, documents) =>
+          model({
+            task: `${def.modelAgent}.check:${rule.id}` as AgentTask,
+            privacy: "anonymize-then-cloud",
+            difficulty: "judgement",
+            schema: LlmVerdictOutputSchema,
+            messages: [
+              { role: "system", content: LLM_CHECK_SYSTEM },
+              {
+                role: "user",
+                content: `Question: ${rule.check}\nEvidence to cite: ${rule.evidence}\n\nDocuments:\n${documents}`,
+              },
+            ],
+          });
     const results = await runChecklist(loaded.ruleSet, checkInput, { registry: def.checklistRegistry, llmCheck, llmContext });
+    session?.assertNoViolation();
+    session?.finish(results);
 
     // Deliverables → Working/.
     const generatedAt = deps.now();
@@ -375,6 +447,7 @@ export async function runAgent<I, E>(def: AgentDefinition<I, E>, jobTaskId: stri
         },
       });
       if (results.length) await tx.checklistResult.createMany({ data: toChecklistResultRows(runId, results) });
+      if (session) await tx.auditEvent.create(session.auditEvent(runId, "ok"));
       for (const s of stored) {
         await tx.deliverable.create({
           data: {
@@ -392,6 +465,7 @@ export async function runAgent<I, E>(def: AgentDefinition<I, E>, jobTaskId: stri
         });
       }
     });
+    guardRecorded = session !== null;
 
     const moved = await transitionJobTask(db, jobTaskId, "AGENT_DONE", agentActor, { expectedState: "IN_PREP", now: deps.now() });
     if (!moved.ok) return fail(`Pack prepared but the job could not move to AGENT_DONE: ${moved.reason}`);

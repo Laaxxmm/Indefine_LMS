@@ -63,6 +63,8 @@ export interface RouteInput {
   /** 0 for the first attempt; +1 per escalation. */
   escalationLevel: number;
   available: Record<ProviderId, boolean>;
+  /** Pinned cloud tier (ADR-008 agreement re-ask): that tier only, no escalation. */
+  forceTier?: Exclude<Tier, "LOCAL">;
 }
 
 export type RouteDecision =
@@ -97,7 +99,7 @@ export function decideRoute(input: RouteInput): RouteDecision {
     return { kind: "call", provider: "local", tier: "LOCAL", anonymize: false, needsPartnerReview, canEscalate: false };
   }
 
-  const rungs = ladder(difficulty, difficulty === "sop" && available.local);
+  const rungs = input.forceTier ? [input.forceTier] : ladder(difficulty, difficulty === "sop" && available.local);
   const idx = Math.min(escalationLevel, rungs.length - 1);
   const tier = rungs[idx];
   const canEscalate = idx < Math.min(MAX_ESCALATIONS, rungs.length - 1);
@@ -189,6 +191,11 @@ function splitSystem(messages: Msg[]): Pick<ProviderRequest, "system" | "message
   return { system: [system, ROUTER_INSTRUCTIONS].filter(Boolean).join("\n\n"), messages: rest.map((m) => ({ role: m.role, content: m.content })) };
 }
 
+/** ModelCall.task: `<task>`, `<task>@<version>` for a registered prompt, `…#2` for an agreement re-ask. */
+export function modelCallTask(req: Pick<ModelRequest, "task" | "taskVersion" | "secondOpinion">): string {
+  return `${req.task}${req.taskVersion !== undefined ? `@${req.taskVersion}` : ""}${req.secondOpinion ? "#2" : ""}`;
+}
+
 function zodIssues(err: { issues: { path: (string | number)[]; message: string }[] }): string[] {
   return err.issues.map((i) => `${i.path.length ? i.path.join(".") : "output"}: ${i.message}`);
 }
@@ -236,7 +243,7 @@ export function createRouter(deps: RouterDeps): Router {
     let feedback: string | null = null;
     let lastProviderError: unknown;
 
-    const base = { runId: req.runId, agent, task: req.task, privacy: req.privacy, difficulty: req.difficulty };
+    const base = { runId: req.runId, agent, task: modelCallTask(req), privacy: req.privacy, difficulty: req.difficulty };
     const hashOf = (fb: string | null) => sha256(JSON.stringify(fb ? [...maskedMessages, { role: "user", content: maskText(fb) }] : maskedMessages));
     const record = (row: Partial<ModelCallRow> & Pick<ModelCallRow, "status">) =>
       repo.record({
@@ -258,7 +265,7 @@ export function createRouter(deps: RouterDeps): Router {
       });
 
     for (;;) {
-      const d = decideRoute({ difficulty: req.difficulty, privacy: req.privacy, escalationLevel: level, available });
+      const d = decideRoute({ difficulty: req.difficulty, privacy: req.privacy, escalationLevel: level, available, forceTier: req.forceTier });
       if (d.kind === "queue") {
         await record({ status: "QUEUED_FOR_HUMAN", error: d.reason });
         return { status: "queued", reason: d.reason, needsPartnerReview: true, runId: req.runId, attempts: 0 };

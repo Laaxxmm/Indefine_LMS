@@ -8,6 +8,7 @@ import type { ProviderSet } from "../providers";
 import {
   createRouter,
   decideRoute,
+  modelCallTask,
   run as defaultRun,
   sha256,
   type ModelCallRepo,
@@ -413,5 +414,35 @@ describe("default run() wiring", () => {
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+});
+
+// ---------------------------------------------------------------- ADR-008 extensions
+
+describe("ADR-008: forceTier, task@version, agreement re-ask", () => {
+  it("decideRoute: a forced tier is used as is, with no escalation; local-only ignores it", () => {
+    expect(decideRoute({ difficulty: "judgement", privacy: "anonymize-then-cloud", escalationLevel: 0, available: all, forceTier: "HARD" })).toMatchObject({ kind: "call", provider: "claude", tier: "HARD", canEscalate: false });
+    expect(decideRoute({ difficulty: "sop", privacy: "anonymize-then-cloud", escalationLevel: 0, available: all, forceTier: "SMART" })).toMatchObject({ tier: "SMART", canEscalate: false });
+    expect(decideRoute({ difficulty: "sop", privacy: "local-only", escalationLevel: 0, available: noLocal, forceTier: "HARD" })).toEqual(expect.objectContaining({ kind: "queue" }));
+    expect(decideRoute({ difficulty: "sop", privacy: "anonymize-then-cloud", escalationLevel: 0, available: { local: false, claude: false, grok: true }, forceTier: "HARD" })).toMatchObject({ provider: "grok", tier: "HARD" });
+  });
+
+  it("run: ModelCall.task records task@version and #2; a forced tier does not escalate on a schema failure", async () => {
+    const s = setup({ claude: [{ output: { total: 1 }, confidence: 0.9 }, { output: { wrong: true }, confidence: 0.9 }] });
+    const ok = await s.router.run({ ...base({ schema: Total }), taskVersion: 3 });
+    expect(ok.status).toBe("ok");
+    const bad = await s.router.run({ ...base({ schema: Total }), taskVersion: 3, secondOpinion: true, forceTier: "HARD" });
+    expect(bad).toMatchObject({ status: "needs-review", output: null, attempts: 1 });
+    expect(s.rows.map((r) => [r.task, r.tier, r.status])).toEqual([
+      ["gst.extract-invoices@3", "FAST", "OK"],
+      ["gst.extract-invoices@3#2", "HARD", "SCHEMA_FAIL"],
+    ]);
+    expect(s.claude.calls.map((c) => c.model)).toEqual([s.config.models.FAST, s.config.models.HARD]);
+  });
+
+  it("modelCallTask", () => {
+    expect(modelCallTask({ task: "gst.x" })).toBe("gst.x");
+    expect(modelCallTask({ task: "gst.x", taskVersion: 2 })).toBe("gst.x@2");
+    expect(modelCallTask({ task: "gst.x", taskVersion: 2, secondOpinion: true })).toBe("gst.x@2#2");
   });
 });
