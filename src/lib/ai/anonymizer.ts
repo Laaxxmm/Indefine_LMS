@@ -81,6 +81,45 @@ export interface MaskContext {
 export interface MaskResult {
   masked: string;
   map: TokenMap;
+  /** Over-long values / message cut before masking (capLongRuns), or null when nothing was cut. */
+  truncated: { runs: number; chars: number } | null;
+}
+
+// ---------------------------------------------------------------- size caps (audit #12)
+
+/** Longest message mask() reads; the rest is cut (above every task's input limit, ADR-009). */
+export const MAX_MASK_CHARS = 600_000;
+/** Longest value without a space or delimiter (one CSV cell, one JSON string) sent as is. */
+export const MAX_RUN_CHARS = 1_024;
+
+const LONG_RUN = new RegExp(`[^\\s,;|"'{}\\[\\]()<>]{${MAX_RUN_CHARS + 1},}`, "g");
+const grouped = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+const cutMarker = (n: number) => ` […${grouped(n)} characters not sent]`;
+
+/**
+ * Cut a message to MAX_MASK_CHARS and every value longer than MAX_RUN_CHARS (a 64 KB register
+ * cell, a pasted blob) to its first MAX_RUN_CHARS characters, with a visible marker. Keeps masking
+ * linear and bounded; `runs` / `chars` let the caller flag what was not sent.
+ */
+export function capLongRuns(text: string, maxRun: number = MAX_RUN_CHARS, maxChars: number = MAX_MASK_CHARS): { text: string; runs: number; chars: number } {
+  let runs = 0;
+  let chars = 0;
+  let s = text;
+  if (s.length > maxChars) {
+    runs++;
+    chars += s.length - maxChars;
+    s = s.slice(0, maxChars) + cutMarker(s.length - maxChars);
+  }
+  const re = maxRun === MAX_RUN_CHARS ? new RegExp(LONG_RUN.source, "g") : new RegExp(`[^\\s,;|"'{}\\[\\]()<>]{${maxRun + 1},}`, "g");
+  s = s.replace(re, (run) => {
+    let keep = maxRun;
+    const code = run.charCodeAt(keep - 1);
+    if (code >= 0xd800 && code <= 0xdbff) keep--; // never split a surrogate pair
+    runs++;
+    chars += run.length - keep;
+    return run.slice(0, keep) + cutMarker(run.length - keep);
+  });
+  return { text: s, runs, chars };
 }
 
 export function createTokenMap(): TokenMap {
@@ -230,6 +269,10 @@ export function normalizeForMatching(text: string): string {
 const MONTH = "(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)";
 const NUM_END = "(?![\\d]|[.,]\\d)"; // not followed by more digits / decimal part
 const NUM_START = "(?<![\\d.,])"; // not inside an amount like 1,23,456.00
+// For runs of 8+ digits a neighbouring comma cannot be Indian digit grouping (groups are 2–3
+// digits), so a comma there is a CSV delimiter: "name,9876543210,500" is a phone in a cell.
+const CELL_END = "(?![\\d]|\\.\\d)";
+const CELL_START = "(?<![\\d.])";
 const DATE_SOURCE = [
   "\\b\\d{1,2}[\\/.\\-]\\d{1,2}[\\/.\\-]\\d{2,4}\\b",
   "\\b\\d{4}-\\d{2}-\\d{2}\\b",
@@ -243,7 +286,8 @@ const DATE_SOURCE = [
  * linear. mask() uses the tolerant variants in M below.
  */
 export const PATTERNS = {
-  EMAIL: /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g,
+  // Bounded local part / labels and anchored at the start of a run: linear on a long run with no '@' (audit #12).
+  EMAIL: /(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]{1,63}(?:\.[A-Za-z0-9-]{1,63}){0,8}\.[A-Za-z]{2,24}/g,
   DATE: new RegExp(DATE_SOURCE, "gi"),
   GSTIN: /(?<![A-Za-z0-9])\d{2}[A-Za-z]{5}\d{4}[A-Za-z][0-9A-Za-z][Zz][0-9A-Za-z](?![A-Za-z0-9])/g,
   CIN: /(?<![A-Za-z0-9])[LUlu]\d{5}[A-Za-z]{2}\d{4}[A-Za-z]{3}\d{6}(?![A-Za-z0-9])/g,
@@ -285,15 +329,15 @@ const M = {
   PAN: /(?<![A-Za-z])[A-Za-z]{5}\d{4}[A-Za-z]/g,
   PASSPORT: /(?<![A-Za-z0-9])[A-Za-z][\s-]?\d{7}(?![A-Za-z0-9])/g,
   VOTER_ID: /(?<![A-Za-z0-9])[A-Za-z]{3}[\s-]?\d{7}(?![A-Za-z0-9])/g,
-  AADHAAR: new RegExp(`${NUM_START}[2-9]\\d{3}([\\s.-]?)\\d{4}\\1\\d{4}${NUM_END}`, "g"),
-  BANK_AC: PATTERNS.BANK_AC,
-  PHONE: new RegExp(`(?<![\\d+.,])(?:(?:\\+|00)\\s?91[\\s.-]?|\\(\\+?91\\)\\s?|0[\\s-]?)?(?:[6-9](?:[\\s-]?\\d){9}|[6-9]\\d{4}\\.\\d{5})${NUM_END}`, "g"),
+  AADHAAR: new RegExp(`${CELL_START}[2-9]\\d{3}([\\s.-]?)\\d{4}\\1\\d{4}${CELL_END}`, "g"),
+  BANK_AC: new RegExp(`${CELL_START}\\d(?:[ -]?\\d){8,17}${CELL_END}`, "g"),
+  PHONE: new RegExp(`(?<![\\d+.])(?:(?:\\+|00)\\s?91[\\s.-]?|\\(\\+?91\\)\\s?|0[\\s-]?)?(?:[6-9](?:[\\s-]?\\d){9}|[6-9]\\d{4}\\.\\d{5})${CELL_END}`, "g"),
   /** 11–18 digits, no label: a bank account unless the context says invoice / e-way bill / amount. */
-  BANK_AC_FREE: new RegExp(`(?<![\\dA-Za-z.,])\\d{11,18}(?![\\dA-Za-z]|[.,]\\d)`, "g"),
-  DIN: PATTERNS.DIN,
+  BANK_AC_FREE: new RegExp(`(?<![\\dA-Za-z.])\\d{11,18}(?![\\dA-Za-z]|\\.\\d)`, "g"),
+  DIN: new RegExp(`${CELL_START}\\d{8}${CELL_END}`, "g"),
   PIN: PATTERNS.PIN,
   /** JSON string values of name-like keys ("employee": "…"). */
-  NAME_KEY: /"([A-Za-z][A-Za-z_-]{1,39})"\s{0,3}:\s{0,3}"([^"\\\n]{2,160})"/g,
+  NAME_KEY: /"([A-Za-z][A-Za-z_-]{1,39})"\s{0,3}:\s{0,3}"([^"\\\n\uE000\uE001]{2,160})"/g,
 } as const;
 
 const CONTEXT = {
@@ -327,8 +371,8 @@ const NAME_KEYS: ReadonlySet<string> = new Set(
 
 // ---------------------------------------------------------------- engine
 
-const FILL = "";
-const FILL_ADDR = "";
+const FILL = "\uE000";
+const FILL_ADDR = "\uE001";
 
 type Claim = { start: number; end: number; kind: PiiKind | null; addr?: boolean };
 
@@ -362,7 +406,7 @@ class Work {
 }
 
 /** Context text with claimed spans blanked (an ADDRESS span still reads as "address"). */
-const readable = (s: string) => s.replace(/+/g, " address ").replace(/+/g, " ");
+const readable = (s: string) => s.replace(/\uE001+/g, " address ").replace(/\uE000+/g, " ");
 const before = (w: string, index: number, width: number) => readable(w.slice(Math.max(0, index - width), index));
 const after = (w: string, index: number, width: number) => readable(w.slice(index, index + width));
 
@@ -573,10 +617,10 @@ const dinDecider: Decide = (m, w) => {
 /** A PIN code in an address; with a door number earlier on the line, the whole address is one ADDRESS. */
 const pinDecider: Decide = (m, w) => {
   if (!CONTEXT.ADDRESS.test(before(w, m.index, 80))) return null;
-  const lineStart = Math.max(w.lastIndexOf("\n", m.index - 1) + 1, m.index - 160);
-  let seg = w.slice(lineStart, m.index);
-  let segStart = lineStart;
-  const cut = Math.max(seg.lastIndexOf(FILL), seg.lastIndexOf(FILL_ADDR), seg.lastIndexOf("|"), seg.lastIndexOf("\t"), seg.lastIndexOf(";"));
+  // Only the 160 characters before the PIN, cut at the line start (searching a bounded slice keeps this linear).
+  let segStart = Math.max(0, m.index - 160);
+  let seg = w.slice(segStart, m.index);
+  const cut = Math.max(seg.lastIndexOf("\n"), seg.lastIndexOf(FILL), seg.lastIndexOf(FILL_ADDR), seg.lastIndexOf("|"), seg.lastIndexOf("\t"), seg.lastIndexOf(";"));
   if (cut >= 0) {
     segStart += cut + 1;
     seg = seg.slice(cut + 1);
@@ -614,10 +658,14 @@ function original(text: string, view: View, start: number, end: number): [number
  * identifiers from the longest / most specific to the least, then context-dependent digit runs,
  * addresses and narration names.
  */
-export function mask(text: string, ctx: MaskContext = {}): MaskResult {
+export function mask(input: string, ctx: MaskContext = {}): MaskResult {
   const map = ctx.map ?? createTokenMap();
   const full = ctx.scope !== "structured";
   const literals: LiteralMode = ctx.literals ?? (full ? "unknown" : "none");
+  // Size caps first (audit #12): every masker below then works on bounded, linear input.
+  const capped = capLongRuns(input);
+  const text = capped.text;
+  const truncated = capped.runs ? { runs: capped.runs, chars: capped.chars } : null;
   const view = normalizeView(text);
   const work = new Work(view.norm);
 
@@ -672,7 +720,7 @@ export function mask(text: string, ctx: MaskContext = {}): MaskResult {
     pos = oe;
   }
   parts.push(text.slice(pos));
-  return { masked: parts.join(""), map };
+  return { masked: parts.join(""), map, truncated };
 }
 
 /** Put the original values back. Unknown tokens (not in this map) are left as they are. */
@@ -709,13 +757,13 @@ const G = {
   CIN: /(?<![A-Za-z0-9])[LUlu]\d{5}[A-Za-z]{2}\d{4}[A-Za-z]{3}\d{6}(?![A-Za-z0-9])/,
   TAN: /(?<![A-Za-z0-9])[A-Za-z]{4}\d{5}[A-Za-z](?![A-Za-z0-9])/,
   IFSC: /(?<![A-Za-z0-9])[A-Za-z]{4}0[A-Za-z0-9]{6}(?![A-Za-z0-9])/,
-  AADHAAR: /(?<![\d.,])[2-9]\d{3}([\s.-]?)\d{4}\1\d{4}(?![\d]|[.,]\d)/g,
-  PHONE: /(?<![\d+.,])(?:(?:\+|00)\s?91[\s.-]?|0[\s-]?)?(?:[6-9](?:[\s-]?\d){9}|[6-9]\d{4}\.\d{5})(?![\d]|[.,]\d)/,
+  AADHAAR: /(?<![\d.])[2-9]\d{3}([\s.-]?)\d{4}\1\d{4}(?![\d]|\.\d)/g,
+  PHONE: /(?<![\d+.])(?:(?:\+|00)\s?91[\s.-]?|0[\s-]?)?(?:[6-9](?:[\s-]?\d){9}|[6-9]\d{4}\.\d{5})(?![\d]|\.\d)/,
   DOB_LABEL: /\b(?:dob|d\.o\.b|date\s+of\s+birth|birth\s*date|born)\b/gi,
   DATE: new RegExp(DATE_SOURCE, "i"),
   PASSPORT_LABEL: /\bpass\s?port\b[^\n]{0,20}?(?<![A-Za-z0-9])[A-Za-z][\s-]?\d{7}(?![A-Za-z0-9])/i,
   VOTER_LABEL: /\b(?:voter|epic)\b[^\n]{0,20}?(?<![A-Za-z0-9])[A-Za-z]{3}[\s-]?\d{7}(?![A-Za-z0-9])/i,
-  DIN_LABEL: /\bDIN\b[^\n\d]{0,12}(?<![\d.,])\d{8}(?![\d]|[.,]\d)/,
+  DIN_LABEL: /\bDIN\b[^\n\d]{0,12}(?<![\d.])\d{8}(?![\d]|\.\d)/,
 };
 
 export interface DetectOptions {

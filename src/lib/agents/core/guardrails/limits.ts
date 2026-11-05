@@ -57,7 +57,8 @@ export const runBudgetFor = (agent: string) => RUN_BUDGET_INR[agent] ?? DEFAULT_
 
 // ------------------------------------------------------------------ truncation
 
-export type Truncation = { task: string; linesNotSent: number; firstLocation: string };
+/** `valuesCut`: values longer than the anonymizer's MAX_RUN_CHARS shortened (audit #12) rather than lines dropped. */
+export type Truncation = { task: string; linesNotSent: number; firstLocation: string; valuesCut?: number };
 
 /**
  * Keep whole lines while the text stays within `maxInputTokens` (the router's ~4 characters per
@@ -88,7 +89,9 @@ export const TRUNCATION_FLAG = "input-truncated" as const;
 export function truncationResult(cuts: readonly Truncation[]): ChecklistResultItem | null {
   if (!cuts.length) return null;
   // Plain words for the reviewer: where the cut starts, not the task identifier (that stays in the run record).
-  const parts = cuts.slice(0, 5).map((c) => `${c.linesNotSent} line${c.linesNotSent === 1 ? "" : "s"} from ${c.firstLocation} onwards`);
+  const parts = cuts
+    .slice(0, 5)
+    .map((c) => (c.valuesCut ? `${c.valuesCut} very long value${c.valuesCut === 1 ? "" : "s"} in ${c.firstLocation} shortened` : `${c.linesNotSent} line${c.linesNotSent === 1 ? "" : "s"} from ${c.firstLocation} onwards`));
   return {
     ruleId: TRUNCATION_RULE_ID,
     title: "Documents longer than the per-call limit for the AI",

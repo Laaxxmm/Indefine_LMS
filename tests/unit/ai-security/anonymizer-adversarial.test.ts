@@ -106,6 +106,13 @@ describe("mask(): 50 adversarial formats — none reaches the cloud unmasked", (
     const { masked } = mask("RAJESH KUMAR paid; Rajesh Kumar signed", { dictionary: [{ value: "Rajesh Kumar", kind: "NAME" }] });
     expect(masked).toBe("⟨NAME_1⟩ paid; ⟨NAME_1⟩ signed");
   });
+  it("identifiers inside CSV cells are masked (a comma next to a 10+ digit run is a delimiter, not grouping)", () => {
+    const csv = `name,phone,uid,account,amount\nx,9876543210,${aadhaarValid},50100123456789,500.00`;
+    const { masked } = mask(csv, { now: NOW });
+    for (const s of ["9876543210", aadhaarValid, "50100123456789"]) expect(masked).not.toContain(s);
+    expect(masked).toContain(",500.00");
+    expect(mask("INV-1,Acme,12345.50\nINV-2,Bright,1,23,456.00").masked).toBe("INV-1,Acme,12345.50\nINV-2,Bright,1,23,456.00");
+  });
   it("JSON name fields are masked without a dictionary", () => {
     const docs = JSON.stringify({ employee: "Rajesh Kumar Sharma", employer: "Acme Widgets Pvt Ltd", form16: { tan: "BLRA12345F", dob: "01/01/1980" } });
     const { masked } = mask(docs, { now: NOW });

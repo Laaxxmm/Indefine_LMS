@@ -36,6 +36,7 @@ import { AGREEMENT_TIER, needsAgreement, settleAgreement } from "./agreement";
 import { GroundingError, groundCheck } from "./grounding";
 import { shapeFingerprint, unboundedStrings } from "./schema";
 import { BudgetExceededError } from "@/lib/ai/errors";
+import { capLongRuns } from "@/lib/ai/anonymizer";
 import { estimateTokens } from "@/lib/ai/pricing";
 import { limitsFor, runBudgetFor, truncateToLimit, truncationResult, type Truncation } from "./limits";
 import { supplyChainMeta } from "./supply-chain";
@@ -237,7 +238,10 @@ export function createGuardrailSession(deps: GuardrailSessionDeps) {
     const t = truncateToLimit(text, Math.max(0, budget.tokens), (line, i) => lineLocation(line, i, fallback));
     budget.tokens -= estimateTokens(t.kept);
     if (t.cut) truncations.push({ task, linesNotSent: t.cut.lines, firstLocation: t.cut.firstLocation });
-    return t.kept;
+    // Audit #12: a value longer than the anonymizer reads in one piece (a 64 KB cell) is shortened here, and flagged.
+    const capped = capLongRuns(t.kept);
+    if (capped.runs) truncations.push({ task, linesNotSent: 0, firstLocation: fallback, valuesCut: capped.runs });
+    return capped.text;
   };
 
   /**

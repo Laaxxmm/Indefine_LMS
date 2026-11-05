@@ -95,9 +95,11 @@ export function partyEntries(values: Iterable<string | null | undefined>, kind?:
 // ------------------------------------------------------------------ narrations
 
 /** Payment-rail keywords after which a bank narration names the payee / payer. */
-const RAIL_RE = /(?<![A-Za-z0-9])(?:NEFT|RTGS|IMPS|UPI|NACH|ECS|ACH|MMT|INFT|TRF|TFR|CHQ|CHEQUE|CLG|CMS|BIL|BILLPAY|INB|MOB)(?![A-Za-z0-9])/gi;
-/** Segment breaks inside a narration (the anonymizer's claimed spans count as breaks too). */
-const SEGMENT_BREAK = /[\-/:|*#_,;\n\t()[\]]/;
+const RAILS = "NEFT|RTGS|IMPS|UPI|NACH|ECS|ACH|MMT|INFT|TRF|TFR|CHQ|CHEQUE|CLG|CMS|BIL|BILLPAY|INB|MOB";
+const RAIL_RE = new RegExp(`(?<![A-Za-z0-9])(?:${RAILS})(?![A-Za-z0-9])`, "gi");
+const RAIL_WORD = new RegExp(`^(?:${RAILS})$`, "i");
+/** Segment breaks inside a narration; the anonymizer's claimed spans (U+E000 / U+E001) count as breaks too. */
+const BREAK_CODES = new Set([0x2d, 0x2f, 0x3a, 0x7c, 0x2a, 0x23, 0x5f, 0x2c, 0x3b, 0x0a, 0x09, 0x28, 0x29, 0x5b, 0x5d, 0xe000, 0xe001]);
 const NAME_WORD = /^[A-Z][A-Za-z.'’&]*$/;
 /** How far after the rail keyword a name may start. */
 const NARRATION_REACH = 160;
@@ -132,8 +134,9 @@ function nameAfter(text: string, from: number): NameSpan | null {
   while (i < limit && segments < 6) {
     // one segment: up to the next break
     let j = i;
-    while (j < limit && !SEGMENT_BREAK.test(text[j])) j++;
+    while (j < limit && !BREAK_CODES.has(text.charCodeAt(j))) j++;
     const found = nameInSegment(text, i, j);
+    if (found === "stop") return null; // the next narration starts here: it gets its own scan (keeps this linear)
     if (found) return found;
     segments++;
     i = j + 1;
@@ -141,14 +144,20 @@ function nameAfter(text: string, from: number): NameSpan | null {
   return null;
 }
 
-function nameInSegment(text: string, start: number, end: number): NameSpan | null {
+function nameInSegment(text: string, start: number, end: number): NameSpan | "stop" | null {
   const words: { s: number; e: number; w: string }[] = [];
-  const re = /[^\s]+/g;
-  const seg = text.slice(start, end);
-  for (let m = re.exec(seg); m; m = re.exec(seg)) words.push({ s: start + m.index, e: start + m.index + m[0].length, w: m[0] });
+  for (let i = start; i < end; ) {
+    while (i < end && text.charCodeAt(i) <= 32) i++;
+    const s = i;
+    while (i < end && text.charCodeAt(i) > 32) i++;
+    if (i > s) words.push({ s, e: i, w: text.slice(s, i) });
+  }
   let k = 0;
   // leading junk: references, digits, short codes, stopwords
-  while (k < words.length && (/\d/.test(words[k].w) || upperWord(words[k].w).length < 2 || NAME_STOPWORDS.has(upperWord(words[k].w)) || !NAME_WORD.test(words[k].w))) k++;
+  while (k < words.length && (/\d/.test(words[k].w) || upperWord(words[k].w).length < 2 || NAME_STOPWORDS.has(upperWord(words[k].w)) || !NAME_WORD.test(words[k].w))) {
+    if (RAIL_WORD.test(words[k].w)) return "stop";
+    k++;
+  }
   const name: typeof words = [];
   let org = false;
   for (; k < words.length && name.length < 6; k++) {
