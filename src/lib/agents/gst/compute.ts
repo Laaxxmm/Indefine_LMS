@@ -16,6 +16,8 @@
 //   are deferred (not claimed); a supplier credit note missing in 2B still reduces ITC.
 // - 4(B)(1) = ITC of matched documents in a s.17(5) category; 4(B)(2) = rule 37 reversal (+ any
 //   net-negative head of 4(A)(5)). 4(C) = 4(A) − 4(B). 4(D)(2) memo = 2B documents with ITC not available.
+//   Credit notes on blocked purchases net against this period's blocked ITC; any excess (ITC that
+//   was never availed) is kept out of 4(A) too, so it never reduces net ITC (memo row in Table 4).
 // - B2CL: unregistered recipient, inter-state, invoice value > GST_CONFIG.b2clThresholdPaise.
 //   Notes to unregistered persons are netted into B2CS (CDNUR is not produced in v1.0.0).
 // - Time-barred credit notes (owner-approved 2026-11-05): a credit note dated after the s.34(2)
@@ -152,6 +154,8 @@ export type Analysis = {
     deferred: TaxSplit;
     unavailable2b: TaxSplit;
     notBooked: TaxSplit;
+    /** Credit notes on s.17(5) blocked purchases above this period's blocked ITC: kept out of 4(A) (never availed). */
+    blockedNoteExcess: TaxSplit;
     rule37Rows: Rule37Row[];
   };
   liability: TaxSplit;
@@ -459,17 +463,29 @@ export function analyse(x: GstExtract): Analysis {
   const rcmTax = sumTax(rcmDocs.map((p) => p.rcmTax));
   const rcmTaxable = rcmDocs.reduce((n, p) => n + p.rcmTaxable, 0);
 
-  // 4(A)(3): RCM tax paid is credit, except on a bill whose ledger the model abstained on (held back).
-  const a3 = pos0(subTax(rcmTax, sumTax(rcmDocs.map((p) => p.heldBack))));
   const heldBack = sumTax(purchases.map((p) => p.heldBack));
   const claimedAll = sumTax(recon.map((r) => r.claimed));
-  const a5 = pos0(claimedAll);
+  // 4(B)(1): s.17(5) ITC of this period's blocked documents, SIGNED (a credit note on a blocked
+  // purchase is negative). Such a note reduces ITC that was never availed — it was reversed in
+  // 4(B)(1) when the bill was booked — so it must not reduce net ITC. When the notes exceed this
+  // period's blocked ITC for a head, 4(B)(1) stays at nil (it cannot be negative) and the excess is
+  // kept out of Table 4(A) at its source — 4(A)(5) for notes in the 2B reconciliation, 4(A)(3) for
+  // reverse-charge notes — so 4(C) = 4(A) − 4(B) equals available ITC − signed blocked ITC −
+  // 4(B)(2). The excess is a memo row in Table 4 (itc.blockedNoteExcess).
   const blockedClaimed = sumTax(recon.filter((r) => r.books?.blocked).map((r) => r.claimed));
   const blockedRcm = sumTax(rcmDocs.filter((p) => p.blocked).map((p) => p.rcmTax));
-  const b1 = pos0(addTax(blockedClaimed, blockedRcm));
+  const blockedSigned = addTax(blockedClaimed, blockedRcm);
+  const b1 = pos0(blockedSigned);
+  const blockedNoteExcess = neg0(blockedSigned);
+  const excessFromA5 = minTax(blockedNoteExcess, neg0(blockedClaimed));
+  const excessFromA3 = subTax(blockedNoteExcess, excessFromA5);
+  // 4(A)(3): RCM tax paid is credit, except on a bill whose ledger the model abstained on (held back).
+  const a3 = pos0(addTax(subTax(rcmTax, sumTax(rcmDocs.map((p) => p.heldBack))), excessFromA3));
+  const claimedA5 = addTax(claimedAll, excessFromA5);
+  const a5 = pos0(claimedA5);
   const r37 = rule37Rows(x.payables, pi.end);
   const rule37 = sumTax(r37.map((r) => r.reversal));
-  const b2 = addTax(rule37, neg0(claimedAll));
+  const b2 = addTax(rule37, neg0(claimedA5));
   const available = addTax(a3, a5);
   const netRaw = subTax(subTax(available, b1), b2);
   const net = pos0(netRaw);
@@ -507,7 +523,7 @@ export function analyse(x: GstExtract): Analysis {
     outward: { taxable, tax: outTax, nilExempt },
     rcm: { taxable: rcmTaxable, tax: rcmTax },
     recon,
-    itc: { a3, a5, available, b1, b2, rule37, net, heldBack, deferred, unavailable2b, notBooked, rule37Rows: r37 },
+    itc: { a3, a5, available, b1, b2, rule37, net, heldBack, deferred, unavailable2b, notBooked, blockedNoteExcess, rule37Rows: r37 },
     liability,
     openingCredit,
     setoff: so,
@@ -555,6 +571,7 @@ export function computeFigures(x: GstExtract): Record<string, number> {
     itcDeferredPaise: taxTotal(a.itc.deferred),
     itcUnavailable2bPaise: taxTotal(a.itc.unavailable2b),
     itcNotBookedPaise: taxTotal(a.itc.notBooked),
+    itcBlockedNoteExcessPaise: taxTotal(a.itc.blockedNoteExcess),
     cashIgstPaise: so.cash.igst,
     cashCgstPaise: so.cash.cgst,
     cashSgstPaise: so.cash.sgst,

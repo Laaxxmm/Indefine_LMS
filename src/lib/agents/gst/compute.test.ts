@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { GSTIN, R, extract, line, lineTax, matched, payable, purchase, sale, twin } from "./__tests__/kit";
 import { analyse, computeFigures, docsRows, dueDateOf, interestOn, lateFeeFor, rule37Rows, seriesOf } from "./compute";
-import { GSTR1_COLUMNS, documentRequests, missingList } from "./deliverables";
+import { GSTR1_COLUMNS, documentRequests, gstDeliverables, missingList } from "./deliverables";
 import { periodInfo, zeroTax } from "./money";
 import { setOff } from "./setoff";
 
@@ -287,6 +287,65 @@ describe("analysis: GSTR-1 tables, 3.1, 4, set-off", () => {
     expect(nil).toMatchObject({ daysLate: 10, lateFeePaise: 20000, interestPaise: 0 });
   });
 });
+
+describe("independent formula audit: blocked credit notes, negative outward tax, unregistered RCM state", () => {
+  const car = { ledger: "Motor Car", blockedCategory: "motor-vehicle" as const, rcmService: "none" as const, evidence: null, note: "" };
+  const sheetsOf = (x: ReturnType<typeof extract>) => {
+    const ctx = { input: { files: [], ignored: [] }, extracted: x, figures: {}, results: [], job: { jobTaskId: "j", title: "GSTR-3B", service: "GST", fy: "2026-27", period: "2026-10", clientCode: "T1", clientName: "T", assigneeId: null, reviewerId: null } };
+    const d = gstDeliverables(ctx as unknown as Parameters<typeof gstDeliverables>[0]).find((w) => w.title === "GSTR-3B computation") as { sheets: { name: string; rows: Record<string, unknown>[] }[] };
+    return (name: string) => d.sheets.find((s) => s.name === name)!.rows;
+  };
+
+  it("a blocked-ledger credit note above this period's blocked ITC does not reduce net ITC (4(B)(1) nil, excess kept out of 4(A)(5))", () => {
+    // Raw material +5,400 / +5,400; car credit note −9,000 / −9,000 (2B-matched); no blocked bill this period.
+    // Old: a5 = −3,600 → 0 and 4(B)(2) 3,600 per head, 4(B)(1) = pos0(−9,000) = 0 → net 0 (ITC understated by 10,800).
+    const raw = purchase({ number: "SS/RAW" });
+    const note = purchase({ number: "HM/CN/1", gstin: GSTIN.sup2, docType: "CRN", ledger: "Motor Car", lines: [line(R(100000))] });
+    const x = extract({ sales: [sale({ lines: [line(R(100000))] })], ...matched(raw, note), ledgers: [car] });
+    const a = analyse(x);
+    expect(a.itc.b1).toEqual(zeroTax());
+    expect(a.itc.blockedNoteExcess).toEqual(T(0, R(9000), R(9000)));
+    expect(a.itc.a5).toEqual(T(0, R(5400), R(5400)));
+    expect(a.itc.b2).toEqual(zeroTax());
+    expect(a.itc.net).toEqual(T(0, R(5400), R(5400)));
+    // 4(C) = 4(A) − 4(B) on the sheet; liability 9,000 / 9,000 − 5,400 → cash 3,600 / 3,600.
+    expect(a.itc.net).toEqual(subTaxes(addTaxes(a.itc.a3, a.itc.a5), addTaxes(a.itc.b1, a.itc.b2)));
+    expect(computeFigures(x)).toMatchObject({ itcNetPaise: R(10800), itcBlockedPaise: 0, itcBlockedNoteExcessPaise: R(18000), cashTaxPaise: R(7200) });
+    expect(sheetsOf(x)("4 ITC").at(-1)).toMatchObject({ cgst: 9000, sgst: 9000 });
+    expect(sheetsOf(x)("Notes").map((r) => r.topic)).toContain("Credit notes on blocked purchases");
+  });
+
+  it("partly offset: blocked bill 2,700 and blocked note 9,000 → 4(B)(1) nil, excess 6,300; blocked bills above notes → 4(B)(1) = the net (unchanged)", () => {
+    const raw = purchase({ number: "SS/RAW" });
+    const bill = purchase({ number: "HM/2", gstin: GSTIN.sup2, ledger: "Motor Car", lines: [line(R(30000))] }); // +2,700 / +2,700
+    const note = purchase({ number: "HM/CN/1", gstin: GSTIN.sup2, docType: "CRN", ledger: "Motor Car", lines: [line(R(100000))] });
+    const a = analyse(extract({ ...matched(raw, bill, note), ledgers: [car] }));
+    expect(a.itc.blockedNoteExcess).toEqual(T(0, R(6300), R(6300)));
+    expect(a.itc.b1).toEqual(zeroTax());
+    // a5 = 5,400 + 2,700 − 9,000 + 6,300 = 5,400; net = 5,400 (only the raw material).
+    expect(a.itc.a5).toEqual(T(0, R(5400), R(5400)));
+    expect(a.itc.net).toEqual(T(0, R(5400), R(5400)));
+    const big = purchase({ number: "HM/3", gstin: GSTIN.sup2, ledger: "Motor Car", lines: [line(R(200000))] }); // +18,000
+    const b = analyse(extract({ ...matched(raw, big, note), ledgers: [car] }));
+    expect(b.itc.b1).toEqual(T(0, R(9000), R(9000))); // 18,000 − 9,000
+    expect(b.itc.blockedNoteExcess).toEqual(zeroTax());
+    expect(b.itc.net).toEqual(T(0, R(5400), R(5400)));
+  });
+
+  it("a reverse-charge credit note on a blocked ledger comes back to 4(A)(3), not 4(A)(5)", () => {
+    const rcmBill = purchase({ number: "LB/1", gstin: null, reverseCharge: true, ledger: "Labour", lines: [lineTax(R(20000), { cgst: R(1800), sgst: R(1800) })] });
+    const rcmNote = purchase({ number: "CAB/CN", gstin: null, reverseCharge: true, docType: "CRN", ledger: "Motor Car", lines: [lineTax(R(10000), { cgst: R(900), sgst: R(900) })] });
+    const a = analyse(extract({ purchases: [rcmBill, rcmNote], ledgers: [car] }));
+    // RCM tax 1,800 − 900 = 900 per head is still the 3.1(d) liability; 4(A)(3) = 900 + 900 excess = 1,800.
+    expect(a.rcm.tax).toEqual(T(0, R(900), R(900)));
+    expect(a.itc.a3).toEqual(T(0, R(1800), R(1800)));
+    expect(a.itc.a5).toEqual(zeroTax());
+    expect(a.itc.net).toEqual(T(0, R(1800), R(1800)));
+  });
+});
+
+const addTaxes = (a: ReturnType<typeof zeroTax>, b: ReturnType<typeof zeroTax>) => T(a.igst + b.igst, a.cgst + b.cgst, a.sgst + b.sgst, a.cess + b.cess);
+const subTaxes = (a: ReturnType<typeof zeroTax>, b: ReturnType<typeof zeroTax>) => T(a.igst - b.igst, a.cgst - b.cgst, a.sgst - b.sgst, a.cess - b.cess);
 
 describe("document series (GSTR-1 Table 13)", () => {
   it("prefix + number, gaps listed separately (never presumed cancelled), non-numeric numbers on their own row", () => {

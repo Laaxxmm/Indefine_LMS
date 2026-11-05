@@ -25,6 +25,11 @@ const TAX_COLS = [c("igst", "IGST", "inr"), c("cgst", "CGST", "inr"), c("sgst", 
 const taxCells = (t: TaxSplit, k = 1): RowSpec => ({ igst: rupees(k * t.igst), cgst: rupees(k * t.cgst), sgst: rupees(k * t.sgst), cess: rupees(k * t.cess) });
 const rate = (bps: number) => bps / 10_000;
 const yn = (b: boolean) => (b ? "Y" : "N");
+/** Non-zero heads of a split for a note: "IGST ₹36,000.00, CGST ₹9,000.00". */
+const taxNote = (t: TaxSplit) =>
+  HEADS.filter((h) => t[h] !== 0)
+    .map((h) => `${h.toUpperCase()} ₹${formatInr(t[h] / 100)}`)
+    .join(", ") || "nil";
 
 // ------------------------------------------------------------------ GSTR-1
 
@@ -179,6 +184,7 @@ function gstr3bSheets(a: Analysis, x: GstExtract): SheetSpec[] {
         { details: "Memo: ITC deferred (in books, not in GSTR-2B)", ...taxCells(a.itc.deferred) },
         { details: "Memo: ITC held back (the model could not classify the bill; reviewer question)", ...taxCells(a.itc.heldBack) },
         { details: "Memo: ITC in GSTR-2B not in books (not claimed)", ...taxCells(a.itc.notBooked) },
+        { details: "Memo: credit notes on s.17(5) blocked purchases above this period's blocked ITC (kept out of 4(A); never availed)", ...taxCells(a.itc.blockedNoteExcess) },
       ],
     },
     { name: "6.1 Payment", columns: [...GSTR3B_COLUMNS.payment], totals: true, rows: payment },
@@ -204,6 +210,14 @@ function gstr3bSheets(a: Analysis, x: GstExtract): SheetSpec[] {
           note: "Table 4(A)(5) is ITC on documents present in both the purchase register and GSTR-2B (ITC available), at the lower of the two per tax head. Documents not in 2B are deferred, not claimed. ITC on a bill whose ledger the model could not classify (insufficient evidence on blocked credit or reverse charge) is held back, not claimed, until the reviewer answers the question (memo row in Table 4).",
         },
         { topic: "Interest and late fee", note: "Estimates only, computed from the expected filing date in profile.json. s.50(3) interest on ITC wrongly availed and utilised is not estimated." },
+        ...(taxTotal(a.itc.blockedNoteExcess) > 0
+          ? [
+              {
+                topic: "Credit notes on blocked purchases",
+                note: `Supplier credit notes on purchases blocked u/s 17(5) exceed this period's blocked ITC by ${taxNote(a.itc.blockedNoteExcess)}. That ITC was never availed (it was reversed in Table 4(B)(1) when the bill was booked), so the excess is kept out of Table 4(A) and 4(B)(1) stays nil; net ITC is not reduced. If the GSTR-2B auto-populates the note in 4(A)(5), edit 4(A)(5) to these figures.`,
+              },
+            ]
+          : []),
         ...(a.timeBarredNotes.length
           ? [
               {
