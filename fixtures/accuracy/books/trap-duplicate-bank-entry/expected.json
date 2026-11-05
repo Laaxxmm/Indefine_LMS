@@ -1,5 +1,6 @@
 {
   "description": "Trap: the bank statement export repeats the 15 Oct Gamma Stores credit of ₹2,40,000 (same date, ref, narration). One copy matches the ledger; the copy is flagged as a duplicate.",
+  "category": "trap",
   "flags": [
     {
       "ruleId": "books.bank-duplicates",

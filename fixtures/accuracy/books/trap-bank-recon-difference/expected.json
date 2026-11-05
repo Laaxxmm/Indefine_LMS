@@ -1,5 +1,6 @@
 {
   "description": "Trap: the ledger opening balance is ₹2,45,000 but the statement opens at ₹2,50,000 (a September item is missing from the books export). Every line still matches, but the BRS leaves an unexplained ₹5,000.",
+  "category": "trap",
   "flags": [
     {
       "ruleId": "books.bank-recon-difference",

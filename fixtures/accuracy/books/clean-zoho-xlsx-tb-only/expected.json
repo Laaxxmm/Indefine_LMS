@@ -1,5 +1,6 @@
 {
-  "description": "Clean Zoho Books trial balance as XLSX (Account / Account Type / Net Debit / Net Credit, numeric cells). Only the TB is provided, so the optional checks are skipped (info).",
+  "description": "Clean Zoho Books trial balance as XLSX (Account / Account Type / Net Debit / Net Credit, numeric cells) plus the TDS ledger and challan (paid on time). Bank, GST, prior TB and schedules are not provided, so those checks are skipped (info).",
+  "category": "clean",
   "flags": [
     {
       "ruleId": "books.inputs-missing",
@@ -13,6 +14,9 @@
     "tbLedgerCount": 7,
     "suspensePaise": 0,
     "cashBalancePaise": 465450,
+    "tdsDeductedPaise": 200000,
+    "tdsDepositedPaise": 200000,
+    "tdsShortfallPaise": 0,
     "suggestionCount": 0,
     "parseIssueCount": 0
   },

@@ -1,5 +1,6 @@
 {
   "description": "Typical gap: three bank debits are not in the books — a courier UPI payment, GST on bank charges, and an insurance NACH whose amount reads '12,O00.00' (letter O) and cannot be parsed. Suggestions for the two readable debits; the bad row is reported.",
+  "category": "typical-gap",
   "flags": [
     {
       "ruleId": "books.parse-issues",

@@ -1,5 +1,6 @@
 {
   "description": "Typical gap: ₹25,000 parked in Suspense and Cash in Hand showing a ₹6,750 credit balance. TB still balances.",
+  "category": "typical-gap",
   "flags": [
     {
       "ruleId": "books.suspense-nonzero",

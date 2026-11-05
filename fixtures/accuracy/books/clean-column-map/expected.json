@@ -1,5 +1,6 @@
 {
   "description": "Clean: the TB export uses 'Account Head / Classification / Dr Total / Cr Total' headers, mapped by column-map.json. Only the TB is provided.",
+  "category": "clean",
   "flags": [
     {
       "ruleId": "books.inputs-missing",

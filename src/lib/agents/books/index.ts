@@ -15,6 +15,7 @@ import { suggestClassifications } from "./classify";
 import { BANK_MATCH } from "./config";
 import { booksInputSchema, parseBooksFiles, type BooksInput } from "./inputs";
 import { booksPack } from "./pack";
+import { BOOKS_PROBE_TARGETS, probeCsvAmount } from "./probe";
 import { BOOKS_CHECKLIST, BOOKS_KEY, booksRegistry } from "./rules";
 import { gstTieOut, tdsCheck } from "./statutory";
 import { netPaise, tbTotals } from "./tb";
@@ -71,6 +72,8 @@ export const booksAgent: AgentDefinition<BooksInput, BooksExtract> = {
   inputSchema: booksInputSchema,
   defaultChecklist: BOOKS_CHECKLIST,
   checklistRegistry: booksRegistry,
+  /** Accuracy-harness probe: +₹1 on the first TB amount (else bank / TDS / GST CSV). */
+  probeMutation: (files) => probeCsvAmount(files, BOOKS_PROBE_TARGETS),
 
   async extract({ input, notes, model }) {
     const parsed = await parseBooksFiles(input);

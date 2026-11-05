@@ -1,5 +1,6 @@
 {
   "description": "Trap: Output SGST keyed as 55,799.99 — TB credits short by one paisa. Block flag; GST ledger file itself still agrees with the return.",
+  "category": "trap",
   "flags": [
     {
       "ruleId": "books.tb-balanced",

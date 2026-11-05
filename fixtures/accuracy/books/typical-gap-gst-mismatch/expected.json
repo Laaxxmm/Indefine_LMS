@@ -1,5 +1,6 @@
 {
   "description": "Typical gap: ITC IGST ₹5,000 in the books is not in the filed return; Output CGST differs by ₹1.00 exactly (within tolerance, not flagged).",
+  "category": "typical-gap",
   "flags": [
     {
       "ruleId": "books.gst-mismatch",

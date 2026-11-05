@@ -1,5 +1,6 @@
 {
   "description": "Clean October close: TB balances, bank reconciles (one cheque in transit), TDS paid on time, GST ties, no reminders.",
+  "category": "clean",
   "flags": [],
   "figures": {
     "tbDebitPaise": 139660000,

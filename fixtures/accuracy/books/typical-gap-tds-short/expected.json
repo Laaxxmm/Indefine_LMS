@@ -1,5 +1,6 @@
 {
   "description": "Typical gap: October 194C TDS ₹2,500 deducted on a contractor bill but no challan; 194I and 192 paid on time.",
+  "category": "typical-gap",
   "flags": [
     {
       "ruleId": "books.tds-not-deposited",

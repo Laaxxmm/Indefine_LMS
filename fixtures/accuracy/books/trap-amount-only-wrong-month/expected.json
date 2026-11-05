@@ -1,5 +1,6 @@
 {
   "description": "Trap: statement debit 02 Oct ₹40,000 and ledger cheque 453 dated 30 Oct ₹40,000 agree by amount only (28 days apart). Must stay unmatched and be flagged; the statement debit gets an expense suggestion.",
+  "category": "trap",
   "flags": [
     {
       "ruleId": "books.bank-amount-only",

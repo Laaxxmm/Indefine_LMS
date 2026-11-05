@@ -1,5 +1,6 @@
 {
   "description": "Trap for promoted mistake m-self-cheque: a ₹25,000 self cheque (cash withdrawal) on 28 Oct, recorded in the books and matched by reference, must still be flagged for review by the approved rule.",
+  "category": "trap",
   "flags": [
     {
       "ruleId": "books.m-self-cheque",

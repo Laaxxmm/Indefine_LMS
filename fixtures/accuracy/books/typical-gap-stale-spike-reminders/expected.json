@@ -1,5 +1,6 @@
 {
   "description": "Typical gap: cheque 448 issued 15 Sep 2026 still not presented (46 days at 31 Oct); Repairs ₹90,000 vs ₹30,000 in September; insurance prepaid and audit-fee accrual to book for October.",
+  "category": "typical-gap",
   "flags": [
     {
       "ruleId": "books.bank-stale-items",
