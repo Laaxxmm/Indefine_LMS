@@ -1,6 +1,6 @@
 # PROGRESS — Indefine Firm OS
-Current phase: 5–8 | Branch: firm-os/phase-0-inventory | Last green: 2026-11-05 21:27 IST
-Tests: unit+integration 1561/1561 (70 files; Firm OS coverage 99.7% lines / 97.4% branches) · e2e 4/4 (smoke, local, no DB) · accuracy: echo pass on hardened harness (deterministic block 1/0/0, warn 2/0/0; input sensitivity 6/6) | GST – | ROC – | TAX – | BOOKS – | AUDIT –
+Current phase: 5–8 | Branch: firm-os/phase-0-inventory | Last green: 2026-11-05 21:40 IST
+Tests: unit+integration 1974/1974 (88 files; Firm OS coverage 99.7% lines / 97.4% branches) · e2e 4/4 (smoke, local, no DB) · accuracy (recorded mode, hardened harness): echo pass | GST pass (23) | ROC – | TAX – | BOOKS pass (15) | AUDIT pass (15) — independent audit pending
 Model mode: CLAUDE_ONLY + LOCAL_STUB(fail-closed) | Turia bridge: MANUAL (ADR-003)
 
 ## Phase checklist (✅ only when QA gate green)
@@ -9,9 +9,9 @@ Model mode: CLAUDE_ONLY + LOCAL_STUB(fail-closed) | Turia bridge: MANUAL (ADR-00
 - [x] 2 ModelRouter + anonymizer + local stub ✅ (19:25 IST; live Claude smoke Blocked — key)
 - [ ] 3 Onboarding Agent — code complete, unit/integration green; QA gate pending e2e 3/3 (Blocked: staging DB + partner session)
 - [x] 4 Task-agent framework ✅ (20:35 IST)
-- [ ] 5 GST Prep
+- [ ] 5 GST Prep — gate green in recorded mode (23 fixtures, input sensitivity 23/23, replay 3/3); independent audit pending; DB e2e Blocked
 - [ ] 6 ROC Prep + Tax Prep
-- [ ] 7 Books Close + Audit Assist
+- [ ] 7 Books Close + Audit Assist — both gates green in recorded mode (15 + 15 fixtures); independent audit pending; DB e2e Blocked
 - [ ] 8 Close loop — code complete, close-loop tests green; QA gate pending golden-path e2e (needs GST agent + staging DB); review-screen buttons in progress
 - [ ] 9 Daily Coach
 - [ ] 10 Client Comms drafts
@@ -109,6 +109,10 @@ Shared foundation (commit c61d885): additive Prisma section "Firm OS: shared spi
 | Mistake promotion loop | src/lib/agents/core/mistakes.test.ts | green |
 | Accuracy scoring + harness self-test | src/lib/agents/core/accuracy*.test.ts | green |
 | /agents pages + API (403/400, no portal button) | tests/unit/routes/agents*.test.ts | green |
+| GST parsers, compute/set-off, rules, model tasks, agent | src/lib/agents/gst/__tests__/*.test.ts | green (145) |
+| Books Close (TB, BRS, TDS/GST tie-out, classify) | src/lib/agents/books/*.test.ts | green (146) |
+| Audit Assist (sampling, leads, CARO, opinion guard) | src/lib/agents/audit/*.test.ts | green (122) |
+| Review close actions + approve hook | tests/unit/routes/close-loop-panel.test.ts, src/lib/close-loop/approve-hook.test.ts | green |
 | Close gate (missing file, wrong path, sha mismatch, size 0, Turia open, minutes 0, both present → DONE) | src/lib/close-loop/gate.test.ts | green |
 | Reconciler (thresholds, idempotent cron, out-of-hours no-op, deleted-after-DONE alert) | src/lib/close-loop/reconcile.test.ts | green |
 | Hooks + cycle time | src/lib/close-loop/{hooks,cycle-time}.test.ts | green |
@@ -122,6 +126,9 @@ Shared foundation (commit c61d885): additive Prisma section "Firm OS: shared spi
 
 **Hardened harness (21:17 IST):** recorded mode gates deterministic flags on thresholds; LLM flags must match recordings exactly; support (tp/fp/fn) shown; input-sensitivity probe mandatory for production agents; thin sets refused (gst/roc/tax ≥ 15, books/audit ≥ 10, ≥1 block + ≥1 warn expected, clean/typical-gap/trap each present); LLM evidence must quote the rule's context. The five audit probes are permanent self-tests and all FAIL as they should.
 
+| gst | accuracy/gst (23) | det. block 1.000/1.000 (10/0/0) | det. warn 1.000/1.000 (13/0/0); LLM warn 1/0/0 match | 23/23 | 23/23 | 3/3 | 23/23 code path | pass · input sensitivity 23/23 · clean 3 / gap 3 / trap 17 | 05 Nov 2026 21:33 IST |
+| books | accuracy/books (15) | det. block 1.000/1.000 (3/0/0) | det. warn 1.000/1.000 (10/0/0) | 15/15 | 15/15 | 3/3 | 15/15 code path | pass · input sensitivity 15/15 · clean 4 / gap 5 / trap 6 | 05 Nov 2026 21:40 IST |
+| audit | accuracy/audit (15) | det. block 1.000/1.000 (2/0/0) | det. warn 1.000/1.000 (9/0/0); LLM warn 1/0/0 match | 15/15 | 15/15 | 3/3 | 15/15 code path | pass · input sensitivity 15/15 · clean 2 / gap 6 / trap 7 | 05 Nov 2026 21:40 IST |
 | echo (hardened) | accuracy/echo (6) | det. block 1.000/1.000 (1/0/0) | det. warn 1.000/1.000 (2/0/0) | 6/6 | 6/6 | 1/1 | 6/6 code path | pass · input sensitivity 6/6 | 05 Nov 2026 21:17 IST |
 
 **Independent accuracy audit (fable model, 20:46 IST, read-only):** echo figures recomputed independently 6/6 match; flags hand-derived 6/6 agree; thresholds equal the spec; P/R maths correct; self-test fails as it should; mistake replay genuinely depends on the promoted rule. Findings:
@@ -158,6 +165,9 @@ Shared foundation (commit c61d885): additive Prisma section "Firm OS: shared spi
 - **Confirm ADR-007** (Graph upload via create-only PUT) · deviates from Phase 1 "GET/POST only" · approve or reject · 2026-11-05
 - **DB trigger for DONE (ADR-005 backstop)** · reconciler detects, a Postgres trigger would prevent · decide whether to add the proposed additive trigger migration (+ set_config hook in state-db.ts) · 2026-11-05
 - **Close-loop conventions** · partner decisions · who performs the 10% Turia spot checks (no UI yet); confirm "waiting on client" = time after an event note saying "waiting on/for client" · 2026-11-05
+- **Partner verification — GST** (src/lib/agents/gst/config.ts GST_VERIFY_NOTES): B2CL > ₹1,00,000 (N 12/2024); s.50(1) 18% on cash portion; 3B late fee ₹50/day (nil ₹20) + AATO caps (N 19/2021); QRMP 22nd/24th groups (N 82/2020); 2B tolerance ₹1 (firm SOP); rule 37 180 days proportional; RCM list + rates (legal, GTA 5%, security, director, sponsorship, unregistered commercial rent N 09/2024-R); HSN 4/6 digits (N 78/2020); e-invoice > ₹5 cr (N 10/2023); s.34(2) and s.16(4) 30 Nov; 17(5) categories; set-off order per s.49/49A/rule 88A/Circular 98 · 2026-11-05
+- **Partner verification — Books/Audit** (config.ts verify notes): bank match windows 5/31 days; unreconciled > 30 days; expense spike > 50% and ≥ ₹50k; TDS deposit 7th / 30 Apr (2025-Act equivalent?); materiality 1% revenue, PM 75%; variance ≥ PM and ≥ 20%; min sample 25, MUS factor 3.0; CARO exemption limits; small company ₹10 cr / ₹100 cr (Dec 2025 amendment — confirm); s.138 thresholds; severities (GST mismatch / negative cash / suspense = warn; TDS not deposited, BRS difference = block) · 2026-11-05
+- **Seed SopPacks** · runner loads the active SopPack from DB · run the seed functions (gst seed.ts; books/audit publish v1.0.0 from defaultChecklist) on staging/prod after partner review · 2026-11-05
 - Push branches / open PRs · no gh CLI on this machine · human approval to push firm-os/* branches · 2026-11-05
 
 ## Known gaps / tech debt
@@ -168,6 +178,8 @@ Shared foundation (commit c61d885): additive Prisma section "Firm OS: shared spi
 - /work is a two-person tech tracker behind an email allow-list — JobTasks will surface on /dashboard + /agents instead (inventory G-7).
 - greytHR is a monthly CSV only — Phase 9 break nudge needs an LMS activity heartbeat (G-6).
 - Workflows hard-code https://lms.indefine.in (staging crons need a variable) (G-11).
+- GST v1.0.0 not covered: exports/SEZ, imports, ISD, amendments (B2BA/CDNRA), CDNUR, e-way bill checks, s.50(3) interest, interest on rule 37 reversals.
+- compute() receives no SopPack, so GST rates live in module config; rule gst.pack-config blocks if pack and code disagree. Better: framework passes pack params to compute.
 - CoachEvent has no unique constraint: two concurrent reconciler runs could double-nudge (sequential duplicates are handled). Fix needs a schema change.
 - AgentRun.inputs purge job (inputsPurgeAt, ≤ 30 days) not built yet — Phase 11.
 - Accuracy `--provider` reserved for Phase 2b (exits 2).
@@ -203,4 +215,7 @@ Shared foundation (commit c61d885): additive Prisma section "Firm OS: shared spi
 - 21:10 · all · ADR-008 agent guardrails written; GST/ROC/Tax/Books/Audit agents briefed · –
 - 21:17 · 4 · Merged hardened accuracy harness (audit C1, H1, H2, M1–M3 fixed; probes as self-tests) · 68 files green · echo pass
 - 21:19 · guardrails · ADR-008 implementation agent started · –
+- 21:33 · 5 · Merged GST Prep (23 fixtures; ADR-008 tasks gst.classify-ledgers, gst.read-hsn) · 1706/1706 · gst pass
+- 21:40 · 7 · Merged Books Close + Audit Assist; registry conflict resolved (all agents kept); *.snap eol=lf · 1974/1974 · books, audit pass
+- 21:41 · 5/7 · Fable auditor re-run requested for gst, books, audit (+ hardened harness) · –
 - 21:27 · 8 · Merged review-screen close actions + approve hook + golden-path e2e spec; resolved agents.test.ts import conflict with the harness fix · 1561/1561 · build green
