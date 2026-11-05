@@ -1,5 +1,5 @@
 {
-  "description": "Boundary: inter-state B2C invoice of â‚¹100000.00 (B2CL needs MORE than â‚¹1,00,000).",
+  "description": "Boundary: inter-state B2C invoice of â‚¹100000.00 (B2CL needs MORE than â‚¹1,00,000). Core 3B figures (hand): outward 84,745.76 + 1,00,000 = 1,84,745.76; IGST 15,254.24, CGST 9,000, SGST 9,000 (tax 33,254.24). ITC 5,400 + 5,400 = 10,800. Cash IGST 15,254.24, CGST 3,600, SGST 3,600 = 22,454.24; no expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee.",
   "category": "trap",
   "job": {
     "fy": "2026-27",
@@ -17,7 +17,19 @@
     "cashIgstPaise": 1525424,
     "cashCgstPaise": 360000,
     "cashSgstPaise": 360000,
-    "cashTaxPaise": 2245424
+    "cashTaxPaise": 2245424,
+    "outwardCgstPaise": 900000,
+    "outwardSgstPaise": 900000,
+    "outwardCessPaise": 0,
+    "outwardTaxPaise": 3325424,
+    "itcAvailablePaise": 1080000,
+    "itcBlockedPaise": 0,
+    "itcOtherReversalPaise": 0,
+    "itcNetPaise": 1080000,
+    "cashCessPaise": 0,
+    "daysLate": 0,
+    "interestPaise": 0,
+    "lateFeePaise": 0
   },
   "deliverables": [
     {

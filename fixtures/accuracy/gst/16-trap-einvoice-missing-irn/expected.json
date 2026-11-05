@@ -1,5 +1,5 @@
 {
-  "description": "Trap: client with AATO â‚¹8 crore; one B2B invoice has no IRN in the e-invoice register.",
+  "description": "Trap: client with AATO â‚¹8 crore; one B2B invoice has no IRN in the e-invoice register. Core 3B figures (hand): outward 3,00,000 + 1,00,000 + 20,000 = 4,20,000; IGST 18,000, CGST 27,000 + 1,800 = 28,800, SGST 28,800 (tax 75,600). ITC 13,500 + 13,500 = 27,000. Cash IGST 18,000, CGST 15,300, SGST 15,300 = 48,600; no expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee.",
   "category": "trap",
   "job": {
     "fy": "2026-27",
@@ -18,7 +18,19 @@
     "cashIgstPaise": 1800000,
     "cashCgstPaise": 1530000,
     "cashSgstPaise": 1530000,
-    "cashTaxPaise": 4860000
+    "cashTaxPaise": 4860000,
+    "outwardIgstPaise": 1800000,
+    "outwardSgstPaise": 2880000,
+    "outwardCessPaise": 0,
+    "outwardTaxPaise": 7560000,
+    "itcAvailablePaise": 2700000,
+    "itcBlockedPaise": 0,
+    "itcOtherReversalPaise": 0,
+    "itcNetPaise": 2700000,
+    "cashCessPaise": 0,
+    "daysLate": 0,
+    "interestPaise": 0,
+    "lateFeePaise": 0
   },
   "deliverables": [
     {

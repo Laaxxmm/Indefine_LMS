@@ -1,5 +1,5 @@
 {
-  "description": "Trap: customer GSTIN with a wrong check character.",
+  "description": "Trap: customer GSTIN with a wrong check character. Core 3B figures (hand): outward 1,00,000; CGST 9,000, SGST 9,000. ITC 5,400 + 5,400 = 10,800. Cash CGST 3,600, SGST 3,600 = 7,200; no expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee.",
   "category": "trap",
   "job": {
     "fy": "2026-27",
@@ -17,7 +17,21 @@
     "cashCgstPaise": 360000,
     "cashSgstPaise": 360000,
     "cashTaxPaise": 720000,
-    "b2bInvoiceCount": 1
+    "b2bInvoiceCount": 1,
+    "outwardIgstPaise": 0,
+    "outwardCgstPaise": 900000,
+    "outwardSgstPaise": 900000,
+    "outwardCessPaise": 0,
+    "outwardTaxPaise": 1800000,
+    "itcAvailablePaise": 1080000,
+    "itcBlockedPaise": 0,
+    "itcOtherReversalPaise": 0,
+    "itcNetPaise": 1080000,
+    "cashIgstPaise": 0,
+    "cashCessPaise": 0,
+    "daysLate": 0,
+    "interestPaise": 0,
+    "lateFeePaise": 0
   },
   "deliverables": [
     {

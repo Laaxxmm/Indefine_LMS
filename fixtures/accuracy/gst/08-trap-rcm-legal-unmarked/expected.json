@@ -1,5 +1,5 @@
 {
-  "description": "Trap: advocate's legal fees booked without reverse charge; the draft adds RCM liability at 18% to 3.1(d) and ITC to 4(A)(3).",
+  "description": "Trap: advocate's legal fees booked without reverse charge; the draft adds RCM liability at 18% to 3.1(d) and ITC to 4(A)(3). Core 3B figures (hand): outward 3,00,000; CGST 27,000, SGST 27,000. RCM legal fees 50,000 x 18% intra = CGST 4,500 + SGST 4,500 (3.1(d), 4(A)(3)); ITC 4,500 + 4,500 + 9,000 + 9,000 = 27,000. Set-off leaves CGST 13,500 + SGST 13,500; RCM 4,500 + 4,500 paid in cash -> cash CGST 18,000, SGST 18,000 = 36,000; no expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee.",
   "category": "trap",
   "job": {
     "fy": "2026-27",
@@ -21,7 +21,20 @@
     "cashSgstPaise": 1800000,
     "cashTaxPaise": 3600000,
     "creditUtilisedPaise": 2700000,
-    "reconMatchedCount": 1
+    "reconMatchedCount": 1,
+    "outwardTaxablePaise": 30000000,
+    "outwardIgstPaise": 0,
+    "outwardCgstPaise": 2700000,
+    "outwardSgstPaise": 2700000,
+    "outwardCessPaise": 0,
+    "outwardTaxPaise": 5400000,
+    "itcBlockedPaise": 0,
+    "itcOtherReversalPaise": 0,
+    "cashIgstPaise": 0,
+    "cashCessPaise": 0,
+    "daysLate": 0,
+    "interestPaise": 0,
+    "lateFeePaise": 0
   },
   "deliverables": [
     {
