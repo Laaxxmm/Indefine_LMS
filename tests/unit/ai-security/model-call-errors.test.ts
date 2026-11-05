@@ -84,8 +84,9 @@ describe("ModelCall.error holds a classification only (#18)", () => {
     });
     const { repo, rows: logged } = memRepo();
     const router = createRouter({ providers: { claude: claude.provider, grok: off("grok"), local: off("local") }, repo, config: cfg });
-    const a = await router.run<string>({ task: "gst.a", privacy: "anonymize-then-cloud", difficulty: "sop", runId: "A", messages: [{ role: "user", content: `PAN ABCDE1234F Aadhaar ${AADHAAR} phone 9876543210` }] });
-    const b = await router.run<string>({ task: "gst.b", privacy: "anonymize-then-cloud", difficulty: "sop", runId: "B", messages: [{ role: "user", content: "nothing sensitive, PAN FGHIJ5678K only" }] });
+    // Free-text answers: "all" restores every known placeholder (the default "grounded" would keep them masked, #25).
+    const a = await router.run<string>({ task: "gst.a", privacy: "anonymize-then-cloud", difficulty: "sop", runId: "A", unmask: "all", messages: [{ role: "user", content: `PAN ABCDE1234F Aadhaar ${AADHAAR} phone 9876543210` }] });
+    const b = await router.run<string>({ task: "gst.b", privacy: "anonymize-then-cloud", difficulty: "sop", runId: "B", unmask: "all", messages: [{ role: "user", content: "nothing sensitive, PAN FGHIJ5678K only" }] });
     expect(seen[0]).not.toContain("ABCDE1234F");
     expect(a.status === "ok" && a.output).toBe(`echo ABCDE1234F ${AADHAAR} 9876543210 ⟨PAN_2⟩`);
     expect(b.status === "ok" && b.output).toBe("echo FGHIJ5678K ⟨AADHAAR_1⟩ ⟨PHONE_1⟩ ⟨PAN_2⟩");

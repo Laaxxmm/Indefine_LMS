@@ -15,8 +15,9 @@
 // prompt text. The anonymizer token map lives only inside one run() call.
 import { createHash } from "node:crypto";
 import type { ZodTypeAny } from "zod";
-import { createTokenMap, detectPii, mask, unmaskDeep, type PiiKind, type TokenMap } from "./anonymizer";
+import { createTokenMap, detectPii, mask, type PiiKind, type TokenMap } from "./anonymizer";
 import { providerErrorCode, storedError, validatorCode, zodCodes } from "./call-errors";
+import { unmaskOutput } from "./unmask-policy";
 import { loadRouterConfig, type RouterConfig } from "./config";
 import {
   BudgetExceededError,
@@ -224,6 +225,11 @@ export function maskContent(text: string, dictionary: DictionaryEntry[] | undefi
   return mask(text, { dictionary, map, literals: "all" }).masked;
 }
 
+/** Everything a request sent (unmasked, system included): the text a grounded answer may restore values from. */
+export function documentsOf(messages: readonly Msg[]): string {
+  return messages.map((m) => m.content).join("\n");
+}
+
 /** What a person reads when the leak gate stops a call (the ModelCall row names the kinds, never the values). */
 export const LEAK_GATE_REASON =
   "The request to the AI was stopped before sending because some client details could not be hidden from it. Nothing was sent; a person should prepare this item by hand.";
@@ -381,7 +387,8 @@ export function createRouter(deps: RouterDeps): Router {
       let schemaOk = false;
       let confidence = 0;
       if (raw) {
-        const value = d.anonymize ? unmaskDeep(raw.output, map) : raw.output;
+        // #25: only grounded fields get their values back (unmask-policy.ts); free text stays masked.
+        const value = d.anonymize ? unmaskOutput(raw.output, map, { mode: req.unmask ?? "grounded", source: documentsOf(req.messages) }) : raw.output;
         if (typeof raw.confidence === "number" && raw.confidence >= 0 && raw.confidence <= 1) confidence = raw.confidence;
         else {
           issues.push("confidence: must be a number between 0 and 1");

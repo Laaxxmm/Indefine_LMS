@@ -31,6 +31,13 @@ export interface ModelRequest<T = unknown> {
   contradictions?: (output: T) => string[] | Promise<string[]>;
   /** Client-master dictionary for the anonymizer (names, companies, addresses). */
   dictionary?: DictionaryEntry[];
+  /**
+   * Which placeholders in the answer are restored (security audit #25, unmask-policy.ts):
+   * "grounded" (default) — free-text fields stay masked and other strings are restored only when
+   * the restored text occurs in the documents sent; "all" — every string value (for rewrites the
+   * caller checks fact by fact, e.g. comms polish / translate).
+   */
+  unmask?: "grounded" | "all";
   /** Per-call output token cap (default 4096). */
   maxTokens?: number;
   /** Version of a registered prompt (ADR-008): ModelCall.task records `<task>@<taskVersion>`. */

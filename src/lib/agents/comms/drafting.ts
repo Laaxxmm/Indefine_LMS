@@ -88,6 +88,8 @@ export async function polishTemplate(t: Template, session: CommsSession, departm
       privacy: "anonymize-then-cloud",
       difficulty: "sop",
       dictionary,
+      // A rewrite of the template: every placeholder comes back, and validatePolish checks each fact (#25).
+      unmask: "all",
       maxTokens: 1500,
       messages: [{ role: "user", content: JSON.stringify({ subject: t.subject, paragraphs: t.paragraphs, facts }) }],
     });
@@ -152,6 +154,8 @@ export async function translateMessage(
       privacy: "anonymize-then-cloud",
       difficulty: "judgement",
       dictionary,
+      // A translation: every placeholder comes back, and the translate validators check each fact (#25).
+      unmask: "all",
       maxTokens: 4000,
       messages: [{ role: "user", content: JSON.stringify({ language, segments }) }],
     });

@@ -134,6 +134,8 @@ type CallOpts<T> = {
   validateWith: unknown;
   /** The call's own validators. */
   contradictions?: ModelRequest<T>["contradictions"];
+  /** Which answer fields get their placeholders back (router default: grounded fields only, #25). */
+  unmask?: ModelRequest<T>["unmask"];
 };
 
 export type GuardrailSessionDeps = {
@@ -304,6 +306,7 @@ export function createGuardrailSession(deps: GuardrailSessionDeps) {
         privacy: o.privacy,
         difficulty: o.difficulty,
         ...(dictionary.length ? { dictionary } : {}),
+        ...(o.unmask ? { unmask: o.unmask } : {}),
         // ADR-009 (LLM10): the task's output cap and the run's cost budget always apply; a call may only ask for less.
         maxTokens: Math.min(o.maxTokens ?? limits.maxOutputTokens, limits.maxOutputTokens),
         maxCostInr: Math.min(o.maxCostInr ?? runBudget, runBudget),
@@ -349,6 +352,7 @@ export function createGuardrailSession(deps: GuardrailSessionDeps) {
       schema,
       validateWith: input,
       contradictions: req.contradictions,
+      unmask: req.unmask,
     });
     // Quotes must come from what the model was actually shown (withheld lines are not in it).
     const source = req.source !== undefined ? screenDocumentText(req.source, label).kept : screened.source;
