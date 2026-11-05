@@ -1,6 +1,6 @@
 # PROGRESS — Indefine Firm OS
-Current phase: 5–8 | Branch: firm-os/phase-0-inventory | Last green: 2026-11-05 21:17 IST
-Tests: unit+integration all green (68 files; Firm OS coverage 99.7% lines / 97.4% branches) · e2e 4/4 (smoke, local, no DB) · accuracy: echo pass on hardened harness (deterministic block 1/0/0, warn 2/0/0; input sensitivity 6/6) | GST – | ROC – | TAX – | BOOKS – | AUDIT –
+Current phase: 5–8 | Branch: firm-os/phase-0-inventory | Last green: 2026-11-05 21:27 IST
+Tests: unit+integration 1561/1561 (70 files; Firm OS coverage 99.7% lines / 97.4% branches) · e2e 4/4 (smoke, local, no DB) · accuracy: echo pass on hardened harness (deterministic block 1/0/0, warn 2/0/0; input sensitivity 6/6) | GST – | ROC – | TAX – | BOOKS – | AUDIT –
 Model mode: CLAUDE_ONLY + LOCAL_STUB(fail-closed) | Turia bridge: MANUAL (ADR-003)
 
 ## Phase checklist (✅ only when QA gate green)
@@ -52,7 +52,7 @@ Phase 8 (merged, 6 commits from worktree branch)
 - [x] 3 reconcile.ts + /api/cron/firm-os/close-loop (Mon–Sat 09:00–19:00 IST) + .github/workflows/firm-os-close-loop.yml (every 30 min); 15-min reminder, 24-h escalation, once per person/job/day; DONE file re-verified — alert, never reopen; DB backstop check on DONE events
 - [x] 4 /api/firm-os/jobs/[id]/{filed,turia-close,state}; state→DONE returns 403 gate-required
 - [x] 5 /admin/firm-os/cycle-time — median / p90 per service, person, client; bottleneck stage
-- [ ] Mark filed / Close in Turia buttons on /agents review screen + approvePack → close-loop hook + tests/e2e-db/golden-path.spec.ts (agent running)
+- [x] Review screen: Mark filed (ack ref required for GST/ROC/IncomeTax/TDS) → Close in Turia (ref + minutes) → gate reasons / DONE chip + cycle time; approve/submit/request-changes fire the close-loop hook via injected afterTransition; tests/e2e-db/golden-path.spec.ts (+ negative case) — runs echo until gst lands (E2E_AGENT=gst)
 - [ ] QA e2e golden path onboard → GST → approve → filed → Turia close → DONE — **Blocked**: staging DB (+ GST agent merge)
 
 Phase 4 (in progress)
@@ -203,3 +203,4 @@ Shared foundation (commit c61d885): additive Prisma section "Firm OS: shared spi
 - 21:10 · all · ADR-008 agent guardrails written; GST/ROC/Tax/Books/Audit agents briefed · –
 - 21:17 · 4 · Merged hardened accuracy harness (audit C1, H1, H2, M1–M3 fixed; probes as self-tests) · 68 files green · echo pass
 - 21:19 · guardrails · ADR-008 implementation agent started · –
+- 21:27 · 8 · Merged review-screen close actions + approve hook + golden-path e2e spec; resolved agents.test.ts import conflict with the harness fix · 1561/1561 · build green
