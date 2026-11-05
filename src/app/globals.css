@@ -14,7 +14,7 @@
   --amber: #ffb020;
   --mint: #17b978;
   --ink: #15132b;
-  --ink2: #6c6a82;
+  --ink2: #67657d; /* = ink-mute (tailwind.config.ts) */
   --muted: #b7b5c6;
   --card: #ffffff;
   --line: #ececf3;
