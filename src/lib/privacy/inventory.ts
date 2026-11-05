@@ -1,10 +1,19 @@
 // Personal data Firm OS and the LMS client master hold about one data principal, as data: which
 // table, which fields (ADR-006 class A client data / B staff data / C firm data), why it is held,
-// and what erasure does to it. The access export and the erasure plan both walk this list, so a
-// field added here is exported and planned for in one place.
+// and what erasure does to it. Two lists:
 //
-// Built from ADR-006 and prisma/schema.prisma. docs/dpdp/data-inventory.md (hardening branch) was
-// not on this branch when this was written: reconcile the two after merge.
+//   DATASETS          the person's records. The access export and the erasure plan both walk it,
+//                     so a field added here is exported and planned for in one place.
+//   RESIDUE_DATASETS  copies of the person's identifiers inside free text and JSON of work records
+//                     (audit comments and notes, agent figures and findings, transition notes,
+//                     Turia checklists, mistake examples, nudges, model errors, onboarding runs that
+//                     never reached a client record, privacy-request notes, deliverable names).
+//                     Only the erasure plan walks it: the identifiers are replaced in place with
+//                     "[erased]" (scrub.ts) and every other value, row id and JSON key stays. Not
+//                     exported, because these rows also hold staff notes and other parties' data.
+//
+// Built from ADR-006, docs/dpdp/data-inventory.md and prisma/schema.prisma; the two documents and
+// this file change together.
 //
 // Deliberately left out of the export: AgentRun inputs and figures (cached registers and
 // computations that also name the client's customers and suppliers — other people's data), staff
@@ -12,6 +21,7 @@
 import { Prisma } from "@prisma/client";
 import type { prisma } from "@/lib/prisma";
 import type { DutyId, PrincipalType } from "./policy";
+import { ERASED_TOKEN, clientNeedles, codeNeedle, phoneNeedle, phraseNeedle, namePartNeedles, scrubColumns, scrubberFor, type Needle, type Scrubber } from "./scrub";
 
 export type Row = Record<string, unknown>;
 
@@ -20,12 +30,18 @@ export type PrivacyDb = Pick<
   | "client"
   | "firmClient"
   | "jobTask"
+  | "jobTaskEvent"
   | "job"
   | "engagement"
   | "commsDraft"
   | "onboardingRun"
   | "agentRun"
+  | "checklistResult"
+  | "mistakeLog"
   | "deliverable"
+  | "turiaSync"
+  | "coachEvent"
+  | "modelCall"
   | "clientDocument"
   | "certificateIssue"
   | "engagementLetter"
@@ -76,7 +92,14 @@ export interface DataField {
  * keep       not personal data on its own, or already purged on a schedule; nothing to do.
  */
 export type ErasureRule =
-  | { kind: "anonymise"; duties: "client" | readonly DutyId[]; set: (row: Row) => Row; applies?: (row: Row) => boolean }
+  | {
+      kind: "anonymise";
+      /** Duties that put the item on legal hold instead: every duty in force ("client"), or only these. */
+      duties: "client" | readonly DutyId[];
+      /** Column values the UPDATE writes. `s` replaces the person's identifiers in text and JSON. */
+      set: (row: Row, s: Scrubber) => Row;
+      applies?: (row: Row, s: Scrubber) => boolean;
+    }
   | { kind: "hold"; duties: "client"; reason: string }
   | { kind: "keep"; reason: string };
 
@@ -96,7 +119,7 @@ export interface DataSet {
 type Finder = { findMany(args: { where: Row; select?: Row; orderBy?: Row; take?: number }): Promise<Row[]> };
 const finder = (db: PrivacyReadDb, model: ModelName) => db[model] as unknown as Finder;
 
-const ERASED = "[erased]";
+const ERASED = ERASED_TOKEN;
 const erasedJson = { erased: true } as const;
 const CLIENT_PEOPLE: readonly PrincipalType[] = ["client-person"];
 const CLIENT_ANY: readonly PrincipalType[] = ["client-person", "client-contact"];
@@ -259,7 +282,7 @@ export const DATASETS: readonly DataSet[] = [
     erasure: {
       kind: "anonymise",
       duties: [],
-      set: (r) => ({ prompt: ERASED, spec: erasedJson, ...(r.plan != null ? { plan: erasedJson } : {}) }),
+      set: (r, s) => ({ prompt: ERASED, spec: erasedJson, ...(r.plan != null ? { plan: erasedJson } : {}), ...scrubColumns(r, ["error"], s) }),
       applies: (r) => r.prompt !== ERASED,
     },
     rows: async (db, s) => {
@@ -412,6 +435,287 @@ export const DATASETS: readonly DataSet[] = [
 ];
 
 export const datasetsFor = (t: PrincipalType) => DATASETS.filter((d) => d.principals.includes(t));
+
+// ------------------------------------------------------------------ residue (erasure only)
+
+/**
+ * The person's needles (scrub.ts): a client principal gets the client master's names and
+ * identifiers; a company's contact person only their own name, email and phone (the company is not
+ * a data principal); staff their name and email.
+ */
+export function needlesFor(s: Scope): Needle[] {
+  if (s.kind === "staff") return [phraseNeedle(s.user.name, "name"), codeNeedle(s.user.email)].filter((n): n is Needle => n !== null);
+  // A client person's filings are theirs too: acknowledgement numbers (ARN / SRN / ITR ack) found in notes.
+  if (s.principalType === "client-person") return [...clientNeedles(s.client), ...s.jobTasks.map((j) => (j.ackRef ? codeNeedle(j.ackRef) : null)).filter((n): n is Needle => n !== null)];
+  const c = s.client;
+  return [codeNeedle(c.contactEmail), phoneNeedle(c.contactPhone), phraseNeedle(c.contactName, "name"), ...namePartNeedles(c.contactName)].filter((n): n is Needle => n !== null);
+}
+
+const scrubbers = new WeakMap<Scope, Scrubber>();
+/** One scrubber per scope (scopes are loaded afresh for each plan). */
+export function scrubberOf(s: Scope): Scrubber {
+  let sc = scrubbers.get(s);
+  if (!sc) {
+    sc = scrubberFor(needlesFor(s));
+    scrubbers.set(s, sc);
+  }
+  return sc;
+}
+
+/** The work records linked to one client, read once per plan: their ids find audit rows and child rows. */
+interface Linked {
+  runs: Row[];
+  drafts: Row[];
+  onboarding: Row[];
+  orphans: Row[];
+  mistakes: Row[];
+  turia: Row[];
+  deliverables: Row[];
+  requests: Row[];
+  certificates: Row[];
+  letters: Row[];
+}
+
+const linkedCache = new WeakMap<ClientScope, Promise<Linked>>();
+const ORPHAN_SCAN_LIMIT = 5000;
+
+async function loadLinked(db: PrivacyReadDb, s: ClientScope): Promise<Linked> {
+  const fc = s.firmClient;
+  const jobIds = ids(s.jobTasks);
+  const name = String(s.client.name);
+  const runs = jobIds.length ? await finder(db, "agentRun").findMany({ where: { jobTaskId: { in: jobIds } }, orderBy: { startedAt: "asc" } }) : [];
+  const runIds = ids(runs);
+  const turiaWhere = [...(jobIds.length ? [{ jobTaskId: { in: jobIds } }] : []), ...(fc ? [{ firmClientId: fc.id }] : [])];
+  // An onboarding that failed before the client record existed has no firmClientId: it is found by
+  // the person's identifiers (PAN, GSTIN, email, phone) in its prompt or extracted details, never by
+  // a name alone.
+  const sc = scrubberOf(s);
+  const unlinked = await finder(db, "onboardingRun").findMany({ where: { firmClientId: null }, orderBy: { createdAt: "asc" }, take: ORPHAN_SCAN_LIMIT });
+  return {
+    runs,
+    drafts: fc ? await finder(db, "commsDraft").findMany({ where: { firmClientId: fc.id }, orderBy: { createdAt: "asc" } }) : [],
+    onboarding: fc ? await finder(db, "onboardingRun").findMany({ where: { firmClientId: fc.id }, orderBy: { createdAt: "asc" } }) : [],
+    orphans: unlinked.filter((r) => sc.hits([r.prompt, r.spec, r.plan], ["id"])),
+    mistakes: runIds.length ? await finder(db, "mistakeLog").findMany({ where: { agentRunId: { in: runIds } }, orderBy: { createdAt: "asc" } }) : [],
+    turia: turiaWhere.length ? await finder(db, "turiaSync").findMany({ where: { OR: turiaWhere }, orderBy: { createdAt: "asc" } }) : [],
+    deliverables: jobIds.length ? await finder(db, "deliverable").findMany({ where: { jobTaskId: { in: jobIds } }, orderBy: { createdAt: "asc" } }) : [],
+    requests: await finder(db, "privacyRequest").findMany({ where: { principalRef: String(s.client.id) }, orderBy: { createdAt: "asc" } }),
+    certificates: await finder(db, "certificateIssue").findMany({ where: { clientName: name }, select: { id: true } }),
+    letters: await finder(db, "engagementLetter").findMany({ where: { clientName: name }, select: { id: true } }),
+  };
+}
+
+function linked(db: PrivacyReadDb, s: Scope): Promise<Linked> | null {
+  const c = clientOf(s);
+  if (!c) return null;
+  let p = linkedCache.get(c);
+  if (!p) {
+    p = loadLinked(db, c);
+    linkedCache.set(c, p);
+  }
+  return p;
+}
+
+/** AuditEvent rows on the client's work records (not the privacy register: that is its own dataset). */
+async function workAuditRows(db: PrivacyReadDb, s: Scope): Promise<Row[]> {
+  const c = clientOf(s);
+  const l = await linked(db, s);
+  if (!c || !l) return [];
+  const on: [string, string[]][] = [
+    ["Client", [String(c.client.id)]],
+    ["FirmClient", c.firmClient ? [String(c.firmClient.id)] : []],
+    ["JobTask", ids(c.jobTasks)],
+    ["Job", ids(c.jobs)],
+    ["Engagement", ids(c.engagements)],
+    ["AgentRun", ids(l.runs)],
+    ["CommsDraft", ids(l.drafts)],
+    ["OnboardingRun", ids([...l.onboarding, ...l.orphans])],
+    ["MistakeLog", ids(l.mistakes)],
+    ["TuriaSync", ids(l.turia)],
+    ["Deliverable", ids(l.deliverables)],
+    ["CertificateIssue", ids(l.certificates)],
+    ["EngagementLetter", ids(l.letters)],
+  ];
+  const OR = on.filter(([, list]) => list.length).map(([entity, list]) => ({ entity, entityId: { in: list } }));
+  return OR.length ? finder(db, "auditEvent").findMany({ where: { OR }, orderBy: { createdAt: "asc" } }) : [];
+}
+
+/** Rows of a child table whose parent ids come from the linked records. */
+const childRows = (model: ModelName, key: string, parent: (l: Linked, c: ClientScope) => string[]) => async (db: PrivacyReadDb, s: Scope) => {
+  const c = clientOf(s);
+  const l = await linked(db, s);
+  if (!c || !l) return [];
+  const list = parent(l, c);
+  return list.length ? finder(db, model).findMany({ where: { [key]: { in: list } }, orderBy: { createdAt: "asc" } }) : [];
+};
+
+/** Anonymise the listed columns where the person's identifiers occur in them. */
+const scrubRule = (columns: readonly string[], duties: "client" | readonly DutyId[]): ErasureRule => ({
+  kind: "anonymise",
+  duties,
+  set: (r, s) => scrubColumns(r, columns, s),
+  applies: (r, s) => s.hits(columns.map((c) => r[c])),
+});
+
+const WORK_RECORD =
+  "Kept with the engagement's working papers (review trail, findings, figures), so they are held while a retention duty applies and anonymised in place after it.";
+
+const ORPHAN_PURPOSE = "A failed or abandoned onboarding: the request typed by staff and the details extracted from it. No engagement started, so no duty applies.";
+const ORPHAN_FIELDS = [f("prompt", "Request as typed"), f("spec", "Details extracted"), f("plan", "Onboarding plan")];
+
+/** The whole onboarding conversation of the person: prompt, extracted details and plan. */
+export const eraseOnboardingRun = (r: Row, s: Scrubber): Row => ({
+  prompt: ERASED,
+  spec: erasedJson,
+  ...(r.plan != null ? { plan: erasedJson } : {}),
+  ...scrubColumns(r, ["error", "steps"], s),
+});
+
+/**
+ * Erasure-only datasets: free text and JSON that copy the person's identifiers. Each is anonymised
+ * in place (identifiers → "[erased]"); a legal hold applies per dataset:
+ *   duties "client"  part of the engagement record (working papers, review trail): held while any
+ *                    retention duty applies (ICAI SQC 1 / SA 230, Income-tax, GST, Companies Act)
+ *   duties []        a derived copy of data the client master or another system already holds:
+ *                    anonymised even while the client's own records are on hold
+ */
+export const RESIDUE_DATASETS: readonly DataSet[] = [
+  {
+    key: "audit-trail-notes",
+    label: "Audit trail: comments, transition notes, correction reasons",
+    model: "auditEvent",
+    principals: CLIENT_ANY,
+    purpose: `Accountability for work on the client's records. ${WORK_RECORD}`,
+    fields: [f("meta", "Audit details")],
+    erasure: { kind: "anonymise", duties: "client", set: (r, s) => ({ meta: s.json(r.meta) }), applies: (r, s) => s.hits(r.meta) },
+    rows: workAuditRows,
+  },
+  {
+    key: "agent-run-notes",
+    label: "Agent runs: figures, review notes and errors",
+    model: "agentRun",
+    principals: CLIENT_ANY,
+    purpose: `Draft packs prepared by task agents. ${WORK_RECORD} Numbers are never changed.`,
+    fields: [f("figures", "Computed figures"), f("reviewNotes", "Review notes"), f("error", "Failure reason")],
+    erasure: scrubRule(["figures", "reviewNotes", "error"], "client"),
+    rows: async (db, s) => (await linked(db, s))?.runs ?? [],
+  },
+  {
+    key: "checklist-findings",
+    label: "Checklist findings of agent runs",
+    model: "checklistResult",
+    principals: CLIENT_ANY,
+    purpose: `Each finding quotes the input it rests on (ADR-008). ${WORK_RECORD}`,
+    fields: [f("message", "Finding"), f("evidence", "Evidence quoted")],
+    erasure: scrubRule(["message", "evidence"], "client"),
+    rows: childRows("checklistResult", "agentRunId", (l) => ids(l.runs)),
+  },
+  {
+    key: "job-history-notes",
+    label: "Job history notes",
+    model: "jobTaskEvent",
+    principals: CLIENT_ANY,
+    purpose: `Notes typed on job transitions and the close-gate evidence. ${WORK_RECORD}`,
+    fields: [f("note", "Note")],
+    erasure: scrubRule(["note"], "client"),
+    rows: childRows("jobTaskEvent", "jobTaskId", (_l, c) => ids(c.jobTasks)),
+  },
+  {
+    key: "deliverable-names",
+    label: "Deliverable file names (pointers to SharePoint)",
+    model: "deliverable",
+    principals: CLIENT_ANY,
+    purpose: "Pointers to the job's files in SharePoint. The file itself stays in SharePoint (held); only the pointer's name and path are cleaned, its id and SHA-256 stay.",
+    fields: [f("name", "File name"), f("spPath", "SharePoint path")],
+    erasure: scrubRule(["name", "spPath"], "client"),
+    rows: async (db, s) => (await linked(db, s))?.deliverables ?? [],
+  },
+  {
+    key: "turia-bridge-evidence",
+    label: "Turia manual-bridge checklists",
+    model: "turiaSync",
+    principals: CLIENT_ANY,
+    purpose: "Values a person typed into Turia, prefilled from the client master. A copy: Turia and the client master hold the record.",
+    fields: [f("evidence", "Checklist and confirmation"), f("spotCheckNote", "Spot-check note", "B")],
+    erasure: scrubRule(["evidence", "spotCheckNote"], []),
+    rows: async (db, s) => (await linked(db, s))?.turia ?? [],
+  },
+  {
+    key: "mistake-examples",
+    label: "Mistake log examples",
+    model: "mistakeLog",
+    principals: CLIENT_ANY,
+    purpose: "The run's extraction kept to replay a proposed checklist rule. A copy of the run's data; the rule itself is kept.",
+    fields: [f("pattern", "What was missed", "B"), f("example", "Example")],
+    erasure: scrubRule(["pattern", "example"], []),
+    rows: async (db, s) => (await linked(db, s))?.mistakes ?? [],
+  },
+  {
+    key: "coach-nudges",
+    label: "Daily Coach reminders and escalations",
+    model: "coachEvent",
+    principals: CLIENT_ANY,
+    purpose: "Nudges to staff about the client's jobs. A copy of the job label.",
+    fields: [f("payload", "Nudge text")],
+    erasure: scrubRule(["payload"], []),
+    rows: childRows("coachEvent", "jobTaskId", (_l, c) => ids(c.jobTasks)),
+  },
+  {
+    key: "model-call-errors",
+    label: "Model call errors",
+    model: "modelCall",
+    principals: CLIENT_ANY,
+    purpose: "Usage log of model calls (ADR-002). The error text is a provider message; it should hold no client text.",
+    fields: [f("error", "Error text")],
+    erasure: scrubRule(["error"], []),
+    rows: childRows("modelCall", "runId", (l) => ids([...l.runs, ...l.onboarding, ...l.orphans, ...l.drafts])),
+  },
+  {
+    key: "onboarding-orphans",
+    label: "Onboarding runs that never reached a client record",
+    model: "onboardingRun",
+    principals: CLIENT_PEOPLE,
+    purpose: ORPHAN_PURPOSE,
+    fields: ORPHAN_FIELDS,
+    erasure: { kind: "anonymise", duties: [], set: eraseOnboardingRun, applies: (r) => r.prompt !== ERASED },
+    rows: async (db, s) => (await linked(db, s))?.orphans ?? [],
+  },
+  {
+    key: "onboarding-orphan-contacts",
+    label: "Onboarding runs that never reached a client record (contact details)",
+    model: "onboardingRun",
+    principals: ["client-contact"],
+    purpose: ORPHAN_PURPOSE,
+    fields: ORPHAN_FIELDS,
+    // A company's contact person: only their own details are cleaned, not the company's.
+    erasure: scrubRule(["prompt", "spec", "plan", "error"], []),
+    rows: async (db, s) => (await linked(db, s))?.orphans ?? [],
+  },
+  {
+    key: "privacy-request-notes",
+    label: "Privacy register: notes and replies",
+    model: "privacyRequest",
+    principals: CLIENT_ANY,
+    purpose: "The firm's record of the person's DPDP requests. The request itself (kind, dates, status, masked label) is kept for accountability; names typed into its notes are cleaned.",
+    fields: [f("notes", "Notes"), f("outcome", "Outcome")],
+    erasure: scrubRule(["notes", "outcome"], []),
+    rows: async (db, s) => (await linked(db, s))?.requests ?? [],
+  },
+  {
+    key: "privacy-register-audit",
+    label: "Privacy register: audit notes",
+    model: "auditEvent",
+    principals: CLIENT_ANY,
+    purpose: "Audit rows of the person's DPDP requests (identity-check notes, replies). Their structure is kept; names typed into them are cleaned.",
+    fields: [f("meta", "Audit details")],
+    erasure: { kind: "anonymise", duties: [], set: (r, s) => ({ meta: s.json(r.meta) }), applies: (r, s) => s.hits(r.meta) },
+    rows: async (db, s) => {
+      const l = await linked(db, s);
+      const list = l ? ids(l.requests) : [];
+      return list.length ? finder(db, "auditEvent").findMany({ where: { entity: "PrivacyRequest", entityId: { in: list } }, orderBy: { createdAt: "asc" } }) : [];
+    },
+  },
+];
 
 /** Systems outside Firm OS that also hold the client's data. Firm OS never deletes in them. */
 export const EXTERNAL_SYSTEMS = [
