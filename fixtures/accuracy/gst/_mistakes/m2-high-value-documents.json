@@ -1,0 +1,44 @@
+{
+  "id": "gst-m2-high-value-documents",
+  "pattern": "Reviewer: a ₹60 lakh capital purchase went through without anyone asking for the agreement and delivery proof. Partner approved a firm-SOP rule: documents above ₹50 lakh need papers on file.",
+  "ruleProposal": {
+    "id": "gst.mistake-high-value-documents",
+    "title": "Documents above ₹50 lakh have supporting papers",
+    "severity": "warn",
+    "kind": "deterministic",
+    "check": "gst.amount-over",
+    "evidence": "document number, taxable value and row",
+    "params": { "limitPaise": 500000000, "verify": "Firm SOP threshold (₹50,00,000 taxable value per document)" }
+  },
+  "example": {
+    "extracted": {
+      "period": "2026-10",
+      "fy": "2026-27",
+      "profile": { "gstin": "29AAFCQ2002L1ZG", "legalName": "Synthetic Client Pvt Ltd", "aatoPaise": 3000000000, "filingFrequency": "monthly", "expectedFilingDate": null, "dueDate": null },
+      "sales": [],
+      "purchases": [
+        {
+          "loc": "purchase-register.csv row 4",
+          "docType": "INV",
+          "number": "HM/CAP/12",
+          "date": "2026-10-21",
+          "supplier": "Horizon Machines",
+          "gstin": "29AAMCH6606Z1Z8",
+          "pos": "29",
+          "reverseCharge": false,
+          "value": 708000000,
+          "lines": [{ "rateBps": 1800, "taxable": 600000000, "tax": { "igst": 0, "cgst": 54000000, "sgst": 54000000, "cess": 0 }, "hsn": null, "description": "CNC lathe", "qty": null, "uqc": null }],
+          "ledger": "Plant and Machinery",
+          "paidOn": null
+        }
+      ],
+      "payables": [],
+      "gstr2b": [],
+      "prev": null,
+      "ledgers": [],
+      "hsnReads": [],
+      "sources": { "sales": { "file": "sales-register.csv" }, "purchases": { "file": "purchase-register.csv" }, "gstr2b": { "file": "gstr2b.json" } },
+      "notes": []
+    }
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "id": "gst-m3-itc-time-limit",
+  "pattern": "Reviewer: a FY 2024-25 bill booked late in October 2026 had its ITC claimed after the s.16(4) time limit (30 Nov 2025). Partner approved a time-limit rule.",
+  "ruleProposal": {
+    "id": "gst.mistake-itc-time-limit",
+    "title": "ITC within the s.16(4) time limit",
+    "severity": "block",
+    "kind": "deterministic",
+    "check": "gst.itc-time-limit",
+    "evidence": "bill number, date and row",
+    "params": { "deadlineMonthDay": "11-30", "verify": "s.16(4) as amended by Finance Act 2022: 30 November after the end of the FY of the invoice" }
+  },
+  "example": {
+    "extracted": {
+      "period": "2026-10",
+      "fy": "2026-27",
+      "profile": { "gstin": "29AAGCV3003M1Z5", "legalName": "Synthetic Client Pvt Ltd", "aatoPaise": 1200000000, "filingFrequency": "monthly", "expectedFilingDate": null, "dueDate": null },
+      "sales": [],
+      "purchases": [
+        {
+          "loc": "purchase-register.csv row 3",
+          "docType": "INV",
+          "number": "PC-2210",
+          "date": "2025-02-10",
+          "supplier": "Prime Components",
+          "gstin": "29AAHCP6202V1ZL",
+          "pos": "29",
+          "reverseCharge": false,
+          "value": 11800000,
+          "lines": [{ "rateBps": 1800, "taxable": 10000000, "tax": { "igst": 0, "cgst": 900000, "sgst": 900000, "cess": 0 }, "hsn": null, "description": "Server rack", "qty": null, "uqc": null }],
+          "ledger": "Purchase - Computer Parts",
+          "paidOn": null
+        }
+      ],
+      "payables": [],
+      "gstr2b": [],
+      "prev": null,
+      "ledgers": [],
+      "hsnReads": [],
+      "sources": { "sales": { "file": "sales-register.csv" }, "purchases": { "file": "purchase-register.csv" }, "gstr2b": { "file": "gstr2b.json" } },
+      "notes": []
+    }
+  }
+}

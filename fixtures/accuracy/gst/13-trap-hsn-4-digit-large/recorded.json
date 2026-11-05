@@ -1,0 +1,24 @@
+{
+  "gst.classify-ledgers": {
+    "ledgers": [
+      {
+        "ledger": "Purchase - Computer Parts",
+        "blockedCategory": "none",
+        "rcmService": "none",
+        "note": "ordinary business input",
+        "evidence": {
+          "quote": "Purchase - Computer Parts",
+          "location": "purchase-register.csv row 2"
+        }
+      }
+    ]
+  },
+  "gst.check:gst.free-supplies": {
+    "status": "pass",
+    "message": "No free supply, gift, sample or personal use described",
+    "evidence": {
+      "quote": "Motherboards",
+      "location": "purchase-register.csv row 2"
+    }
+  }
+}
