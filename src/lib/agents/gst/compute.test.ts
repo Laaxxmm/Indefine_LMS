@@ -342,6 +342,24 @@ describe("independent formula audit: blocked credit notes, negative outward tax,
     expect(a.itc.a5).toEqual(zeroTax());
     expect(a.itc.net).toEqual(T(0, R(1800), R(1800)));
   });
+
+  it("negative outward IGST (credit note above invoices): nil in the set-off, carried forward, shown on the 3B sheet", () => {
+    const x = extract({
+      sales: [sale({ lines: [line(R(500000))] }), sale({ number: "CN/1", docType: "CRN", gstin: GSTIN.mh, pos: "27", lines: [line(R(200000), 1800, true)], origNumber: "INV/9", origDate: "2026-08-20" })],
+    });
+    const a = analyse(x);
+    expect(a.outward.tax).toEqual(T(R(-36000), R(45000), R(45000)));
+    expect(a.outward.carryForward).toEqual(T(R(36000), 0, 0));
+    expect(a.liability).toEqual(T(0, R(45000), R(45000)));
+    expect(a.setoff.cash).toEqual(T(0, R(45000), R(45000)));
+    expect(computeFigures(x)).toMatchObject({ outwardIgstPaise: R(-36000), outwardCarryForwardPaise: R(36000) });
+    const rows = sheetsOf(x)("3.1 Outward");
+    expect(rows[0]).toMatchObject({ igst: 0, cgst: 45000, sgst: 45000 }); // what is entered in 3.1(a)
+    expect(rows.at(-1)).toMatchObject({ igst: 36000, cgst: 0, sgst: 0 }); // the memo row
+    expect(sheetsOf(x)("Notes").find((r) => r.topic === "Output tax carried forward")?.note).toMatch(/IGST ₹36,000\.00/);
+    // No negative head: nothing carried forward, row (a) unchanged.
+    expect(analyse(extract({ sales: [sale()] })).outward.carryForward).toEqual(zeroTax());
+  });
 });
 
 const addTaxes = (a: ReturnType<typeof zeroTax>, b: ReturnType<typeof zeroTax>) => T(a.igst + b.igst, a.cgst + b.cgst, a.sgst + b.sgst, a.cess + b.cess);

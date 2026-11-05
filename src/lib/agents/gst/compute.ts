@@ -18,6 +18,9 @@
 //   net-negative head of 4(A)(5)). 4(C) = 4(A) − 4(B). 4(D)(2) memo = 2B documents with ITC not available.
 //   Credit notes on blocked purchases net against this period's blocked ITC; any excess (ITC that
 //   was never availed) is kept out of 4(A) too, so it never reduces net ITC (memo row in Table 4).
+// - A head whose outward tax is negative (credit notes above invoices) is nil in the liability
+//   set off; the excess is carried forward to a later period's output tax (rule
+//   gst.negative-outward-tax, warn; memo row under Table 3.1). It is never ITC.
 // - B2CL: unregistered recipient, inter-state, invoice value > GST_CONFIG.b2clThresholdPaise.
 //   Notes to unregistered persons are netted into B2CS (CDNUR is not produced in v1.0.0).
 // - Time-barred credit notes (owner-approved 2026-11-05): a credit note dated after the s.34(2)
@@ -138,7 +141,8 @@ export type Analysis = {
   timeBarredNotes: SalesA[];
   purchases: PurchaseA[];
   gstr1: { b2b: SalesA[]; b2cl: SalesA[]; b2cs: B2csRow[]; cdnr: SalesA[]; hsn: HsnRow[]; docs: DocsRow[] };
-  outward: { taxable: number; tax: TaxSplit; nilExempt: number };
+  /** `tax` is signed; `carryForward` = the negative part of each head (credit notes above invoices), not set off this period. */
+  outward: { taxable: number; tax: TaxSplit; nilExempt: number; carryForward: TaxSplit };
   rcm: { taxable: number; tax: TaxSplit };
   recon: ReconRow[];
   itc: {
@@ -495,6 +499,9 @@ export function analyse(x: GstExtract): Analysis {
   const unavailable2b = sumTax(recon.filter((r) => r.status === "itc-unavailable").map((r) => scaleTax(r.twoBTax, sign(r.docType))));
   const notBooked = sumTax(recon.filter((r) => r.status === "missing-in-books").map((r) => scaleTax(r.twoBTax, sign(r.docType))));
 
+  // A head with negative outward tax (credit notes above this period's invoices) cannot be set
+  // off or paid as negative: it is nil here and the excess is carried forward (never ITC).
+  const outwardCarryForward = neg0(outTax);
   const liability = addTax(pos0(outTax), excessReversal);
   const openingCredit = x.prev ? pos0(x.prev.closingCredit) : zeroTax();
   const so = setOff(liability, addTax(openingCredit, net), pos0(rcmTax));
@@ -520,7 +527,7 @@ export function analyse(x: GstExtract): Analysis {
       hsn: hsnRows(reported),
       docs: docsRows(x.sales),
     },
-    outward: { taxable, tax: outTax, nilExempt },
+    outward: { taxable, tax: outTax, nilExempt, carryForward: outwardCarryForward },
     rcm: { taxable: rcmTaxable, tax: rcmTax },
     recon,
     itc: { a3, a5, available, b1, b2, rule37, net, heldBack, deferred, unavailable2b, notBooked, blockedNoteExcess, rule37Rows: r37 },
@@ -559,6 +566,7 @@ export function computeFigures(x: GstExtract): Record<string, number> {
     outwardSgstPaise: a.outward.tax.sgst,
     outwardCessPaise: a.outward.tax.cess,
     outwardTaxPaise: taxTotal(a.outward.tax),
+    outwardCarryForwardPaise: taxTotal(a.outward.carryForward),
     nilExemptPaise: a.outward.nilExempt,
     rcmTaxablePaise: a.rcm.taxable,
     rcmTaxPaise: taxTotal(a.rcm.tax),

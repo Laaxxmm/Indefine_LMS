@@ -9,7 +9,7 @@ import { formatInr } from "@/lib/agents/core/format";
 import { GST_VERIFY_NOTES } from "./config";
 import { analyse, byRate, heldBackFor, sign, type Analysis, type SalesA } from "./compute";
 import { stateName } from "./config";
-import { HEADS, rupees, taxTotal, type TaxSplit } from "./money";
+import { HEADS, addTax, rupees, taxTotal, type TaxSplit } from "./money";
 import type { GstExtract, GstInput } from "./types";
 
 export const DELIVERABLE_TITLES = {
@@ -159,11 +159,13 @@ function gstr3bSheets(a: Analysis, x: GstExtract): SheetSpec[] {
       name: "3.1 Outward",
       columns: [...GSTR3B_COLUMNS.outward],
       rows: [
-        { nature: "(a) Outward taxable supplies (other than zero rated, nil rated and exempted)", taxable: rupees(a.outward.taxable), ...taxCells(a.outward.tax) },
+        // A negative head (credit notes above invoices) is entered as nil; the excess is the memo row below.
+        { nature: "(a) Outward taxable supplies (other than zero rated, nil rated and exempted)", taxable: rupees(a.outward.taxable), ...taxCells(addTax(a.outward.tax, a.outward.carryForward)) },
         { nature: "(b) Outward taxable supplies (zero rated)", taxable: 0, ...taxCells(zero) },
         { nature: "(c) Other outward supplies (nil rated, exempted)", taxable: rupees(a.outward.nilExempt), ...taxCells(zero) },
         { nature: "(d) Inward supplies (liable to reverse charge)", taxable: rupees(a.rcm.taxable), ...taxCells(a.rcm.tax) },
         { nature: "(e) Non-GST outward supplies", taxable: 0, ...taxCells(zero) },
+        { nature: "Memo: credit-note tax above this period's output tax (not in (a); carried forward to a later period, not ITC)", taxable: 0, ...taxCells(a.outward.carryForward) },
       ],
     },
     {
@@ -210,6 +212,14 @@ function gstr3bSheets(a: Analysis, x: GstExtract): SheetSpec[] {
           note: "Table 4(A)(5) is ITC on documents present in both the purchase register and GSTR-2B (ITC available), at the lower of the two per tax head. Documents not in 2B are deferred, not claimed. ITC on a bill whose ledger the model could not classify (insufficient evidence on blocked credit or reverse charge) is held back, not claimed, until the reviewer answers the question (memo row in Table 4).",
         },
         { topic: "Interest and late fee", note: "Estimates only, computed from the expected filing date in profile.json. s.50(3) interest on ITC wrongly availed and utilised is not estimated." },
+        ...(taxTotal(a.outward.carryForward) > 0
+          ? [
+              {
+                topic: "Output tax carried forward",
+                note: `Credit notes exceed this period's invoices for ${taxNote(a.outward.carryForward)} (warn finding gst.negative-outward-tax). Table 3.1(a) cannot be negative, so that head is entered as nil and nothing is set off against it; carry the amount forward and reduce the same head's output tax in a later return. It is not input tax credit and cannot pay another head.`,
+              },
+            ]
+          : []),
         ...(taxTotal(a.itc.blockedNoteExcess) > 0
           ? [
               {
