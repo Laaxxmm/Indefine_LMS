@@ -19,6 +19,12 @@ export default defineConfig({
     ],
     exclude: ["node_modules/**", ".next/**", "tests/e2e/**"],
     restoreMocks: true,
+    // Several suites scan the whole repository (guards, ui-links, the DONE-gate minter scan) or run
+    // the full accuracy harness. They take 0.5–3 s on a quiet machine but timed out at the 5 s
+    // default when the suite ran beside parallel builds. These are work, not races: a 20 s default
+    // keeps a genuinely hung test visible while not failing on CPU contention.
+    testTimeout: 20_000,
+    hookTimeout: 20_000,
     coverage: {
       provider: "v8",
       reporter: ["text-summary", "json-summary"],
