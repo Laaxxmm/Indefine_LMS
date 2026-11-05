@@ -13,8 +13,9 @@ export const dynamic = "force-dynamic";
 
 // Agent pack review (DESIGN): left = checklist results with evidence, right = deliverables with
 // preview, comments; bottom bar = the one action the person can take now ("Approve pack",
-// "Request changes", "Submit for review", "Run agent"; after approval "Mark filed", then "Close in
-// Turia"). The person files on the portal; there is no portal, submit or send action here.
+// "Request changes", "Submit for review" with "Re-run with a note" beside it, "Run agent"; after
+// approval "Mark filed", then "Record Turia close"). The person files on the portal; there is no
+// portal, submit or send action here.
 
 type Tone = { label: string; box: string; icon: typeof XCircle; iconClass: string };
 
@@ -78,7 +79,8 @@ export default async function RunReviewPage({ params }: { params: Promise<{ agen
       )}
       {run.reviewNotes && (
         <p className="rounded-xl border border-border bg-card px-4 py-3 text-[13px] mb-4">
-          <span className="font-bold">Reviewer notes for this run: </span>
+          {/* From "Request changes" (the reviewer) or "Re-run with a note" (the preparer, a manager or a partner). */}
+          <span className="font-bold">Notes for this run: </span>
           {run.reviewNotes}
         </p>
       )}

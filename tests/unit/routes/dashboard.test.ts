@@ -40,6 +40,12 @@ describe("/dashboard", () => {
     expect(await renderHtml(await Dashboard())).not.toContain('href="/agents"');
   });
 
+  it("shows the Clients link only to people the /clients guard lets in (active users)", async () => {
+    expect(await renderHtml(await Dashboard())).toContain('href="/clients"');
+    signedIn(activeSession({ active: false }));
+    expect(await renderHtml(await Dashboard())).not.toContain('href="/clients"');
+  });
+
   it("redirects a signed-out visitor to sign-in", async () => {
     signedIn(null);
     expect(await redirectTarget(() => Dashboard())).toBe("/");

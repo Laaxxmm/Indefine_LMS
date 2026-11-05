@@ -67,8 +67,14 @@ describe("reviewActions (from the state machine)", () => {
   it("assignee: run on ASSIGNED / IN_PREP, submit on AGENT_DONE, never approve own job", () => {
     expect(reviewActions(user("priya"), job("ASSIGNED"), 0, NOW)).toMatchObject({ run: true, submit: false, approve: false });
     expect(reviewActions(user("priya"), job("IN_PREP"), 0, NOW).run).toBe(true);
-    expect(reviewActions(user("priya"), job("AGENT_DONE"), 0, NOW)).toMatchObject({ run: false, submit: true });
-    expect(reviewActions(user("priya"), job("IN_REVIEW"), 0, NOW)).toMatchObject({ approve: false, requestChanges: false });
+    expect(reviewActions(user("priya"), job("AGENT_DONE"), 0, NOW)).toMatchObject({ run: false, submit: true, rerun: true });
+    expect(reviewActions(user("priya"), job("IN_REVIEW"), 0, NOW)).toMatchObject({ approve: false, requestChanges: false, rerun: false });
+  });
+
+  it("re-run with a note (AGENT_DONE → IN_PREP): the assignee, a manager or a partner; not the reviewer or admin; only in AGENT_DONE", () => {
+    for (const who of ["priya", "meera", "partner"] as const) expect(reviewActions(user(who), job("AGENT_DONE"), 0, NOW).rerun).toBe(true);
+    for (const who of ["ravi", "admin", "outsider"] as const) expect(reviewActions(user(who), job("AGENT_DONE"), 0, NOW).rerun).toBe(false);
+    for (const s of ["ASSIGNED", "IN_PREP", "IN_REVIEW", "APPROVED", "CLOSING"] as const) expect(reviewActions(user("priya"), job(s), 0, NOW).rerun).toBe(false);
   });
 
   it("reviewer: request changes / approve on IN_REVIEW; not over block failures", () => {
@@ -79,7 +85,7 @@ describe("reviewActions (from the state machine)", () => {
   });
 
   it("outsiders and admins-only get nothing actionable", () => {
-    expect(reviewActions(user("outsider"), job("IN_REVIEW"), 0, NOW)).toEqual({ run: false, submit: false, requestChanges: false, approve: false, approveNeedsNote: false, proposeMistake: false });
+    expect(reviewActions(user("outsider"), job("IN_REVIEW"), 0, NOW)).toEqual({ run: false, submit: false, rerun: false, requestChanges: false, approve: false, approveNeedsNote: false, proposeMistake: false });
     expect(reviewActions(user("admin"), job("IN_REVIEW"), 0, NOW)).toMatchObject({ approve: false, requestChanges: false, run: false });
     expect(reviewActions(user("meera"), job("APPROVED"), 0, NOW)).toMatchObject({ run: false, submit: false, approve: false });
   });

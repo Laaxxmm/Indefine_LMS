@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Session } from "next-auth";
 import { NotFoundSignal, redirectTarget, renderHtml as renderRaw } from "./harness";
 import { echoWorld, rows, user, type World } from "../../fakes/agent-world";
-import { approvePack, logMistake, requestChanges, startAgentRun, submitForReview } from "@/lib/agents/service";
+import { approvePack, logMistake, requestChanges, rerunAgent, startAgentRun, submitForReview } from "@/lib/agents/service";
 
 const state = vi.hoisted(() => ({ world: null as unknown as World, turia: [] as Record<string, unknown>[] }));
 
@@ -26,7 +26,7 @@ const { default: ReviewPage } = await import("@/app/agents/[agent]/runs/[id]/pag
 const { default: MistakesPage } = await import("@/app/agents/mistakes/page");
 const { default: AdminMistakesPage } = await import("@/app/admin/firm-os/mistakes/page");
 const { decisionConsequence } = await import("@/app/agents/mistakes/MistakeDecision");
-const { approveConsequence } = await import("@/app/agents/[agent]/runs/[id]/ReviewPanels");
+const { RERUN_CONSEQUENCE, approveConsequence } = await import("@/app/agents/[agent]/runs/[id]/ReviewPanels");
 
 const as = (u: Session["user"] | null) => (auth as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(u ? { user: u, expires: "2099-01-01" } : null);
 const review = async (id: string) => renderHtml(await ReviewPage({ params: Promise.resolve({ agent: "echo", id }) }));
@@ -194,6 +194,42 @@ describe("/agents/[agent]/runs/[id] review screen", () => {
     expect(html).not.toMatch(PORTAL_OR_SEND);
   });
 
+  it("AGENT_DONE: Re-run with a note (secondary, warn) beside Submit for review for the assignee, a manager and a partner; nobody else", async () => {
+    await startAgentRun(user("priya"), "echo", "job-1", state.world.deps);
+    for (const who of ["priya", "meera", "partner"] as const) {
+      as(user(who));
+      const html = await review("run-1");
+      const bar = html.slice(html.indexOf('aria-label="Review actions"'));
+      expect(bar).toMatch(/<button[^>]*class="[^"]*bg-amber-50[^"]*"[^>]*>Re-run with a note<\/button>/);
+      expect(bar).toMatch(/<button[^>]*class="[^"]*bg-brand-500[^"]*"[^>]*>Submit for review<\/button>/);
+      expect((bar.match(/bg-brand-500/g) ?? []).length).toBe(1); // one primary action
+      // The note box and what a re-run does appear on the first click; nothing is sent from here.
+      expect(bar).not.toContain("Re-run agent with this note");
+      expect(bar).not.toContain("<textarea");
+      expect(html).not.toMatch(PORTAL_OR_SEND);
+    }
+    expect(RERUN_CONSEQUENCE).toBe(
+      "Re-running moves the job back to IN_PREP and starts a new agent run with your note. This run is kept for the record; submit the new run for review when it is ready.",
+    );
+    // The reviewer (staff) and admin have no edge out of AGENT_DONE: the bar says who acts.
+    for (const who of ["ravi", "admin"] as const) {
+      as(user(who));
+      const html = await review("run-1");
+      expect(html).not.toContain("Re-run with a note");
+      expect(html).not.toContain(">Submit for review<");
+      expect(html).toContain("The preparer checks it and submits it for review, or re-runs the agent with a note.");
+    }
+    // After a re-run the old run is read-only.
+    await rerunAgent(user("priya"), "run-1", "Use the corrected register", state.world.deps);
+    as(user("priya"));
+    const old = await review("run-1");
+    expect(old).toContain("A newer run exists");
+    expect(old).not.toContain("Re-run with a note");
+    const fresh = await review("run-2");
+    expect(fresh).toContain("Re-run with a note");
+    expect(fresh).toContain("Notes for this run: </span>Use the corrected register");
+  });
+
   it("reviewer on IN_REVIEW: Approve pack (primary) + Request changes; block findings shown in red", async () => {
     state.world = echoWorld({ register: ["ref,party,date,amount", "A,P,2026-10-05,1.00", "A,P,2026-10-06,1.00"].join("\n"), responses: {} });
     await startAgentRun(user("priya"), "echo", "job-1", state.world.deps);
@@ -241,7 +277,7 @@ describe("/agents/[agent]/runs/[id] review screen", () => {
     expect(old).toContain("A newer run exists");
     expect(old).not.toContain("Approve pack");
     const done = await review("run-2");
-    expect(done).toContain("Reviewer notes for this run");
+    expect(done).toContain("Notes for this run: </span>Recheck");
     expect(done).toContain("Firm OS never files anything");
     expect(done).toContain("Ravi Kumar");
     expect(done).toContain("Final · v2"); // attempt 2 → Working _v2 → Final _v2
@@ -249,12 +285,13 @@ describe("/agents/[agent]/runs/[id] review screen", () => {
     expect(done).toContain("Filing and close");
     expect(done).toContain("Filed by you on the portal — record the acknowledgement here.");
     expect(done).toMatch(/<button[^>]*>Mark filed<\/button>/);
-    expect(done).toContain("Mark filed records the filing against your name and moves the job on to closing; it cannot be undone from this screen.");
+    expect(done).toContain("Mark filed records the filing against your name and moves the job on to closing. Only a manager or partner can retract it afterwards, with a note.");
+    expect(done).not.toContain("cannot be undone from this screen");
     expect(done).not.toMatch(PORTAL_OR_SEND);
     expect(old).not.toContain("Mark filed"); // superseded run: read-only
   });
 
-  it("close loop on the review screen: CLOSING shows Close in Turia and the gate's reasons; DONE shows the chip; admin gets no action", async () => {
+  it("close loop on the review screen: CLOSING shows Record Turia close and the gate's reasons; DONE shows the chip; admin gets no action", async () => {
     await startAgentRun(user("priya"), "echo", "job-1", state.world.deps);
     await submitForReview(user("priya"), "run-1", state.world.deps);
     await approvePack(user("ravi"), "run-1", null, state.world.deps);
@@ -272,11 +309,22 @@ describe("/agents/[agent]/runs/[id] review screen", () => {
     await db.auditEvent.create({ data: { actorId: "u-priya", action: "close-refused", entity: "JobTask", entityId: "job-1", meta: { reasons: ["Turia task not closed: enter the Turia task ref and minutes logged"], state: "CLOSING" } } });
     as(user("priya"));
     const closing = await review("run-1");
-    expect(closing).toMatch(/<button[^>]*>Close in Turia<\/button>/);
+    expect(closing).toMatch(/<button[^>]*>Record Turia close<\/button>/);
     expect(closing).toContain("Still closing: the close gate did not pass");
     expect(closing).toContain("Turia task not closed");
     expect(closing).toContain("BOOKS-1");
     expect(closing).not.toMatch(PORTAL_OR_SEND);
+    expect(closing).not.toContain("Retract filing"); // the assignee is staff: managers and partners retract
+    for (const who of ["meera", "partner"] as const) {
+      as(user(who));
+      const manager = await review("run-1");
+      expect(manager).toMatch(/<button[^>]*class="[^"]*bg-amber-50[^"]*"[^>]*>Retract filing<\/button>/);
+      expect(manager).not.toContain("Confirm retraction");
+      expect(manager).not.toMatch(PORTAL_OR_SEND);
+    }
+    as(user("ravi"));
+    expect(await review("run-1")).not.toContain("Retract filing");
+    as(user("priya"));
 
     state.turia.push({ jobTaskId: "job-1", operation: "closeTask", status: "CLOSED", turiaRef: "TT-9", minutesLogged: 40, updatedAt: new Date() });
     expect(await review("run-1")).toMatch(/<button[^>]*>Check again<\/button>/);
@@ -285,7 +333,7 @@ describe("/agents/[agent]/runs/[id] review screen", () => {
     Object.assign(job, { state: "DONE", doneAt: new Date("2026-11-05T09:00:00Z") });
     const done = await review("run-1");
     expect(done).toContain("Closed 05 Nov 2026 14:30 IST · cycle time");
-    expect(done).not.toContain("Close in Turia");
+    expect(done).not.toContain("Record Turia close");
     expect(done).not.toContain("Still closing");
     expect(done).not.toMatch(PORTAL_OR_SEND);
   });

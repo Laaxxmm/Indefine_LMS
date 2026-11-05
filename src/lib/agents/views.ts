@@ -242,7 +242,7 @@ export async function loadRunReview(db: FirmDb, user: SessionUser, runId: string
     .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || SEV_ORDER[a.severity] - SEV_ORDER[b.severity]);
   const fails = (s: ChecklistView["severity"]) => checklist.filter((c) => c.status === "fail" && c.severity === s).length;
   const blockingFailures = fails("block");
-  const base = isLatest ? reviewActions(user, run.jobTask, blockingFailures, now) : { run: false, submit: false, requestChanges: false, approve: false, approveNeedsNote: false, proposeMistake: true };
+  const base = isLatest ? reviewActions(user, run.jobTask, blockingFailures, now) : { run: false, submit: false, rerun: false, requestChanges: false, approve: false, approveNeedsNote: false, proposeMistake: true };
   const hasFinal = run.deliverables.some((d) => d.kind === "Final");
   const def = getAgent(run.agent);
 
