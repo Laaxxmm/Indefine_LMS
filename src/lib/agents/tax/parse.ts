@@ -12,6 +12,7 @@
 // Statements are downloaded by staff; nothing here contacts any portal. Amounts → integer paise.
 import { z } from "zod";
 import type { InputFile } from "@/lib/agents/core/runner";
+import { wrongDepartment } from "@/lib/agents/roc/grounding";
 import { isDayKey, optPaise, parseCsv, rupeesToPaise, yes } from "@/lib/agents/roc/util";
 
 const Day = z.string().refine(isDayKey, "date must be YYYY-MM-DD");
@@ -254,6 +255,9 @@ export function parsePriorItr(file: InputFile): PriorItr {
 const byName = (files: InputFile[], name: string) => files.find((f) => f.name.toLowerCase() === name);
 
 export function parseTaxFiles(files: InputFile[]): TaxInput {
+  // Wrong-department input fails closed before any model call (ADR-008).
+  const elsewhere = wrongDepartment(files, "tax");
+  if (elsewhere) throw new Error(elsewhere);
   const problems: string[] = [];
   const attempt = <T>(fn: () => T): T | null => {
     try {
