@@ -1,5 +1,5 @@
 {
-  "description": "Abstain case: no HSN written for a B2B line and a vague 'Miscellaneous Expenses' bill; the right answer is insufficient_evidence, raised as questions and client requests. Core 3B figures (hand): outward 50,000; CGST 4,500, SGST 4,500. ITC 5,400 + 5,400 + 900 + 900 = 12,600 (the abstained Miscellaneous Expenses bill is neither blocked nor RCM in the figures; it is a reviewer question). Cash nil; closing credit CGST 1,800 + SGST 1,800; no expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee.",
+  "description": "Abstain case: no HSN written for a B2B line and a vague 'Miscellaneous Expenses' bill; the right answer is insufficient_evidence, raised as questions and client requests. Owner-approved convention (2026-11-05): ITC on a bill whose ledger the model abstained on is held back (not claimed) until the reviewer answers. Core 3B figures (hand): outward 50,000; CGST 4,500, SGST 4,500; outward tax 9,000. ITC: SS/1001 (Raw Material Purchases, matched to 2B) CGST 5,400 + SGST 5,400 = 10,800 available; PC-1201 (Miscellaneous Expenses, insufficient_evidence on blocked credit and reverse charge) matched to 2B at CGST 900 + SGST 900 = 1,800, lower of books and 2B -> held back, not in 4(A)(5): itcHeldBackPaise 1,800; itcAvailable 10,800, blocked 0, other reversal 0, net 10,800. Set-off: CGST 4,500 from CGST credit 5,400 (900 left), SGST 4,500 from SGST credit 5,400 (900 left) -> cash nil, credit utilised 9,000, closing credit CGST 900 + SGST 900 = 1,800. The gst.model-questions finding and the client document request state the 1,800 held back. No expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee.",
   "category": "trap",
   "job": {
     "fy": "2026-27",
@@ -17,12 +17,13 @@
     }
   ],
   "figures": {
-    "itcAvailablePaise": 1260000,
+    "itcAvailablePaise": 1080000,
     "itcBlockedPaise": 0,
-    "itcNetPaise": 1260000,
+    "itcNetPaise": 1080000,
+    "itcHeldBackPaise": 180000,
     "cashTaxPaise": 0,
     "creditUtilisedPaise": 900000,
-    "closingCreditPaise": 360000,
+    "closingCreditPaise": 180000,
     "hsnRowCount": 1,
     "outwardTaxablePaise": 5000000,
     "outwardIgstPaise": 0,

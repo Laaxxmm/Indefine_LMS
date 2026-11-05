@@ -40,6 +40,14 @@ describe("/dashboard", () => {
     expect(await renderHtml(await Dashboard())).not.toContain('href="/agents"');
   });
 
+  it("shows the My day link only to people the /coach guard lets in; no Firm OS jobs → no My day card", async () => {
+    const html = await renderHtml(await Dashboard());
+    expect(html).toContain('href="/coach"');
+    expect(html).not.toContain('id="my-day"');
+    signedIn(activeSession({ active: false }));
+    expect(await renderHtml(await Dashboard())).not.toContain('href="/coach"');
+  });
+
   it("shows the Clients link only to people the /clients guard lets in (active users)", async () => {
     expect(await renderHtml(await Dashboard())).toContain('href="/clients"');
     signedIn(activeSession({ active: false }));

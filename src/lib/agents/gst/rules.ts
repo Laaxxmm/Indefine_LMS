@@ -12,12 +12,22 @@
 //           claimed) but a person must follow up or confirm a judgement (2B mismatches, blocked
 //           credits, rule 37, series gaps, credit-note linkage, lateness, free supplies).
 //   info  — classification the reviewer should glance at (B2CL invoices).
+//
+// Conventions for the draft figures (owner-approved 2026-11-05; compute.ts carries the detail):
+//   - A time-barred credit note (dated after the s.34(2) limit, GST_CONFIG.creditNoteDeadlineMonthDay
+//     after the FY of its original invoice) does NOT reduce outward liability: it is excluded from
+//     Table 3.1 and the GSTR-1 CDNR / B2CS / HSN figures. gst.credit-note-time-limit still blocks and
+//     lists it as "time-barred credit note excluded: <no>, ₹<value>".
+//   - ITC on a purchase bill whose ledger the model answered insufficient_evidence on (blocked credit
+//     or reverse charge) is HELD BACK — not claimed in Table 4(A) — until answered: figure
+//     itcHeldBackPaise, raised by gst.model-questions and the client document requests with the
+//     amount, and shown under Open questions on the review screen.
 import { createRuleRegistry, type ChecklistPack, type CheckOutcome, type RuleDefinition } from "@/lib/agents/core/checklist";
 import type { CheckInput } from "@/lib/agents/core/runner";
 import { validateGstin } from "@/lib/agents/onboarding/validators";
 import { BLOCKED_CATEGORIES, GST_CONFIG, GST_RULE_DEFAULTS, GST_VERIFY_NOTES, RCM_SERVICES, type AatoSlab } from "./config";
-import { analyse, differs, rule37Rows, sign, type Analysis } from "./compute";
-import { dayAfterFyEnd, fyOfDay, plainRupees, taxTotal, type TaxSplit } from "./money";
+import { analyse, creditNoteDeadline, differs, heldBackFor, rule37Rows, sign, type Analysis, type SalesA } from "./compute";
+import { dayAfterFyEnd, fyOfDay, plainRupees, sumTax, taxTotal, type TaxSplit } from "./money";
 import { dupKey } from "./registers";
 import { INSUFFICIENT } from "./tasks";
 import type { GstExtract, GstInput } from "./types";
@@ -34,6 +44,8 @@ const num = (v: unknown, d: number) => (typeof v === "number" && Number.isSafeIn
 const str = (v: unknown, d: string) => (typeof v === "string" && v.trim() ? v.trim() : d);
 const taxText = (t: TaxSplit) => `IGST ${plainRupees(t.igst)}, CGST ${plainRupees(t.cgst)}, SGST ${plainRupees(t.sgst)}${t.cess ? `, cess ${plainRupees(t.cess)}` : ""}`;
 const A = (ci: GstCheckInput): Analysis => analyse(ci.extracted);
+const docTaxable = (d: SalesA) => d.lines.reduce((n, l) => n + l.taxable, 0);
+const docTax = (d: SalesA) => sumTax(d.lines.map((l) => l.tax));
 
 type Hit = { quote: string; loc: string; text: string };
 function listFail(hits: Hit[], head: string): CheckOutcome {
@@ -107,7 +119,11 @@ function blockedCredit(ci: GstCheckInput): CheckOutcome {
   return listFail(hits, `ITC on blocked credits u/s 17(5): ${inr(taxTotal(a.itc.b1))} moved to Table 4(B)(1); confirm the classification`);
 }
 
-/** Every insufficient_evidence model answer is a question for the reviewer (ADR-008), never a silent default. */
+/**
+ * Every insufficient_evidence model answer is a question for the reviewer (ADR-008), never a silent
+ * default. The ITC on a bill whose ledger the model abstained on is held back from Table 4(A) until
+ * the question is answered (owner-approved 2026-11-05), and the question states the amount.
+ */
 function modelQuestions(ci: GstCheckInput): CheckOutcome {
   const x = ci.extracted;
   const a = A(ci);
@@ -116,12 +132,15 @@ function modelQuestions(ci: GstCheckInput): CheckOutcome {
     const what = [l.blockedCategory === INSUFFICIENT ? "whether ITC is blocked u/s 17(5)" : "", l.rcmService === INSUFFICIENT ? "whether reverse charge applies" : ""].filter(Boolean).join(" and ");
     if (!what) continue;
     const doc = a.purchases.find((p) => p.key === l.ledger);
-    hits.push({ quote: l.ledger, loc: doc?.loc ?? x.sources.purchases.file, text: `ledger "${l.ledger}": the books do not show ${what}${l.note ? ` (${l.note})` : ""}; the draft treats it as neither until answered` });
+    const held = heldBackFor(a, l.ledger);
+    const draft = held.paise > 0 ? `ITC of ${inr(held.paise)} on ${held.numbers.join(", ")} held back (not claimed) until answered` : "no ITC on it is claimed until answered";
+    hits.push({ quote: l.ledger, loc: doc?.loc ?? x.sources.purchases.file, text: `ledger "${l.ledger}": the books do not show ${what}${l.note ? ` (${l.note})` : ""}; the draft treats it as neither blocked nor reverse charge, ${draft}` });
   }
   for (const h of x.hsnReads) {
     if (h.status === INSUFFICIENT) hits.push({ quote: h.description, loc: h.location, text: `no HSN/SAC is written for "${h.description}"${h.note ? ` (${h.note})` : ""}` });
   }
-  return listFail(hits, `${hits.length} question(s) the documents cannot answer; ask the client or decide before approval`);
+  const held = taxTotal(a.itc.heldBack);
+  return listFail(hits, `${hits.length} question(s) the documents cannot answer${held > 0 ? ` (ITC of ${inr(held)} held back from Table 4(A) until answered)` : ""}; ask the client or decide before approval`);
 }
 
 function rcmLiability(ci: GstCheckInput): CheckOutcome {
@@ -187,15 +206,32 @@ function notesLinked(ci: GstCheckInput): CheckOutcome {
   return listFail(hits, `Credit/debit notes not linked to an original invoice (s.34)`);
 }
 
+/**
+ * Time-barred credit notes (owner-approved 2026-11-05): the computation leaves a note past the
+ * s.34(2) limit out of 3.1 and the GSTR-1 value tables (compute.ts, GST_CONFIG limit); this rule
+ * blocks and lists each one as a reviewer item "time-barred credit note excluded: <no>, ₹<value>".
+ * The pack's own limit (params.deadlineMonthDay) decides the flag; if a partner set it apart from
+ * the computation's, every note the two treat differently is listed too, so the figures never
+ * disagree with the checklist silently.
+ */
 function noteTimeLimit(ci: GstCheckInput, rule: RuleDefinition): CheckOutcome {
-  const md = str(rule.params?.deadlineMonthDay, GST_RULE_DEFAULTS.creditNoteDeadlineMonthDay);
+  const md = str(rule.params?.deadlineMonthDay, GST_CONFIG.creditNoteDeadlineMonthDay);
   const hits: Hit[] = [];
-  for (const d of ci.extracted.sales) {
-    if (d.docType !== "CRN" || !d.origDate) continue;
-    const deadline = dayAfterFyEnd(fyOfDay(d.origDate), md);
-    if (d.date > deadline) hits.push({ quote: `${d.number.trim()} ${d.date}`, loc: d.loc, text: `credit note ${d.number.trim()} dated ${d.date} against an invoice of ${d.origDate}: time limit was ${deadline}` });
+  for (const d of A(ci).sales) {
+    const deadline = creditNoteDeadline(d, md);
+    if (deadline === null) continue;
+    const late = d.date > deadline;
+    if (!late && !d.timeBarred) continue;
+    const no = d.number.trim();
+    const what = `${inr(d.value)} (taxable ${inr(docTaxable(d))}, tax ${inr(taxTotal(docTax(d)))}; dated ${d.date} against invoice ${d.origNumber ?? "(no number)"} of ${d.origDate}; time limit ${deadline})`;
+    const own = creditNoteDeadline(d);
+    let text: string;
+    if (late && d.timeBarred) text = `time-barred credit note excluded: ${no}, ${what}`;
+    else if (late) text = `credit note ${no}, ${what}: past the SOP pack's time limit but the computation's limit (${own}) keeps it in the draft figures; align the pack and the computation`;
+    else text = `credit note ${no}, ${what}: excluded from the draft figures by the computation's time limit (${own}) although the SOP pack allows it; align the pack and the computation`;
+    hits.push({ quote: `${no} ${d.date}`, loc: d.loc, text });
   }
-  return listFail(hits, `Credit notes issued after the s.34(2) time limit cannot reduce output tax`);
+  return listFail(hits, `Credit notes issued after the s.34(2) time limit cannot reduce output tax; the draft leaves them out of Table 3.1 and the GSTR-1 note tables`);
 }
 
 function taxTypeProblem(inter: boolean, tax: TaxSplit, rateBps: number): string | null {
@@ -297,6 +333,7 @@ export function packConfigParams(): Record<string, unknown> {
     reconTolerancePaise: GST_CONFIG.reconTolerancePaise,
     rule37Days: GST_CONFIG.rule37Days,
     rcmRatesBps: GST_CONFIG.rcmRatesBps,
+    creditNoteDeadlineMonthDay: GST_CONFIG.creditNoteDeadlineMonthDay,
   };
 }
 
@@ -388,7 +425,7 @@ export const GST_CHECKLIST: ChecklistPack = {
     { id: "gst.rcm-liability", title: "Reverse-charge liability accounted", severity: "block", kind: "deterministic", check: "gst.rcm-liability", evidence: "ledger name and purchase row", params: { verify: verify("rcmRatesBps.legal") } },
     { id: "gst.hsn-digits", title: "HSN digits by aggregate turnover", severity: "block", kind: "deterministic", check: "gst.hsn-digits", evidence: "HSN and sales row", params: { slabs: GST_RULE_DEFAULTS.hsnSlabs, verify: verify("hsnSlabs") } },
     { id: "gst.invoice-duplicates", title: "No duplicate document numbers", severity: "block", kind: "deterministic", check: "gst.invoice-duplicates", evidence: "both document numbers and rows" },
-    { id: "gst.credit-note-time-limit", title: "Credit notes within the s.34(2) time limit", severity: "block", kind: "deterministic", check: "gst.credit-note-time-limit", evidence: "note number, date and row", params: { deadlineMonthDay: GST_RULE_DEFAULTS.creditNoteDeadlineMonthDay, verify: verify("creditNoteDeadlineMonthDay") } },
+    { id: "gst.credit-note-time-limit", title: "Credit notes within the s.34(2) time limit", severity: "block", kind: "deterministic", check: "gst.credit-note-time-limit", evidence: "note number, date and row", params: { deadlineMonthDay: GST_CONFIG.creditNoteDeadlineMonthDay, verify: verify("creditNoteDeadlineMonthDay") } },
     { id: "gst.period-lock", title: "Previous period GSTR-1 vs GSTR-3B Table 3.1 liability", severity: "block", kind: "deterministic", check: "gst.period-lock", evidence: "tax head figures from the previous return", params: { tolerancePaise: GST_RULE_DEFAULTS.periodLockTolerancePaise, verify: verify("periodLockTolerancePaise") } },
     { id: "gst.einvoice-irn", title: "IRN on B2B documents when e-invoicing applies", severity: "block", kind: "deterministic", check: "gst.einvoice-irn", evidence: "document number and row", params: { aatoPaise: GST_RULE_DEFAULTS.einvoiceAatoPaise, verify: verify("einvoiceAatoPaise") } },
     {

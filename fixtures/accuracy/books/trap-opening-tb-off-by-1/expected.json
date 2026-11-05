@@ -1,5 +1,5 @@
 {
-  "description": "Trap (opening TB unbalanced by ₹1): Furniture and Fixtures was brought forward into FY 2026-27 at ₹1,64,201 against ₹1,64,200 in the closed books, and the export carries no 'Difference in opening balances' line, so the October TB inherits the ₹1 opening difference. Debits 13,96,600 + 1 = 13,96,601 (139660100 paise), credits 13,96,600 (139660000) -> difference ₹1 (100 paise) -> block books.tb-balanced. Everything else as clean-month: bank reconciles (7 matched, cheque 452 ₹4,250 unpresented, difference 0), TDS ₹20,000 deposited, GST ties, no reminders. (The books agent has no separate check that the prior-month TB balances — partner item.)",
+  "description": "Trap (opening TB unbalanced by ₹1): Furniture and Fixtures was brought forward into FY 2026-27 at ₹1,64,201 against ₹1,64,200 in the closed books, and the export carries no 'Difference in opening balances' line, so the October TB inherits the ₹1 opening difference. Debits 13,96,600 + 1 = 13,96,601 (139660100 paise), credits 13,96,600 (139660000) -> difference ₹1 (100 paise) -> block books.tb-balanced. Everything else as clean-month: bank reconciles (7 matched, cheque 452 ₹4,250 unpresented, difference 0), TDS ₹20,000 deposited, GST ties, no reminders. The September TB supplied for comparison balances (2,07,100 = 2,07,100), so books.prior-tb-balanced passes: the difference sits in the October TB only.",
   "category": "trap",
   "flags": [
     {
@@ -12,6 +12,9 @@
     "tbCreditPaise": 139660000,
     "tbDifferencePaise": 100,
     "tbLedgerCount": 17,
+    "priorTbDebitPaise": 20710000,
+    "priorTbCreditPaise": 20710000,
+    "priorTbDifferencePaise": 0,
     "bankMatchedCount": 7,
     "bankUnmatchedStatementCount": 0,
     "bankUnmatchedLedgerCount": 1,

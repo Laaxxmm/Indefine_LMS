@@ -1,5 +1,5 @@
 {
-  "description": "Clean month, Tally-style CSV registers, GSTR-2B JSON; all purchases match 2B; HSN of a B2C line read from its description by code. Core 3B figures (hand): outward 1,00,000 + 50,000 + 20,000 = 1,70,000; IGST 9,000, CGST 9,000 + 1,800 = 10,800, SGST 10,800 (tax 30,600). ITC (all matched to 2B) IGST 1,800, CGST 5,400 + 2,250 = 7,650, SGST 7,650 = 17,100; nothing blocked or reversed. Set-off: IGST 1,800 vs IGST, CGST 7,650 vs CGST, SGST 7,650 vs SGST -> cash IGST 7,200, CGST 3,150, SGST 3,150 = 13,500; no expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee.",
+  "description": "Clean month, Tally-style CSV registers, GSTR-2B JSON; all purchases match 2B; HSN of a B2C line read from its description by code. Core 3B figures (hand): outward 1,00,000 + 50,000 + 20,000 = 1,70,000; IGST 9,000, CGST 9,000 + 1,800 = 10,800, SGST 10,800 (tax 30,600). ITC (all matched to 2B) IGST 1,800, CGST 5,400 + 2,250 = 7,650, SGST 7,650 = 17,100; nothing blocked or reversed. Set-off: IGST 1,800 vs IGST, CGST 7,650 vs CGST, SGST 7,650 vs SGST -> cash IGST 7,200, CGST 3,150, SGST 3,150 = 13,500; no expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee. ITC held back 0: no purchase ledger the model answered insufficient_evidence on.",
   "category": "clean",
   "job": {
     "fy": "2026-27",
@@ -14,6 +14,7 @@
     "outwardSgstPaise": 1080000,
     "itcAvailablePaise": 1710000,
     "itcNetPaise": 1710000,
+    "itcHeldBackPaise": 0,
     "cashIgstPaise": 720000,
     "cashCgstPaise": 315000,
     "cashSgstPaise": 315000,

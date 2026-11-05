@@ -20,6 +20,9 @@ import {
 import { formatIst } from "@/lib/ist";
 import { canUseWork } from "@/lib/work/core";
 import { canUseAgents } from "@/lib/agents/access";
+import { isBreakNudgeEnabled } from "@/lib/agents/coach/flags";
+import { CoachCard } from "@/app/coach/CoachCard";
+import { ActivityPing } from "@/components/ActivityPing";
 import { canViewClients } from "@/lib/clients/core";
 import {
   Flame,
@@ -315,6 +318,10 @@ export default async function Dashboard() {
           {canUseAgents(session.user) && (
             <Link href="/agents" className="px-4 py-2 rounded-full text-ink-mute font-semibold text-[13.5px] hover:text-ink transition">Agents</Link>
           )}
+          {/* Firm OS daily coach: same predicate as the /coach layout guard. */}
+          {canUseAgents(session.user) && (
+            <Link href="/coach" className="px-4 py-2 rounded-full text-ink-mute font-semibold text-[13.5px] hover:text-ink transition">My day</Link>
+          )}
           {canUseWork(session.user.email) && (
             <Link href="/work" className="px-4 py-2 rounded-full text-ink-mute font-semibold text-[13.5px] hover:text-ink transition">Work</Link>
           )}
@@ -398,6 +405,9 @@ export default async function Dashboard() {
             ))}
           </div>
         </div>
+
+        {/* Firm OS morning board: only for people with open Firm OS jobs (the card renders nothing otherwise) */}
+        {canUseAgents(session.user) && <CoachCard userId={userId} />}
 
         {/* Live & upcoming sessions (Teams) */}
         {nextLive && (
@@ -820,6 +830,7 @@ export default async function Dashboard() {
 
       <OnboardingTour steps={TOUR_STEPS} />
       <UrgencyModal items={urgentItems} />
+      {canUseAgents(session.user) && <ActivityPing enabled={isBreakNudgeEnabled()} />}
     </div>
   );
 }

@@ -97,7 +97,12 @@ review, drift-db), wired in `core/runner.ts`; router options `taskVersion`, `for
 2. `abstainable()`, `note()` (≤ 300), `evidence()`, `ScopedVerdictSchema`; `unboundedStrings()` is
    gated by the harness. A per-call schema (`schemaPerCall`) must match the task's template shape.
 3. `insufficient_evidence` → `na` + `insufficient-evidence`; `openQuestions()` lists abstentions as
-   reviewer questions / client document requests (`RunReview.openQuestions`).
+   reviewer questions / client document requests (`RunReview.openQuestions`). The run review page
+   shows them under "Open questions" beside the checklist, together with the extraction abstentions
+   an agent reports through its own rule (`ABSTENTION_RULES` in `src/lib/agents/views.ts`). An
+   abstention never becomes a default in the figures: GST holds back the ITC of a bill the model
+   abstained on (`itcHeldBackPaise`, owner-approved 2026-11-05; see the agent-framework spec,
+   "Agent conventions").
 4. `groundCheck()` on every scoped extraction output (quotes; `groundedNumber()` fields).
 5. Task `validate` and per-call `contradictions` run as router contradictions (escalation); after
    the last escalation the router returns its output as needs-review, so agents keep only the items

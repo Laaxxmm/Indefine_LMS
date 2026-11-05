@@ -1,5 +1,5 @@
 {
-  "description": "Boundary: inter-state B2C invoice of â‚¹100000.01 (B2CL needs MORE than â‚¹1,00,000). Core 3B figures (hand): outward 84,745.77 + 1,00,000 = 1,84,745.77; IGST 15,254.24, CGST 9,000, SGST 9,000 (tax 33,254.24). ITC 5,400 + 5,400 = 10,800. Cash IGST 15,254.24, CGST 3,600, SGST 3,600 = 22,454.24; no expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee.",
+  "description": "Boundary: inter-state B2C invoice of â‚¹100000.01 (B2CL needs MORE than â‚¹1,00,000). Core 3B figures (hand): outward 84,745.77 + 1,00,000 = 1,84,745.77; IGST 15,254.24, CGST 9,000, SGST 9,000 (tax 33,254.24). ITC 5,400 + 5,400 = 10,800. Cash IGST 15,254.24, CGST 3,600, SGST 3,600 = 22,454.24; no expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee. ITC held back 0: no purchase ledger the model answered insufficient_evidence on.",
   "category": "trap",
   "job": {
     "fy": "2026-27",
@@ -31,6 +31,7 @@
     "itcBlockedPaise": 0,
     "itcOtherReversalPaise": 0,
     "itcNetPaise": 1080000,
+    "itcHeldBackPaise": 0,
     "cashCessPaise": 0,
     "daysLate": 0,
     "interestPaise": 0,
