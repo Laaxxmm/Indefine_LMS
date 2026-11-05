@@ -11,6 +11,6 @@ export async function POST(req: Request) {
   if (!firmOsEnabled()) return firmOsOffResponse();
   const g = await requireCoachUser();
   if (g.res) return g.res;
-  if (!(await emptyBody(req))) return NextResponse.json({ error: "The heartbeat takes no data" }, { status: 400 });
+  if (!(await emptyBody(req))) return NextResponse.json({ error: "This check-in from the page should carry nothing, so it was refused. Reload the page." }, { status: 400 });
   return NextResponse.json(await recordHeartbeat(g.user.id, { db: coachDb() }));
 }

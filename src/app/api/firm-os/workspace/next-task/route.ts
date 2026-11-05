@@ -16,7 +16,7 @@ export async function GET() {
   if (!firmOsEnabled()) return firmOsOffResponse();
   const g = await signedInUser();
   if (g.res) return g.res;
-  if (!canUseAgents(g.user)) return NextResponse.json({ error: "Your account cannot use agents. Ask an admin if you need them." }, { status: 403 });
+  if (!canUseAgents(g.user)) return NextResponse.json({ error: "Your account can't use the agents. Ask an admin if you need them." }, { status: 403 });
   if (!(await isModuleEnabled(g.user, "agents", prisma as unknown as WorkspaceDb))) return NextResponse.json({ error: moduleOffMessage("agents") }, { status: 403 });
   const view = await getNextTaskView(g.user, { db: prisma as unknown as FirmDb });
   return NextResponse.json(view, { headers: { "cache-control": "no-store" } });

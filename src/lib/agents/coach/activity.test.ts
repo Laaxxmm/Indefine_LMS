@@ -123,7 +123,7 @@ describe("dismiss", () => {
   it("only the owner can dismiss; someone else's id is not found; repeating is harmless", async () => {
     vi.setSystemTime(at(0));
     const e = w.coachEvent.insert({ userId: "u-priya", kind: "reminder", dedupeKey: "k1", payload: { message: "x" } });
-    expect(await dismissEvent("u-meena", String(e.id), deps())).toEqual({ ok: false, status: 404, error: "Notice not found" });
+    expect(await dismissEvent("u-meena", String(e.id), deps())).toEqual({ ok: false, status: 404, error: "That notice wasn't found. It may already be dismissed — reload the page." });
     expect(await dismissEvent("u-priya", "nope", deps())).toMatchObject({ ok: false, status: 404 });
     const ok = await dismissEvent("u-priya", String(e.id), deps());
     expect(ok).toEqual({ ok: true, data: { id: e.id, dismissedAt: at(0).toISOString() } });
@@ -164,7 +164,7 @@ describe("preferences", () => {
 
   it("refuses an unsupported snooze length and an empty change", async () => {
     expect(await updatePreferences("u-priya", { snoozeMinutes: 45 }, deps())).toEqual({ ok: false, status: 400, error: "Snooze for 30 or 60 minutes" });
-    expect(await updatePreferences("u-priya", {}, deps())).toEqual({ ok: false, status: 400, error: "Nothing to change" });
+    expect(await updatePreferences("u-priya", {}, deps())).toEqual({ ok: false, status: 400, error: "Nothing was changed. Pick a setting to change first." });
     expect(w.coachPreference.rows).toEqual([]);
   });
 });

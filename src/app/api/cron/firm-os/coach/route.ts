@@ -16,6 +16,6 @@ export async function GET(req: NextRequest) {
   if (denied) return denied;
   if (!firmOsEnabled()) return firmOsOffCronResponse(); // master switch off: nothing to do, 200 so the scheduler stays green
   const job = req.nextUrl.searchParams.get("job");
-  if (!isCoachJob(job)) return NextResponse.json({ error: `job must be ${COACH_JOBS.join(", ")}` }, { status: 400 });
+  if (!isCoachJob(job)) return NextResponse.json({ error: `This scheduled task needs to know which job to run (${COACH_JOBS.join(", ")}). Nothing was run.` }, { status: 400 });
   return NextResponse.json(await runCoachJob(job, coachDeps()));
 }
