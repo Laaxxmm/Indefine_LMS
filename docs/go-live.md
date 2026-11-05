@@ -20,6 +20,12 @@ The final QA gate that must be green before this checklist is used: `docs/qa/pha
 - [ ] UI checklist (`docs/qa/ui-checklist.md`) complete and passing.
 - [ ] Partner verification items (§8) answered — every legal threshold the agents use is confirmed.
 - [ ] Railway Postgres snapshot restore drill done on staging (Phase 11) and the restore time noted.
+- [ ] DPDP retention runs on staging (Phase 11 purge): `ActivityHeartbeat` and `CoachEvent` rows of
+      kind `break` older than 7 days are gone (ADR-006 break data; the coach writes no AuditEvent for
+      it); `AgentRun.inputs` cleared after `inputsPurgeAt` (≤ 30 days). Nothing else is purged.
+- [ ] Close-loop reminders and coach reminders coexist: a coach pre-filing reminder (reason
+      `internal-due`) does not suppress the reconciler's same-day "filed but not closed" reminder
+      (reason `close-loop`) — `tests/chaos/duplicate-cron-concurrent.test.ts` green after Phase 11.
 - [ ] PR `firm-os/phase-0-inventory → main` reviewed by the owner (the agent never merges).
 
 ## 2. Railway environment variables (production service)
@@ -80,7 +86,9 @@ the ensure-* functions.
 | `FIRM_OS_ONBOARD_CONFIRM` | unset (= confirm) — **never `false` in prod** | A partner/manager must click Create before the onboarding saga runs. |
 | `FIRM_OS_TURIA_BRIDGE` | unset (= `MANUAL`) | MANUAL checklists (ADR-003). `UI`/`API` are stubs that block. |
 | `FIRM_OS_TURIA_UI` | unset (off) | UI automation against practice.turia.in — off until Turia confirms it is permitted. |
-| Phase 9 / 10 / 11 flags | *fill in after merge* | Coach (morning board, reminders, break nudge), comms drafts, rate limits — copy the names from `.env.example` after the merges and add rows here. |
+| `FIRM_OS_BREAK_NUDGE` (Phase 9) | unset (off) | LMS activity heartbeats + gentle break nudges (ADR-006: kept 7 days, aggregate only, never reported to managers). Tell staff what is collected **before** turning it on. Off = no heartbeat stored, no ping sent. |
+| `FIRM_OS_HOLIDAYS` (Phase 9) | set to the firm's holidays | Comma-separated `YYYY-MM-DD` the coach skips when counting working days (the LMS has no holiday table); blank = weekends only. Not a feature flag — set it before Stage 1. |
+| Phase 10 / 11 flags | *fill in after merge* | Comms drafts, rate limits — copy the names from `.env.example` after the merges and add rows here. |
 
 `FIRM_OS_ONBOARD_CONFIRM`, `FIRM_OS_TURIA_BRIDGE`, `FIRM_OS_TURIA_UI` and the `GUARDRAIL_*` variables are
 read by the code but missing from `.env.example` — add them there (owner of `.env.example`).
@@ -90,14 +98,19 @@ read by the code but missing from `.env.example` — add them there (owner of `.
 - Repository secret `CRON_SECRET` = the Railway value (all `/api/cron/*` routes are bearer-only).
 - `.github/workflows/firm-os-close-loop.yml` (every 30 min, Mon–Sat 09:00–19:00 IST) and the other
   workflows hard-code `https://lms.indefine.in` (inventory G-11): staging crons need a variable.
-- Phase 9 coach crons (morning board 09:00 IST, reminders) — add after merge.
+- `.github/workflows/firm-os-coach.yml` (Phase 9): `/api/cron/firm-os/coach?job=morning` 09:00 IST,
+  `?job=reminders` every 30 min 09:00–19:00 IST Mon–Sat, `?job=summary` Fridays 16:00 IST. Each job
+  checks its own IST window; every nudge is written once (CoachEvent.dedupeKey). Delivery is in-app
+  only (/coach and the dashboard card) — no Teams or e-mail to staff.
 
 ## 3. Rollout gap — decide before Stage 1
 
 With every `FIRM_OS_*` flag off (production default), Firm OS entry points are **already visible**,
 because they are gated by role, not by a flag (`tests/regression/firm-os-flags-off.test.ts` pins this):
 
-- `/dashboard` shows **Agents** (→ /agents) to every active user;
+- `/dashboard` shows **Agents** (→ /agents) and, since Phase 9, **My day** (→ /coach) to every
+  active user, plus the **My day** morning-board card to everyone with open Firm OS jobs — so the
+  dashboard queries Firm OS jobs for every signed-in person even with all flags off;
 - `/tools` and `/clients` show **Firm OS onboarding** (→ /onboard) to partners, managers and admins;
 - `/admin` shows the **Firm OS** group (models, mistakes, cycle time) to LMS admins.
 

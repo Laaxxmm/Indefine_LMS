@@ -54,17 +54,6 @@ export const matchesWhere = (row: object, where: Where = {}): boolean =>
   });
 const matches = (row: CoachEventRow, where: Where = {}) => matchesWhere(row, where);
 
-/** A read-only Prisma-shaped table over plain rows (findMany / findFirst / findUnique / count). */
-export function readTable<T extends object>(rows: T[]) {
-  return {
-    rows,
-    findMany: async (args: { where?: Where; take?: number } = {}) => rows.filter((r) => matchesWhere(r, args.where)).slice(0, args.take ?? rows.length),
-    findFirst: async (args: { where?: Where } = {}) => rows.find((r) => matchesWhere(r, args.where)) ?? null,
-    findUnique: async (args: { where: Where }) => rows.find((r) => matchesWhere(r, args.where)) ?? null,
-    count: async (args: { where?: Where } = {}) => rows.filter((r) => matchesWhere(r, args.where)).length,
-  };
-}
-
 export function coachEventTable(clock: () => Date = () => new Date()) {
   const rows: CoachEventRow[] = [];
   let seq = 0;
@@ -129,11 +118,17 @@ export function coachEventTable(clock: () => Date = () => new Date()) {
 
 export type CoachEventTable = ReturnType<typeof coachEventTable>;
 
-/** Duplicates by the natural key (person, kind, job, IST day) — what a person would perceive as "the same nudge twice". */
+/**
+ * Duplicates by the natural key (kind, reason, person, job, IST day) — what a person would perceive as
+ * "the same nudge twice". The reason (payload.reason) separates the coach's pre-filing nudges
+ * ("internal-due", "internal-overdue") from the reconciler's ("close-loop", "done-recheck"): one of
+ * each for the same job and day is two different messages, not a duplicate.
+ */
 export function naturalDuplicates(rows: CoachEventRow[], istDay: (d: Date) => string): string[] {
   const seen = new Map<string, number>();
   for (const r of rows) {
-    const k = `${r.kind}|${r.userId}|${r.jobTaskId ?? "-"}|${istDay(r.createdAt)}`;
+    const reason = (r.payload as { reason?: string } | null)?.reason ?? "-";
+    const k = `${r.kind}|${reason}|${r.userId}|${r.jobTaskId ?? "-"}|${istDay(r.createdAt)}`;
     seen.set(k, (seen.get(k) ?? 0) + 1);
   }
   return [...seen.entries()].filter(([, n]) => n > 1).map(([k, n]) => `${k} ×${n}`);

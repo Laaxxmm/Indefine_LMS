@@ -24,23 +24,27 @@ git status   # clean
 
 ## 1. After-merge fix-ups (written ahead against the briefs — make them real)
 
-1. **Chaos tests that waited for the merges** — `tests/chaos/after-merge/`:
+1. **Chaos test that waits for Phase 11** — `tests/chaos/after-merge/`:
    ```sh
-   # Phase 11: the reconciler uses CoachEvent.dedupeKey → this must now pass
+   # Phase 11: the reconciler writes nudges with CoachEvent.dedupeKey keyed by reason → this must now pass
    git mv tests/chaos/after-merge/duplicate-cron-concurrent.pending.ts tests/chaos/duplicate-cron-concurrent.test.ts
-   # Phase 9: fix the ADAPTER block (module path, export, deps) first, then
-   git mv tests/chaos/after-merge/coach-reminders-duplicate-cron.pending.ts tests/chaos/coach-reminders-duplicate-cron.test.ts
-   # fix the relative imports ("../../fakes" → "../fakes", "../support" → "./support") after the move
+   # fix the relative imports after the move: "../../fakes" → "../fakes", "../support" → "./support"
    npx vitest run tests/chaos
    ```
-   Before Phase 11, the concurrent test fails on purpose (verified 05 Nov 2026: three simultaneous
-   reconciler runs → 3 reminders and 3 escalations per recipient). It must pass after the merge.
+   Before Phase 11 its three tests fail on purpose (verified 05–06 Nov 2026): three simultaneous
+   reconciler runs → 3 reminders and 3 escalations per recipient; two simultaneous DONE re-checks →
+   2 alerts per recipient; and a coach pre-filing reminder (reason `internal-due`) suppresses the
+   reconciler's same-day close-loop reminder because `nudgeOnce` matches on kind alone. The expected
+   keys follow the coordinator's note: `reminder:<job>:<user>:close-loop:<istDay>`,
+   `escalation:<job>:<user>:close-loop:<istDay>`, `done-alert:<job>:<istDay>`.
+   The Phase 9 coach chaos test is already live: `tests/chaos/coach-reminders-duplicate-cron.test.ts`.
 2. **E2E selectors for the new pages** — confirm every marked line against the merged UI:
    ```sh
-   grep -rn "PHASE 9:\|PHASE 10:\|PHASE 11:" tests/e2e-db
+   grep -rn "PHASE 10:\|PHASE 11:" tests/e2e-db
    ```
-   Specs: `coach.spec.ts` (@phase-9), `comms.spec.ts` (@phase-10), `rbac-phase-10-11.spec.ts`
-   (@phase-10, @phase-11). Keep the assertions; change selectors / routes only.
+   Specs: `comms.spec.ts` (@phase-10), `rbac-phase-10-11.spec.ts` (@phase-10, @phase-11). Keep the
+   assertions; change selectors / routes only. `coach.spec.ts` (@phase-9) was confirmed against the
+   merged Phase 9 UI on 06 Nov 2026. When both are merged, drop the `@after-merge` tags.
 3. **Flags-off regression allowlist** — `tests/regression/firm-os-flags-off.test.ts`. If a phase adds a
    Firm OS entry point to an LMS page (e.g. the coach board card on /dashboard), it must be hidden with
    its flag off; if it is deliberately visible, record that in `docs/go-live.md` §3 first, then extend
@@ -66,8 +70,13 @@ npm run typecheck       # tsc --noEmit, no output
 for i in 1 2 3; do npm test || { echo "RED on run $i"; break; }; done
 git status --porcelain src/lib/integrations/turia   # a run must not rewrite the Turia snapshot; if it did: git checkout -- <file>
 ```
-Baseline at Phase 12 prep (05 Nov 2026, before Phases 9–11): **2512 tests in 126 files** — of which
-chaos **43** (7 files) and LMS regression **72** (5 files). Expect more after the merges.
+Baseline at Phase 12 prep (06 Nov 2026, after the Phase 9 merge, before 10–11): **2655 tests in 136
+files** — of which chaos **46** (8 files) and LMS regression **72** (5 files). Expect more after the
+merges. Known load flake at prep: in 1 of 3 full runs two heavy accuracy-harness tests timed out at
+the 5 s default (`src/lib/agents/core/accuracy-probes.test.ts` "a probe that changes nothing → FAIL",
+`src/lib/agents/tax/index.test.ts` "wrong-department input fails the run before any model call");
+both pass alone and in the other runs. Give them an explicit timeout (as the cold-import test got
+30 s on 05 Nov) before this step — a flake is red.
 
 ## 5. Coverage (new modules ≥ 80 % lines)
 
@@ -136,7 +145,7 @@ npm run build           # prisma generate && next build
 ```sh
 npx playwright test --config playwright.db.config.ts --list
 ```
-At prep: **26 tests in 12 files** (18 current + 8 tagged `@after-merge`). All must load with no
+At prep: **26 tests in 12 files** (21 runnable now + 5 tagged `@after-merge` for Phases 10–11). All must load with no
 environment set (nothing runs at import time).
 
 ## 14. Visual first look (local)
@@ -145,7 +154,7 @@ environment set (nothing runs at import time).
 npx vitest run --config tests/regression/visual.vitest.config.ts
 # open test-results/visual/index.html — every Firm OS page at 390 / 1280 / 1440
 ```
-Look for overflow and broken layout before the staging UI pass (step 18). At prep: 13/13 pages render.
+Look for overflow and broken layout before the staging UI pass (step 18). At prep (after the Phase 9 merge): 14/14 pages render, /coach included.
 
 ---
 
@@ -200,6 +209,11 @@ on every Firm OS page).
 Railway → Postgres → Backups → restore the latest snapshot into a scratch staging database →
 `DATABASE_URL=<scratch> npx prisma migrate status` (up to date) → compare row counts of
 `JobTask`, `AgentRun`, `Deliverable`, `TuriaSync`, `AuditEvent` with the source → note the restore time.
+
+Then the DPDP retention purge (Phase 11, one allowlisted purge function): seed an `ActivityHeartbeat`
+and a `CoachEvent` of kind `break` dated 8 days ago on the scratch database, run the purge, and check
+both are gone while a 6-day-old one and every non-break CoachEvent remain; `AgentRun.inputs` past
+`inputsPurgeAt` is cleared. The coach writes no AuditEvent for break data (ADR-006).
 
 ### 20. Live accuracy canary and the human checks
 

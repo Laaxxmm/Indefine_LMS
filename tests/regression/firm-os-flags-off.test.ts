@@ -1,15 +1,18 @@
 // LMS regression (Phase 12 §4): with every FIRM_OS_* flag OFF — the default production state until
 // the go-live rollout (docs/go-live.md) — nothing of Firm OS leaks into the LMS pages beyond the
-// entry points listed below, and rendering an LMS page never touches a Firm OS table.
+// entry points listed below, no LMS page WRITES a Firm OS table, and the only Firm OS reads are the
+// dashboard's morning-board lookup.
 //
-// ALLOWLIST (the Firm OS surface that is visible today with every flag off — each is role-gated,
-// NOT flag-gated; see docs/go-live.md "Rollout gap"):
-//   /dashboard  "Agents" link → /agents          every active user (canUseAgents)
-//   /tools      "Firm OS onboarding" → /onboard   partners, managers, admins (canOnboard)
-//   /clients    "Firm OS onboarding" → /onboard   partners, managers, admins (canOnboard)
-//   /admin      Firm OS group → /admin/firm-os/*  LMS admins
+// ALLOWLIST (the Firm OS surface that is visible with every flag off — each is role-gated, NOT
+// flag-gated; recorded in docs/go-live.md §3 "Rollout gap"):
+//   /dashboard  "Agents" → /agents, "My day" → /coach   every active user (canUseAgents)
+//   /dashboard  morning board card (CoachCard)          every active user with open Firm OS jobs (Phase 9);
+//                                                       it reads jobTask for the signed-in person
+//   /tools      "Firm OS onboarding" → /onboard          partners, managers, admins (canOnboard)
+//   /clients    "Firm OS onboarding" → /onboard          partners, managers, admins (canOnboard)
+//   /admin      Firm OS group → /admin/firm-os/*         LMS admins
 // Adding to this list is a go-live decision, not a test fix: record it in docs/go-live.md first.
-// After the Phase 9 merge the dashboard board card must stay hidden here unless its flag is on.
+// The break nudge is flag-gated (FIRM_OS_BREAK_NUDGE): off → no heartbeat is stored.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // Server renders and cold module imports are slow when the whole suite runs in parallel; 5 s flakes.
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
@@ -58,14 +61,17 @@ afterEach(() => {
 });
 
 describe("Firm OS surface on LMS pages with every FIRM_OS_* flag off", () => {
-  it("/dashboard: only the role-gated Agents link, for every role; no coach board, no Firm OS query", async () => {
+  it("/dashboard: only the role-gated Agents and My day links, for every role; no board without jobs; Firm OS reads only, no writes", async () => {
     for (const who of [PEOPLE.staff, PEOPLE.manager, PEOPLE.partner, PEOPLE.admin]) {
       signedIn(who);
       prismaCalls.length = 0;
       const html = await renderPage(await import("@/app/dashboard/page"));
-      expect(firmOsHrefs(html), `dashboard for ${who.user.level}/${who.user.role}`).toEqual(["/agents"]);
-      expect(textOf(html)).not.toMatch(/Must today|Morning board|Firm OS|Take a break/);
-      expect(firmOsQueries()).toEqual([]);
+      expect(firmOsHrefs(html), `dashboard for ${who.user.level}/${who.user.role}`).toEqual(["/agents", "/coach"]);
+      expect(textOf(html)).not.toMatch(/Must today|Firm OS|Take a break|break reminder/i); // no open jobs → no board card; no break nudge
+      const firmOs = firmOsQueries();
+      expect(firmOs.filter((q) => !/\.(findMany|findFirst|findUnique|count|aggregate|groupBy)$/.test(q)), "no Firm OS writes from the dashboard").toEqual([]);
+      expect(firmOs.every((q) => q.startsWith("jobTask.")), `Firm OS reads: ${firmOs.join(", ")}`).toBe(true); // the morning board's own-jobs lookup
+      expect(prismaCalls.some((c) => c.model === "activityHeartbeat")).toBe(false); // FIRM_OS_BREAK_NUDGE off: nothing collected
     }
   });
 

@@ -112,7 +112,7 @@ From the UI audit (PROGRESS "UI audit", "Known gaps") — check that each is sti
 - LMS (not Firm OS) pages: `/clients`, `/work`, `/tools` headers do not wrap at 390 px; `ink-faint` text
   ≈ 2:1 contrast across the LMS; dashboard emoji. These are LMS debts, not Firm OS failures — note them
   but do not fail a Firm OS row for them.
-- Local visual render (2026-11-05, `tests/regression/visual-render.ts`): all 13 current Firm OS / comparison
-  pages render with the compiled CSS. Phases 9–11 pages appear in the render automatically after merge.
+- Local visual render (2026-11-06, `tests/regression/visual-render.ts`): all 14 current Firm OS / comparison
+  pages render with the compiled CSS, /coach included. /comms and /agents/spot-checks appear automatically after their merges.
 
 Sign-off: UI checklist complete and passing — ________________________ (owner) date ____________
