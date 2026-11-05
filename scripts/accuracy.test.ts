@@ -24,7 +24,7 @@ describe("npm run accuracy (CLI)", () => {
   it(
     "perfect echo set exits 0; each audit probe exits 1 except the documented one; --provider is reserved",
     async () => {
-      const [ok, p1, p2, p3, p4, p5, corrupted, provider] = await Promise.all([
+      const [ok, p1, p2, p3, p4, p5, corrupted, provider, live] = await Promise.all([
         cli("--agent=echo"),
         cli("--agent=echo", `--fixtures=${PROBES}/probe-1-input-amount-plus-1`),
         cli("--agent=echo", `--fixtures=${PROBES}/probe-2-duplicate-ref-input-only`),
@@ -33,11 +33,13 @@ describe("npm run accuracy (CLI)", () => {
         cli("--agent=echo", `--fixtures=${PROBES}/probe-5-llm-quote-not-in-input`),
         cli("--agent=echo", `--fixtures=${PROBES}/corrupted`),
         cli("--agent=echo", "--provider=claude"),
+        cli("--agent=echo", "--mode=live"),
       ]);
       expect(ok.code).toBe(0);
       expect(ok.out).toContain("Mode: **recorded**");
-      expect(ok.out).toContain("| **echo** | accuracy/echo (6) | **overall** | – | – | – | all of the above | **pass** |");
-      expect(ok.out).toContain("| input sensitivity | – | – | – | 6/6 changed · need all | pass |");
+      expect(ok.out).toContain("| **echo** | accuracy/echo (9) | **overall** | – | – | – | all of the above | **pass** |");
+      expect(ok.out).toContain("| input sensitivity · register.csv (required) | – | – | – | 8/8 changed · need all | pass |");
+      expect(ok.out).toContain("| scope violations | – | – | – | 0 · need 0 | pass |");
       expect(ok.out).toContain("| 3× identical (code path) |");
 
       expect(p1).toMatchObject({ code: 1 });
@@ -53,6 +55,9 @@ describe("npm run accuracy (CLI)", () => {
       expect(corrupted).toMatchObject({ code: 1 });
       expect(provider).toMatchObject({ code: 2 });
       expect(provider.out).toContain("reserved for Phase 2b");
+      // ADR-008 nightly canary stub: not built until a live key exists.
+      expect(live).toMatchObject({ code: 2 });
+      expect(live.out).toContain("needs ANTHROPIC_API_KEY / Phase 2b");
     },
     180_000,
   );

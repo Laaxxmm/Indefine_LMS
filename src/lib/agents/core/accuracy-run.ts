@@ -13,6 +13,12 @@
 // Input sensitivity: after its N runs, every fixture runs once more on agent.probeMutation(input)
 // with the SAME recorded responses; at least one figure or flag must differ from run 1, or the
 // agent is not reading its input (audit C1). Flags are split by the rule kind from the pack.
+//
+// ADR-008: the run's guardrail outcomes (abstentions, disagreements, out-of-scope rules from the
+// checklist flags; ungrounded / scope-violation / agreement counts from its `guardrail-run`
+// AuditEvent) are collected per run; the agent's scope and task schemas are checked statically.
+// `<task>#2` recordings answer the agreement re-ask; without one the single answer is reused and
+// noted. A fixture whose expected.json names an `error` must fail with it and is not probed.
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { FirmService } from "@prisma/client";
@@ -26,17 +32,21 @@ import {
   type FixtureExpected,
   type FixtureOutcome,
   type FixtureRuns,
+  type GuardrailOutcome,
   type ReplayOutcome,
   type RunMode,
   type Thresholds,
 } from "./accuracy";
-import { MistakeRuleProposalSchema, withPromotedRule, type ChecklistPack, type RuleDefinition, type RuleKind } from "./checklist";
+import { MistakeRuleProposalSchema, withPromotedRule, type ChecklistPack, type ResultFlag, type RuleDefinition, type RuleKind } from "./checklist";
+import { taskLabel, validateScope } from "./guardrails/scope";
+import { hasAbstainOption, unboundedStrings } from "./guardrails/schema";
+import { GUARDRAIL_RUN_ACTION, type GuardrailStats } from "./guardrails/session";
 import { staticInputSource } from "./inputs";
 import { createMemoryDb } from "./memory-db";
 import { createMemoryStore } from "./memory-store";
 import { replayMistake } from "./mistakes";
 import { checkWorkbookShape } from "./preview";
-import { createRecordedRouter, type RecordedResponses, type RecordedRouter } from "./recorded-router";
+import { SECOND_OPINION_SUFFIX, createRecordedRouter, type RecordedResponses, type RecordedRouter } from "./recorded-router";
 import { jobFolder, runAgent, type AnyAgent, type InputFile, type ModelRouterLike } from "./runner";
 
 export const DEFAULT_FIXTURES_ROOT = "fixtures/accuracy";
@@ -114,7 +124,7 @@ export async function runFixtureOnce(def: AnyAgent, fx: FixtureCase, pack: Check
 
   let n = 0;
   const modelRouter = router ?? createRecordedRouter(fx.recorded);
-  const requested = () => ("calls" in modelRouter ? (modelRouter as RecordedRouter).calls.map((c) => c.task) : undefined);
+  const requested = () => ("asked" in modelRouter ? [...(modelRouter as RecordedRouter).asked] : undefined);
   const out = await runAgent(def, "fixture-job", {
     db,
     router: modelRouter,
@@ -123,11 +133,14 @@ export async function runFixtureOnce(def: AnyAgent, fx: FixtureCase, pack: Check
     now: () => FIXTURE_NOW,
     ids: () => `${fx.id}-run-${++n}`,
   });
-  if (!out.ok) return { flags: [], figures: {}, deliverables: [], error: `${out.code}: ${out.reason}`, requestedTasks: requested() };
+  if (!out.ok) {
+    const runId = out.code === "FAILED" ? out.runId : null;
+    return { flags: [], figures: {}, deliverables: [], error: `${out.code}: ${out.reason}`, requestedTasks: requested(), guardrails: runId && def.scope ? guardrailOutcome(db, runId) : undefined };
+  }
 
-  const flags = (db.tables.checklistResult as { agentRunId: string; ruleId: string; severity: string; status: string }[])
-    .filter((r) => r.agentRunId === out.runId && r.status === "fail")
-    .map((r) => ({ ruleId: r.ruleId, severity: r.severity as RuleDefinition["severity"] }));
+  const checklist = (db.tables.checklistResult as { agentRunId: string; ruleId: string; severity: string; status: string }[]).filter((r) => r.agentRunId === out.runId);
+  const flags = checklist.filter((r) => r.status === "fail").map((r) => ({ ruleId: r.ruleId, severity: r.severity as RuleDefinition["severity"] }));
+  const statuses = Object.fromEntries(checklist.map((r) => [r.ruleId, r.status as "pass" | "fail" | "na"]));
 
   const working = jobFolder({ clientCode: FIXTURE_CLIENT_CODE, fy, service: def.service, period }, "Working");
   const deliverables: FixtureOutcome["deliverables"] = [];
@@ -150,7 +163,41 @@ export async function runFixtureOnce(def: AnyAgent, fx: FixtureCase, pack: Check
     deliverables.push({ name: want.name, problems });
   }
   for (const f of files.filter((x) => !matched.has(x))) deliverables.push({ name: f, problems: ["unexpected deliverable"] });
-  return { flags, figures: out.figures, deliverables, requestedTasks: requested() };
+  return { flags, figures: out.figures, deliverables, requestedTasks: requested(), guardrails: def.scope ? guardrailOutcome(db, out.runId) : undefined, statuses };
+}
+
+/** Rules whose outcome follows a model task's output: the ruleIds the scope's task specs declare (LLM rules excluded later). */
+export const modelDependentRulesOf = (def: AnyAgent): string[] => [...new Set((def.scope?.tasks ?? []).flatMap((t) => [...(t.ruleIds ?? [])]))].sort();
+
+/** ADR-008 outcomes of one run: checklist flags + the run's guardrail-run AuditEvent counts. */
+function guardrailOutcome(db: ReturnType<typeof createMemoryDb>, runId: string): GuardrailOutcome | undefined {
+  const event = (db.tables.auditEvent as { action: string; entityId: string | null; meta: unknown }[]).find((e) => e.action === GUARDRAIL_RUN_ACTION && e.entityId === runId);
+  const stats = (event?.meta ?? null) as Partial<GuardrailStats> | null;
+  const results = (db.tables.checklistResult as { agentRunId: string; ruleId: string; evidence: unknown }[]).filter((r) => r.agentRunId === runId);
+  if (!stats && !results.length) return undefined;
+  const withFlag = (flag: ResultFlag) => results.filter((r) => ((r.evidence as { flags?: string[] } | null)?.flags ?? []).includes(flag)).map((r) => r.ruleId).sort();
+  return {
+    insufficientEvidence: withFlag("insufficient-evidence"),
+    disagreements: withFlag("model-disagreement"),
+    outOfScope: withFlag("out-of-scope"),
+    ungrounded: stats?.ungrounded ?? 0,
+    scopeViolations: stats?.scopeViolations ?? 0,
+    agreementChecks: stats?.agreementChecks ?? 0,
+    wrongInput: stats?.wrongInput ?? 0,
+  };
+}
+
+/** Static ADR-008 checks of an agent's scope and task schemas (no runs needed). */
+export function staticGuardrailChecks(def: AnyAgent): { scopeDeclared: boolean; scopeProblems: string[]; modelTasks: number; unbounded: string[]; notAbstainable: string[] } {
+  if (!def.scope) return { scopeDeclared: false, scopeProblems: [], modelTasks: 0, unbounded: [], notAbstainable: [] };
+  const tasks = def.scope.tasks;
+  return {
+    scopeDeclared: true,
+    scopeProblems: validateScope(def),
+    modelTasks: tasks.length,
+    unbounded: tasks.flatMap((t) => unboundedStrings(t.schema).map((p) => `${taskLabel(t)}: ${p}`)),
+    notAbstainable: tasks.filter((t) => !hasAbstainOption(t.schema)).map(taskLabel),
+  };
 }
 
 const sameFiles = (a: InputFile[], b: InputFile[]) => a.length === b.length && a.every((f, i) => f.name === b[i].name && f.bytes.equals(b[i].bytes));
@@ -187,7 +234,19 @@ export async function runAgentAccuracy(def: AnyAgent, opts: AccuracyOptions = {}
     const outcomes: FixtureOutcome[] = [];
     for (let i = 0; i < runs; i++) outcomes.push(await runFixtureOnce(def, fx, pack, opts.routerFor?.(fx, i)));
     const result: FixtureRuns = { id: fx.id, expected: fx.expected, runs: outcomes };
-    if (def.probeMutation) {
+    if (def.inputProbes?.length && !fx.expected.error) {
+      // One probe per input file kind: same recordings, one value in THAT file changed.
+      result.probes = [];
+      for (const p of def.inputProbes) {
+        const mutated = await p.mutate(copyFiles(fx.inputFiles));
+        if (sameFiles(fx.inputFiles, mutated)) {
+          result.probes.push({ input: p.input, applied: false, changed: false, reason: `the ${p.input} probe left the input unchanged` });
+          continue;
+        }
+        const v = probeVerdict(outcomes[0], await runFixtureOnce(def, { ...fx, inputFiles: mutated }, pack, opts.routerFor?.(fx, runs)), true);
+        result.probes.push({ input: p.input, applied: true, changed: v.changed, reason: v.reason });
+      }
+    } else if (def.probeMutation && !fx.expected.error) {
       // Same recordings, one input value changed: something scored must move.
       const mutated = def.probeMutation(copyFiles(fx.inputFiles));
       const changedInput = !sameFiles(fx.inputFiles, mutated);
@@ -198,6 +257,8 @@ export async function runAgentAccuracy(def: AnyAgent, opts: AccuracyOptions = {}
       const asked = new Set(outcomes.flatMap((o) => o.requestedTasks ?? []));
       const unused = Object.keys(fx.recorded).filter((task) => !asked.has(task));
       if (unused.length) result.unusedRecordings = unused.sort();
+      const single = [...asked].filter((k) => k.endsWith(SECOND_OPINION_SUFFIX) && !Object.prototype.hasOwnProperty.call(fx.recorded, k));
+      if (single.length) result.singleAnswer = single.map((k) => k.slice(0, -SECOND_OPINION_SUFFIX.length)).sort();
     }
     results.push(result);
   }
@@ -212,5 +273,10 @@ export async function runAgentAccuracy(def: AnyAgent, opts: AccuracyOptions = {}
     internal: def.internal === true,
     probeDeclared: typeof def.probeMutation === "function",
     ruleKinds: ruleKindsOf(pack),
+    ...staticGuardrailChecks(def),
+    modelDependentRules: modelDependentRulesOf(def),
+    probeInputs: (def.inputProbes ?? []).map((p) => p.input),
+    requiredInputs: def.requiredInputs ?? [],
+    coverageExemptions: def.coverageExemptions,
   });
 }

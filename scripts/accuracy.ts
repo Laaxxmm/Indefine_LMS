@@ -8,6 +8,7 @@
 // --write-progress --out=<file> puts the block into <file>: it replaces a previous scoreboard
 // block or the body of a "## Accuracy scoreboard" section and leaves the rest of the file alone.
 // The block keeps its start / end markers, so the next write replaces it in place.
+// --mode=live is the ADR-008 nightly canary stub: it exits 2 ("needs ANTHROPIC_API_KEY / Phase 2b").
 // --provider is reserved for Phase 2b (live local / Claude runs); today only the recorded
 // fixtures are used ("recorded" mode: LLM flags gated as code path only, labelled on the
 // scoreboard) and any other value exits 2. The gating itself is mode-aware (accuracy.ts).
@@ -19,7 +20,7 @@ import { failureDetails, scoreboardMarkdown, upsertScoreboard, type AgentScore }
 import { DEFAULT_FIXTURES_ROOT, agentsWithFixtures, runAgentAccuracy } from "@/lib/agents/core/accuracy-run";
 import { AGENTS, getAgent } from "@/lib/agents/registry";
 
-type Args = { agent?: string; fixtures: string; runs?: number; writeProgress: boolean; out?: string; provider?: string };
+type Args = { agent?: string; fixtures: string; runs?: number; writeProgress: boolean; out?: string; provider?: string; mode?: string };
 
 function parseArgs(argv: string[]): Args {
   const a: Args = { fixtures: DEFAULT_FIXTURES_ROOT, writeProgress: false };
@@ -31,6 +32,7 @@ function parseArgs(argv: string[]): Args {
     else if (k === "write-progress") a.writeProgress = true;
     else if (k === "out") a.out = v;
     else if (k === "provider") a.provider = v;
+    else if (k === "mode") a.mode = v;
     else throw new Error(`unknown argument ${arg}`);
   }
   return a;
@@ -42,6 +44,15 @@ async function main(): Promise<number> {
     args = parseArgs(process.argv.slice(2));
   } catch (e) {
     console.error(`accuracy: ${(e as Error).message}`);
+    return 2;
+  }
+  if (args.mode === "live") {
+    // ADR-008 §9 nightly canary: each agent's fixture set against the live provider. Not built yet.
+    console.error("accuracy: --mode=live (nightly canary) needs ANTHROPIC_API_KEY / Phase 2b; live provider runs are not built yet.");
+    return 2;
+  }
+  if (args.mode !== undefined && args.mode !== "recorded") {
+    console.error(`accuracy: --mode must be recorded or live (got "${args.mode}")`);
     return 2;
   }
   if (args.provider && args.provider !== "recorded") {
