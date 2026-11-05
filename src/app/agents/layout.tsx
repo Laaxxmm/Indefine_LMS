@@ -9,6 +9,7 @@ import { canSeeMistakeLog, canSeeAllRuns, canUseAgents } from "@/lib/agents/acce
 import { isBreakNudgeEnabled } from "@/lib/agents/coach/flags";
 import { canSpotCheck } from "@/lib/rbac/policy";
 import { visibleAgents } from "@/lib/agents/registry";
+import { requireModule } from "@/lib/workspace/guard";
 import { focusRing, runsListLabel } from "./parts";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +22,7 @@ export default async function AgentsLayout({ children }: { children: React.React
   const session = await auth();
   if (!session?.user) redirect("/");
   if (!canUseAgents(session.user)) redirect("/dashboard");
+  await requireModule(session.user, "agents");
   const agents = visibleAgents();
 
   // The header grows instead of clipping: on a phone the nav takes its own row and scrolls sideways.

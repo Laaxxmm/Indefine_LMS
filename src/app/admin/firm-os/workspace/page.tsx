@@ -16,6 +16,7 @@ import {
   type PersonRow,
 } from "@/lib/workspace/admin";
 import { ALWAYS_ON, BUILT_IN_FOCUS, BUILT_IN_ROLE_MODULES, FIRM_ROLES, ROLE_LABELS, isFirmRole, moduleLabel } from "@/lib/workspace/registry";
+import { firmOsEnabled } from "@/lib/workspace/flag";
 import { PersonForm, RoleDefaultForm } from "./WorkspaceForms";
 
 export const dynamic = "force-dynamic";
@@ -207,6 +208,13 @@ export default async function WorkspaceSettingsPage({ searchParams }: { searchPa
           ← Admin
         </Link>
       </div>
+
+      {!firmOsEnabled() && (
+        <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-[13px] mb-6 max-w-3xl">
+          Firm OS is switched off for the whole firm, so nobody sees a Firm OS module yet and these settings are not used. Set the role defaults first
+          (leave the Firm OS modules off for a pilot), then ask IT to set FIRM_OS_ENABLED to 1. From then on these settings decide who sees what.
+        </p>
+      )}
 
       <nav aria-label="Workspace settings" className="flex items-center gap-1 mb-6 max-w-full overflow-x-auto">
         <Pill href="/admin/firm-os/workspace" current={view === "roles" && "page"}>

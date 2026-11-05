@@ -1,6 +1,14 @@
 // Smoke: /onboard renders for a partner (layout + page + client panel), and sends everyone else away.
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { activeSession, prismaCalls, redirectTarget, renderHtml } from "./harness";
+
+// Firm OS switched on for these tests (FIRM_OS_ENABLED defaults off: src/lib/workspace/flag.ts).
+beforeEach(() => {
+  vi.stubEnv("FIRM_OS_ENABLED", "1");
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 vi.mock("@/lib/auth", () => ({ auth: vi.fn(), signIn: vi.fn(), signOut: vi.fn(), handlers: {} }));
 vi.mock("@/lib/prisma", async () => ({ prisma: (await import("./harness")).prismaMock }));

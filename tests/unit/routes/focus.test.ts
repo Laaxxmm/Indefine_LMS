@@ -5,6 +5,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { redirectTarget, renderHtml as renderRaw } from "./harness";
 import { echoWorld, user, NOW, type World } from "../../fakes/agent-world";
 
+// Firm OS switched on for these tests (FIRM_OS_ENABLED defaults off: src/lib/workspace/flag.ts).
+beforeEach(() => {
+  vi.stubEnv("FIRM_OS_ENABLED", "1");
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
 const state = vi.hoisted(() => ({ world: null as unknown as World, setting: null as null | Record<string, unknown> }));
 
 vi.mock("@/lib/auth", () => ({ auth: vi.fn(), signIn: vi.fn(), signOut: vi.fn(), handlers: {} }));

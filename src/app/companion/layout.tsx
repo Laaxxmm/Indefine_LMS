@@ -6,17 +6,20 @@ import { LogoMark } from "@/components/Logo";
 import { NavLink } from "@/components/NavLink";
 import { canUseAgents } from "@/lib/agents/access";
 import { focusRing } from "@/app/agents/parts";
+import { requireCompanion } from "@/lib/workspace/guard";
 
 export const dynamic = "force-dynamic";
 
 const link = `shrink-0 whitespace-nowrap px-3.5 py-2 rounded-full text-sm font-semibold text-ink-mute hover:text-ink hover:bg-muted transition ${focusRing}`;
 
-// Firm OS Companion pairing. Any signed-in person reaches the layout; the page itself decides
-// whether they may pair (src/lib/companion/access.ts) and says so plainly when they may not.
+// Firm OS Companion pairing, only for people who may pair (the companion's rule with the person's
+// switch from the workspace settings); others go to the dashboard, which says why. The page keeps
+// its own check (src/lib/companion/access.ts) and says so plainly too.
 // The header grows instead of clipping: on a phone the nav takes its own row and scrolls sideways.
 export default async function CompanionLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
   if (!session?.user) redirect("/");
+  await requireCompanion(session.user);
 
   return (
     <div className="min-h-screen">

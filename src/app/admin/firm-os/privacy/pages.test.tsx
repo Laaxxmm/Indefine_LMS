@@ -8,6 +8,14 @@ import { createRequest, verifyIdentity, type PrivacyDeps } from "@/lib/privacy/r
 import { recordBreach } from "@/lib/privacy/breach";
 import type { PrivacyDb } from "@/lib/privacy/inventory";
 
+// Firm OS switched on for these tests (FIRM_OS_ENABLED defaults off: src/lib/workspace/flag.ts).
+beforeEach(() => {
+  vi.stubEnv("FIRM_OS_ENABLED", "1");
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
 const state = vi.hoisted(() => ({ db: null as unknown }));
 vi.mock("@/lib/auth", () => ({ auth: vi.fn(), signIn: vi.fn(), signOut: vi.fn(), handlers: {} }));
 vi.mock("@/lib/prisma", () => ({ prisma: new Proxy({}, { get: (_t, k) => (state.db as Record<string | symbol, unknown>)[k] }) }));

@@ -5,6 +5,8 @@ import { ArrowLeft, Menu } from "lucide-react";
 import { LogoMark } from "@/components/Logo";
 import AdminNav, { type AdminNavItem } from "./AdminNav";
 import { isAdmin } from "@/lib/access";
+import { requireModule } from "@/lib/workspace/guard";
+import { firmOsEnabled } from "@/lib/workspace/flag";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +35,10 @@ const FIRM_OS_ITEMS: AdminNavItem[] = [
   { href: "/admin/firm-os/breaches", label: "Breach register", icon: "CalendarClock" },
 ];
 const SETTINGS_ITEMS: AdminNavItem[] = [{ href: "/admin/settings", label: "Settings", icon: "Settings" }];
+const WORKSPACE_SETTINGS = "/admin/firm-os/workspace";
+
+/** While FIRM_OS_ENABLED is off only Workspace settings stays, so the rollout can be prepared. */
+const firmOsItems = () => (firmOsEnabled() ? FIRM_OS_ITEMS : FIRM_OS_ITEMS.filter((i) => i.href === WORKSPACE_SETTINGS));
 
 const groupLabel = "px-3 pt-4 pb-1 text-[10.5px] font-extrabold tracking-[0.12em] text-ink-mute uppercase";
 
@@ -42,7 +48,7 @@ function AdminMenu() {
     <>
       <AdminNav items={LMS_ITEMS} />
       <p className={groupLabel}>Firm OS</p>
-      <AdminNav items={FIRM_OS_ITEMS} />
+      <AdminNav items={firmOsItems()} />
       <div className="pt-3">
         <AdminNav items={SETTINGS_ITEMS} />
       </div>
@@ -58,6 +64,7 @@ export default async function AdminLayout({
   const session = await auth();
   if (!session?.user) redirect("/");
   if (!isAdmin(session.user)) redirect("/dashboard");
+  await requireModule(session.user, "admin"); // an admin always keeps it, so this never reads or redirects
 
   return (
     <div className="min-h-screen flex">

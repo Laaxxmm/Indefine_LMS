@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { X } from "lucide-react";
 import { LogoMark } from "@/components/Logo";
+import { requireModule } from "@/lib/workspace/guard";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,7 @@ export default async function WizardLayout({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/");
+  await requireModule(session.user, "leaderboard"); // the growth wizard is part of Trajectory
 
   return (
     <div className="min-h-screen relative">

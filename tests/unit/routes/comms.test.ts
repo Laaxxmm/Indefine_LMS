@@ -1,21 +1,34 @@
 // /api/firm-os/comms/** (401 / 403 / 400 / 404 / 412 / 201) and the /comms pages (list, draft
 // panel, draft view) over the in-memory comms world. Nothing on these screens is labelled "Send".
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CommsDeps } from "@/lib/agents/comms/defaults";
 import { ENGLISH_DIVIDER } from "@/lib/agents/comms/compose";
 import { CommsWorld, type MemJob } from "../../fakes/comms-world";
 import { scriptedRouter } from "../../fakes/comms-router";
-import { activeSession, redirectTarget, renderHtml, NotFoundSignal } from "./harness";
+import { activeSession, redirectTarget, renderHtml, workspaceRow, NotFoundSignal } from "./harness";
+
+// Firm OS switched on for these tests (FIRM_OS_ENABLED defaults off: src/lib/workspace/flag.ts).
+beforeEach(() => {
+  vi.stubEnv("FIRM_OS_ENABLED", "1");
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 let w: CommsWorld;
 let deps: CommsDeps;
 vi.mock("@/lib/auth", () => ({ auth: vi.fn(), signIn: vi.fn(), signOut: vi.fn(), handlers: {} }));
 vi.mock("@/lib/agents/comms/defaults", () => ({ commsDeps: () => deps }));
-vi.mock("@/lib/prisma", () => ({
-  get prisma() {
-    return w.db;
-  },
-}));
+// The comms world plus the workspace-settings reads (none saved: built-in role defaults).
+const ws = vi.hoisted(() => ({ setting: null as unknown }));
+vi.mock("@/lib/prisma", async () => {
+  const { withWorkspace } = await import("./harness");
+  return {
+    get prisma() {
+      return withWorkspace(w.db, { setting: () => ws.setting });
+    },
+  };
+});
 vi.mock("next/navigation", async () => (await import("./harness")).navigationMock);
 
 const { auth } = await import("@/lib/auth");
@@ -55,6 +68,7 @@ beforeEach(() => {
       find: async () => null,
     },
   };
+  ws.setting = null;
   signedIn(priya());
 });
 
@@ -117,7 +131,13 @@ describe("/comms pages", () => {
     expect(await redirectTarget(() => CommsLayout({ children: null }))).toBe("/");
     signedIn(activeSession({ active: false }));
     expect(await redirectTarget(() => CommsLayout({ children: null }))).toBe("/dashboard");
+    // Staff do not get Client comms drafts by default; a manager does, and so does staff it is switched on for.
     signedIn(priya());
+    expect(await redirectTarget(() => CommsLayout({ children: null }))).toBe("/dashboard?module-off=comms");
+    ws.setting = workspaceRow(["comms", "agents"]);
+    expect(await renderHtml(await CommsLayout({ children: null }))).toContain('href="/comms"');
+    ws.setting = null;
+    signedIn(activeSession({ id: "u-meena", level: "MANAGER" }));
     const html = clean(await renderHtml(await CommsLayout({ children: null })));
     expect(html).toContain('href="/comms"');
     expect(html).toContain("Client messages");

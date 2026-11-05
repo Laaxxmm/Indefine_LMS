@@ -8,6 +8,7 @@ import { NavLink } from "@/components/NavLink";
 import { canUseAgents } from "@/lib/agents/access";
 import { isBreakNudgeEnabled } from "@/lib/agents/coach/flags";
 import { canOnboard } from "@/lib/rbac/policy";
+import { requireModule } from "@/lib/workspace/guard";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,7 @@ export default async function OnboardLayout({ children }: { children: React.Reac
   const session = await auth();
   if (!session?.user) redirect("/");
   if (!canOnboard(session.user)) redirect("/dashboard");
+  await requireModule(session.user, "onboard");
 
   return (
     <div className="min-h-screen">

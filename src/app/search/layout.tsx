@@ -8,6 +8,7 @@ import { canUseAgents } from "@/lib/agents/access";
 import { canViewClients } from "@/lib/clients/core";
 import { canSearch } from "@/lib/search/access";
 import { focusRing } from "@/app/agents/parts";
+import { requireModule } from "@/lib/workspace/guard";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,7 @@ export default async function SearchLayout({ children }: { children: React.React
   const session = await auth();
   if (!session?.user) redirect("/");
   if (!canSearch(session.user)) redirect("/dashboard");
+  await requireModule(session.user, "search");
 
   return (
     <div className="min-h-screen">

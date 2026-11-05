@@ -6,6 +6,7 @@ import { LogoMark } from "@/components/Logo";
 import { NavLink } from "@/components/NavLink";
 import { canUseAgents } from "@/lib/agents/access";
 import { focusRing } from "@/app/agents/parts";
+import { requireModule } from "@/lib/workspace/guard";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,7 @@ export default async function CommsLayout({ children }: { children: React.ReactN
   const session = await auth();
   if (!session?.user) redirect("/");
   if (!canUseAgents(session.user)) redirect("/dashboard");
+  await requireModule(session.user, "comms");
 
   return (
     <div className="min-h-screen">
