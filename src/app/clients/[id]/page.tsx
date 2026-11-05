@@ -15,7 +15,7 @@ import { listClientJobs, type ClientJobsDb } from "@/lib/agents/client-jobs";
 import { FirmOsJobs } from "./FirmOsJobs";
 import { RevealPii } from "./RevealPii";
 import { canRevealClientPii } from "@/lib/rbac/policy";
-import { maskClientPii, type PiiField } from "@/lib/clients/pii";
+import { EDIT_PRIVATE_FIELDS, maskClientPii, maskName, type EditPrivateField, type PiiField } from "@/lib/clients/pii";
 import { ClientHistory } from "./ClientHistory";
 import { auditClientView } from "@/lib/audit/reads";
 
@@ -59,13 +59,17 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
     if (!masked) return null;
     return reveal ? <RevealPii key={field} clientId={client.id} field={field} masked={masked} /> : masked;
   };
-  const contact = [client.contactName, pii("phone", client.contactPhone), pii("email", client.contactEmail)].filter(Boolean);
+  // The contact person is shown as initials, and the referral source and growth note (free text that
+  // can be personal) are left out, for everyone but management.
+  const contactName = client.contactName ? (canManage ? client.contactName : maskName(client.contactName)) : null;
+  const contact = [contactName, pii("phone", client.contactPhone), pii("email", client.contactEmail)].filter(Boolean);
   const facts: Array<[string, React.ReactNode]> = [
     ["Entity", ENTITY_TYPES[client.entityType]], ["PAN", pii("pan", client.pan) ?? "—"], ["GSTIN", pii("gstin", client.gstin) ?? "—"], ["CIN", client.cin ?? "—"],
     ["Industry", client.industry ?? "—"], ["City", client.city ?? "—"],
     ["Contact", contact.length ? contact.map((c, i) => <span key={i}>{i > 0 && " · "}{c}</span>) : "—"],
-    ["Referral", client.referralSource ?? "—"], ["Turnover", `${inr(client.turnover)} (${TURNOVER_BANDS[client.turnoverBand]})`],
-    ["Growth goal", `${GROWTH_GOALS[client.growthGoal]}${client.growthNote ? ` — ${client.growthNote}` : ""}`],
+    ...(canManage ? ([["Referral", client.referralSource ?? "—"]] as Array<[string, React.ReactNode]>) : []),
+    ["Turnover", `${inr(client.turnover)} (${TURNOVER_BANDS[client.turnoverBand]})`],
+    ["Growth goal", `${GROWTH_GOALS[client.growthGoal]}${canManage && client.growthNote ? ` — ${client.growthNote}` : ""}`],
     ["Onboarded", ist(client.onboardedOn)], ["Primary handler", client.primaryHandler.name ?? client.primaryHandler.email],
   ];
 
@@ -86,12 +90,12 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
           {canManage && (
             <EditClient
               handlers={handlers}
+              // Personal fields go blank: the form loads them when opened (audited reveal route).
               client={{
-                id: client.id, active: client.active, name: client.name, entityType: client.entityType, pan: client.pan ?? "", gstin: client.gstin ?? "",
-                cin: client.cin ?? "", industry: client.industry ?? "", city: client.city ?? "", contactName: client.contactName ?? "",
-                contactPhone: client.contactPhone ?? "", contactEmail: client.contactEmail ?? "", referralSource: client.referralSource ?? "",
-                turnover: String(client.turnover), growthGoal: client.growthGoal, growthNote: client.growthNote ?? "",
+                id: client.id, active: client.active, name: client.name, entityType: client.entityType, cin: client.cin ?? "", industry: client.industry ?? "",
+                city: client.city ?? "", turnover: String(client.turnover), growthGoal: client.growthGoal,
                 onboardedOn: ist(client.onboardedOn), primaryHandlerId: client.primaryHandlerId,
+                ...(Object.fromEntries(EDIT_PRIVATE_FIELDS.map((f) => [f, ""])) as Record<EditPrivateField, string>),
               }}
             />
           )}
