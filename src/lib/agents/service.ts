@@ -19,6 +19,7 @@ import { transitionJobTask, type TransitionResult } from "@/lib/agents/core/stat
 import { DOCX_MIME, XLSX_MIME } from "@/lib/agents/core/templates";
 import { AGENTS, getAgent } from "@/lib/agents/registry";
 import { logAudit } from "@/lib/audit/log";
+import { agentRunBusyMessage, agentRunSlots, type ConcurrencyLimiter } from "@/lib/hardening/concurrency";
 
 /** A successful transition, as transitionJobTask reports it. */
 export type TransitionDone = Extract<TransitionResult, { ok: true }>;
@@ -26,11 +27,28 @@ export type TransitionDone = Extract<TransitionResult, { ok: true }>;
 /** Runs after a transition made by this service succeeded (production: the close-loop afterTransition). */
 export type TransitionHook = (t: TransitionDone, user: SessionUser) => Promise<unknown>;
 
-export type AgentServiceDeps = RunnerDeps & { agents: Readonly<Record<string, AnyAgent>>; afterTransition?: TransitionHook };
+export type AgentServiceDeps = RunnerDeps & {
+  agents: Readonly<Record<string, AnyAgent>>;
+  afterTransition?: TransitionHook;
+  /** Per-process cap on concurrent runs (default: agentRunSlots(), 2 at once + a short queue). */
+  runSlots?: ConcurrencyLimiter;
+};
 
-export type ServiceResult<T> = { ok: true; data: T } | { ok: false; status: 400 | 403 | 404 | 409 | 502; error: string };
+export type ServiceResult<T> = { ok: true; data: T } | { ok: false; status: 400 | 403 | 404 | 409 | 502 | 503; error: string; retryAfterSec?: number };
 
-const fail = (status: 400 | 403 | 404 | 409 | 502, error: string) => ({ ok: false as const, status, error });
+const fail = (status: 400 | 403 | 404 | 409 | 502 | 503, error: string) => ({ ok: false as const, status, error });
+
+/**
+ * Runs `fn` (a run, or a transition + run) in an agent-run slot. When the slots and the queue are
+ * full, or the wait runs out, nothing runs and the person gets 503 + Retry-After with a plain message.
+ */
+async function withRunSlot<T>(deps: AgentServiceDeps, fn: () => Promise<ServiceResult<T>>): Promise<ServiceResult<T>> {
+  const slots = deps.runSlots ?? agentRunSlots();
+  const r = await slots.run(fn);
+  if (r.ok) return r.value;
+  console.warn(`[agents] run refused: ${r.reason} (${slots.active} running, ${slots.waiting} waiting, max ${slots.options.max})`);
+  return { ok: false, status: 503, error: agentRunBusyMessage(r, slots.options.max), retryAfterSec: r.retryAfterSec };
+}
 
 let cached: AgentServiceDeps | null = null;
 
@@ -132,7 +150,7 @@ export async function startAgentRun(user: SessionUser, agentKey: string, jobTask
   const latest = await latestRunId(deps.db, jobTaskId);
   const actions = reviewActions(user, job, latest ? await blockingFailuresOf(deps.db, latest) : 0, deps.now());
   if (!actions.run) return fail(403, "Only the assignee, a manager or a partner can run the agent on an ASSIGNED or IN_PREP job");
-  return runAndAudit(user, def, jobTaskId, deps, "agent-run");
+  return withRunSlot(deps, () => runAndAudit(user, def, jobTaskId, deps, "agent-run"));
 }
 
 /** "Submit for review": AGENT_DONE → IN_REVIEW, on the job's latest run. */
@@ -165,12 +183,15 @@ async function backToPrepAndRun(
   const def = getAgent(v.data.agent, deps.agents);
   if (!def) return fail(404, `Unknown agent ${v.data.agent}`);
   if ((await latestRunId(deps.db, v.data.jobTaskId)) !== runId) return fail(409, "A newer run exists for this job; open the latest run");
-  const t = await transitionJobTask(deps.db, v.data.jobTaskId, "IN_PREP", actorOf(user)!, { expectedState: from, note, now: deps.now() });
-  if (!t.ok) return fail(t.code === "FORBIDDEN" ? 403 : t.code === "NOTE_REQUIRED" ? 400 : 409, t.reason);
-  if (from === "IN_REVIEW") await deps.db.agentRun.update({ where: { id: runId }, data: { status: "CHANGES_REQUESTED", reviewNotes: note.trim() } });
-  await auditTransition(user, deps, t, runId, { note: note.trim() });
-  await fireHook(deps, t, user);
-  return runAndAudit(user, def, v.data.jobTaskId, deps, "agent-run", note);
+  // The slot is taken before the transition, so a refused (busy) request leaves the job as it was.
+  return withRunSlot(deps, async () => {
+    const t = await transitionJobTask(deps.db, v.data.jobTaskId, "IN_PREP", actorOf(user)!, { expectedState: from, note, now: deps.now() });
+    if (!t.ok) return fail(t.code === "FORBIDDEN" ? 403 : t.code === "NOTE_REQUIRED" ? 400 : 409, t.reason);
+    if (from === "IN_REVIEW") await deps.db.agentRun.update({ where: { id: runId }, data: { status: "CHANGES_REQUESTED", reviewNotes: note.trim() } });
+    await auditTransition(user, deps, t, runId, { note: note.trim() });
+    await fireHook(deps, t, user);
+    return runAndAudit(user, def, v.data.jobTaskId, deps, "agent-run", note);
+  });
 }
 
 /** "Request changes": IN_REVIEW → IN_PREP with the reviewer's note, then a new run with that note. */

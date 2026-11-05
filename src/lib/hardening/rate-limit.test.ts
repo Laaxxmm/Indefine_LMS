@@ -86,11 +86,14 @@ describe("fixed window (fake timers)", () => {
     expect(burst.filter((d) => d.allowed)).toHaveLength(3);
   });
 
-  it("fails open, with an error logged, when the bucket store is unavailable", async () => {
+  it("fails CLOSED (503 + Retry-After, plain message), with an error logged, when the bucket store is unavailable", async () => {
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
     const broken: RateLimitStore = { hit: async () => Promise.reject(new Error("connection refused")) };
-    expect(await enforceRateLimit("onboard", "u-1", { store: broken, rule })).toBeNull();
-    expect(err).toHaveBeenCalledWith(expect.stringMatching(/onboard: store unavailable, request allowed: connection refused/));
+    const res = await enforceRateLimit("onboard", "u-1", { store: broken, rule });
+    expect(res?.status).toBe(503);
+    expect(res?.headers.get("Retry-After")).toBe("60");
+    expect(await res?.json()).toEqual({ error: "The system is busy — try again in a minute.", retryAfter: 60 });
+    expect(err).toHaveBeenCalledWith(expect.stringMatching(/onboard: store unavailable, request refused with 503 \(fail closed\): connection refused/));
   });
 });
 

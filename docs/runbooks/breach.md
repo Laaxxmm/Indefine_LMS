@@ -31,7 +31,7 @@ Do the steps that fit the incident; each is reversible.
 | A secret may have leaked | Rotate it (table below), redeploy, then check its use in the provider's console |
 | A SharePoint client site is exposed | SharePoint admin: remove the sharing link / external user; Purview audit log for that site |
 | Suspected database exposure | Rotate the Postgres password (Railway → Postgres → Variables → regenerate), update `DATABASE_URL` everywhere, redeploy |
-| Abuse of an API (bulk requests) | Lower the limit at once: `RATE_LIMIT_ONBOARD`, `RATE_LIMIT_AGENT_RUN`, `RATE_LIMIT_COMMS_DRAFT` (e.g. `1/1h`), redeploy. Note: the limiter lets requests through if its table is unreachable (fail-open), so also block the account |
+| Abuse of an API (bulk requests) | Lower the limit at once: `RATE_LIMIT_ONBOARD`, `RATE_LIMIT_AGENT_RUN`, `RATE_LIMIT_COMMS_DRAFT` (e.g. `1/1h`), redeploy. The limiter fails closed: if its table is unreachable, onboarding, agent runs and comms drafting answer 503 "The system is busy" until the database is back. Agent runs are also capped per process (`AGENT_RUN_CONCURRENCY`, default 2; `AGENT_RUN_QUEUE`, default 6 waiting) — set `AGENT_RUN_CONCURRENCY=1` to slow a burst further. Block the account as well |
 
 **Secrets to rotate** (names only; values live in Railway and GitHub secrets): `AUTH_SECRET`,
 `AUTH_MICROSOFT_ENTRA_ID_SECRET`, `MS_CLIENT_SECRET` (Graph app-only), the PnP certificate (SharePoint
