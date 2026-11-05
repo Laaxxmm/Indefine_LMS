@@ -1,5 +1,5 @@
 {
-  "description": "Trap: 4-digit HSN on a B2B invoice of a client with AATO above â‚¹5 crore (6 digits required). Core 3B figures (hand): outward 5,00,000 + 2,00,000 = 7,00,000; IGST 36,000, CGST 45,000, SGST 45,000 (tax 1,26,000). ITC CGST 27,000 + SGST 27,000 = 54,000. Cash IGST 36,000, CGST 18,000, SGST 18,000 = 72,000; no expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee. ITC held back 0: no purchase ledger the model answered insufficient_evidence on.",
+  "description": "Trap: 4-digit HSN on a B2B invoice of a client with AATO above ₹5 crore (6 digits required). Core 3B figures (hand): outward 5,00,000 + 2,00,000 = 7,00,000; IGST 36,000, CGST 45,000, SGST 45,000 (tax 1,26,000). ITC CGST 27,000 + SGST 27,000 = 54,000. Cash IGST 36,000, CGST 18,000, SGST 18,000 = 72,000; no expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee. ITC held back 0: no purchase ledger the model answered insufficient_evidence on.",
   "category": "trap",
   "job": {
     "fy": "2026-27",

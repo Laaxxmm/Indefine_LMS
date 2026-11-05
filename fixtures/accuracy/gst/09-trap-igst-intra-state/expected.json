@@ -1,5 +1,5 @@
 {
-  "description": "Trap: IGST charged on a sale to a Karnataka customer by a Karnataka supplier; also exercises CGST â†’ IGST and SGST â†’ IGST set-off. Core 3B figures (hand): outward 1,00,000 + 50,000 = 1,50,000 with IGST 18,000 + 9,000 = 27,000 as charged (the intra-state IGST is the block flag), CGST/SGST 0. ITC CGST 5,400 + SGST 5,400 = 10,800: CGST credit against IGST, then SGST credit against IGST (CGST credit exhausted) -> cash IGST 16,200; no expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee. ITC held back 0: no purchase ledger the model answered insufficient_evidence on.",
+  "description": "Trap: IGST charged on a sale to a Karnataka customer by a Karnataka supplier; also exercises CGST → IGST and SGST → IGST set-off. Core 3B figures (hand): outward 1,00,000 + 50,000 = 1,50,000 with IGST 18,000 + 9,000 = 27,000 as charged (the intra-state IGST is the block flag), CGST/SGST 0. ITC CGST 5,400 + SGST 5,400 = 10,800: CGST credit against IGST, then SGST credit against IGST (CGST credit exhausted) -> cash IGST 16,200; no expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee. ITC held back 0: no purchase ledger the model answered insufficient_evidence on.",
   "category": "trap",
   "job": {
     "fy": "2026-27",
