@@ -57,6 +57,7 @@ export const FIRM_OS_DIRS = [
   "src/lib/agents/comms",
   "src/lib/integrations/outlook",
   "src/app/api/firm-os",
+  "src/lib/hardening",
 ];
 export const isFirmOs = (p: string) => FIRM_OS_DIRS.some((d) => under(norm(p), d));
 
@@ -260,12 +261,91 @@ const NO_DELETE_RULES: [string, RegExp][] = [
 ];
 const GRAPH_IMPORT_RE = /import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*["']@\/lib\/graph["']/g;
 
-export function checkNoDelete(files: SourceFile[]): Violation[] {
+export type NoDeleteExemption = {
+  /** Exact repo path of the one file. */
+  path: string;
+  /** The one exported function in it that may delete. */
+  fn: string;
+  /** The one Prisma model it may delete from: only `.<model>.deleteMany(` inside the function's body. */
+  model: string;
+  /** The decision that requires the delete. */
+  adr: string;
+  why: string;
+};
+
+/**
+ * Deletes Firm OS code may contain: exactly ONE, required by ADR-006 (retention: break-nudge
+ * heartbeats are kept 7 days and then deleted; they carry no business value). The exemption is as
+ * narrow as the rule allows: in this one file, the declaration line of this one exported function
+ * (rule no-delete:exported-destructive-fn) and `.activityHeartbeat.deleteMany(` lines inside that
+ * function's body (rule no-delete:prisma-delete). Every other rule, line, function, model and file is
+ * scanned exactly as before. Adding a second entry needs an ADR, like this one.
+ */
+export const NO_DELETE_EXEMPTIONS: readonly NoDeleteExemption[] = [
+  {
+    path: "src/lib/hardening/retention.ts",
+    fn: "purgeExpiredHeartbeats",
+    model: "activityHeartbeat",
+    adr: "ADR-006",
+    why: "ActivityHeartbeat (break-nudge signal) is kept 7 days, then deleted (ADR-006 retention table); the rows have no business value after the nudge window.",
+  },
+];
+
+const escRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** 1-based [declaration line, body end line] of `export (async) function <fn>(` in `content`, or null. */
+export function exportedFunctionRange(content: string, fn: string): [number, number] | null {
+  const decl = new RegExp("^export\\s+(?:async\\s+)?function\\s+" + escRe(fn) + "\\s*\\(", "m");
+  const hits = content.match(new RegExp(decl.source, "gm"));
+  if (!hits || hits.length !== 1) return null; // missing or ambiguous: no exemption (fail closed)
+  const start = content.search(decl);
+  // Close the parameter list, then the body is the next `{ … }` (a return type with braces would be
+  // taken as the body: the real body's lines would then fall outside and stay flagged — fail closed).
+  let i = content.indexOf("(", start);
+  let depth = 0;
+  for (; i < content.length; i++) {
+    if (content[i] === "(") depth++;
+    else if (content[i] === ")" && --depth === 0) break;
+  }
+  const open = content.indexOf("{", i);
+  if (open < 0) return null;
+  depth = 0;
+  let end = open;
+  for (; end < content.length; end++) {
+    if (content[end] === "{") depth++;
+    else if (content[end] === "}" && --depth === 0) break;
+  }
+  if (depth !== 0) return null;
+  const lineAt = (pos: number) => content.slice(0, pos).split(/\r?\n/).length;
+  return [lineAt(start), lineAt(end)];
+}
+
+/** Whether a no-delete violation is covered by an exemption (see NO_DELETE_EXEMPTIONS). */
+function isExempt(v: Violation, file: SourceFile, exemptions: readonly NoDeleteExemption[]): boolean {
+  for (const e of exemptions) {
+    if (norm(e.path) !== v.path) continue;
+    const range = exportedFunctionRange(file.content, e.fn);
+    if (!range) continue;
+    const [first, last] = range;
+    if (v.rule === "no-delete:exported-destructive-fn" && v.line === first) return true;
+    if (v.rule === "no-delete:prisma-delete" && v.line > first && v.line <= last) {
+      const line = file.content.split(/\r?\n/)[v.line - 1] ?? "";
+      const all = line.match(/\.delete(?:Many)?\s*\(/g)?.length ?? 0;
+      const allowed = line.match(new RegExp("\\." + escRe(e.model) + "\\.deleteMany\\s*\\(", "g"))?.length ?? 0;
+      if (all > 0 && all === allowed) return true;
+    }
+  }
+  return false;
+}
+
+export function checkNoDelete(files: SourceFile[], exemptions: readonly NoDeleteExemption[] = NO_DELETE_EXEMPTIONS): Violation[] {
   const out: Violation[] = [];
   for (const f of files) {
     const p = norm(f.path);
     if (!inNoDeleteScope(p) || !CODE_EXT.has(ext(p))) continue;
-    for (const [rule, re] of NO_DELETE_RULES) scanLines(f, rule, re, out);
+    const found: Violation[] = [];
+    for (const [rule, re] of NO_DELETE_RULES) scanLines(f, rule, re, found);
+    out.push(...found.filter((v) => !isExempt(v, f, exemptions)));
     for (const m of f.content.matchAll(GRAPH_IMPORT_RE)) {
       const names = m[1].split(",").map((s) => s.trim().split(/\s+as\s+/)[0].replace(/^type\s+/, ""));
       const bad = names.filter((n) => GRAPH_DESTRUCTIVE.includes(n));

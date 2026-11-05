@@ -4,6 +4,7 @@
 // (entityId "<agent>:<YYYY-MM-DD>"; an existing one is never written again). No schema change:
 // counts live in AuditEvent.meta. Called when /admin/firm-os/models loads. The client is injected.
 import type { GuardrailDay, GuardrailRunSignal, ReviewSignal } from "@/lib/ai/usage";
+import { logAudit } from "@/lib/audit/log";
 import { GUARDRAIL_RUN_ACTION } from "./session";
 
 export const GUARDRAIL_BREACH_ACTION = "guardrail-breach";
@@ -62,14 +63,12 @@ export async function recordGuardrailBreaches(days: GuardrailDay[], db: Pick<App
   for (const d of breached) {
     const id = breachEntityId(d.agent, d.day);
     if (done.has(id)) continue;
-    await db.auditEvent.create({
-      data: {
-        actorId: null,
-        action: GUARDRAIL_BREACH_ACTION,
-        entity: GUARDRAIL_BREACH_ENTITY,
-        entityId: id,
-        meta: { agent: d.agent, day: d.day, breaches: d.breaches.map((b) => ({ ...b, rate: b.rate === null ? null : Math.round(b.rate * 10_000) / 10_000 })) },
-      },
+    await logAudit(db, {
+      actorId: null,
+      action: GUARDRAIL_BREACH_ACTION,
+      entity: GUARDRAIL_BREACH_ENTITY,
+      entityId: id,
+      meta: { agent: d.agent, day: d.day, breaches: d.breaches.map((b) => ({ ...b, rate: b.rate === null ? null : Math.round(b.rate * 10_000) / 10_000 })) },
     });
     done.add(id);
     written.push(id);

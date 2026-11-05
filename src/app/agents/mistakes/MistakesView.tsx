@@ -1,6 +1,6 @@
 // The mistake log: proposed rules (with the diff they would make to the active SOP pack) and
 // decided ones (with the diff they made). Rendered at /agents/mistakes (partners, managers and
-// admins) and /admin/firm-os/mistakes (admin area). Only partners and managers get the buttons.
+// admins) and /admin/firm-os/mistakes (admin area). Only partners get the buttons (SOP rule changes are partner decisions).
 import Link from "next/link";
 import type { RuleDefinition } from "@/lib/agents/core/checklist";
 import type { MistakeRow } from "@/lib/agents/views";
@@ -91,7 +91,7 @@ function Row({ row, canDecide, names }: { row: MistakeRow; canDecide: boolean; n
 }
 
 const INTRO =
-  "Findings reviewers say an agent missed or got wrong. Approving one adds its rule to a new minor version of the SOP pack; the next runs use it. Nothing is promoted without a partner or manager.";
+  "Findings reviewers say an agent missed or got wrong. Approving one adds its rule to a new minor version of the SOP pack; the next runs use it. Nothing is promoted without a partner.";
 
 /** The admin area's page header (eyebrow "Admin · …", title, "← Admin" on the right), as on the models and cycle-time pages. */
 function AdminHeader() {
@@ -144,7 +144,7 @@ export function MistakesView({ data, names, back, admin = false }: { data: { can
             ))}
           </ul>
         )}
-        {!data.canDecide && data.proposed.length > 0 && <p className="text-[12.5px] text-ink-mute mt-3">Only a partner or manager can approve or reject.</p>}
+        {!data.canDecide && data.proposed.length > 0 && <p className="text-[12.5px] text-ink-mute mt-3">Only a partner can approve or reject.</p>}
       </section>
       <section aria-labelledby="decided" className={card}>
         <h2 id="decided" className={sectionTitle}>

@@ -1,11 +1,12 @@
 // Supervised learning loop (Phase 4 task 4). A reviewer logs a finding the agent missed or got
-// wrong, with a proposed checklist rule and an example → MistakeLog PROPOSED. A partner or
-// manager approves it → a NEW SopPack row (minor version bump, via withPromotedRule) carrying the
+// wrong, with a proposed checklist rule and an example → MistakeLog PROPOSED. A partner approves
+// it (an SOP rule change is a partner decision, Phase 11) → a NEW SopPack row (minor version bump, via withPromotedRule) carrying the
 // rule, and the MistakeLog becomes APPROVED with promotedToVersion; the next run loads that pack.
 // Rejection only marks the row. Nothing auto-promotes and nothing is edited in place or removed.
 // `replayMistake` re-checks a promoted rule against the mistake's example (accuracy harness).
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
+import { logAudit } from "@/lib/audit/log";
 import {
   ChecklistPackSchema,
   MistakeRuleProposalSchema,
@@ -46,7 +47,8 @@ export const MistakeExampleSchema = z
   .refine((e) => e.extracted !== undefined, { message: "example.extracted is required" });
 export type MistakeExample = z.infer<typeof MistakeExampleSchema>;
 
-const canDecide = (by: HumanActor) => by.roles.includes("partner") || by.roles.includes("manager");
+/** SOP rule changes are partner decisions (src/lib/rbac/policy.ts canApproveSopRuleChange). */
+const canDecide = (by: HumanActor) => by.roles.includes("partner");
 
 function validateProposal(def: AnyAgent, proposal: unknown): { ok: true; rule: Omit<RuleDefinition, "origin"> } | { ok: false; reason: string } {
   const p = MistakeRuleProposalSchema.safeParse(proposal);
@@ -110,14 +112,14 @@ export async function proposeMistake(
 
 export type Decision = "approve" | "reject";
 
-/** Partner / manager decision. Approve → new SopPack minor version with the rule; reject → marked only. */
+/** Partner decision. Approve → new SopPack minor version with the rule; reject → marked only. */
 export async function decideMistake(
   deps: MistakeDeps,
   id: string,
   decision: Decision,
   by: HumanActor,
 ): Promise<MistakeResult<{ status: "APPROVED" | "REJECTED"; promotedToVersion: string | null }>> {
-  if (!canDecide(by)) return { ok: false, code: "FORBIDDEN", reason: "Only a partner or manager may approve or reject a mistake rule" };
+  if (!canDecide(by)) return { ok: false, code: "FORBIDDEN", reason: "Only a partner may approve or reject a mistake rule" };
   const now = deps.now();
   try {
     return await deps.db.$transaction(async (tx) => {
@@ -128,7 +130,7 @@ export async function decideMistake(
       if (decision === "reject") {
         const r = await tx.mistakeLog.updateMany({ where: { id, status: "PROPOSED" }, data: { status: "REJECTED", decidedById: by.userId, decidedAt: now } });
         if (r.count !== 1) return { ok: false, code: "CONFLICT", reason: "Decided by someone else meanwhile; reload" } as const;
-        await tx.auditEvent.create({ data: { actorId: by.userId, action: "reject", entity: "MistakeLog", entityId: id, meta: { agent: m.agent } } });
+        await logAudit(tx, { actorId: by.userId, action: "reject", entity: "MistakeLog", entityId: id, meta: { agent: m.agent } });
         return { ok: true, data: { status: "REJECTED" as const, promotedToVersion: null } };
       }
 
@@ -169,9 +171,7 @@ export async function decideMistake(
         data: { status: "APPROVED", decidedById: by.userId, decidedAt: now, promotedToVersion: next.version },
       });
       if (r.count !== 1) throw new Error("Decided by someone else meanwhile; reload");
-      await tx.auditEvent.create({
-        data: { actorId: by.userId, action: "approve", entity: "MistakeLog", entityId: id, meta: { agent: m.agent, ruleId: v.rule.id, promotedToVersion: next.version } },
-      });
+      await logAudit(tx, { actorId: by.userId, action: "approve", entity: "MistakeLog", entityId: id, meta: { agent: m.agent, ruleId: v.rule.id, promotedToVersion: next.version } });
       return { ok: true, data: { status: "APPROVED" as const, promotedToVersion: next.version } };
     });
   } catch (e) {

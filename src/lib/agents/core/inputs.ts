@@ -1,8 +1,15 @@
 // Input sources for the agent runner: the job's SharePoint ClientDocs folder, files staff upload,
 // and books exports, combined; plus a static source for tests and fixtures. Read-only: nothing
 // here writes to SharePoint.
+//
+// Upload limits (Phase 11, src/lib/hardening/uploads.ts): every file a source returns is screened
+// by screenedInputSource(): 25 MB per file, the virus-scan hook (default "not scanned — allowed
+// with warning", logged once per gather), and the type allowlist (pdf, xlsx, xls, csv, json, docx).
+// ClientDocs is screened in "warn" mode for type, because the ROC agent reads an optional
+// notes.txt placed there; staff uploads are screened strictly. A rejected file stops the run.
 import type { DeliverableStore } from "@/lib/integrations/sharepoint/deliverable-store";
 import type { SharePointClient } from "@/lib/integrations/sharepoint/graph-client";
+import { screenUpload, type ScreenOptions, type UploadLogEntry } from "@/lib/hardening/uploads";
 import type { InputFile, InputRequest, InputSource } from "./runner";
 
 /** Inputs larger than this in total stop the run (a register, not a data dump). */
@@ -13,6 +20,37 @@ export class InputTooLargeError extends Error {
     super(`Inputs total ${total} bytes, above the ${max}-byte limit; split the documents`);
     this.name = "InputTooLargeError";
   }
+}
+
+export class InputRejectedError extends Error {
+  constructor(name: string, reason: string) {
+    super(`${name} was refused: ${reason}`);
+    this.name = "InputRejectedError";
+  }
+}
+
+/**
+ * Screens every file the inner source returns (src/lib/hardening/uploads.ts). Throws
+ * InputRejectedError on a refused file; logs one summary line per gather (no file names).
+ */
+export function screenedInputSource(inner: InputSource, opts: ScreenOptions & { typeMode: "strict" | "warn" }): InputSource {
+  return {
+    async gather(req: InputRequest) {
+      const files = await inner.gather(req);
+      const entries: UploadLogEntry[] = [];
+      const log = opts.log ?? ((e: UploadLogEntry) => void entries.push(e));
+      try {
+        for (const f of files) {
+          const r = await screenUpload({ name: f.name, bytes: f.bytes, type: f.contentType }, { ...opts, log, source: f.source });
+          if (!r.ok) throw new InputRejectedError(f.name, r.reason);
+        }
+      } finally {
+        const flagged = entries.filter((e) => e.verdict !== "clean");
+        if (flagged.length) console.warn(`[upload] ${req.clientCode} inputs screened: ${JSON.stringify(flagged)}`);
+      }
+      return files;
+    },
+  };
 }
 
 /** Fixed files (tests, fixtures, replay). */
@@ -59,7 +97,19 @@ export function clientDocsInputSource(client: SharePointClient, store: Deliverab
   };
 }
 
-/** Production input source: ClientDocs + uploads + books exports (the last two plug in later phases). */
-export function defaultInputSource(client: SharePointClient, store: DeliverableStore, extra: { uploads?: InputSource; booksExports?: InputSource } = {}): InputSource {
-  return combineInputSources([clientDocsInputSource(client, store), extra.uploads ?? emptyInputSource, extra.booksExports ?? emptyInputSource]);
+/**
+ * Production input source: ClientDocs + uploads + books exports (the last two plug in later
+ * phases), each screened by the upload limits: ClientDocs and books exports in "warn" mode for
+ * type, staff uploads strictly.
+ */
+export function defaultInputSource(
+  client: SharePointClient,
+  store: DeliverableStore,
+  extra: { uploads?: InputSource; booksExports?: InputSource; screen?: ScreenOptions } = {},
+): InputSource {
+  return combineInputSources([
+    screenedInputSource(clientDocsInputSource(client, store), { ...extra.screen, typeMode: "warn" }),
+    screenedInputSource(extra.uploads ?? emptyInputSource, { ...extra.screen, typeMode: "strict" }),
+    screenedInputSource(extra.booksExports ?? emptyInputSource, { ...extra.screen, typeMode: "warn" }),
+  ]);
 }

@@ -7,13 +7,19 @@
 //                         filed > 24 h ago   → escalate to the reviewer and the assignee's manager
 //                                              (partners when neither exists) (CoachEvent "escalation").
 //                       Each person gets at most one of each per job per IST day, so a cron that fires
-//                       twice sends nothing twice.
+//                       twice sends nothing twice. Enforced by the database: every nudge carries a
+//                       unique CoachEvent.dedupeKey (reminder:<job>:<user>:<IST day>,
+//                       escalation:<job>:<user>:<IST day>), and a unique-key violation means another
+//                       run already sent it — so even two runs at the same moment cannot double-nudge.
 //   DONE (last 30 d)  → backstop: the DONE event must be CLOSING → DONE by system:close-gate with
 //                       passing evidence; and every Final file in that evidence must still be live and
-//                       unchanged. A violation raises an alert (CoachEvent "escalation" + AuditEvent).
+//                       unchanged. A violation raises an alert (CoachEvent "escalation" + AuditEvent)
+//                       once per job per IST day: the run that creates done-alert:<job>:<IST day>
+//                       (on the first recipient's event) sends it, the others' events carry
+//                       done-alert:<job>:<IST day>:<user>, and only that run writes the AuditEvent.
 //                       The job is NEVER reopened and its state is never changed here.
 import type { JobTaskState } from "@prisma/client";
-import { istDayStart, istWeekday, utcToIstWall } from "@/lib/ist";
+import { istDayKey, istWeekday, utcToIstWall } from "@/lib/ist";
 import type { Actor } from "@/lib/agents/core/state";
 import { formatDuration } from "./cycle-time";
 import {
@@ -67,15 +73,31 @@ export interface ReconcileSummary {
 
 // ------------------------------------------------------------------ nudges
 
-/** Creates the CoachEvent unless this person already has one of this kind for this job today (IST). */
-async function nudgeOnce(db: CloseLoopDb, data: CoachEventData, now: Date): Promise<boolean> {
-  const existing = await db.coachEvent.findFirst({
-    where: { userId: data.userId, kind: data.kind, jobTaskId: data.jobTaskId, createdAt: { gte: istDayStart(now) } },
-    select: { id: true },
-  });
-  if (existing) return false;
-  await db.coachEvent.create({ data, select: { id: true } });
-  return true;
+/** Dedupe keys (CoachEvent.dedupeKey is unique). `day` is the IST date, YYYY-MM-DD. */
+export const dedupeKeys = {
+  reminder: (jobId: string, userId: string, day: string) => `reminder:${jobId}:${userId}:${day}`,
+  escalation: (jobId: string, userId: string, day: string) => `escalation:${jobId}:${userId}:${day}`,
+  doneAlert: (jobId: string, day: string) => `done-alert:${jobId}:${day}`,
+  doneAlertRecipient: (jobId: string, day: string, userId: string) => `done-alert:${jobId}:${day}:${userId}`,
+};
+
+/** Prisma's unique-constraint error (P2002), from the real client or a fake that mimics it. */
+export function isUniqueViolation(e: unknown): boolean {
+  return !!e && typeof e === "object" && (e as { code?: unknown }).code === "P2002";
+}
+
+/**
+ * Creates the CoachEvent with its dedupe key. A unique-key violation means another run (or an
+ * earlier one today) already sent it: not an error, just "already sent" (false).
+ */
+async function nudgeOnce(db: CloseLoopDb, data: CoachEventData, dedupeKey: string): Promise<boolean> {
+  try {
+    await db.coachEvent.create({ data: { ...data, dedupeKey }, select: { id: true } });
+    return true;
+  } catch (e) {
+    if (isUniqueViolation(e)) return false;
+    throw e;
+  }
 }
 
 /** Reviewer (job, else engagement) and the assignee's manager; partners when there is nobody. Never the assignee. */
@@ -129,17 +151,17 @@ async function reconcileOpen(job: CloseJobRow, deps: ReconcileDeps, now: Date, s
 
   const age = now.getTime() - (await filedAtOf(deps.db, job)).getTime();
   const base = { reason: "close-loop", state, missing, reasons: c.reasons, ageMinutes: Math.floor(age / 60_000) };
+  const day = istDayKey(now);
   if (age > NUDGE_AFTER_MS) {
     const to = job.assigneeId ?? job.reviewerId;
     const message = `${jobLabel(job)} was marked filed ${formatDuration(age)} ago and is not closed yet. Still needed: ${missing.join("; ")}.`;
-    if (to && (await nudgeOnce(deps.db, { userId: to, kind: "reminder", jobTaskId: job.id, payload: { ...base, message } }, now))) s.reminders += 1;
+    if (to && (await nudgeOnce(deps.db, { userId: to, kind: "reminder", jobTaskId: job.id, payload: { ...base, message } }, dedupeKeys.reminder(job.id, to, day)))) s.reminders += 1;
   }
   if (age > ESCALATE_AFTER_MS) {
     const message = `${jobLabel(job)} has waited ${formatDuration(age)} since filing without closing. Still needed: ${missing.join("; ")}.`;
     for (const to of await escalationRecipients(deps.db, job)) {
-      if (await nudgeOnce(deps.db, { userId: to, kind: "escalation", jobTaskId: job.id, payload: { ...base, message, assigneeId: job.assigneeId } }, now)) {
-        s.escalations += 1;
-      }
+      const data: CoachEventData = { userId: to, kind: "escalation", jobTaskId: job.id, payload: { ...base, message, assigneeId: job.assigneeId } };
+      if (await nudgeOnce(deps.db, data, dedupeKeys.escalation(job.id, to, day))) s.escalations += 1;
     }
   }
 }
@@ -176,15 +198,16 @@ async function recheckDone(job: CloseJobRow, deps: ReconcileDeps, now: Date, s: 
   if (problems.length === 0) return;
 
   const message = `${jobLabel(job)} is DONE but needs attention: ${problems.join("; ")}. The job was not reopened.`;
-  let raised = false;
-  for (const to of await escalationRecipients(deps.db, job)) {
-    const payload = { reason: "done-recheck", problems, message, assigneeId: job.assigneeId };
-    if (await nudgeOnce(deps.db, { userId: to, kind: "escalation", jobTaskId: job.id, payload }, now)) raised = true;
-  }
-  if (raised) {
-    s.alerts.push(job.id);
-    await audit(deps.db, { actorId: RECONCILER_REF, action: "done-alert", entity: "JobTask", entityId: job.id, meta: { problems } });
-  }
+  const payload = { reason: "done-recheck", problems, message, assigneeId: job.assigneeId };
+  const day = istDayKey(now);
+  const [first, ...rest] = await escalationRecipients(deps.db, job);
+  if (!first) return;
+  // The run that creates done-alert:<job>:<day> owns today's alert: it alone notifies the others
+  // and writes the AuditEvent. A concurrent or later run gets the unique violation and stops.
+  if (!(await nudgeOnce(deps.db, { userId: first, kind: "escalation", jobTaskId: job.id, payload }, dedupeKeys.doneAlert(job.id, day)))) return;
+  for (const to of rest) await nudgeOnce(deps.db, { userId: to, kind: "escalation", jobTaskId: job.id, payload }, dedupeKeys.doneAlertRecipient(job.id, day, to));
+  s.alerts.push(job.id);
+  await audit(deps.db, { actorId: RECONCILER_REF, action: "done-alert", entity: "JobTask", entityId: job.id, meta: { problems } });
 }
 
 // ------------------------------------------------------------------ entry

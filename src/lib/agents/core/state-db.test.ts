@@ -1,7 +1,9 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { PrismaClient } from "@prisma/client";
 import { describe, it, expect, vi } from "vitest";
 import { registerCloseGate, type Actor } from "./state";
-import { transitionJobTask, updateFor, type JobTaskDb, type JobTaskRow, type JobTaskTx } from "./state-db";
+import { CLOSE_GATE_SETTING, transitionJobTask, updateFor, type JobTaskDb, type JobTaskRow, type JobTaskTx } from "./state-db";
 
 // Compile-time: the real Prisma client satisfies the narrow interface the service takes.
 export const _prismaFits = (p: PrismaClient): JobTaskDb => p;
@@ -24,11 +26,15 @@ function fakeDb(row: Partial<JobTaskRow> & Record<string, unknown>, opts: { bloc
       Record<string, unknown>,
     events: [] as Event[],
     transactions: 0,
+    /** Every call, tagged with the transaction it ran in (the fake runs one at a time). */
+    ops: [] as string[],
   };
+  const op = (s: string) => state.ops.push(`tx${state.transactions}:${s}`);
   const tx: JobTaskTx = {
     jobTask: {
-      findUnique: vi.fn(async ({ where }) => (where.id === state.row.id ? { ...state.row } : null)),
+      findUnique: vi.fn(async ({ where }) => (op("findUnique"), where.id === state.row.id ? { ...state.row } : null)),
       updateMany: vi.fn(async ({ where, data }) => {
+        op(`updateMany:${data.state}`);
         if (opts.raceOnUpdate) return { count: 0 };
         const r = state.row;
         if (where.id !== r.id || where.state !== r.state || where.updatedAt.getTime() !== r.updatedAt.getTime()) return { count: 0 };
@@ -45,6 +51,10 @@ function fakeDb(row: Partial<JobTaskRow> & Record<string, unknown>, opts: { bloc
     },
     agentRun: { findFirst: vi.fn(async () => (opts.hasRun === false ? null : { id: "run-9" })) },
     checklistResult: { count: vi.fn(async () => opts.blockFails ?? 0) },
+    $queryRaw: vi.fn(async (q: TemplateStringsArray, ...values: unknown[]) => {
+      op(`queryRaw:${q.join("?")}|${values.join(",")}`);
+      return [{ set_config: values[1] }];
+    }),
   };
   const db: JobTaskDb = {
     $transaction: async (fn) => {
@@ -156,6 +166,44 @@ describe("transitionJobTask", () => {
       ok: false,
       code: "GATE_REQUIRED",
     });
+  });
+
+  it("DONE trigger hook: set_config(firm_os.close_gate, <job id>, true) runs in the same transaction, after the gate checks and right before the UPDATE", async () => {
+    const { db, state, tx } = fakeDb({ state: "CLOSING" });
+    const token = mint({ jobTaskId: "job-1", now: NOW, evidence: {} });
+    expect(await transitionJobTask(db, "job-1", "DONE", system, { expectedState: "CLOSING", gateToken: token, now: NOW })).toMatchObject({ ok: true, to: "DONE" });
+    expect(CLOSE_GATE_SETTING).toBe("firm_os.close_gate");
+    expect(state.ops).toEqual(["tx1:findUnique", "tx1:queryRaw:SELECT set_config(?, ?, true)|firm_os.close_gate,job-1", "tx1:updateMany:DONE"]);
+    expect(state.transactions).toBe(1);
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it("DONE trigger hook: never armed for other edges, for a refused DONE, or for a token minted for another job", async () => {
+    // Every non-DONE edge.
+    const filed = fakeDb({ state: "APPROVED" });
+    await transitionJobTask(filed.db, "job-1", "FILED_BY_HUMAN", staff, { expectedState: "APPROVED", ackRef: "ARN1", now: NOW });
+    const closing = fakeDb({ state: "FILED_BY_HUMAN" });
+    await transitionJobTask(closing.db, "job-1", "CLOSING", system, { expectedState: "FILED_BY_HUMAN", now: NOW });
+    for (const w of [filed, closing]) expect(w.tx.$queryRaw).not.toHaveBeenCalled();
+    // No token, a token for another job, a used token, a stale expected state.
+    const w = fakeDb({ state: "CLOSING" });
+    await transitionJobTask(w.db, "job-1", "DONE", partner, { expectedState: "CLOSING", now: NOW });
+    await transitionJobTask(w.db, "job-1", "DONE", system, { expectedState: "CLOSING", gateToken: mint({ jobTaskId: "job-2", now: NOW, evidence: {} }), now: NOW });
+    const used = mint({ jobTaskId: "job-1", now: NOW, evidence: {} });
+    await transitionJobTask(fakeDb({ state: "CLOSING" }).db, "job-1", "DONE", system, { expectedState: "CLOSING", gateToken: used, now: NOW });
+    await transitionJobTask(w.db, "job-1", "DONE", system, { expectedState: "CLOSING", gateToken: used, now: NOW });
+    await transitionJobTask(w.db, "job-1", "DONE", system, { expectedState: "FILED_BY_HUMAN", gateToken: mint({ jobTaskId: "job-1", now: NOW, evidence: {} }), now: NOW });
+    expect(w.tx.$queryRaw).not.toHaveBeenCalled();
+    expect(w.state.row.state).toBe("CLOSING");
+    expect(w.state.ops.filter((o) => o.includes("updateMany"))).toEqual([]);
+  });
+
+  it("the migration's trigger checks the same setting name the hook sets", () => {
+    const sql = readFileSync(join(process.cwd(), "prisma/migrations/20261106000000_firm_os_done_trigger/migration.sql"), "utf8");
+    expect(sql).toContain(`current_setting('${CLOSE_GATE_SETTING}', true) IS DISTINCT FROM NEW."id"`);
+    expect(sql).toMatch(/BEFORE UPDATE OF "state" ON "JobTask"/);
+    expect(sql).toMatch(/RAISE EXCEPTION/);
+    expect(sql).not.toMatch(/\bDROP\b|\bDELETE\b|ALTER TABLE/i); // additive only
   });
 
   it("uses the real clock when no now is injected", async () => {
