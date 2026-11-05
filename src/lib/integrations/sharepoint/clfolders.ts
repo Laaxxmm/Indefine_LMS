@@ -165,10 +165,7 @@ export function createClFolders(deps: ClFoldersDeps) {
       const driveId = drive.id;
       async function listingOf(parent: string): Promise<Set<string>> {
         const ready = prefetched.get(parent);
-        if (ready) {
-          prefetched.delete(parent);
-          return ready;
-        }
+        if (ready) return ready; // each parent is listed once per plan
         enqueued.add(parent);
         const others = known.filter((k) => k !== parent && !prefetched.has(k)).slice(0, BATCH_MAX - 1);
         const taken = new Set([parent, ...others]);

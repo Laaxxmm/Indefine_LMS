@@ -158,8 +158,8 @@ describe("close-gate verifier", () => {
     expect(r.knownSha256("other-drive", item)).toBeNull();
     r.remember("d", "i2", { sha256: "A", quickXorHash: "q", size: 1, cTag: "c" });
     r.remember("d", "i3", { sha256: "B", quickXorHash: "q", size: 1, cTag: "c" });
-    expect(r.size).toBe(2); // bounded
-    expect(r.knownSha256("d", item)).toBeNull(); // the oldest was evicted
+    expect(r.size).toBeLessThanOrEqual(2); // bounded
+    expect(r.knownSha256("d", item)).toBeNull(); // the oldest generation was dropped
   });
 });
 

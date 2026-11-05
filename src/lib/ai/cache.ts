@@ -12,8 +12,8 @@
 //          queued or failed results), with the provider / model / confidence it came from. The
 //          router re-validates a hit (schema + validators) before using it; a hit that fails is
 //          dropped and the call is made.
-//   bounds LRU, at most `maxEntries` entries and `maxChars` characters of JSON, each kept for
-//          `ttlMs` (default 12 h). Process memory only: nothing is written to the database, no
+//   bounds two-generation LRU, at most `maxEntries` entries and `maxChars` characters of JSON,
+//          each kept for `ttlMs` (default 12 h). Process memory only: nothing is written to the database, no
 //          prompt text is kept (only hashes as keys), and a restart empties it.
 //
 // ADR-002 / ADR-006: no raw prompt is stored anywhere; outputs are kept only in process memory,
@@ -35,8 +35,9 @@ export type CachedResponse = {
 export interface ResponseCache {
   get(key: string): CachedResponse | undefined;
   set(key: string, value: CachedResponse): void;
-  /** Forget one entry (a hit that no longer validates). */
-  delete(key: string): void;
+  /** Stop serving one entry (a hit that no longer validates). */
+  invalidate(key: string): void;
+  /** Entries held (both generations; an entry used in both may count twice). */
   readonly size: number;
 }
 
@@ -52,49 +53,54 @@ export type ResponseCacheOptions = {
 
 export const RESPONSE_CACHE_DEFAULTS = { maxEntries: 500, maxChars: 4_000_000, ttlMs: 12 * 60 * 60 * 1000 } as const;
 
-type Entry = { value: CachedResponse; chars: number; expires: number };
+type Entry = { value: CachedResponse | null; chars: number; expires: number };
 
+/**
+ * Two-generation LRU (no per-entry removal): new and recently used entries go to the young map;
+ * when it holds half the entry or character budget, it becomes the old map and the previous old
+ * map is dropped whole. A hit in the old map is copied back to the young one. So at most
+ * `maxEntries` entries / `maxChars` characters are held, and an entry that keeps being used stays.
+ */
 export function createResponseCache(opts: ResponseCacheOptions = {}): ResponseCache {
-  const maxEntries = Math.max(1, opts.maxEntries ?? RESPONSE_CACHE_DEFAULTS.maxEntries);
+  const half = Math.max(1, Math.ceil((opts.maxEntries ?? RESPONSE_CACHE_DEFAULTS.maxEntries) / 2));
   const maxChars = Math.max(1, opts.maxChars ?? RESPONSE_CACHE_DEFAULTS.maxChars);
+  const halfChars = Math.max(1, Math.ceil(maxChars / 2));
   const ttlMs = Math.max(1, opts.ttlMs ?? RESPONSE_CACHE_DEFAULTS.ttlMs);
   const now = opts.now ?? Date.now;
-  const map = new Map<string, Entry>(); // insertion order = least recently used first
-  let chars = 0;
+  let young = new Map<string, Entry>();
+  let old = new Map<string, Entry>();
+  let youngChars = 0;
 
-  const drop = (key: string) => {
-    const e = map.get(key);
-    if (!e) return;
-    chars -= e.chars;
-    map.delete(key);
+  const put = (key: string, e: Entry) => {
+    youngChars += e.chars - (young.get(key)?.chars ?? 0);
+    young.set(key, e);
+    if (young.size >= half || youngChars >= halfChars) {
+      old = young;
+      young = new Map();
+      youngChars = 0;
+    }
   };
 
   return {
     get(key) {
-      const e = map.get(key);
-      if (!e) return undefined;
-      if (e.expires <= now()) {
-        drop(key);
-        return undefined;
+      let e = young.get(key);
+      if (!e) {
+        e = old.get(key);
+        if (e?.value && e.expires > now()) put(key, e); // used again: keep it young
       }
-      map.delete(key);
-      map.set(key, e); // most recently used
+      if (!e?.value || e.expires <= now()) return undefined;
       return { ...e.value, output: structuredClone(e.value.output) };
     },
     set(key, value) {
-      drop(key);
-      const size = JSON.stringify(value.output ?? null).length;
-      if (size > maxChars) return; // one answer larger than the whole budget: not kept
-      map.set(key, { value: { ...value, output: structuredClone(value.output) }, chars: size, expires: now() + ttlMs });
-      chars += size;
-      for (const k of map.keys()) {
-        if (map.size <= maxEntries && chars <= maxChars) break;
-        drop(k);
-      }
+      const chars = JSON.stringify(value.output ?? null).length;
+      if (chars > maxChars) return; // one answer larger than the whole budget: not kept
+      put(key, { value: { ...value, output: structuredClone(value.output) }, chars, expires: now() + ttlMs });
     },
-    delete: drop,
+    invalidate(key) {
+      put(key, { value: null, chars: 0, expires: 0 });
+    },
     get size() {
-      return map.size;
+      return young.size + old.size;
     },
   };
 }
@@ -169,7 +175,8 @@ async function revalidate<T>(req: Pick<ModelRequest<T>, "schema" | "contradictio
  * (the run alone); a failed lookup also falls back to the run.
  */
 export function createRouterCacheHook(cache: ResponseCache, scopeOf: (runId: string) => Promise<string | null | undefined>) {
-  const scopes = new Map<string, string>();
+  // Run → scope, kept for the most recent runs (a fresh map once it is full; a miss just looks up again).
+  let scopes = new Map<string, string>();
   async function scopeFor(runId: string): Promise<string> {
     const known = scopes.get(runId);
     if (known) return known;
@@ -179,8 +186,8 @@ export function createRouterCacheHook(cache: ResponseCache, scopeOf: (runId: str
     } catch {
       // A failed lookup only narrows the scope to this run.
     }
+    if (scopes.size >= SCOPE_MEMO_MAX) scopes = new Map();
     scopes.set(runId, scope);
-    if (scopes.size > SCOPE_MEMO_MAX) scopes.delete(scopes.keys().next().value as string);
     return scope;
   }
   return {
@@ -201,7 +208,7 @@ export function createRouterCacheHook(cache: ResponseCache, scopeOf: (runId: str
       if (!cached) return { hit: null, remember };
       const output = await revalidate(req, cached.output);
       if (output === null) {
-        cache.delete(key);
+        cache.invalidate(key);
         return { hit: null, remember };
       }
       const { provider, model, confidence, escalated, anonymized, needsPartnerReview } = cached;

@@ -11,34 +11,44 @@ import type { ModelProvider, ModelRequest, ProviderRequest } from "../types";
 const value = (output: unknown): CachedResponse => ({ output, provider: "claude", model: "m", confidence: 0.9, escalated: false, anonymized: true, needsPartnerReview: false });
 
 describe("createResponseCache", () => {
-  it("returns what was set, as a copy, and refreshes recency on get", () => {
-    const c = createResponseCache({ maxEntries: 2 });
+  it("returns what was set, as a copy; an entry in use survives, an unused one is dropped", () => {
+    const c = createResponseCache({ maxEntries: 4 });
     c.set("a", value({ n: 1 }));
-    c.set("b", value({ n: 2 }));
-    const got = c.get("a")!;
+    c.set("b", value({ n: 2 })); // young generation full (2 of 4): it becomes the old one
+    const got = c.get("a")!; // used again: copied back to the young generation
     (got.output as { n: number }).n = 99; // a caller mutating its copy changes nothing cached
     expect(c.get("a")!.output).toEqual({ n: 1 });
-    c.set("c", value({ n: 3 })); // evicts b (a was used more recently)
+    c.set("c", value({ n: 3 })); // rotates again: the generation holding b is dropped
     expect(c.get("b")).toBeUndefined();
     expect(c.get("a")).toBeDefined();
-    expect(c.size).toBe(2);
+    expect(c.size).toBeLessThanOrEqual(4);
   });
 
-  it("expires entries after the TTL and honours the character budget", () => {
+  it("expires entries after the TTL, honours the character budget, and invalidates", () => {
     let t = 0;
     const c = createResponseCache({ ttlMs: 1000, maxChars: 30, now: () => t });
     c.set("a", value("x".repeat(10)));
-    c.set("b", value("y".repeat(10)));
-    c.set("c", value("z".repeat(10))); // 36 chars of JSON > 30: the oldest goes
+    c.set("b", value("y".repeat(10))); // 24 chars ≥ half the budget: rotates
+    c.set("c", value("z".repeat(10)));
+    c.set("d", value("w".repeat(10))); // rotates again: a and b are gone
     expect(c.get("a")).toBeUndefined();
-    expect(c.get("b")).toBeDefined();
+    expect(c.get("c")).toBeDefined();
     c.set("huge", value("w".repeat(100))); // larger than the whole budget: not kept
     expect(c.get("huge")).toBeUndefined();
     t = 5000;
-    expect(c.get("b")).toBeUndefined();
-    c.set("d", value(1));
-    c.delete("d");
-    expect(c.get("d")).toBeUndefined();
+    expect(c.get("c")).toBeUndefined();
+    c.set("e", value(1));
+    expect(c.get("e")).toBeDefined();
+    c.invalidate("e");
+    expect(c.get("e")).toBeUndefined();
+  });
+
+  it("stays within its entry cap under many writes", () => {
+    const c = createResponseCache({ maxEntries: 10 });
+    for (let i = 0; i < 1000; i++) c.set(`k${i}`, value(i));
+    expect(c.size).toBeLessThanOrEqual(10);
+    expect(c.get("k999")).toBeDefined();
+    expect(c.get("k0")).toBeUndefined();
   });
 
   it("defaults", () => {

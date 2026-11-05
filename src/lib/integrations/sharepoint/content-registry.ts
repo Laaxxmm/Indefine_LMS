@@ -41,25 +41,41 @@ export function liveFingerprint(item: Pick<GraphItem, "size" | "cTag" | "file">)
   return { cTag: item.cTag, quickXorHash: qx, size: item.size };
 }
 
+/**
+ * Bounded by two generations (no per-entry removal): new and re-checked items go to the young map;
+ * when it holds half of `max`, it becomes the old map and the previous old map is dropped whole.
+ * An item found in the old map is copied back to the young one, so files that keep being checked stay.
+ */
 export function createContentRegistry(max = CONTENT_REGISTRY_MAX): ContentRegistry {
-  const map = new Map<string, ContentFacts>();
+  const half = Math.max(1, Math.ceil(max / 2));
+  let young = new Map<string, ContentFacts>();
+  let old = new Map<string, ContentFacts>();
   const key = (driveId: string, itemId: string) => `${driveId}\u0000${itemId}`;
+  const put = (k: string, facts: ContentFacts) => {
+    young.set(k, facts);
+    if (young.size >= half) {
+      old = young;
+      young = new Map();
+    }
+  };
   return {
     remember(driveId, itemId, facts) {
-      const k = key(driveId, itemId);
-      map.delete(k);
-      map.set(k, { ...facts, sha256: facts.sha256.toLowerCase() });
-      while (map.size > max) map.delete(map.keys().next().value as string);
+      put(key(driveId, itemId), { ...facts, sha256: facts.sha256.toLowerCase() });
     },
     knownSha256(driveId, item) {
       const live = liveFingerprint(item);
-      const facts = map.get(key(driveId, item.id));
+      const k = key(driveId, item.id);
+      let facts = young.get(k);
+      if (!facts) {
+        facts = old.get(k);
+        if (facts) put(k, facts);
+      }
       if (!live || !facts) return null;
       if (facts.cTag !== live.cTag || facts.quickXorHash !== live.quickXorHash || facts.size !== live.size) return null;
       return facts.sha256;
     },
     get size() {
-      return map.size;
+      return young.size + old.size;
     },
   };
 }
