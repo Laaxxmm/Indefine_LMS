@@ -91,9 +91,9 @@ describe("extractSpec", () => {
     const router: ExtractRouter = { run: vi.fn().mockRejectedValue(new Error("Daily AI budget is exhausted")) };
     const r = await extractSpec("x", { router, runId: "r", base: { clientCode: "ABC" } });
     expect(r.spec).toEqual({ clientCode: "ABC" });
-    expect(r.notes).toEqual(["Automatic reading failed (Daily AI budget is exhausted). Answer the questions below instead."]);
+    expect(r.notes).toEqual(["The description could not be read automatically. Daily AI budget is exhausted. Answer the questions below instead."]);
     const odd: ExtractRouter = { run: vi.fn().mockRejectedValue("boom") };
-    expect((await extractSpec("x", { router: odd, runId: "r" })).notes[0]).toMatch(/\(boom\)/);
+    expect((await extractSpec("x", { router: odd, runId: "r" })).notes[0]).toMatch(/automatically\. Boom\. Answer/);
   });
 
   it("a sentence carrying instructions for the AI is never sent: the person answers the questions and is told why (ADR-009)", async () => {

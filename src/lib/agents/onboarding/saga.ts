@@ -256,8 +256,8 @@ export function createSaga(deps: SagaDeps) {
   /** Run (or resume) the saga. Returns the run as stored at the end. */
   async function execute(runId: string, actorId: string): Promise<RunRecord> {
     const run = await store.getRun(runId);
-    if (!run) throw new SagaError("not-found", "Onboarding run not found");
-    if (!run.plan || run.status === "DRAFT") throw new SagaError("not-confirmed", "This plan has not been confirmed yet");
+    if (!run) throw new SagaError("not-found", "That onboarding wasn't found. Go back to the onboarding page and open it again.");
+    if (!run.plan || run.status === "DRAFT") throw new SagaError("not-confirmed", "Confirm the plan first, then create the client.");
     if (!(await store.claimRun(runId, new Date(now().getTime() - staleAfterMs)))) {
       throw new SagaError("busy", "This onboarding is already running. Wait for it to finish, then refresh.");
     }
@@ -315,7 +315,7 @@ export function createSaga(deps: SagaDeps) {
    */
   async function settleWaiting(runId: string, isSettled: (syncId: string) => Promise<boolean>): Promise<RunRecord> {
     const run = await store.getRun(runId);
-    if (!run) throw new SagaError("not-found", "Onboarding run not found");
+    if (!run) throw new SagaError("not-found", "That onboarding wasn't found. Go back to the onboarding page and open it again.");
     const steps = normalizeSteps(run.steps);
     let changed = false;
     for (const step of steps) {

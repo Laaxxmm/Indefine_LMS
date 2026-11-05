@@ -90,14 +90,14 @@ describe("budget refusal elsewhere", () => {
     const llm = rows(w.db, "checklistResult").find((r) => r.ruleId === "echo.related-party")!;
     expect(llm.status).toBe("na");
     // Scoped agents get the plain sentence (ADR-009 guardrail session); the ModelCall row keeps BUDGET_REFUSED.
-    expect(String(llm.message)).toContain("model check failed (Today's AI budget for the firm is used up (₹5.00 of ₹5.00), so this run stopped. Run it again tomorrow, or ask an admin to raise the daily AI budget.); review manually");
+    expect(String(llm.message)).toContain("the AI could not check this, so check it by hand. Today's AI budget for the firm is used up (₹5.00 of ₹5.00), so this run stopped. Run it again tomorrow, or ask an admin to raise the daily AI budget.");
     expect(m.claude.requests).toHaveLength(0);
   });
 
   it("during onboarding: the partner is told why and answers the questions instead", async () => {
     const m = modelWorld({ claude: [], env: { AI_DAILY_BUDGET_INR: "5" }, seed: [{ at: EARLIER_TODAY, costInr: 7.5 }] });
     const x = await extractSpec("Onboard Bright Tools LLP — GST monthly, assign Priya Sharma.", { router: m.router, runId: "onb-b" });
-    expect(x.notes).toEqual(["Automatic reading failed (Daily AI budget is exhausted: ₹7.50 spent today (IST) of ₹5.00 allowed (AI_DAILY_BUDGET_INR).). Answer the questions below instead."]);
+    expect(x.notes).toEqual(["The description could not be read automatically. Today's AI budget for the firm is used up. Answer the questions below instead."]);
     expect(x.spec).toEqual({});
   });
 });

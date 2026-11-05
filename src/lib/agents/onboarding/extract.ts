@@ -11,6 +11,7 @@ import { UNTRUSTED_DATA_INSTRUCTION, fenceUntrusted, patternLabel, screenText, v
 import { limitsFor } from "@/lib/agents/core/guardrails/limits";
 import { resolvePeople, type Person } from "./people";
 import { ENTITY_TYPES, ExtractedSpec, FIRM_SERVICES, mergeSpec, normalizeExtracted, type PartialSpec } from "./spec";
+import { causeSentence } from "@/lib/errors";
 
 export interface ExtractRouter {
   run<T>(req: ModelRequest<T>): Promise<RouterResult<T>>;
@@ -114,12 +115,12 @@ export async function extractSpec(prompt: string, opts: ExtractOptions): Promise
       runId: opts.runId,
       maxCostInr: opts.maxCostInr,
     })
-    .catch((e: unknown) => ({ status: "error" as const, reason: e instanceof Error ? e.message : String(e) }));
+    .catch((e: unknown) => ({ status: "error" as const, reason: causeSentence(e) ?? "" }));
 
   let extracted: ExtractedSpec | null = null;
   let needsReview = false;
   if (result.status === "error") {
-    notes.push(`Automatic reading failed (${result.reason}). Answer the questions below instead.`);
+    notes.push(`The description could not be read automatically.${result.reason ? ` ${result.reason}` : ""} Answer the questions below instead.`);
   } else if (result.status === "ok") {
     extracted = result.output;
     needsReview = result.needsPartnerReview;
