@@ -1,6 +1,6 @@
 # PROGRESS — Indefine Firm OS
 Current phase: 5–8 | Branch: firm-os/phase-0-inventory | Last green: 2026-11-05 20:35 IST
-Tests: unit+integration 1324/1324 (55 files; Firm OS coverage 99.7% lines / 97.4% branches) · e2e 4/4 (smoke, local, no DB) · accuracy: echo P=1.00 R=1.00 (harness self-test) | GST – | ROC – | TAX – | BOOKS – | AUDIT –
+Tests: unit+integration 1324/1324 (55 files; Firm OS coverage 99.7% lines / 97.4% branches) · e2e 4/4 (smoke, local, no DB) · accuracy: echo P=1.00 R=1.00 (code path only — audit C1, harness fix in progress) | GST – | ROC – | TAX – | BOOKS – | AUDIT –
 Model mode: CLAUDE_ONLY + LOCAL_STUB(fail-closed) | Turia bridge: MANUAL (ADR-003)
 
 ## Phase checklist (✅ only when QA gate green)
@@ -104,7 +104,13 @@ Shared foundation (commit c61d885): additive Prisma section "Firm OS: shared spi
 ## Accuracy scoreboard     (agent → fixture set → precision → recall → threshold → pass/fail → date)
 | Agent | Fixture set | Block P/R | Warn P/R | Figures | Schema | Replay | 3× | Result | Date |
 |---|---|---|---|---|---|---|---|---|---|
-| echo (framework self-test) | accuracy/echo (6) | 1.000/1.000 | 1.000/1.000 | 6/6 | 6/6 | 1/1 | 6/6 | pass | 05 Nov 2026 20:31 IST |
+| echo (framework self-test) | accuracy/echo (6) | 1.000/1.000 (n=1) | 1.000/1.000 (n=3) | 6/6 | 6/6 | 1/1 | 6/6 | pass — code path only, see audit | 05 Nov 2026 20:46 IST |
+
+**Independent accuracy audit (fable model, 20:46 IST, read-only):** echo figures recomputed independently 6/6 match; flags hand-derived 6/6 agree; thresholds equal the spec; P/R maths correct; self-test fails as it should; mistake replay genuinely depends on the promoted rule. Findings:
+- **C1 CRITICAL** — scored pipeline never read input/: figures + deterministic rules derived from recorded.json; ₹1 input change and an injected duplicate ref still passed. → harness fix in progress (echo parses input in code; mandatory input-sensitivity probe for production agents). Phases 5–7 agents told to parse input in code.
+- **H1 HIGH** — LLM evidence quote/location not checked against the document (a fabricated quote passed). → engine to require the quote verbatim in the rule's context.
+- **H2 HIGH** — LLM-sourced flags are self-fulfilling in recorded mode. → split P/R by rule kind; gate deterministic only in recorded mode, LLM rules in live mode (Phase 2b).
+- **M1** support counts hidden · **M2** "3× identical" tautological under recordings · **M3** thin fixture sets pass trivially · **L1–L3** minor. → all in the harness fix.
 
 ## Decisions (ADR index)
 - Package manager is npm (repo convention): spec's `pnpm x` = `npm run x`.
@@ -165,3 +171,6 @@ Shared foundation (commit c61d885): additive Prisma section "Firm OS: shared spi
 - 20:22 · 8 · Agent started: close loop (gate, hooks, reconciler cron, routes, cycle-time page) · –
 - 20:30 · 4 · Merged runner/mistakes/accuracy/review UI (0017eb1); npm run accuracy added · 1324/1324 · accuracy echo pass
 - 20:35 · 4 · next build green → Phase 4 ✅; ADR-007 proposed · 1324/1324
+- 20:37 · 5/6/7 · Agents started: GST Prep; ROC + Tax Prep; Books Close + Audit Assist · –
+- 20:46 · 4 · Independent accuracy audit (fable): echo numbers verified; harness findings C1, H1, H2, M1–M3 · –
+- 20:52 · 4 · Harness-hardening agent started; Phases 5–7 agents briefed on the findings · –
