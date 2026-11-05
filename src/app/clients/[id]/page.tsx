@@ -13,6 +13,9 @@ import { clientSiteLink, jobFolderLink } from "@/lib/integrations/sharepoint/cli
 import { canSeeAllRuns } from "@/lib/agents/access";
 import { listClientJobs, type ClientJobsDb } from "@/lib/agents/client-jobs";
 import { FirmOsJobs } from "./FirmOsJobs";
+import { RevealPii } from "./RevealPii";
+import { canRevealClientPii } from "@/lib/rbac/policy";
+import { maskClientPii, type PiiField } from "@/lib/clients/pii";
 
 export const dynamic = "force-dynamic";
 
@@ -43,9 +46,19 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
   const siteLink = clientSiteLink({ clPaths, clientCode });
   const firmJobs = firmClient ? await listClientJobs(prisma as unknown as ClientJobsDb, session.user, id) : null;
 
-  const facts: Array<[string, string]> = [
-    ["Entity", ENTITY_TYPES[client.entityType]], ["PAN", client.pan ?? "—"], ["GSTIN", client.gstin ?? "—"], ["CIN", client.cin ?? "—"],
-    ["Industry", client.industry ?? "—"], ["City", client.city ?? "—"], ["Contact", [client.contactName, client.contactPhone, client.contactEmail].filter(Boolean).join(" · ") || "—"],
+  // DPDP (ADR-006 class A): PAN, GSTIN, phone and email are shown masked to everyone; management
+  // (canRevealClientPii) gets a "Show" per value, and each Show is an AuditEvent.
+  const reveal = canRevealClientPii(session.user);
+  const pii = (field: PiiField, value: string | null): React.ReactNode => {
+    const masked = maskClientPii(field, value);
+    if (!masked) return null;
+    return reveal ? <RevealPii key={field} clientId={client.id} field={field} masked={masked} /> : masked;
+  };
+  const contact = [client.contactName, pii("phone", client.contactPhone), pii("email", client.contactEmail)].filter(Boolean);
+  const facts: Array<[string, React.ReactNode]> = [
+    ["Entity", ENTITY_TYPES[client.entityType]], ["PAN", pii("pan", client.pan) ?? "—"], ["GSTIN", pii("gstin", client.gstin) ?? "—"], ["CIN", client.cin ?? "—"],
+    ["Industry", client.industry ?? "—"], ["City", client.city ?? "—"],
+    ["Contact", contact.length ? contact.map((c, i) => <span key={i}>{i > 0 && " · "}{c}</span>) : "—"],
     ["Referral", client.referralSource ?? "—"], ["Turnover", `${inr(client.turnover)} (${TURNOVER_BANDS[client.turnoverBand]})`],
     ["Growth goal", `${GROWTH_GOALS[client.growthGoal]}${client.growthNote ? ` — ${client.growthNote}` : ""}`],
     ["Onboarded", ist(client.onboardedOn)], ["Primary handler", client.primaryHandler.name ?? client.primaryHandler.email],
