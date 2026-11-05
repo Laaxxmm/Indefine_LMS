@@ -64,3 +64,5 @@ export {
   withheldNote,
 } from "./untrusted";
 export type { InjectionPattern, InjectionPatternId, ItemScreen, ScreenOptions, ScreenResult, WithheldItem } from "./untrusted";
+
+export { MODEL_SUPPLY_CHAIN, supplyChainMeta } from "./supply-chain";

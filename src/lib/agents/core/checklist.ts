@@ -282,7 +282,9 @@ async function runLlm<I>(rule: RuleDefinition, input: I, llmCheck: LlmCheck<I> |
   if (!quoteInContext(v.data.evidence.quote, context)) {
     return item(rule, "na", `${rule.title}: model answer rejected (its quote does not occur in the documents it was given); review manually`, null, ["llm-evidence-missing"]);
   }
-  return item(rule, v.data.status, v.data.message, v.data.evidence);
+  // ADR-009 (OWASP LLM05): a link is rendered as an href on the review page, so it only ever comes
+  // from deterministic code — a model verdict's `link` is never kept.
+  return item(rule, v.data.status, v.data.message, { quote: v.data.evidence.quote, location: v.data.evidence.location });
 }
 
 /**

@@ -36,6 +36,11 @@ export const BOOKS_MODEL_TASKS: readonly BooksModelTask[] = Object.freeze([
     rules: ["books.suggestions-low-confidence", "books.classification-questions"],
     ruleIds: ["books.suggestions-low-confidence", "books.classification-questions"],
     validateCall: validateClassification,
+    privacy: "anonymize-then-cloud",
+    profile: {
+      documents: "Bank debits not yet in the books (id, date, narration, reference, amount) and the client's own expense / purchase ledger names as the allowed heads (each screened); reviewer notes.",
+      validators: "validateClassification per call: quote in the line text, location names the line, numbers in the quote are the line's; per-call closed enums of line ids and the client's ledgers.",
+    },
   },
 ]);
 

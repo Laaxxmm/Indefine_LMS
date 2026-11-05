@@ -176,8 +176,27 @@ export const GST_MODEL_TASKS: readonly GstModelTask[] = Object.freeze([
     difficulty: "judgement",
     ruleIds: ["gst.blocked-credit", "gst.rcm-liability", "gst.model-questions"],
     builtBy: "agent",
+    privacy: "anonymize-then-cloud",
+    profile: {
+      documents: "Purchase ledger names, each with one sample description and the purchase-register row it first appears on (screened per ledger line); reviewer notes. No amounts.",
+      validators: "validateLedgers per call: every ledger answered once, quote copied from that ledger's line, location is that row; ungrounded answers become insufficient_evidence.",
+    },
   },
-  { name: READ_HSN_TASK, version: 2, schema: HsnReadOutputSchema, systemPrompt: HSN_SYSTEM, system: HSN_SYSTEM, difficulty: "sop", ruleIds: ["gst.hsn-digits", "gst.model-questions"], builtBy: "agent" },
+  {
+    name: READ_HSN_TASK,
+    version: 2,
+    schema: HsnReadOutputSchema,
+    systemPrompt: HSN_SYSTEM,
+    system: HSN_SYSTEM,
+    difficulty: "sop",
+    ruleIds: ["gst.hsn-digits", "gst.model-questions"],
+    builtBy: "agent",
+    privacy: "anonymize-then-cloud",
+    profile: {
+      documents: "Sales-line descriptions with no HSN/SAC in the register and none printed plainly, with their sales-register row (screened per description). No amounts.",
+      validators: "validateHsn per call: quote in the description, location is its row, the HSN digits appear in the quote.",
+    },
+  },
   {
     name: FREE_SUPPLIES_TASK,
     version: 2,
@@ -187,6 +206,8 @@ export const GST_MODEL_TASKS: readonly GstModelTask[] = Object.freeze([
     difficulty: "judgement",
     ruleIds: ["gst.free-supplies"],
     builtBy: "runner",
+    privacy: "anonymize-then-cloud",
+    profile: { documents: "LLM context: purchase rows (supplier, ledger, description) and sales rows (customer, document, description), one labelled line each. No amounts." },
     validate: (v: Verdict, context: string) => validateVerdict(v, context),
   },
 ]);

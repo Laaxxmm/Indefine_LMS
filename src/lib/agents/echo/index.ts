@@ -276,6 +276,8 @@ export const ECHO_RELATED_PARTY_SPEC: ModelTaskSpec<ScopedVerdict, string> = {
   highStakes: true,
   difficulty: "judgement",
   ruleIds: ["echo.related-party"],
+  privacy: "anonymize-then-cloud",
+  profile: { documents: "LLM context: register rows (ref, party, date, amount), one labelled line each (register.csv row n)." },
 };
 
 export const ECHO_SCOPE: AgentScope = {

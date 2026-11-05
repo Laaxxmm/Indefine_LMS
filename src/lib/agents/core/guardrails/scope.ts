@@ -6,7 +6,7 @@
 // stops the run before any model call. Pure apart from the types it shares with the runner.
 import type { FirmService } from "@prisma/client";
 import type { ZodType, ZodTypeDef } from "zod";
-import type { Difficulty } from "@/lib/ai/router";
+import type { Difficulty, Privacy } from "@/lib/ai/router";
 import type { ChecklistPack } from "../checklist";
 import { UNTRUSTED_DATA_INSTRUCTION } from "./untrusted";
 
@@ -46,6 +46,19 @@ export interface ModelTaskSpec<T = unknown, I = unknown, K extends string = stri
   schemaPerCall?: boolean;
   /** Checklist rules whose outcome depends on this task (documentation; the scope's ruleIds is the ownership list). */
   ruleIds?: readonly string[];
+  /**
+   * Data class of what this task carries (ADR-006 / ADR-009, OWASP LLM02). When declared, a call
+   * asking for any other privacy is a scope violation; production tasks declare
+   * "anonymize-then-cloud" (or the stricter "local-only"). Not part of the prompt lock.
+   */
+  privacy?: Privacy;
+  /** For docs/ai/guardrail-profiles.md (not part of the prompt lock). */
+  profile?: {
+    /** The untrusted document text the task carries (what is fenced and screened). */
+    documents: string;
+    /** Call-level validators passed as `contradictions` (the task's own `validate` is listed automatically). */
+    validators?: string;
+  };
 }
 
 /** Any task spec (registries, the runner). */

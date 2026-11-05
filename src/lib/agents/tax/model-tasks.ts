@@ -153,6 +153,8 @@ export const TAX_MATCH_AIS_SPEC: ModelTaskSpec<AisMatchOutput, TaxInput, "tax"> 
   difficulty: "sop",
   ruleIds: ["tax.ais-not-in-books"],
   validate: (out, input) => validateAisMatches(out, aisContextOf(input)),
+  privacy: "anonymize-then-cloud",
+  profile: { documents: "AIS income lines (id, category, source, description) and books other-source ledgers (id, nature, payer), one labelled line each (screened per line); the Act and year; reviewer notes. No amounts." },
 };
 
 /** The foreign-asset verdict must quote the documents it was shown (abstaining needs no quote). */
@@ -167,6 +169,8 @@ export const TAX_FOREIGN_ASSET_CHECK_SPEC: ModelTaskSpec<ScopedVerdict, string, 
   difficulty: "judgement",
   ruleIds: ["tax.foreign-asset"],
   validate: validateForeignAssetVerdict,
+  privacy: "anonymize-then-cloud",
+  profile: { documents: "LLM context: organiser profile notes, AIS rows and capital-gains asset names, one labelled line each." },
 };
 
 /** Every model task the Tax agent may run. */

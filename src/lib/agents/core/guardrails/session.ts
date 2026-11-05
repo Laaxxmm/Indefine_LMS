@@ -29,6 +29,7 @@ import { ABSTAIN_STATUS, isGuardrailOutcome, quoteInContext } from "../checklist
 import { AGREEMENT_TIER, needsAgreement, settleAgreement } from "./agreement";
 import { GroundingError, groundCheck } from "./grounding";
 import { shapeFingerprint, unboundedStrings } from "./schema";
+import { supplyChainMeta } from "./supply-chain";
 import { fenceUntrusted, injectionResult, screenDocumentText, screenItems, type ItemScreen, type ScreenOptions, type WithheldItem } from "./untrusted";
 import {
   ScopeViolationError,
@@ -243,6 +244,7 @@ export function createGuardrailSession(deps: GuardrailSessionDeps) {
     const schema = schemaFor(spec, label, req.schema);
     if (req.messages.some((m) => m.role === "system")) throw violate(`task ${label}: the system prompt comes from the task registry; pass user / assistant messages only`);
     if (spec.difficulty && req.difficulty !== spec.difficulty) throw violate(`task ${label} declares difficulty "${spec.difficulty}"; the call asked for "${req.difficulty}"`);
+    if (spec.privacy && req.privacy !== spec.privacy) throw violate(`task ${label} declares privacy "${spec.privacy}"; the call asked for "${req.privacy}"`);
     const screened = screenMessages(label, req.messages);
     const out = await callSpec<T>(spec, screened.messages, {
       privacy: req.privacy,
@@ -278,7 +280,9 @@ export function createGuardrailSession(deps: GuardrailSessionDeps) {
     stats.screened += docs.lines;
     noteWithheld(label, docs.withheld);
     const messages: Msg[] = [{ role: "user", content: `Question: ${rule.check}\nEvidence to cite: ${rule.evidence}\n\nDocuments:\n${fenceUntrusted(docs.kept)}` }];
-    const o: CallOpts<unknown> = { privacy: "anonymize-then-cloud", difficulty: spec.difficulty ?? "judgement", validateWith: docs.kept };
+    // Checklist documents are client data: masked before any cloud call, or local-only when the task says so.
+    const privacy: Privacy = spec.privacy === "local-only" ? "local-only" : "anonymize-then-cloud";
+    const o: CallOpts<unknown> = { privacy, difficulty: spec.difficulty ?? "judgement", validateWith: docs.kept };
     stats.judgements += 1;
     const first = await callSpec<unknown>(spec, messages, o);
     let verdict: unknown = first;
@@ -343,6 +347,8 @@ export function createGuardrailSession(deps: GuardrailSessionDeps) {
             outcome,
             ...stats,
             injectionLocations: [...withheld.keys()].slice(0, MAX_RECORDED_INJECTIONS),
+            // ADR-009 (LLM03): which SDK and model ids produced this run.
+            supplyChain: supplyChainMeta(),
           },
         },
       };

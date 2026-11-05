@@ -122,6 +122,8 @@ export const ROC_MAP_TASK_SPEC: ModelTaskSpec<LedgerMapping, RocInput, "roc"> = 
   difficulty: "sop",
   ruleIds: ["roc.financials-tie"],
   validate: (out, input) => validateLedgerMapping(out, trialBalanceOf(input)),
+  privacy: "anonymize-then-cloud",
+  profile: { documents: "Trial-balance ledger names, one labelled line each (financials.json trialBalance[i], screened per line); the Schedule III head list; reviewer notes. No amounts." },
 };
 
 /** The AOC-2 verdict must quote the notes to accounts it was shown (abstaining needs no quote). */
@@ -136,6 +138,8 @@ export const ROC_AOC2_CHECK_SPEC: ModelTaskSpec<ScopedVerdict, string, "roc"> = 
   difficulty: "judgement",
   ruleIds: ["roc.aoc2-related-party"],
   validate: validateAoc2Verdict,
+  privacy: "anonymize-then-cloud",
+  profile: { documents: "LLM context: the notes to accounts, one labelled line each (notes.txt line n)." },
 };
 
 /** Every model task the ROC agent may run. */
