@@ -13,82 +13,82 @@ datasource db {
 // -------------------- Auth (NextAuth/Auth.js) --------------------
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String    @unique
-  emailVerified DateTime?
-  image         String?
-  role          Role      @default(EMPLOYEE)
-  level         EmployeeLevel @default(EXECUTIVE)
-  department    Department    @default(GENERAL)
-  branchId      String?
-  managerId     String?
-  active        Boolean   @default(true)
-  deactivatedAt DateTime?
+  id                  String        @id @default(cuid())
+  name                String?
+  email               String        @unique
+  emailVerified       DateTime?
+  image               String?
+  role                Role          @default(EMPLOYEE)
+  level               EmployeeLevel @default(EXECUTIVE)
+  department          Department    @default(GENERAL)
+  branchId            String?
+  managerId           String?
+  active              Boolean       @default(true)
+  deactivatedAt       DateTime?
   // Shared / functional mailboxes (accounts@, info@, team inboxes) that sync in
   // from M365 but aren't real people — kept for invites/email, excluded from the
   // leaderboard, grading and the assignment picker.
-  excludedFromScoring Boolean @default(false)
+  excludedFromScoring Boolean       @default(false)
   // Growth Wizard self-reflection — populated through the multi-step flow
-  strengths           Json?     // string[]
-  aspiration          String?   // free-text "where do you see yourself in 12mo"
+  strengths           Json? // string[]
+  aspiration          String? // free-text "where do you see yourself in 12mo"
   wizardSubmittedAt   DateTime?
-  createdAt     DateTime  @default(now())
+  createdAt           DateTime      @default(now())
 
-  accounts      Account[]
-  sessions      Session[]
+  accounts Account[]
+  sessions Session[]
 
-  progresses    VideoProgress[]
-  attempts      QuizAttempt[]
+  progresses VideoProgress[]
+  attempts   QuizAttempt[]
 
   assignments        Assignment[] @relation("AssignmentTarget")
   assignmentsCreated Assignment[] @relation("AssignmentCreator")
 
-  manager       User?    @relation("Reports", fields: [managerId], references: [id])
-  reports       User[]   @relation("Reports")
-  branch        Branch?  @relation(fields: [branchId], references: [id])
+  manager User?   @relation("Reports", fields: [managerId], references: [id])
+  reports User[]  @relation("Reports")
+  branch  Branch? @relation(fields: [branchId], references: [id])
 
   // Trajectory
   quests              Quest[]
-  questsApproved      Quest[]      @relation("QuestApprover")
+  questsApproved      Quest[]              @relation("QuestApprover")
   initiatives         Initiative[]
   initiativeReactions InitiativeReaction[]
-  endorsementsGiven   Endorsement[] @relation("EndorseFrom")
-  endorsementsGot     Endorsement[] @relation("EndorseTo")
+  endorsementsGiven   Endorsement[]        @relation("EndorseFrom")
+  endorsementsGot     Endorsement[]        @relation("EndorseTo")
   checkins            WeeklyCheckin[]
   trackSnapshots      TrackSnapshot[]
   tierAssignments     TierAssignment[]
   attendances         AttendanceRecord[]
-  liveSessions        LiveSession[]   @relation("LiveSessionOrganizer")
+  liveSessions        LiveSession[]        @relation("LiveSessionOrganizer")
   liveAttendances     LiveAttendance[]
-  videosCreated       Video[]         @relation("VideoCreator")
+  videosCreated       Video[]              @relation("VideoCreator")
   dailyActivity       DailyActivity[]
-  certificateIssues   CertificateIssue[] @relation("CertificateCreator")
-  officeToolRuns      OfficeToolRun[]    @relation("OfficeToolRunner")
-  opsClients          OpsClient[]        @relation("OpsClientCreator")
-  opsSubscriptions    OpsSubscription[]  @relation("OpsSubscriptionCreator")
-  opsReminders        OpsReminder[]      @relation("OpsReminderSender")
-  clientsHandled      Client[]           @relation("ClientHandler")
-  clientsCreated      Client[]           @relation("ClientCreator")
-  jobsHandled         Job[]              @relation("JobHandler")
-  jobsCreated         Job[]              @relation("JobCreator")
-  clientDocsUploaded  ClientDocument[]   @relation("ClientDocUploader")
-  worksOwned          Work[]             @relation("WorkOwner")
-  worksCreated        Work[]             @relation("WorkCreator")
-  workTasksAssigned   WorkTask[]         @relation("WorkTaskAssignee")
-  workTasksCreated    WorkTask[]         @relation("WorkTaskCreator")
+  certificateIssues   CertificateIssue[]   @relation("CertificateCreator")
+  officeToolRuns      OfficeToolRun[]      @relation("OfficeToolRunner")
+  opsClients          OpsClient[]          @relation("OpsClientCreator")
+  opsSubscriptions    OpsSubscription[]    @relation("OpsSubscriptionCreator")
+  opsReminders        OpsReminder[]        @relation("OpsReminderSender")
+  clientsHandled      Client[]             @relation("ClientHandler")
+  clientsCreated      Client[]             @relation("ClientCreator")
+  jobsHandled         Job[]                @relation("JobHandler")
+  jobsCreated         Job[]                @relation("JobCreator")
+  clientDocsUploaded  ClientDocument[]     @relation("ClientDocUploader")
+  worksOwned          Work[]               @relation("WorkOwner")
+  worksCreated        Work[]               @relation("WorkCreator")
+  workTasksAssigned   WorkTask[]           @relation("WorkTaskAssignee")
+  workTasksCreated    WorkTask[]           @relation("WorkTaskCreator")
   weekPlanWorks       WeekPlanWork[]
   dayPicks            DayPick[]
   weekReviews         WeekReview[]
-  workEvents          WorkEvent[]        @relation("WorkEventActor")
+  workEvents          WorkEvent[]          @relation("WorkEventActor")
 }
 
 enum EmployeeLevel {
   // Legacy values kept so existing rows don't break — UI hides these.
-  TRAINEE        @map("TRAINEE")
-  ASSOCIATE      @map("ASSOCIATE")
-  SENIOR         @map("SENIOR")
-  LEAD           @map("LEAD")
+  TRAINEE           @map("TRAINEE")
+  ASSOCIATE         @map("ASSOCIATE")
+  SENIOR            @map("SENIOR")
+  LEAD              @map("LEAD")
   // CA-firm canonical levels
   ARTICLE
   EXECUTIVE
@@ -104,9 +104,9 @@ enum Department {
   TAX
   ACCOUNTS
   ROC
-  TECH       // internal technology / engineering team
-  ADMIN      // operations / hr / finance / front office
-  GENERAL    // fallback / not-yet-assigned
+  TECH // internal technology / engineering team
+  ADMIN // operations / hr / finance / front office
+  GENERAL // fallback / not-yet-assigned
 }
 
 enum Role {
@@ -124,7 +124,7 @@ model DailyActivity {
   userId String
   day    String
 
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, day])
   @@index([userId])
@@ -132,28 +132,28 @@ model DailyActivity {
 
 model Branch {
   id        String   @id @default(cuid())
-  name      String   // "Bangalore HQ"
-  code      String   @unique  // short code "BLR" used in lists
+  name      String // "Bangalore HQ"
+  code      String   @unique // short code "BLR" used in lists
   city      String?
   state     String?
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
 
-  users     User[]
+  users User[]
 }
 
 model Account {
-  id                String  @id @default(cuid())
+  id                String    @id @default(cuid())
   userId            String
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String? @db.Text
-  access_token      String? @db.Text
+  refresh_token     String?   @db.Text
+  access_token      String?   @db.Text
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String? @db.Text
+  id_token          String?   @db.Text
   session_state     String?
   // Set when this account granted the elevated Graph scopes (see src/lib/graph-scopes.ts).
   // The org sync clears stored tokens from non-admin accounts that never did.
@@ -191,22 +191,22 @@ model Course {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  modules     Module[]
-  deadlines   Deadline[]
+  modules   Module[]
+  deadlines Deadline[]
 }
 
 model Module {
-  id          String   @id @default(cuid())
+  id          String  @id @default(cuid())
   courseId    String
   title       String
   description String?
-  order       Int      @default(0)
+  order       Int     @default(0)
   // Parent grouping folder under the L&D root (e.g. "Accounting" for
   // L&D/Accounting/Isha Misty KT). null for top-level folders. Lets the content
   // library mirror the SharePoint folder nesting.
   groupName   String?
 
-  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  course      Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
   videos      Video[]
   assignments Assignment[]
 }
@@ -229,12 +229,12 @@ model Video {
   createdById     String?
   createdAt       DateTime @default(now())
 
-  module          Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  createdBy       User?    @relation("VideoCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  quiz            Quiz?
-  progresses      VideoProgress[]
-  assignments     Assignment[]
-  materials       Material[]
+  module      Module          @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  createdBy   User?           @relation("VideoCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  quiz        Quiz?
+  progresses  VideoProgress[]
+  assignments Assignment[]
+  materials   Material[]
 }
 
 // A downloadable handout attached to a video (PDF, worksheet, checklist...).
@@ -250,24 +250,24 @@ model Material {
   order        Int      @default(0)
   createdAt    DateTime @default(now())
 
-  video        Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
 
   @@index([videoId])
 }
 
 model VideoProgress {
-  id              String   @id @default(cuid())
-  userId          String
-  videoId         String
-  watchedSeconds  Int      @default(0)
-  lastPosition    Int      @default(0)
-  percent         Float    @default(0)
-  completed       Boolean  @default(false)
-  completedAt     DateTime?
-  updatedAt       DateTime @updatedAt
+  id             String    @id @default(cuid())
+  userId         String
+  videoId        String
+  watchedSeconds Int       @default(0)
+  lastPosition   Int       @default(0)
+  percent        Float     @default(0)
+  completed      Boolean   @default(false)
+  completedAt    DateTime?
+  updatedAt      DateTime  @updatedAt
 
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  video           Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
 
   @@unique([userId, videoId])
 }
@@ -275,17 +275,17 @@ model VideoProgress {
 // -------------------- Quizzes --------------------
 
 model Quiz {
-  id              String   @id @default(cuid())
-  videoId         String   @unique
+  id              String @id @default(cuid())
+  videoId         String @unique
   title           String
-  timeLimitSec    Int      @default(300) // whole-quiz timer
-  passPercent     Int      @default(70)
-  maxAttempts     Int?     // null = unlimited
-  unlockAtPercent Int      @default(90) // % of video that must be watched
+  timeLimitSec    Int    @default(300) // whole-quiz timer
+  passPercent     Int    @default(70)
+  maxAttempts     Int? // null = unlimited
+  unlockAtPercent Int    @default(90) // % of video that must be watched
 
-  video           Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
-  questions       Question[]
-  attempts        QuizAttempt[]
+  video     Video         @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  questions Question[]
+  attempts  QuizAttempt[]
 }
 
 // App-wide settings (single row, id = 1). Holds the default quiz timing/pass
@@ -301,41 +301,41 @@ model Settings {
 }
 
 model Question {
-  id        String   @id @default(cuid())
-  quizId    String
-  text      String
-  order     Int      @default(0)
-  points    Int      @default(1)
+  id     String @id @default(cuid())
+  quizId String
+  text   String
+  order  Int    @default(0)
+  points Int    @default(1)
 
-  quiz      Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
-  options   Option[]
+  quiz    Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  options Option[]
 }
 
 model Option {
-  id         String   @id @default(cuid())
+  id         String  @id @default(cuid())
   questionId String
   text       String
-  isCorrect  Boolean  @default(false)
-  order      Int      @default(0)
+  isCorrect  Boolean @default(false)
+  order      Int     @default(0)
 
-  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
 }
 
 model QuizAttempt {
-  id           String   @id @default(cuid())
-  userId       String
-  quizId       String
-  score        Int      @default(0)
-  maxScore     Int      @default(0)
-  percent      Float    @default(0)
-  passed       Boolean  @default(false)
-  startedAt    DateTime @default(now())
-  submittedAt  DateTime?
+  id          String    @id @default(cuid())
+  userId      String
+  quizId      String
+  score       Int       @default(0)
+  maxScore    Int       @default(0)
+  percent     Float     @default(0)
+  passed      Boolean   @default(false)
+  startedAt   DateTime  @default(now())
+  submittedAt DateTime?
   // JSON of { questionId: optionId } answers
-  answers      Json?
+  answers     Json?
 
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  quiz         Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quiz Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
 
   @@index([userId, submittedAt])
 }
@@ -343,15 +343,15 @@ model QuizAttempt {
 // -------------------- Deadlines / KRA --------------------
 
 model Deadline {
-  id         String        @id @default(cuid())
-  courseId   String
-  kind       DeadlineKind  @default(CUSTOM)
-  dueAt      DateTime
+  id           String       @id @default(cuid())
+  courseId     String
+  kind         DeadlineKind @default(CUSTOM)
+  dueAt        DateTime
   // points awarded toward KRA when completed on time
-  pointsOnTime Int         @default(10)
-  pointsLate   Int         @default(0)
+  pointsOnTime Int          @default(10)
+  pointsLate   Int          @default(0)
 
-  course     Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
 }
 
 enum DeadlineKind {
@@ -372,12 +372,12 @@ enum DeadlineKind {
 
 model Assignment {
   id            String           @id @default(cuid())
-  userId        String           // who it's assigned to
-  assignedById  String           // admin who created it
+  userId        String // who it's assigned to
+  assignedById  String // admin who created it
   kind          AssignmentKind
-  videoId       String?          // populated for VIDEO kind
-  moduleId      String?          // populated for MODULE kind
-  title         String           // shown in lists; for TASK this is the instruction
+  videoId       String? // populated for VIDEO kind
+  moduleId      String? // populated for MODULE kind
+  title         String // shown in lists; for TASK this is the instruction
   description   String?
   points        Int              @default(0)
   dueAt         DateTime?
@@ -390,10 +390,10 @@ model Assignment {
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 
-  user        User    @relation("AssignmentTarget", fields: [userId], references: [id], onDelete: Cascade)
-  assignedBy  User    @relation("AssignmentCreator", fields: [assignedById], references: [id])
-  video       Video?  @relation(fields: [videoId], references: [id], onDelete: SetNull)
-  module      Module? @relation(fields: [moduleId], references: [id], onDelete: SetNull)
+  user       User    @relation("AssignmentTarget", fields: [userId], references: [id], onDelete: Cascade)
+  assignedBy User    @relation("AssignmentCreator", fields: [assignedById], references: [id])
+  video      Video?  @relation(fields: [videoId], references: [id], onDelete: SetNull)
+  module     Module? @relation(fields: [moduleId], references: [id], onDelete: SetNull)
 
   @@index([userId, status])
   @@index([videoId])
@@ -420,18 +420,18 @@ model AttendanceRecord {
   id            String   @id @default(cuid())
   userId        String
   periodMonth   DateTime // first day of the covered month, UTC midnight
-  workingDays   Float    // total working / payable days in the period
-  presentDays   Float    // days present (supports half-days)
+  workingDays   Float // total working / payable days in the period
+  presentDays   Float // days present (supports half-days)
   lateMarks     Int      @default(0)
-  attendancePct Float    // presentDays / workingDays * 100, stored for transparency
-  points        Int      // KRA points awarded for this month
+  attendancePct Float // presentDays / workingDays * 100, stored for transparency
+  points        Int // KRA points awarded for this month
   source        String   @default("greytHR")
   note          String?
   importedById  String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, periodMonth])
   @@index([periodMonth])
@@ -443,7 +443,7 @@ model AttendanceRecord {
 // Quarters Q1-Q4 are derived from the cycle's start date.
 model PerformanceCycle {
   id        String   @id @default(cuid())
-  name      String   // "FY 2026-27"
+  name      String // "FY 2026-27"
   startDate DateTime
   endDate   DateTime
   isActive  Boolean  @default(false)
@@ -458,12 +458,12 @@ model PerformanceCycle {
 }
 
 enum TrackKind {
-  MASTERY        // Auto: training compliance + best quiz scores
-  DELIVERY       // Auto: task/module completion, on-time finishes
-  INITIATIVE     // Self-log: initiatives kicked off, trainings led
-  COLLABORATION  // Self-log: cross-team help, mentorship
-  VISION         // Self-set: quarterly milestones on annual goals
-  CRAFT          // Manager-rated: quality + soft skills
+  MASTERY // Auto: training compliance + best quiz scores
+  DELIVERY // Auto: task/module completion, on-time finishes
+  INITIATIVE // Self-log: initiatives kicked off, trainings led
+  COLLABORATION // Self-log: cross-team help, mentorship
+  VISION // Self-set: quarterly milestones on annual goals
+  CRAFT // Manager-rated: quality + soft skills
 }
 
 // Per-cycle, per-level target + weight for each track.
@@ -474,21 +474,21 @@ model TrackTarget {
   cycleId   String
   trackKind TrackKind
   level     EmployeeLevel
-  target    Float         // raw value to score 100 (e.g. 12 modules)
-  weight    Int           // % contribution to total tier score (0-100)
+  target    Float // raw value to score 100 (e.g. 12 modules)
+  weight    Int // % contribution to total tier score (0-100)
 
-  cycle     PerformanceCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  cycle PerformanceCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
 
   @@unique([cycleId, trackKind, level])
 }
 
 enum TierKind {
-  STELLAR        // 90-100
-  SOARING        // 80-89
-  SOLID          // 70-79
-  GROWING        // 60-69
-  FOCUSED        // 50-59
-  RECALIBRATING  // < 50
+  STELLAR // 90-100
+  SOARING // 80-89
+  SOLID // 70-79
+  GROWING // 60-69
+  FOCUSED // 50-59
+  RECALIBRATING // < 50
 }
 
 enum QuestStatus {
@@ -501,24 +501,24 @@ enum QuestStatus {
 }
 
 model Quest {
-  id          String      @id @default(cuid())
-  userId      String
-  cycleId     String
-  title       String
-  description String?
-  why         String?     // why this matters to the employee
-  weight      Int         @default(10)  // contributes to VISION track
-  status      QuestStatus @default(DRAFT)
+  id           String      @id @default(cuid())
+  userId       String
+  cycleId      String
+  title        String
+  description  String?
+  why          String? // why this matters to the employee
+  weight       Int         @default(10) // contributes to VISION track
+  status       QuestStatus @default(DRAFT)
   approvedById String?
-  approvedAt  DateTime?
-  completedAt DateTime?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  approvedAt   DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
 
-  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  cycle       PerformanceCycle  @relation(fields: [cycleId], references: [id], onDelete: Cascade)
-  approvedBy  User?             @relation("QuestApprover", fields: [approvedById], references: [id])
-  milestones  QuestMilestone[]
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cycle      PerformanceCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  approvedBy User?            @relation("QuestApprover", fields: [approvedById], references: [id])
+  milestones QuestMilestone[]
 
   @@index([userId, cycleId])
   @@index([status])
@@ -528,11 +528,11 @@ model QuestMilestone {
   id          String    @id @default(cuid())
   questId     String
   title       String
-  quarter     Int       // 1-4
+  quarter     Int // 1-4
   completed   Boolean   @default(false)
   completedAt DateTime?
 
-  quest       Quest @relation(fields: [questId], references: [id], onDelete: Cascade)
+  quest Quest @relation(fields: [questId], references: [id], onDelete: Cascade)
 }
 
 enum InitiativeStatus {
@@ -549,7 +549,7 @@ model Initiative {
   cycleId     String
   title       String
   description String?
-  impact      String?          // expected impact statement
+  impact      String? // expected impact statement
   status      InitiativeStatus @default(PITCHED)
   fundedById  String?
   fundedAt    DateTime?
@@ -558,16 +558,16 @@ model Initiative {
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
-  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  cycle       PerformanceCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
-  reactions   InitiativeReaction[]
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cycle     PerformanceCycle     @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  reactions InitiativeReaction[]
 
   @@index([cycleId, status])
 }
 
 enum ReactionKind {
-  UPVOTE       // 🚀 generic support
-  INTERESTED   // 🙋 count me in
+  UPVOTE // 🚀 generic support
+  INTERESTED // 🙋 count me in
 }
 
 model InitiativeReaction {
@@ -585,42 +585,42 @@ model InitiativeReaction {
 }
 
 enum EndorsementKind {
-  COLLABORATION   // counts toward Collaboration track
-  INITIATIVE      // counts toward Initiative track
-  MENTORSHIP      // counts toward Collaboration track
-  CROSS_DEPT      // counts toward Collaboration track
-  CRAFT           // manager rating for Craft track (uses score 1-5)
+  COLLABORATION // counts toward Collaboration track
+  INITIATIVE // counts toward Initiative track
+  MENTORSHIP // counts toward Collaboration track
+  CROSS_DEPT // counts toward Collaboration track
+  CRAFT // manager rating for Craft track (uses score 1-5)
 }
 
 model Endorsement {
-  id         String          @id @default(cuid())
-  fromId     String
-  toId       String
-  kind       EndorsementKind
-  score      Int?            // 1-5 for CRAFT; null for count-based endorsements
-  reason     String?
-  approvedById String?       // for ones that need manager endorsement
-  approvedAt DateTime?
-  createdAt  DateTime        @default(now())
+  id           String          @id @default(cuid())
+  fromId       String
+  toId         String
+  kind         EndorsementKind
+  score        Int? // 1-5 for CRAFT; null for count-based endorsements
+  reason       String?
+  approvedById String? // for ones that need manager endorsement
+  approvedAt   DateTime?
+  createdAt    DateTime        @default(now())
 
-  from       User @relation("EndorseFrom", fields: [fromId], references: [id], onDelete: Cascade)
-  to         User @relation("EndorseTo", fields: [toId], references: [id], onDelete: Cascade)
+  from User @relation("EndorseFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  to   User @relation("EndorseTo", fields: [toId], references: [id], onDelete: Cascade)
 
   @@index([toId])
   @@index([kind])
 }
 
 model WeeklyCheckin {
-  id          String   @id @default(cuid())
-  userId      String
-  cycleId     String
-  weekStart   DateTime // Monday 00:00 UTC of that week
-  whatWorked  String?
-  whatBlocked String?
-  nextFocus   String?
+  id           String   @id @default(cuid())
+  userId       String
+  cycleId      String
+  weekStart    DateTime // Monday 00:00 UTC of that week
+  whatWorked   String?
+  whatBlocked  String?
+  nextFocus    String?
   managerReply String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   user  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   cycle PerformanceCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
@@ -631,7 +631,7 @@ model WeeklyCheckin {
 // Frozen quarterly snapshots — populated when a quarter ends so historical
 // trends survive even if targets / weights change later.
 model TrackSnapshot {
-  id        String           @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
   cycleId   String
   quarter   Int
@@ -639,7 +639,7 @@ model TrackSnapshot {
   actual    Float
   scorePct  Float
   weighted  Float
-  createdAt DateTime         @default(now())
+  createdAt DateTime  @default(now())
 
   user  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   cycle PerformanceCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
@@ -648,13 +648,13 @@ model TrackSnapshot {
 }
 
 model TierAssignment {
-  id         String           @id @default(cuid())
+  id         String   @id @default(cuid())
   userId     String
   cycleId    String
   quarter    Int
   tier       TierKind
   totalScore Float
-  computedAt DateTime         @default(now())
+  computedAt DateTime @default(now())
 
   user  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   cycle PerformanceCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
@@ -677,24 +677,24 @@ model LiveSession {
   // L&D/{folderParent} when set, else directly under the L&D root.
   courseTitle     String
   folderParent    String?
-  scheduledById   String            // organizer (admin) — meeting is created as this user
-  startAt         DateTime          // UTC instant
-  endAt           DateTime          // UTC instant
-  attendeeIds     Json              // string[] of User ids invited
+  scheduledById   String // organizer (admin) — meeting is created as this user
+  startAt         DateTime // UTC instant
+  endAt           DateTime // UTC instant
+  attendeeIds     Json // string[] of User ids invited
   // Microsoft Graph references
-  graphEventId    String?           // calendar event id on the organizer's calendar
-  onlineMeetingId String?           // Teams onlineMeeting id (resolved for recording lookup)
+  graphEventId    String? // calendar event id on the organizer's calendar
+  onlineMeetingId String? // Teams onlineMeeting id (resolved for recording lookup)
   joinUrl         String?           @db.Text
-  targetFolderId  String?           // driveItem id of the L&D/{courseTitle} folder
+  targetFolderId  String? // driveItem id of the L&D/{courseTitle} folder
   // Recording ingestion (Phase 2)
-  recordingItemId String?           // driveItem id of the copied recording
-  recordedVideoId String?           // Video row created from the recording
+  recordingItemId String? // driveItem id of the copied recording
+  recordedVideoId String? // Video row created from the recording
   status          LiveSessionStatus @default(SCHEDULED)
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 
-  scheduledBy     User              @relation("LiveSessionOrganizer", fields: [scheduledById], references: [id])
-  attendances     LiveAttendance[]
+  scheduledBy User             @relation("LiveSessionOrganizer", fields: [scheduledById], references: [id])
+  attendances LiveAttendance[]
 
   @@index([startAt])
   @@index([status])
@@ -713,8 +713,8 @@ model LiveAttendance {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  liveSession     LiveSession @relation(fields: [liveSessionId], references: [id], onDelete: Cascade)
-  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  liveSession LiveSession @relation(fields: [liveSessionId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([liveSessionId, userId])
   @@index([userId])
@@ -734,12 +734,12 @@ enum LiveSessionStatus {
 // certificate is reproducible against the exact wording that made it.
 model CertificateIssue {
   id              String   @id @default(cuid())
-  formatId        String        // template id, e.g. "i-ufce"
-  formatTitle     String        // denormalized for history display
+  formatId        String // template id, e.g. "i-ufce"
+  formatTitle     String // denormalized for history display
   templateVersion String
-  templateHash    String        // sha256 of locked text at issue time
-  clientName      String        // the entity/client the certificate is issued for
-  payload         Json          // field values — the regenerate-on-demand source
+  templateHash    String // sha256 of locked text at issue time
+  clientName      String // the entity/client the certificate is issued for
+  payload         Json // field values — the regenerate-on-demand source
   acknowledged    Boolean  @default(false) // illustrative-format acknowledgment (§0.8)
   createdById     String
   createdBy       User     @relation("CertificateCreator", fields: [createdById], references: [id])
@@ -755,9 +755,9 @@ model CertificateIssue {
 // on the Certification generator form so staff don't re-type the same signing details.
 model CertificateFieldOption {
   id          String   @id @default(cuid())
-  fieldKey    String        // e.g. "firmName", "placeOfSignature"
+  fieldKey    String // e.g. "firmName", "placeOfSignature"
   value       String
-  createdById String?       // who first added it (metadata only; list is shared firm-wide)
+  createdById String? // who first added it (metadata only; list is shared firm-wide)
   createdAt   DateTime @default(now())
 
   @@unique([fieldKey, value])
@@ -770,15 +770,15 @@ model CertificateFieldOption {
 // OneDrive L&D/SOP/<Department>/. Viewable firm-wide; created/edited by admins + granted
 // editors. Who-created is on each version; who-viewed-when is logged in SopView.
 model Sop {
-  id               String   @id @default(cuid())
+  id               String     @id @default(cuid())
   title            String
   department       Department
   workCategory     String
   currentVersionId String?
   createdById      String
   createdByName    String
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
 
   versions SopVersion[]
   views    SopView[]
@@ -794,10 +794,10 @@ model SopVersion {
   versionNumber      Int
   versionString      String
   purpose            String   @db.Text
-  rawProcedure       String   @db.Text   // the user's layman input, preserved for editing
-  brief              Json?                // the confirmed AI brief used to generate
-  content            Json                 // the structured SOP (sections, tables, flowchart)
-  graphItemId        String?              // OneDrive .docx item id for this version
+  rawProcedure       String   @db.Text // the user's layman input, preserved for editing
+  brief              Json? // the confirmed AI brief used to generate
+  content            Json // the structured SOP (sections, tables, flowchart)
+  graphItemId        String? // OneDrive .docx item id for this version
   graphWebUrl        String?
   createdById        String
   creatorName        String
@@ -834,16 +834,16 @@ model SopView {
 // No generated file is stored — this records who ran which tool, when, and a small
 // summary (e.g. the client/firm name, or how many PDFs were processed). §no-storing.
 model OfficeToolRun {
-  id          String   @id @default(cuid())
-  tool        String        // registry id, e.g. "mou", "gstr3b"
-  toolTitle   String        // denormalized for history display
-  category    String        // "Legal" | "Tax" | "Financial"
-  summary     String        // human-readable one-liner (client name / file count)
-  format      String        // "docx" | "xlsx"
-  createdById String
-  createdBy   User     @relation("OfficeToolRunner", fields: [createdById], references: [id])
+  id            String   @id @default(cuid())
+  tool          String // registry id, e.g. "mou", "gstr3b"
+  toolTitle     String // denormalized for history display
+  category      String // "Legal" | "Tax" | "Financial"
+  summary       String // human-readable one-liner (client name / file count)
+  format        String // "docx" | "xlsx"
+  createdById   String
+  createdBy     User     @relation("OfficeToolRunner", fields: [createdById], references: [id])
   createdByName String
-  createdAt   DateTime @default(now())
+  createdAt     DateTime @default(now())
 
   @@index([createdById])
   @@index([tool])
@@ -855,11 +855,11 @@ model OfficeToolRun {
 // The firm's single Turia session cookie (captured from a logged-in Turia tab and
 // relayed by a director). Used server-side to call Turia's internal API.
 model NeoTuriaSession {
-  id        Int      @id @default(1)
-  cookie    String   @db.Text
-  updatedById String?
+  id            Int      @id @default(1)
+  cookie        String   @db.Text
+  updatedById   String?
   updatedByName String?
-  updatedAt DateTime @updatedAt
+  updatedAt     DateTime @updatedAt
 }
 
 // Per-director Turia mapping (director = a Partner user). Resolved by fuzzy
@@ -875,7 +875,7 @@ model NeoDirectorMapping {
 model NeoInternalBudget {
   id            String   @id @default(cuid())
   turiaTaskId   String?
-  taskIdentity  String?  // Turia uniqueidentity, e.g. TSK03519
+  taskIdentity  String? // Turia uniqueidentity, e.g. TSK03519
   taskName      String
   approvedHours Float
   approvedBy    String?
@@ -892,9 +892,9 @@ model NeoInternalBudget {
 model NeoProfitSplit {
   id           String   @id @default(cuid())
   turiaTaskId  String?
-  taskIdentity String?  // Turia uniqueidentity, e.g. TSK03732
+  taskIdentity String? // Turia uniqueidentity, e.g. TSK03732
   taskName     String
-  splits       Json     // { [directorId]: percent } — must sum to 100
+  splits       Json // { [directorId]: percent } — must sum to 100
   updatedBy    String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -909,9 +909,9 @@ model NeoProfitSplit {
 model NeoHoursSplit {
   id           String   @id @default(cuid())
   turiaTaskId  String?
-  taskIdentity String?  // Turia uniqueidentity, e.g. TSK03625
+  taskIdentity String? // Turia uniqueidentity, e.g. TSK03625
   taskName     String
-  hours        Json     // { [directorId]: plannedHours }
+  hours        Json // { [directorId]: plannedHours }
   updatedBy    String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -926,7 +926,7 @@ model NeoIncentiveSnapshot {
   periodStart DateTime
   periodEnd   DateTime
   generatedAt DateTime @default(now())
-  data        Json     // full per-director 4-bucket breakdown
+  data        Json // full per-director 4-bucket breakdown
 
   @@index([periodStart])
 }
@@ -1014,7 +1014,7 @@ model Client {
   contactPhone     String?
   contactEmail     String?
   referralSource   String?
-  turnover         Float        // rupees
+  turnover         Float // rupees
   turnoverBand     TurnoverBand
   growthGoal       GrowthGoal
   growthNote       String?
@@ -1054,11 +1054,11 @@ model Job {
   id            String       @id @default(cuid())
   clientId      String
   serviceTypeId String
-  fy            String       // "2026-27"
+  fy            String // "2026-27"
   handlerId     String
   status        JobStatus    @default(NOT_STARTED)
   dueOn         DateTime?
-  fees          Float?       // rupees
+  fees          Float? // rupees
   notes         String?
   graphFolderId String?
   folderStatus  FolderStatus @default(PENDING)
@@ -1105,9 +1105,9 @@ model ClientDocument {
 // write in src/lib/work/db.ts appends a WorkEvent in the same transaction.
 
 enum WorkStatus {
-  INBOX     // "Ideas"
-  ACTIVE    // "Working"
-  PARKED    // "Paused"
+  INBOX // "Ideas"
+  ACTIVE // "Working"
+  PARKED // "Paused"
   DONE
   OBSOLETE
 }
@@ -1142,7 +1142,7 @@ enum WorkEventKind {
 model Work {
   id             String     @id @default(cuid())
   title          String
-  why            String?    // one line: what changes when this is done
+  why            String? // one line: what changes when this is done
   ownerId        String
   status         WorkStatus @default(INBOX)
   obsoleteReason String?
@@ -1170,7 +1170,7 @@ model WorkTask {
   status      WorkTaskStatus @default(TODO)
   order       Int            @default(0)
   doneAt      DateTime?
-  reviewedAt  DateTime?      // lead's tick on a task someone else finished; set at once for the lead's own
+  reviewedAt  DateTime? // lead's tick on a task someone else finished; set at once for the lead's own
   createdById String
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
@@ -1201,7 +1201,7 @@ model WeekPlanWork {
 model DayPick {
   id      String          @id @default(cuid())
   userId  String
-  day     DateTime        // IST calendar day, 00:00 IST as the UTC instant
+  day     DateTime // IST calendar day, 00:00 IST as the UTC instant
   taskId  String
   outcome DayPickOutcome? // null while the day is open
 
@@ -1229,9 +1229,9 @@ model WorkEvent {
   id     String        @id @default(cuid())
   workId String
   taskId String?
-  userId String?       // null when written by cron
+  userId String? // null when written by cron
   kind   WorkEventKind
-  detail String?       // one plain line, e.g. the task title or "Ideas → Working"
+  detail String? // one plain line, e.g. the task title or "Ideas → Working"
   at     DateTime      @default(now())
 
   work Work  @relation(fields: [workId], references: [id], onDelete: Cascade)
@@ -1288,8 +1288,8 @@ model OpsSubscription {
   provider     String
   expiresOn    DateTime
   cycle        BillingCycle     @default(YEARLY)
-  costPaid     Float?           // rupees we pay the provider
-  chargeAmount Float            // rupees we bill the client
+  costPaid     Float? // rupees we pay the provider
+  chargeAmount Float // rupees we bill the client
   renewalLink  String?
   active       Boolean          @default(true)
   notes        String?
@@ -1340,38 +1340,38 @@ model OpsReminder {
 // Flow: draft PDF (unsigned) → emailed for approval → client approves → Indefine signs
 // → signed PDF emailed → client countersigns. Saving an edit restarts at DRAFT.
 enum EngagementLetterStatus {
-  DRAFT              // form saved; no draft PDF for this version yet
-  DRAFT_UPLOADED     // unsigned draft PDF uploaded
-  SENT_FOR_APPROVAL  // draft emailed to the client
-  APPROVED           // client approved the draft (recorded by staff)
-  SIGNED             // Indefine-signed PDF uploaded
-  SENT               // signed letter emailed to the client
-  CLIENT_SIGNED      // client's countersigned copy uploaded
+  DRAFT // form saved; no draft PDF for this version yet
+  DRAFT_UPLOADED // unsigned draft PDF uploaded
+  SENT_FOR_APPROVAL // draft emailed to the client
+  APPROVED // client approved the draft (recorded by staff)
+  SIGNED // Indefine-signed PDF uploaded
+  SENT // signed letter emailed to the client
+  CLIENT_SIGNED // client's countersigned copy uploaded
 }
 
 model EngagementLetter {
-  id                  String                 @id @default(cuid())
-  clientName          String                 // as in Turia; also the SharePoint folder name
-  fy                  String                 // "26-27"
-  data                Json
-  status              EngagementLetterStatus @default(DRAFT)
-  graphDriveId        String?
-  draftItemId         String?
-  draftWebUrl         String?
-  draftSentAt         DateTime?
-  approvedAt          DateTime?
-  signedItemId        String?
-  signedWebUrl        String?
-  clientSignedItemId  String?
-  clientSignedWebUrl  String?
-  sentAt              DateTime?
-  sentTo              String?
-  createdById         String
-  createdByName       String
-  updatedByName       String
-  createdAt           DateTime               @default(now())
-  updatedAt           DateTime               @updatedAt
-  events              EngagementLetterEvent[]
+  id                 String                  @id @default(cuid())
+  clientName         String // as in Turia; also the SharePoint folder name
+  fy                 String // "26-27"
+  data               Json
+  status             EngagementLetterStatus  @default(DRAFT)
+  graphDriveId       String?
+  draftItemId        String?
+  draftWebUrl        String?
+  draftSentAt        DateTime?
+  approvedAt         DateTime?
+  signedItemId       String?
+  signedWebUrl       String?
+  clientSignedItemId String?
+  clientSignedWebUrl String?
+  sentAt             DateTime?
+  sentTo             String?
+  createdById        String
+  createdByName      String
+  updatedByName      String
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+  events             EngagementLetterEvent[]
 
   @@unique([clientName, fy])
   @@index([updatedAt])
@@ -1381,9 +1381,9 @@ model EngagementLetterEvent {
   id       String           @id @default(cuid())
   letterId String
   letter   EngagementLetter @relation(fields: [letterId], references: [id], onDelete: Cascade)
-  action   String           // "saved" | "signed-upload" | "sent" | "client-signed-upload"
+  action   String // "saved" | "signed-upload" | "sent" | "client-signed-upload"
   detail   String?
-  data     Json?            // form snapshot for "saved", so any earlier version can be restored
+  data     Json? // form snapshot for "saved", so any earlier version can be restored
   byId     String
   byName   String
   at       DateTime         @default(now())
@@ -1449,7 +1449,9 @@ model FirmClient {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  client Client @relation(fields: [lmsClientId], references: [id])
+  client      Client       @relation(fields: [lmsClientId], references: [id])
+  engagements Engagement[]
+  jobTasks    JobTask[]
 }
 
 enum ModelProviderId {
@@ -1514,4 +1516,286 @@ model AuditEvent {
   @@index([entity, entityId])
   @@index([actorId, createdAt])
   @@index([createdAt])
+}
+
+// -------------------- Firm OS: jobs, agents, close loop --------------------
+// JobTask is the Firm OS job state machine (ADR-005). DONE is reachable only through
+// closeLoop.gate() (src/lib/close-loop/gate.ts); every transition appends a JobTaskEvent.
+// Service names match the SharePoint folder contract (docs/folder-contract.md).
+
+enum FirmService {
+  GST
+  ROC
+  IncomeTax
+  TDS
+  Books
+  Audit
+  Engagement
+}
+
+enum JobTaskState {
+  DRAFT
+  ASSIGNED
+  IN_PREP
+  AGENT_DONE
+  IN_REVIEW
+  APPROVED
+  FILED_BY_HUMAN
+  CLOSING
+  DONE
+}
+
+model Engagement {
+  id           String      @id @default(cuid())
+  firmClientId String
+  service      FirmService
+  frequency    String // MONTHLY | QUARTERLY | ANNUAL
+  assigneeId   String?
+  reviewerId   String?
+  firstPeriod  String?
+  sopPackKey   String?
+  active       Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  firmClient FirmClient @relation(fields: [firmClientId], references: [id])
+  jobTasks   JobTask[]
+
+  @@unique([firmClientId, service])
+}
+
+// Versioned SOP pack: statutory calendar + checklist rules as data. A promoted MistakeLog
+// rule creates a new minor version; nothing is edited in place.
+model SopPack {
+  id           String   @id @default(cuid())
+  key          String // gst | roc | tax | books | audit | onboarding
+  version      String // semver "1.3.0"
+  major        Int
+  minor        Int
+  patch        Int      @default(0)
+  title        String
+  calendar     Json? // statutory due-date rules (src/lib/agents/core/calendar.ts)
+  checklist    Json? // rule definitions (src/lib/agents/core/checklist.ts)
+  bufferDays   Int      @default(3)
+  active       Boolean  @default(true)
+  createdById  String?
+  approvedById String?
+  changeNote   String?
+  createdAt    DateTime @default(now())
+
+  @@unique([key, version])
+  @@index([key, active])
+}
+
+model JobTask {
+  id                 String       @id @default(cuid())
+  firmClientId       String
+  engagementId       String?
+  lmsJobId           String? // link to the legacy /clients Job, when one exists
+  service            FirmService
+  fy                 String // "2026-27"
+  period             String // "2026-10" | "Q2" | "Annual"
+  title              String // e.g. "GSTR-3B"
+  state              JobTaskState @default(DRAFT)
+  assigneeId         String?
+  reviewerId         String?
+  statutoryDueOn     DateTime?
+  internalDueOn      DateTime?
+  sopPackVersion     String?
+  needsPartnerReview Boolean      @default(false)
+  ackRef             String? // GST ARN / MCA SRN / ITR ack - stored, never verified against a portal
+  filedById          String?
+  filedAt            DateTime?
+  doneAt             DateTime?
+  createdById        String?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  firmClient   FirmClient     @relation(fields: [firmClientId], references: [id])
+  engagement   Engagement?    @relation(fields: [engagementId], references: [id])
+  events       JobTaskEvent[]
+  agentRuns    AgentRun[]
+  deliverables Deliverable[]
+  turiaSyncs   TuriaSync[]
+
+  @@unique([firmClientId, service, fy, period, title])
+  @@index([assigneeId, state])
+  @@index([state])
+  @@index([internalDueOn])
+}
+
+// Append-only state history: cycle time (assigned to done, prep, review, wait-on-client).
+model JobTaskEvent {
+  id        String        @id @default(cuid())
+  jobTaskId String
+  fromState JobTaskState?
+  toState   JobTaskState
+  actorId   String?
+  note      String?
+  createdAt DateTime      @default(now())
+
+  jobTask JobTask @relation(fields: [jobTaskId], references: [id])
+
+  @@index([jobTaskId, createdAt])
+}
+
+model AgentRun {
+  id                 String    @id @default(cuid())
+  jobTaskId          String
+  agent              String // gst | roc | tax | books | audit | echo
+  sopPackVersion     String
+  status             String // RUNNING | AGENT_DONE | FAILED | CHANGES_REQUESTED | APPROVED
+  attempt            Int       @default(1)
+  reviewNotes        String?
+  inputs             Json? // cached inputs; purge after inputsPurgeAt (ADR-006, max 30 days)
+  inputsPurgeAt      DateTime?
+  figures            Json? // deterministic computed figures
+  needsPartnerReview Boolean   @default(false)
+  error              String?
+  startedById        String?
+  startedAt          DateTime  @default(now())
+  finishedAt         DateTime?
+
+  jobTask      JobTask           @relation(fields: [jobTaskId], references: [id])
+  checklist    ChecklistResult[]
+  deliverables Deliverable[]
+
+  @@index([jobTaskId, startedAt])
+  @@index([agent, startedAt])
+}
+
+model ChecklistResult {
+  id         String   @id @default(cuid())
+  agentRunId String
+  ruleId     String
+  severity   String // block | warn | info
+  status     String // pass | fail | na
+  message    String
+  evidence   Json? // { quote, location, link }
+  source     String // deterministic | llm | mistake
+  createdAt  DateTime @default(now())
+
+  agentRun AgentRun @relation(fields: [agentRunId], references: [id])
+
+  @@index([agentRunId])
+}
+
+enum MistakeStatus {
+  PROPOSED
+  APPROVED
+  REJECTED
+}
+
+// Supervised learning loop: a reviewer logs a missed/wrong finding; a partner or manager
+// approves it into a versioned checklist rule. Nothing auto-promotes.
+model MistakeLog {
+  id                String        @id @default(cuid())
+  agent             String
+  pattern           String
+  ruleProposal      Json
+  example           Json?
+  agentRunId        String?
+  status            MistakeStatus @default(PROPOSED)
+  createdById       String
+  decidedById       String?
+  decidedAt         DateTime?
+  promotedToVersion String?
+  createdAt         DateTime      @default(now())
+
+  @@index([agent, status])
+}
+
+model Deliverable {
+  id          String    @id @default(cuid())
+  jobTaskId   String
+  agentRunId  String?
+  kind        String // Working | Final
+  name        String
+  spPath      String // must equal deliverablePath() for Final
+  driveId     String?
+  driveItemId String?
+  sha256      String
+  sizeBytes   Int
+  version     Int       @default(1)
+  verifiedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  jobTask  JobTask   @relation(fields: [jobTaskId], references: [id])
+  agentRun AgentRun? @relation(fields: [agentRunId], references: [id])
+
+  @@index([jobTaskId, kind])
+}
+
+enum TuriaSyncStatus {
+  PENDING
+  CHECKLIST_ISSUED
+  CONFIRMED
+  CLOSED
+  FAILED
+}
+
+model TuriaSync {
+  id            String          @id @default(cuid())
+  jobTaskId     String?
+  firmClientId  String?
+  operation     String // createClient | addService | createTask | closeTask
+  mode          String // API | MANUAL | UI
+  status        TuriaSyncStatus @default(PENDING)
+  turiaRef      String?
+  minutesLogged Int?
+  evidence      Json?
+  confirmedById String?
+  spotChecked   Boolean         @default(false)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  jobTask JobTask? @relation(fields: [jobTaskId], references: [id])
+
+  @@index([jobTaskId])
+  @@index([firmClientId])
+}
+
+// Onboarding saga (Phase 3): each step recorded, resumable; nothing rolled back by deletion.
+model OnboardingRun {
+  id           String   @id @default(cuid())
+  createdById  String
+  prompt       String
+  spec         Json
+  plan         Json?
+  status       String // DRAFT | CONFIRMED | RUNNING | FAILED | DONE
+  steps        Json? // [{ key, status, at, error }]
+  error        String?
+  firmClientId String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([createdById, createdAt])
+}
+
+model CommsDraft {
+  id             String   @id @default(cuid())
+  firmClientId   String
+  jobTaskId      String?
+  kind           String // status | doc-chase | due-reminder | filing-completed | query-response
+  language       String   @default("en")
+  subject        String
+  body           String
+  createdById    String
+  outlookDraftId String? // draft in the staff member's own mailbox - never sent by the app
+  createdAt      DateTime @default(now())
+
+  @@index([firmClientId, createdAt])
+}
+
+model CoachEvent {
+  id          String    @id @default(cuid())
+  userId      String
+  kind        String // board | reminder | escalation | break
+  jobTaskId   String?
+  payload     Json?
+  dismissedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@index([kind, createdAt])
 }
