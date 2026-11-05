@@ -6,7 +6,9 @@
 // allow-listed field with a reason. Values of client personal data arrive masked from the API.
 //
 // Mount it on a record page with one line, e.g. <HistoryLink entity="JobTask" id={job.id} />.
-import { useId, useState } from "react";
+// With privacyRequestId (the DPDP correction step), corrections go through the privacy route so
+// they are tied to the request; only the person's own Client / FirmClient records are accepted.
+import { useEffect, useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { History, Loader2 } from "lucide-react";
 import { btnGhost, btnPrimary, call, card, errorText, field } from "@/components/ui";
@@ -20,11 +22,32 @@ type View = { noun: string; entries: Entry[]; editable: Editable[]; people: { id
 const focusRing = "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2";
 const labelText = "text-[11px] font-bold text-ink-mute";
 
-export function HistoryLink({ entity, id, label = "History" }: { entity: HistoryEntity; id: string; label?: string }) {
+export function HistoryLink({
+  entity,
+  id,
+  label = "History",
+  privacyRequestId,
+  startOpen = false,
+}: {
+  entity: HistoryEntity;
+  id: string;
+  label?: string;
+  privacyRequestId?: string;
+  startOpen?: boolean;
+}) {
   const router = useRouter();
   const uid = useId();
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<View | null>(null);
+  const [opened, setOpened] = useState(false);
+  useEffect(() => {
+    if (startOpen && !opened) {
+      setOpened(true);
+      void toggle();
+    }
+    // Open once on mount when asked; toggle reads the latest state itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startOpen]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,7 +79,8 @@ export function HistoryLink({ entity, id, label = "History" }: { entity: History
     setSaving(true);
     setSaveError(null);
     setSaved(null);
-    const r = await call("/api/firm-os/corrections", { entity, id, field: fieldName, newValue: value, reason });
+    const url = privacyRequestId ? `/api/firm-os/privacy/requests/${encodeURIComponent(privacyRequestId)}/correction` : "/api/firm-os/corrections";
+    const r = await call(url, { entity, id, field: fieldName, newValue: value, reason });
     setSaving(false);
     if (!r.ok) return setSaveError(r.error);
     const note = typeof r.data.note === "string" ? ` ${r.data.note}` : "";

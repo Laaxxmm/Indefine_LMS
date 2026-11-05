@@ -189,3 +189,87 @@ export function world(now: () => Date = () => T0): MemoryDb {
   seedWorld(db);
   return db;
 }
+
+export const SUPPLIER_PAN = "CDEPS7777K"; // a supplier named in Kumar Traders' purchase register
+export const ZENITH_SIGNATORY = "zara.signatory@zenith.test";
+
+/** Extra records for the privacy tests: documents, runs, certificates, an old client. */
+export function privacyWorld(now: () => Date = () => T0): MemoryDb {
+  const db = world(now);
+  db.seed("client", [
+    {
+      id: "c-old",
+      name: "Old Ledger Accounts",
+      folderName: "Old Ledger Accounts",
+      entityType: "INDIVIDUAL",
+      pan: "DEFPO1111A",
+      gstin: null,
+      cin: null,
+      industry: "Services",
+      city: "Pune",
+      contactName: "Omkar O",
+      contactPhone: "9333344444",
+      contactEmail: "omkar@oldledger.test",
+      referralSource: null,
+      turnover: 1_200_000,
+      turnoverBand: "UNDER_40L",
+      growthGoal: "MAINTAIN",
+      growthNote: null,
+      onboardedOn: new Date("2015-05-01T00:00:00.000Z"),
+      primaryHandlerId: USERS.staff.id,
+      active: false,
+      graphFolderId: null,
+      folderStatus: "PENDING",
+      createdById: USERS.partner.id,
+    },
+  ]);
+  db.seed("firmClient", [{ id: "fc-old", lmsClientId: "c-old", clientCode: "OLDLED", turiaClientRef: null, clSiteUrl: null, preferredLanguage: "en", createdById: USERS.partner.id }]);
+  db.seed("jobTask", [
+    {
+      id: "j-old",
+      firmClientId: "fc-old",
+      engagementId: null,
+      service: "IncomeTax",
+      fy: "2015-16",
+      period: "Annual",
+      title: "ITR",
+      state: "DONE",
+      assigneeId: USERS.staff.id,
+      reviewerId: USERS.reviewer.id,
+      statutoryDueOn: null,
+      internalDueOn: null,
+      ackRef: "ITR-ACK-123456789",
+      createdById: USERS.partner.id,
+    },
+  ]);
+  db.seed("job", [
+    { id: "lj-prop", clientId: "c-prop", serviceTypeId: "st-gst", fy: "2025-26", handlerId: USERS.staff.id, status: "CLOSED", dueOn: null, fees: 24000, notes: "Kiran prefers WhatsApp", createdById: USERS.partner.id },
+    { id: "lj-co", clientId: "c-co", serviceTypeId: "st-roc", fy: "2025-26", handlerId: USERS.staff.id, status: "IN_PROGRESS", dueOn: null, fees: 50000, notes: "Zenith board meets in October", createdById: USERS.partner.id },
+  ]);
+  db.seed("onboardingRun", [
+    { id: "ob-prop", createdById: USERS.partner.id, prompt: "Onboard Kumar Traders, PAN ABCPK1234F, GST monthly, assign Priya", spec: { legalName: "Kumar Traders", pan: PAN_PROP }, plan: { jobs: 12 }, status: "DONE", steps: null, error: null, firmClientId: "fc-prop" },
+    { id: "ob-co", createdById: USERS.partner.id, prompt: "Onboard Zenith Components", spec: { legalName: "Zenith Components Pvt Ltd", pan: PAN_CO, contactName: "Zara Iyer", contactEmail: "zara@zenith.test" }, plan: null, status: "DONE", steps: null, error: null, firmClientId: "fc-co" },
+  ]);
+  db.seed("agentRun", [
+    { id: "run-prop", jobTaskId: "j-prep", agent: "gst", sopPackVersion: "1.0.0", status: "AGENT_DONE", attempt: 1, inputs: { purchases: [{ supplierPan: SUPPLIER_PAN, amount: 1180 }] }, inputsPurgeAt: new Date("2026-11-30T00:00:00.000Z"), figures: { outputTax: 1800 }, startedAt: T0 },
+  ]);
+  db.seed("deliverable", [
+    { id: "dl-prop", jobTaskId: "j-prep", agentRunId: "run-prop", kind: "Working", name: "GSTR-3B_2026-09.xlsx", spPath: "CL-KUMAR1/Compliance/FY2026-27/GST/2026-09/Working/GSTR-3B_2026-09.xlsx", sha256: "abc", sizeBytes: 100, version: 1 },
+  ]);
+  db.seed("clientDocument", [
+    { id: "doc-prop", clientId: "c-prop", jobId: null, docType: "PAN", name: "PAN card.pdf", graphDriveId: "d", graphItemId: "i1", webUrl: "https://example.sharepoint.test/pan.pdf", sizeBytes: 10, uploadedById: USERS.staff.id },
+    { id: "doc-co", clientId: "c-co", jobId: null, docType: "PAN", name: "Zenith PAN.pdf", graphDriveId: "d", graphItemId: "i2", webUrl: "https://example.sharepoint.test/zpan.pdf", sizeBytes: 10, uploadedById: USERS.staff.id },
+  ]);
+  db.seed("certificateIssue", [
+    { id: "cert-prop", formatId: "i-ufce", formatTitle: "Net worth certificate", templateVersion: "1", templateHash: "h", clientName: "Kumar Traders", payload: { pan: PAN_PROP, netWorth: 1500000 }, acknowledged: false, createdById: USERS.partner.id },
+    { id: "cert-co", formatId: "i-ufce", formatTitle: "Turnover certificate", templateVersion: "1", templateHash: "h", clientName: "Zenith Components Pvt Ltd", payload: { pan: PAN_CO }, acknowledged: false, createdById: USERS.partner.id },
+  ]);
+  db.seed("engagementLetter", [
+    { id: "el-co", clientName: "Zenith Components Pvt Ltd", fy: "26-27", data: { signatory: "Zara Iyer" }, status: "SENT", sentTo: ZENITH_SIGNATORY, createdById: USERS.partner.id, createdByName: "Lakshmi", updatedByName: "Lakshmi" },
+  ]);
+  db.seed("attendanceRecord", [
+    { id: "att-1", userId: USERS.staff.id, periodMonth: new Date("2026-10-01T00:00:00.000Z"), workingDays: 22, presentDays: 21, lateMarks: 1, attendancePct: 95.45, points: 9, source: "greytHR" },
+    { id: "att-2", userId: USERS.reviewer.id, periodMonth: new Date("2026-10-01T00:00:00.000Z"), workingDays: 22, presentDays: 20, lateMarks: 0, attendancePct: 90.9, points: 8, source: "greytHR" },
+  ]);
+  return db;
+}
