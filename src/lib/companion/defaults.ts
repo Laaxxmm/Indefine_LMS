@@ -1,12 +1,13 @@
-// Production wiring for the companion routes: Prisma, this module's own job selection, the
-// in-process rate limiter and the extension origins from the environment. Tests build their deps
-// from fakes instead. To switch to the shared getNextTask, pass `source` to createCompanionProvider
-// (provider.ts explains the mapping); to switch to the Phase 11 database limiter, replace `limiter`.
+// Production wiring for the companion routes: Prisma, the shared next-task queue (fromNextTaskView:
+// the side panel shows what /focus shows), the in-process rate limiter and the extension origins
+// from the environment. Tests build their deps from fakes instead. To switch to the Phase 11
+// database limiter, replace `limiter`.
 import type { PrismaClient } from "@prisma/client";
+import type { FirmDb } from "@/lib/agents/core/runner";
 import { prisma } from "@/lib/prisma";
 import { allowedExtensionOrigins } from "./config";
 import type { NextTaskDeps } from "./http";
-import { createCompanionProvider } from "./provider";
+import { createCompanionProvider, fromNextTaskView } from "./provider";
 import { companionRateLimiter } from "./rate-limit";
 import type { CompanionTokenDb } from "./tokens";
 
@@ -21,5 +22,6 @@ export function pairingDb(): CompanionTokenDb {
 
 export function nextTaskDeps(): NextTaskDeps {
   const db = companionDb();
-  return { db, provider: createCompanionProvider({ db }), limiter: companionRateLimiter, origins: allowedExtensionOrigins() };
+  const provider = createCompanionProvider({ db, source: fromNextTaskView({ db: db as unknown as FirmDb }) });
+  return { db, provider, limiter: companionRateLimiter, origins: allowedExtensionOrigins() };
 }
