@@ -6,16 +6,11 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
-import { btnGhost, call, errorText } from "@/components/ui";
-import { chip, focusRing, linkText } from "@/app/agents/parts";
+import { call, errorText, linkText, type ChipTone } from "@/components/ui";
 import type { NoticeView } from "@/lib/agents/coach/views";
+import { Button, Chip } from "@/components/firm-os";
 
-const TONE: Record<string, string> = {
-  board: "border-brand-200 bg-brand-50 text-brand-700",
-  reminder: "border-sky-200 bg-sky-50 text-sky-800",
-  escalation: "border-amber-200 bg-amber-50 text-amber-800",
-};
+const TONE: Record<string, ChipTone> = { board: "brand", reminder: "info", escalation: "warning" };
 
 export function NoticeList({ notices }: { notices: NoticeView[] }) {
   const router = useRouter();
@@ -32,15 +27,15 @@ export function NoticeList({ notices }: { notices: NoticeView[] }) {
   }
 
   return (
-    <ul className="divide-y divide-border -mx-5 -mb-5">
+    <ul className="divide-y divide-border -mx-6 -mb-6">
       {notices.map((n) => (
-        <li key={n.id} className="px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
+        <li key={n.id} className="px-6 py-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap mb-1">
-              <span className={`${chip} ${TONE[n.kind] ?? "border-border bg-muted text-ink-soft"}`}>{n.label}</span>
+              <Chip tone={TONE[n.kind] ?? "neutral"}>{n.label}</Chip>
               <span className="text-[12px] text-ink-mute tabular-nums">{n.at}</span>
             </div>
-            <p className="text-[13.5px] text-ink">{n.message}</p>
+            <p className="text-[13px] text-ink">{n.message}</p>
             {n.link && (
               <Link href={n.link.href} className={`${linkText} text-[13px]`}>
                 {n.link.label}
@@ -48,16 +43,9 @@ export function NoticeList({ notices }: { notices: NoticeView[] }) {
             )}
           </div>
           <span className="inline-flex flex-col items-start sm:items-end gap-1 shrink-0">
-            <button
-              type="button"
-              onClick={() => dismiss(n.id)}
-              disabled={busy !== null}
-              aria-label={`Dismiss ${n.label.toLowerCase()}: ${n.message}`}
-              className={`${btnGhost} ${focusRing} inline-flex items-center gap-1.5`}
-            >
-              {busy === n.id && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />}
+            <Button onClick={() => dismiss(n.id)} busy={busy === n.id} disabled={busy !== null} aria-label={`Dismiss ${n.label.toLowerCase()}: ${n.message}`}>
               Dismiss
-            </button>
+            </Button>
             {error?.id === n.id && (
               <span role="alert" className={errorText}>
                 {error.text}

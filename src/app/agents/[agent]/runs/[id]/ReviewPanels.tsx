@@ -2,12 +2,12 @@
 
 import { useId, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Download, Eye, Loader2 } from "lucide-react";
+import { Download, Eye } from "lucide-react";
 import type { JobTaskState } from "@prisma/client";
-import { btnGhost, btnPrimary, btnWarn, call, card, errorText, field, type CallResult } from "@/components/ui";
+import { btnGhost, call, card, errorText, field, focusRing, labelText, pageBleed, pageGutter, sectionTitle, type CallResult } from "@/components/ui";
 import type { CommentView, DeliverableView, RunReview } from "@/lib/agents/views";
 import type { CloseLoopAction, CloseLoopView } from "@/lib/close-loop/review";
-import { StateChip, focusRing, sectionTitle } from "../../../parts";
+import { Alert, Button, Section, Spinner, StateChip } from "@/components/firm-os";
 
 type Preview = { sheets: { name: string; rows: string[][]; truncated: boolean }[] };
 
@@ -37,30 +37,27 @@ export function DeliverablesPanel({ deliverables }: { deliverables: DeliverableV
 
   const current = preview?.sheets[sheet];
   return (
-    <section aria-labelledby="deliverables" className={card}>
-      <h2 id="deliverables" className={sectionTitle}>
-        Deliverables
-      </h2>
+    <Section id="deliverables" title="Deliverables" card last>
       {deliverables.length === 0 ? (
         <p className="text-[13px] text-ink-mute">No files from this run.</p>
       ) : (
         <ul className="divide-y divide-border">
           {deliverables.map((d) => (
-            <li key={d.id} className="py-2.5 flex items-center justify-between gap-3 flex-wrap">
+            <li key={d.id} className="py-3 flex items-center justify-between gap-3 flex-wrap">
               <div className="min-w-0">
-                <p className="text-[13.5px] font-semibold break-all">{d.name}</p>
-                <p className="text-[11.5px] text-ink-mute tabular-nums">
+                <p className="text-[13px] font-semibold break-all">{d.name}</p>
+                <p className="text-[12px] text-ink-mute tabular-nums">
                   {d.kind} · v{d.version} · {d.size} · sha256 <span className="font-mono">{d.sha256.slice(0, 12)}…</span>
                 </p>
               </div>
               <div className="flex items-center gap-2">
                 {d.isSheet && (
-                  <button type="button" onClick={() => show(d.id)} aria-expanded={open === d.id} className={`${btnGhost} ${focusRing} inline-flex items-center gap-1.5`}>
-                    {busy && open !== d.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <Eye className="w-3.5 h-3.5" aria-hidden="true" />}
+                  <button type="button" onClick={() => show(d.id)} aria-expanded={open === d.id} className={btnGhost}>
+                    {busy && open !== d.id ? <Spinner /> : <Eye className="w-3.5 h-3.5" aria-hidden="true" />}
                     {open === d.id ? "Hide preview" : "Preview"}
                   </button>
                 )}
-                <a href={`/api/firm-os/agents/deliverables/${encodeURIComponent(d.id)}`} className={`${btnGhost} ${focusRing} inline-flex items-center gap-1.5`} download>
+                <a href={`/api/firm-os/agents/deliverables/${encodeURIComponent(d.id)}`} className={btnGhost} download>
                   <Download className="w-3.5 h-3.5" aria-hidden="true" /> Download
                 </a>
               </div>
@@ -100,10 +97,10 @@ export function DeliverablesPanel({ deliverables }: { deliverables: DeliverableV
               </tbody>
             </table>
           </div>
-          {current.truncated && <p className="text-[11.5px] text-ink-mute mt-1">Preview shows the first rows and columns; download the file for the rest.</p>}
+          {current.truncated && <p className="text-[12px] text-ink-mute mt-1">Preview shows the first rows and columns; download the file for the rest.</p>}
         </div>
       )}
-    </section>
+    </Section>
   );
 }
 
@@ -127,17 +124,14 @@ export function CommentsPanel({ runId, comments }: { runId: string; comments: Co
   }
 
   return (
-    <section aria-labelledby={`${id}-h`} className={card}>
-      <h2 id={`${id}-h`} className={sectionTitle}>
-        Comments
-      </h2>
+    <Section id={`${id}-h`} title="Comments" card last>
       {comments.length === 0 ? (
         <p className="text-[13px] text-ink-mute mb-3">No comments yet.</p>
       ) : (
         <ul className="space-y-2 mb-3">
           {comments.map((c) => (
             <li key={c.id} className="text-[13px]">
-              <p className="text-[11.5px] text-ink-mute">
+              <p className="text-[12px] text-ink-mute">
                 {c.author} · {c.at}
               </p>
               <p className="whitespace-pre-wrap">{c.text}</p>
@@ -145,7 +139,7 @@ export function CommentsPanel({ runId, comments }: { runId: string; comments: Co
           ))}
         </ul>
       )}
-      <label htmlFor={`${id}-t`} className="text-[11px] font-bold text-ink-mute">
+      <label htmlFor={`${id}-t`} className={labelText}>
         Add a comment
       </label>
       <textarea id={`${id}-t`} value={text} onChange={(e) => setText(e.target.value)} rows={2} maxLength={2000} className={`${field} mt-1 ${focusRing}`} />
@@ -157,11 +151,11 @@ export function CommentsPanel({ runId, comments }: { runId: string; comments: Co
         ) : (
           <span />
         )}
-        <button type="button" onClick={add} disabled={busy || !text.trim()} className={`${btnGhost} ${focusRing}`}>
+        <Button busy={busy} disabled={!text.trim()} onClick={add}>
           Add comment
-        </button>
+        </Button>
       </div>
-    </section>
+    </Section>
   );
 }
 
@@ -201,7 +195,7 @@ export function MistakeForm({ runId, checks }: { runId: string; checks: string[]
     setDone(true);
   }
 
-  const lbl = "flex flex-col gap-1 text-[11px] font-bold text-ink-mute";
+  const lbl = `flex flex-col gap-1 ${labelText}`;
   return (
     <section aria-labelledby={`${id}-h`} className={card}>
       <details>
@@ -211,7 +205,7 @@ export function MistakeForm({ runId, checks }: { runId: string; checks: string[]
           </h2>
         </summary>
         {done ? (
-          <p className="text-[13px] mt-3" role="status">
+          <p className="text-[13px] mt-4" role="status">
             Logged. A partner or manager will review the proposed rule in the mistake log; nothing changes until they approve it.
           </p>
         ) : (
@@ -276,9 +270,9 @@ export function MistakeForm({ runId, checks }: { runId: string; checks: string[]
               </p>
             )}
             <div>
-              <button type="button" onClick={submit} disabled={busy || !f.finding.trim()} className={`${btnGhost} ${focusRing}`}>
+              <Button busy={busy} disabled={!f.finding.trim()} onClick={submit}>
                 Propose rule
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -384,10 +378,7 @@ export function CloseLoopStatus({ view }: { view: CloseLoopView }) {
   const id = useId();
   const { ack } = view;
   return (
-    <section aria-labelledby={`${id}-h`} className={card}>
-      <h2 id={`${id}-h`} className={sectionTitle}>
-        Filing and close
-      </h2>
+    <Section id={`${id}-h`} title="Filing and close" card last>
       <p className="text-[13px] text-ink-soft mb-3">
         Firm OS never files anything. You file on the portal, record the acknowledgement here and close the Turia task; the job is done when the close gate finds the Final file in SharePoint and the Turia
         close.
@@ -403,15 +394,14 @@ export function CloseLoopStatus({ view }: { view: CloseLoopView }) {
         <dd className="tabular-nums">{turiaLine(view.turia)}</dd>
       </dl>
       {view.gate && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-[13px] mt-4" role="status">
-          <p className="font-bold">Still closing: the close gate did not pass</p>
-          <ul className="list-disc pl-5 mt-1 space-y-0.5">
+        <Alert tone="warning" title="Still closing: the close gate did not pass" className="mt-4">
+          <ul className="list-disc pl-6 space-y-1">
             {view.gate.reasons.map((r) => (
               <li key={r}>{r}</li>
             ))}
           </ul>
-          <p className="text-[11.5px] mt-1.5 tabular-nums">Checked {view.gate.at}</p>
-        </div>
+          <p className="text-[12px] mt-2 tabular-nums">Checked {view.gate.at}</p>
+        </Alert>
       )}
       {view.done && (
         <div className="flex items-center gap-2 flex-wrap mt-4">
@@ -421,11 +411,11 @@ export function CloseLoopStatus({ view }: { view: CloseLoopView }) {
           </span>
         </div>
       )}
-    </section>
+    </Section>
   );
 }
 
-const fieldLabel = "flex flex-col gap-1 text-[11px] font-bold text-ink-mute";
+const fieldLabel = `flex flex-col gap-1 ${labelText}`;
 
 /** The bar's content for the close-loop action: Mark filed, Record Turia close, or Check again. */
 export function CloseLoopActions({ view }: { view: CloseLoopView }) {
@@ -475,25 +465,21 @@ export function CloseLoopActions({ view }: { view: CloseLoopView }) {
     router.refresh();
   }
 
-  const spinner = busy && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />;
-  const primaryBtn = `${btnPrimary} ${focusRing} inline-flex items-center gap-1.5`;
-  const primary = `${primaryBtn} ml-auto`;
   /** The bar's buttons in FILED_BY_HUMAN / CLOSING: "Retract filing" (secondary, managers and partners) beside the primary. */
   const withRetract = (button: React.ReactNode) => (
     <div className="flex items-center gap-2 ml-auto">
       {view.canRetract && (
-        <button
-          type="button"
+        <Button
+          variant="warn"
           disabled={!!busy}
           onClick={() => {
             setRetracting(true);
             setError(null);
             setNotice(null);
           }}
-          className={`${btnWarn} ${focusRing} inline-flex items-center gap-1.5`}
         >
           Retract filing
-        </button>
+        </Button>
       )}
       {button}
     </div>
@@ -532,7 +518,7 @@ export function CloseLoopActions({ view }: { view: CloseLoopView }) {
           <span className="font-bold text-ink">Filed by you on the portal — record the acknowledgement here.</span>{" "}
           {view.hasFinal ? "Pack approved and in Final." : "Pack approved; no Final file is recorded yet, and the job cannot close without one."} Firm OS never files anything.
         </p>
-        <p id={`${id}-filed`} className="text-[12.5px] text-ink-mute w-full">
+        <p id={`${id}-filed`} className="text-[12px] text-ink-mute w-full">
           Mark filed records the filing against your name and moves the job on to closing. Only a manager or partner can retract it afterwards, with a note.
         </p>
         <label htmlFor={`${id}-ack`} className={`${fieldLabel} w-full sm:w-[240px]`}>
@@ -541,9 +527,9 @@ export function CloseLoopActions({ view }: { view: CloseLoopView }) {
         </label>
         {refField("Turia task ref (optional)", false)}
         {minutesField("Minutes logged in Turia (optional)", false)}
-        <button type="button" disabled={!!busy || (ack.required && !f.ackRef.trim())} onClick={markFiled} aria-describedby={`${id}-filed`} className={primary}>
-          {spinner}Mark filed
-        </button>
+        <Button variant="primary" busy={!!busy} disabled={ack.required && !f.ackRef.trim()} onClick={markFiled} aria-describedby={`${id}-filed`} className="ml-auto">
+          Mark filed
+        </Button>
         {messages}
       </>
     );
@@ -562,21 +548,18 @@ export function CloseLoopActions({ view }: { view: CloseLoopView }) {
           {retractConsequence(ack, view.ackRef)}
         </p>
         <div className="flex items-center gap-2 ml-auto">
-          <button
-            type="button"
+          <Button
             disabled={!!busy}
             onClick={() => {
               setRetracting(false);
               setError(null);
             }}
-            className={`${btnGhost} ${focusRing}`}
           >
             Cancel
-          </button>
-          <button type="button" disabled={!!busy || !note.trim()} onClick={retract} aria-describedby={`${id}-retract`} className={`${btnWarn} ${focusRing} inline-flex items-center gap-1.5`}>
-            {busy === "retract" && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />}
+          </Button>
+          <Button variant="warn" busy={busy === "retract"} disabled={!!busy || !note.trim()} onClick={retract} aria-describedby={`${id}-retract`}>
             Confirm retraction
-          </button>
+          </Button>
         </div>
         {messages}
       </>
@@ -590,9 +573,9 @@ export function CloseLoopActions({ view }: { view: CloseLoopView }) {
           Turia close recorded ({view.turia.ref}, {view.turia.minutes} min). The job closes when every check under Filing and close passes.
         </p>
         {withRetract(
-          <button type="button" disabled={!!busy} onClick={() => recordClose({ turiaTaskRef: view.turia.ref ?? "", minutes: String(view.turia.minutes ?? "") })} className={primaryBtn}>
-            {spinner}Check again
-          </button>,
+          <Button variant="primary" busy={!!busy} onClick={() => recordClose({ turiaTaskRef: view.turia.ref ?? "", minutes: String(view.turia.minutes ?? "") })}>
+            Check again
+          </Button>,
         )}
         {messages}
       </>
@@ -608,9 +591,9 @@ export function CloseLoopActions({ view }: { view: CloseLoopView }) {
       {refField("Turia task ref", true)}
       {minutesField("Minutes logged in Turia", true)}
       {withRetract(
-        <button type="button" disabled={!!busy || !f.turiaTaskRef.trim() || !f.minutes.trim()} onClick={() => recordClose(f)} className={primaryBtn}>
-          {spinner}Record Turia close
-        </button>,
+        <Button variant="primary" busy={!!busy} disabled={!f.turiaTaskRef.trim() || !f.minutes.trim()} onClick={() => recordClose(f)}>
+          Record Turia close
+        </Button>,
       )}
       {messages}
     </>
@@ -717,10 +700,8 @@ export function ActionBar({
     router.push(`/agents/${agent}/runs/${r.runId}`); // navigating: stay busy so nothing is sent twice
   }
 
-  const spinner = busy && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />;
-  const primary = `${btnPrimary} ${focusRing} inline-flex items-center gap-1.5`;
   const noteBox = (label: string) => (
-    <label htmlFor={`${id}-n`} className="flex flex-col gap-1 text-[11px] font-bold text-ink-mute w-full sm:w-[420px]">
+    <label htmlFor={`${id}-n`} className={`flex flex-col gap-1 ${labelText} w-full sm:w-[420px]`}>
       {label}
       <textarea id={`${id}-n`} value={note} onChange={(e) => setNote(e.target.value)} rows={2} maxLength={2000} className={`${field} ${focusRing}`} autoFocus />
     </label>
@@ -744,33 +725,29 @@ export function ActionBar({
         )}
         <div className="flex items-center gap-2 ml-auto">
           {mode !== "idle" && (
-            <button type="button" onClick={() => setMode("idle")} className={`${btnGhost} ${focusRing}`}>
-              Cancel
-            </button>
+            <Button onClick={() => setMode("idle")}>Cancel</Button>
           )}
           {actions.requestChanges && mode !== "approve" && (
-            <button
-              type="button"
+            <Button
+              variant="warn"
+              busy={busy && mode === "changes"}
               disabled={busy || (mode === "changes" && note.trim().length < 3)}
               onClick={() => (mode === "changes" ? go(`${base}/request-changes`, { note }, (d) => router.push(`/agents/${agent}/runs/${String(d.runId)}`)) : setMode("changes"))}
-              className={`${btnWarn} ${focusRing} inline-flex items-center gap-1.5`}
             >
-              {mode === "changes" && spinner}
               {mode === "changes" ? "Request changes and re-run" : "Request changes"}
-            </button>
+            </Button>
           )}
           {actions.approve && mode !== "changes" && (
             // First click shows what approval does (and the partner note box when needed); the second sends it.
-            <button
-              type="button"
+            <Button
+              variant="primary"
+              busy={busy && mode === "approve"}
               disabled={busy || (mode === "approve" && actions.approveNeedsNote && !note.trim())}
               onClick={() => (mode !== "approve" ? setMode("approve") : go(`${base}/approve`, { note: note || null }))}
               aria-describedby={mode === "approve" ? `${id}-approve` : undefined}
-              className={primary}
             >
-              {mode === "approve" && spinner}
               {mode === "approve" ? "Confirm approval" : "Approve pack"}
-            </button>
+            </Button>
           )}
         </div>
       </>
@@ -788,26 +765,23 @@ export function ActionBar({
         )}
         <div className="flex items-center gap-2 ml-auto">
           {mode === "rerun" && (
-            <button type="button" onClick={() => setMode("idle")} className={`${btnGhost} ${focusRing}`}>
-              Cancel
-            </button>
+            <Button onClick={() => setMode("idle")}>Cancel</Button>
           )}
           {actions.rerun && (
-            <button
-              type="button"
+            <Button
+              variant="warn"
+              busy={busy && mode === "rerun"}
               disabled={busy || (mode === "rerun" && !rerunBody(note).ok)}
               onClick={() => (mode === "rerun" ? rerun() : setMode("rerun"))}
               aria-describedby={mode === "rerun" ? `${id}-rerun` : undefined}
-              className={`${btnWarn} ${focusRing} inline-flex items-center gap-1.5`}
             >
-              {mode === "rerun" && spinner}
               {mode === "rerun" ? "Re-run agent with this note" : "Re-run with a note"}
-            </button>
+            </Button>
           )}
           {actions.submit && mode !== "rerun" && (
-            <button type="button" disabled={busy} onClick={() => go(`${base}/submit`)} className={primary}>
-              {spinner}Submit for review
-            </button>
+            <Button variant="primary" busy={busy} onClick={() => go(`${base}/submit`)}>
+              Submit for review
+            </Button>
           )}
         </div>
       </>
@@ -816,23 +790,23 @@ export function ActionBar({
     content = (
       <>
         <p className="text-[13px] text-ink-soft">Approved, but the files are not in Final yet.</p>
-        <button type="button" disabled={busy} onClick={() => go(`${base}/finalize`)} className={`${primary} ml-auto`}>
-          {spinner}Copy to Final
-        </button>
+        <Button variant="primary" busy={busy} onClick={() => go(`${base}/finalize`)} className="ml-auto">
+          Copy to Final
+        </Button>
       </>
     );
   } else if (actions.run) {
     content = (
       <>
         <p className="text-[13px] text-ink-soft">The job is back in preparation. Run the agent again when the documents are ready.</p>
-        <button
-          type="button"
-          disabled={busy}
+        <Button
+          variant="primary"
+          busy={busy}
           onClick={() => go(`/api/firm-os/agents/${encodeURIComponent(agent)}/jobs/${encodeURIComponent(jobId)}/run`, undefined, (d) => router.push(`/agents/${agent}/runs/${String(d.runId)}`))}
-          className={`${primary} ml-auto`}
+          className="ml-auto"
         >
-          {spinner}Run agent
-        </button>
+          Run agent
+        </Button>
       </>
     );
   } else if (closeLoop?.action) {
@@ -847,8 +821,8 @@ export function ActionBar({
   // at all (the Mark filed form would cover most of the screen); it sits at the end of the page.
   // It bleeds to the edges of the layout's padding, and scrolls itself if taller than 70vh.
   return (
-    <div className="sticky max-sm:static bottom-0 z-20 -mx-5 sm:-mx-8 -mb-8 mt-8 max-h-[70vh] max-sm:max-h-none overflow-y-auto border-t border-border bg-card/95 backdrop-blur" role="region" aria-label="Review actions">
-      <div className="px-5 sm:px-8 py-3 flex items-end gap-3 flex-wrap">
+    <div className={`sticky max-sm:static bottom-0 z-20 ${pageBleed} -mb-8 mt-8 max-h-[70vh] max-sm:max-h-none overflow-y-auto border-t border-border bg-card/95 backdrop-blur`} role="region" aria-label="Review actions">
+      <div className={`${pageGutter} py-3 flex items-end gap-3 flex-wrap`}>
         {content}
         {error && (
           <p role="alert" className={`${errorText} w-full`}>

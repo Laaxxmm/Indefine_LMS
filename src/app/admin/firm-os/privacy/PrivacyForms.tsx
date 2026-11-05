@@ -8,11 +8,9 @@
 import { useId, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
-import { btnDanger, btnGhost, btnPrimary, call, errorText, field } from "@/components/ui";
-import { focusRing, linkText } from "@/app/agents/parts";
+import { Button, ConfirmPanel, Spinner as SharedSpinner } from "@/components/firm-os";
+import { btnDanger, btnGhost, btnPrimary, call, errorText, field, focusRing, labelText, linkText } from "@/components/ui";
 
-const labelText = "text-[11px] font-bold text-ink-mute";
 
 function useAction() {
   const router = useRouter();
@@ -35,7 +33,7 @@ function useAction() {
 }
 
 function Spinner({ on }: { on: boolean }) {
-  return on ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : null;
+  return on ? <SharedSpinner /> : null;
 }
 
 function ErrorLine({ error }: { error: string | null }) {
@@ -132,12 +130,12 @@ export function NewRequestForm({ kinds, today }: { kinds: { value: string; label
         <div aria-live="polite" className="space-y-1">
           <ErrorLine error={error} />
           {notes.map((n) => (
-            <p key={n} className="text-[12.5px] text-amber-800">
+            <p key={n} className="text-[12px] text-amber-800">
               {n}
             </p>
           ))}
           {loggedId && (
-            <p className="text-[12.5px] text-ink-soft">
+            <p className="text-[12px] text-ink-soft">
               The request was logged.{" "}
               <Link href={`/admin/firm-os/privacy/${encodeURIComponent(loggedId)}`} className={linkText}>
                 Open the request
@@ -362,32 +360,27 @@ export function LiftRestrictionForm({ id }: { id: string }) {
 export function ConfirmStep({ url, body, label, confirmLabel, consequence, tone = "danger" }: { url: string; body?: unknown; label: string; confirmLabel: string; consequence: string; tone?: "danger" | "primary" }) {
   const { busy, error, run } = useAction();
   const [pending, setPending] = useState(false);
-  const cls = tone === "danger" ? btnDanger : btnPrimary;
+  const variant = tone === "danger" ? "danger" : "primary";
+  // The shared confirm group (src/components/firm-os/ConfirmStep.tsx); this wrapper keeps the call to the route.
   return (
     <div className="space-y-2">
       {pending ? (
-        <div className="flex items-center gap-2 flex-wrap justify-end" role="group" aria-label={`Confirm: ${label}`}>
-          <span className="text-[12px] text-ink-soft max-w-md text-right">{consequence}</span>
-          <button type="button" disabled={busy} onClick={() => setPending(false)} className={`${btnGhost} ${focusRing}`}>
-            Cancel
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={async () => {
-              if (await run(url, body ?? {})) setPending(false);
-            }}
-            className={`${cls} ${focusRing} inline-flex items-center gap-1.5`}
-          >
-            <Spinner on={busy} />
-            {busy ? "Saving…" : confirmLabel}
-          </button>
-        </div>
+        <ConfirmPanel
+          label={label}
+          consequence={consequence}
+          confirmLabel={confirmLabel}
+          confirmVariant={variant}
+          busy={busy}
+          onCancel={() => setPending(false)}
+          onConfirm={async () => {
+            if (await run(url, body ?? {})) setPending(false);
+          }}
+        />
       ) : (
         <div className="flex justify-end">
-          <button type="button" onClick={() => setPending(true)} className={`${cls} ${focusRing}`}>
+          <Button variant={variant} onClick={() => setPending(true)}>
             {label}
-          </button>
+          </Button>
         </div>
       )}
       <div className="flex justify-end">

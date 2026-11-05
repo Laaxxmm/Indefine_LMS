@@ -11,10 +11,9 @@
 // FIRM_OS_BREAK_NUDGE, read on the server.
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
-import { btnGhost, btnPrimary, call, card, errorText } from "@/components/ui";
-import { focusRing, sectionTitle } from "@/app/agents/parts";
+import { btnGhost, btnPrimary, call, card, errorText, focusRing, sectionTitle } from "@/components/ui";
 import { PING_CHECK_MS, isQuietAnswer, pingInterval, shouldPing } from "@/lib/agents/coach/ping";
+import { Spinner } from "@/components/firm-os";
 
 type Nudge = { id: string; message: string };
 type Action = "dismiss" | "snooze-30" | "snooze-60" | "off";
@@ -95,8 +94,8 @@ export function ActivityPing({ enabled }: { enabled: boolean }) {
   }
 
   const button = (n: Nudge, action: Action, label: string, cls = btnGhost) => (
-    <button type="button" disabled={busy !== null} onClick={() => act(n, action)} className={`${cls} ${focusRing} inline-flex items-center gap-1.5`}>
-      {busy === action && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />}
+    <button type="button" disabled={busy !== null} onClick={() => act(n, action)} className={`${cls} ${focusRing} inline-flex items-center gap-2`}>
+      {busy === action && <Spinner />}
       {label}
     </button>
   );

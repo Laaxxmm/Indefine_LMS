@@ -4,6 +4,10 @@ import { auth } from "@/lib/auth";
 import { canUseNeoCentra } from "@/lib/neo-centra/access";
 import { isModuleEnabled } from "@/lib/workspace/settings";
 
+// "Open" text in each card's accent, darkened where the accent itself is below AA on white (mint
+// 2.6:1, pink 3.6:1, orange 2.8:1, sky 2.8:1 → the -700 shade, 5.2:1+). The bar and icon keep the accent.
+const AA_TEXT: Record<string, string> = { "#17b978": "#047857", "#e84a8a": "#be185d", "#f97316": "#c2410c", "#0ea5e9": "#0369a1" };
+
 // Partners and managers only, appended like NEO_CENTRA: Firm OS plain-English onboarding, while the
 // onboard module is on for them (its role rule, the Firm OS master switch and the workspace settings).
 const FIRM_OS_ONBOARD = {
@@ -121,7 +125,7 @@ export default async function ToolsIndex() {
             <div className="text-[10.5px] font-extrabold tracking-[0.1em] text-ink-faint uppercase">{tool.tag}</div>
             <div className="font-display font-bold text-xl mt-0.5 mb-2 leading-tight">{tool.title}</div>
             <p className="text-[13.5px] text-ink-mute leading-relaxed">{tool.blurb}</p>
-            <div className="mt-4 inline-flex items-center gap-1.5 text-sm font-bold" style={{ color: tool.accent }}>
+            <div className="mt-4 inline-flex items-center gap-1.5 text-sm font-bold" style={{ color: AA_TEXT[tool.accent.toLowerCase()] ?? tool.accent }}>
               Open <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition" />
             </div>
           </Link>

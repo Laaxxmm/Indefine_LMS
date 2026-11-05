@@ -8,12 +8,11 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
 import { btnPrimary, call, errorText } from "@/components/ui";
-import { focusRing } from "@/app/agents/parts";
+import { Button } from "@/components/firm-os";
 import type { NextTaskAction } from "@/lib/workspace/contract";
 
-const primary = `${btnPrimary} ${focusRing} inline-flex items-center gap-1.5`;
+const primary = btnPrimary;
 
 export function NextActionButton({ action, jobId, context }: { action: NextTaskAction; jobId: string; context: string }) {
   const router = useRouter();
@@ -43,10 +42,9 @@ export function NextActionButton({ action, jobId, context }: { action: NextTaskA
 
   return (
     <span className="inline-flex flex-col items-start gap-1">
-      <button type="button" onClick={run} disabled={busy} aria-label={`${action.label}: ${context}`} className={primary}>
-        {busy && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />}
-        {busy ? "Running…" : action.label}
-      </button>
+      <Button variant="primary" onClick={run} busy={busy} busyLabel="Running…" aria-label={`${action.label}: ${context}`}>
+        {action.label}
+      </Button>
       {error && (
         <span role="alert" className={errorText}>
           {error}

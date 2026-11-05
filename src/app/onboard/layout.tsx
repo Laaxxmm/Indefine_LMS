@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { ActivityPing } from "@/components/ActivityPing";
 import { FirmOsHeader } from "@/components/FirmOsHeader";
+import { pageMain } from "@/components/ui";
 import { isBreakNudgeEnabled } from "@/lib/agents/coach/flags";
 import { canOnboard } from "@/lib/rbac/policy";
 import { requireModule } from "@/lib/workspace/guard";
@@ -17,8 +18,8 @@ export default async function OnboardLayout({ children }: { children: React.Reac
 
   return (
     <div className="min-h-screen">
-      <FirmOsHeader user={session.user} home="/onboard" width="max-w-[1180px]" />
-      <main className="max-w-[1180px] mx-auto px-5 sm:px-8 py-8">{children}</main>
+      <FirmOsHeader user={session.user} home="/onboard" />
+      <main className={pageMain}>{children}</main>
       <ActivityPing enabled={isBreakNudgeEnabled()} />
     </div>
   );

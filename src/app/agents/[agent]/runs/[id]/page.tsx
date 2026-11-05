@@ -6,9 +6,9 @@ import { prisma } from "@/lib/prisma";
 import type { FirmDb } from "@/lib/agents/core/runner";
 import { loadRunReview, type ChecklistView, type OpenQuestionView } from "@/lib/agents/views";
 import { loadCloseLoopView, type CloseLoopViewDb } from "@/lib/close-loop/review";
-import { card } from "@/components/ui";
+import { card, figure, focusRing, linkText, sectionTitle } from "@/components/ui";
 import { HistoryLink } from "@/components/CorrectionHistory";
-import { BackLink, PartnerChip, RunStatusChip, StateChip, eyebrow, focusRing, pageTitle, sectionTitle } from "../../../parts";
+import { Alert, PageHeader, PartnerChip, RunStatusChip, Section, StateChip } from "@/components/firm-os";
 import { ActionBar, CloseLoopStatus, CommentsPanel, DeliverablesPanel, MistakeForm } from "./ReviewPanels";
 
 export const dynamic = "force-dynamic";
@@ -63,50 +63,44 @@ export default async function RunReviewPage({ params }: { params: Promise<{ agen
 
   return (
     <div>
-      <BackLink href={`/agents/${agent}`}>{run.agentTitle}</BackLink>
+      <PageHeader
+        back={{ href: `/agents/${agent}`, label: run.agentTitle }}
+        eyebrow={<>Agent run · attempt {run.attempt} · SOP pack v{run.sopPackVersion}</>}
+        title={<>{job.title} — {job.clientName} ({job.clientCode})</>}
+        meta={<>{job.service} · {job.period} · FY {job.fy} · started {run.startedAt} · finished {run.finishedAt}</>}
+        action={
+          <>
+            <StateChip state={job.state} />
+            <RunStatusChip status={run.status} />
+            {run.needsPartnerReview && <PartnerChip />}
+          </>
+        }
+      />
 
-      <div className="flex items-start justify-between gap-4 flex-wrap mb-5">
-        <div>
-          <p className={eyebrow}>
-            Agent run · attempt {run.attempt} · SOP pack v{run.sopPackVersion}
-          </p>
-          <h1 className={pageTitle}>
-            {job.title} — {job.clientName} ({job.clientCode})
-          </h1>
-          <p className="text-ink-mute text-[13.5px] mt-1.5 tabular-nums">
-            {job.service} · {job.period} · FY {job.fy} · started {run.startedAt} · finished {run.finishedAt}
-          </p>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <StateChip state={job.state} />
-          <RunStatusChip status={run.status} />
-          {run.needsPartnerReview && <PartnerChip />}
-          <Link href={`/comms/new?run=${run.id}`} className={`text-[13px] font-semibold text-brand-600 hover:underline rounded ${focusRing}`}>Draft client message</Link>
-        </div>
-      </div>
-
-      {/* The job's correction history (who changed which field, when and why), and a fix for a wrong entry. */}
-      <div className="mb-5">
+      {/* The job's correction history (who changed which field, when and why, and a fix for a wrong entry), and a client message from this run. */}
+      <div className="mb-6 flex items-start justify-between gap-x-4 gap-y-2 flex-wrap">
         <HistoryLink entity="JobTask" id={job.id} />
+        <Link href={`/comms/new?run=${run.id}`} className={`text-[13px] leading-8 ${linkText}`}>
+          Draft client message
+        </Link>
       </div>
 
       {!review.isLatest && (
-        <p className="rounded-xl border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-[13px] mb-4" role="status">
+        <Alert tone="warning" className="mb-4">
           A newer run exists for this job. This run is kept for the record; act on the latest one.
-        </p>
+        </Alert>
       )}
       {run.error && (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 text-rose-700 px-4 py-3 text-[13px] mb-4" role="alert">
-          <p className="font-bold">The agent could not finish this run</p>
-          <p className="mt-0.5">{run.error}</p>
-        </div>
+        <Alert tone="error" title="The agent could not finish this run" className="mb-4">
+          {run.error}
+        </Alert>
       )}
       {run.reviewNotes && (
-        <p className="rounded-xl border border-border bg-card px-4 py-3 text-[13px] mb-4">
-          {/* From "Request changes" (the reviewer) or "Re-run with a note" (the preparer, a manager or a partner). */}
+        // From "Request changes" (the reviewer) or "Re-run with a note" (the preparer, a manager or a partner).
+        <Alert tone="info" role="note" className="mb-4">
           <span className="font-bold">Notes for this run: </span>
           {run.reviewNotes}
-        </p>
+        </Alert>
       )}
 
       {review.figures.length > 0 && (
@@ -114,17 +108,14 @@ export default async function RunReviewPage({ params }: { params: Promise<{ agen
           {review.figures.map((f) => (
             <div key={f.key} className={card}>
               <dt className={sectionTitle}>{f.label}</dt>
-              <dd className="font-display text-[22px] font-extrabold tabular-nums leading-none">{f.value}</dd>
+              <dd className={figure}>{f.value}</dd>
             </div>
           ))}
         </dl>
       )}
 
       <div className="grid lg:grid-cols-2 gap-6 items-start">
-        <section aria-labelledby="checklist" className={card}>
-          <h2 id="checklist" className={sectionTitle}>
-            Checklist
-          </h2>
+        <Section id="checklist" title="Checklist" card last>
           <p className="text-[13px] text-ink-soft mb-4 tabular-nums">
             <span className={counts.block ? "text-rose-700 font-bold" : ""}>{counts.block} block</span> · <span className={counts.warn ? "text-amber-800 font-bold" : ""}>{counts.warn} warning</span> · {counts.info} note ·{" "}
             {counts.na} to check by hand · {counts.pass} passed
@@ -132,27 +123,27 @@ export default async function RunReviewPage({ params }: { params: Promise<{ agen
           {review.checklist.length === 0 ? (
             <p className="text-[13px] text-ink-mute">No checklist results{run.status === "FAILED" ? " — the run failed before the checks." : "."}</p>
           ) : (
-            <ul className="space-y-2.5">
+            <ul className="space-y-3">
               {review.checklist.map((c) => {
                 const t = tone(c);
                 const Icon = t.icon;
                 return (
-                  <li key={c.id} className={`rounded-lg border border-border border-l-4 ${t.box} px-3.5 py-2.5`}>
-                    <div className="flex items-start gap-2.5">
+                  <li key={c.id} className={`rounded-lg border border-border border-l-4 ${t.box} px-4 py-3`}>
+                    <div className="flex items-start gap-3">
                       <Icon className={`w-4 h-4 mt-0.5 shrink-0 ${t.iconClass}`} aria-hidden="true" />
                       <div className="min-w-0 flex-1">
-                        <p className="text-[13.5px] font-semibold">
+                        <p className="text-[13px] font-semibold">
                           <span className={`${t.iconClass} font-bold`}>{t.label}:</span> {c.message}
                         </p>
-                        <p className="text-[11.5px] text-ink-mute mt-0.5">
+                        <p className="text-[12px] text-ink-mute mt-1">
                           {c.ruleId} · {c.severity} · {SOURCE[c.source] ?? c.source}
                           {c.flags.length > 0 && ` · ${c.flags.join(", ")}`}
                         </p>
                         {(c.quote || c.location) && (
-                          <figure className="mt-1.5">
-                            {c.quote && <blockquote className="text-[12.5px] font-mono bg-card border border-border rounded px-2 py-1 break-words">“{c.quote}”</blockquote>}
+                          <figure className="mt-2">
+                            {c.quote && <blockquote className="text-[12px] font-mono bg-card border border-border rounded px-2 py-1 break-words">“{c.quote}”</blockquote>}
                             {c.location && (
-                              <figcaption className="text-[11.5px] text-ink-mute mt-0.5">
+                              <figcaption className="text-[12px] text-ink-mute mt-1">
                                 {c.link ? (
                                   <a href={c.link} target="_blank" rel="noopener noreferrer" className={`text-brand-600 hover:underline rounded ${focusRing}`}>
                                     {c.location}
@@ -171,37 +162,34 @@ export default async function RunReviewPage({ params }: { params: Promise<{ agen
               })}
             </ul>
           )}
-        </section>
+        </Section>
 
         <div className="space-y-6">
           {review.openQuestions.length > 0 && (
-            <section aria-labelledby="open-questions" className={card}>
-              <h2 id="open-questions" className={sectionTitle}>
-                Open questions
-              </h2>
+            <Section id="open-questions" title="Open questions" card last>
               <p className="text-[13px] text-ink-soft mb-4">
                 {review.openQuestions.length} question{review.openQuestions.length === 1 ? "" : "s"} for the reviewer: what the documents did not show, model reads that disagreed, or rules outside
                 this agent&apos;s checks. Approval does not wait on them, so settle each first; a client document request is for staff to raise with the client — Firm OS does not contact the client.
               </p>
-              <ul className="space-y-2.5">
+              <ul className="space-y-3">
                 {review.openQuestions.map((q) => {
                   const t = questionTone(q);
                   return (
-                    <li key={q.id} className={`rounded-lg border border-border border-l-4 ${t.box} px-3.5 py-2.5`}>
-                      <div className="flex items-start gap-2.5">
+                    <li key={q.id} className={`rounded-lg border border-border border-l-4 ${t.box} px-4 py-3`}>
+                      <div className="flex items-start gap-3">
                         <CircleHelp className={`w-4 h-4 mt-0.5 shrink-0 ${t.iconClass}`} aria-hidden="true" />
                         <div className="min-w-0 flex-1">
-                          <p className="text-[13.5px] font-semibold">
+                          <p className="text-[13px] font-semibold">
                             <span className={`${t.iconClass} font-bold`}>{t.label}:</span> {q.question}
                           </p>
-                          <p className="text-[11.5px] text-ink-mute mt-0.5">
+                          <p className="text-[12px] text-ink-mute mt-1">
                             {q.ruleId} · {QUESTION_KIND[q.kind]}
                           </p>
                           {(q.quote || q.location) && (
-                            <figure className="mt-1.5">
-                              {q.quote && <blockquote className="text-[12.5px] font-mono bg-card border border-border rounded px-2 py-1 break-words">“{q.quote}”</blockquote>}
+                            <figure className="mt-2">
+                              {q.quote && <blockquote className="text-[12px] font-mono bg-card border border-border rounded px-2 py-1 break-words">“{q.quote}”</blockquote>}
                               {q.location && (
-                                <figcaption className="text-[11.5px] text-ink-mute mt-0.5">
+                                <figcaption className="text-[12px] text-ink-mute mt-1">
                                   {q.link ? (
                                     <a href={q.link} target="_blank" rel="noopener noreferrer" className={`text-brand-600 hover:underline rounded ${focusRing}`}>
                                       {q.location}
@@ -214,7 +202,7 @@ export default async function RunReviewPage({ params }: { params: Promise<{ agen
                             </figure>
                           )}
                           {q.heldBack && (
-                            <p className="text-[13px] mt-1.5 tabular-nums">
+                            <p className="text-[13px] mt-2 tabular-nums">
                               <span className="text-ink-mute">{q.heldBack.label}: </span>
                               <span className="font-bold">{q.heldBack.amount}</span>
                             </p>
@@ -225,7 +213,7 @@ export default async function RunReviewPage({ params }: { params: Promise<{ agen
                   );
                 })}
               </ul>
-            </section>
+            </Section>
           )}
           {closeLoop && <CloseLoopStatus view={closeLoop} />}
           <DeliverablesPanel deliverables={review.deliverables} />

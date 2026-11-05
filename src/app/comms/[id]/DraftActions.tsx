@@ -1,10 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { btnGhost, call } from "@/components/ui";
-
-const focusRing = "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2";
-const primary = `px-4 py-2.5 rounded-full bg-brand-500 hover:bg-brand-600 text-white text-sm font-bold transition disabled:opacity-50 ${focusRing}`;
+import { call, linkText, pageBleed, pageGutter } from "@/components/ui";
+import { Button } from "@/components/firm-os";
 
 // "Open in Outlook draft" (primary) puts the message in the Drafts folder of the person's own
 // mailbox and opens it; "Copy" puts subject + body on the clipboard. Neither sends anything.
@@ -36,24 +34,23 @@ export function DraftActions({ id, subject, body, inOutlook }: { id: string; sub
   }
 
   return (
-    <div className="sticky bottom-0 mt-6 -mx-5 sm:-mx-8 px-5 sm:px-8 py-3 border-t border-border bg-card/95 backdrop-blur flex flex-wrap items-center gap-3">
-      <button type="button" className={primary} disabled={busy} onClick={openOutlook}>
-        {busy ? "Creating the Outlook draft…" : "Open in Outlook draft"}
-      </button>
-      <button type="button" className={`${btnGhost} ${focusRing}`} onClick={copy}>
-        Copy
-      </button>
-      <span className="text-[12.5px] text-ink-mute" role="status" aria-live="polite">
+    // The page's action bar, as on the run review screen: sticky at the bottom, edge to edge.
+    <div className={`sticky bottom-0 mt-8 -mb-8 ${pageBleed} ${pageGutter} py-3 border-t border-border bg-card/95 backdrop-blur flex flex-wrap items-center gap-3`}>
+      <Button variant="primary" busy={busy} busyLabel="Creating the Outlook draft…" onClick={openOutlook}>
+        Open in Outlook draft
+      </Button>
+      <Button onClick={copy}>Copy</Button>
+      <span className="text-[12px] leading-4 text-ink-mute" role="status" aria-live="polite">
         {msg ? (
           <>
             {msg.text}{" "}
             {msg.link && (
-              <a href={msg.link} target="_blank" rel="noopener noreferrer" className="font-semibold text-brand-600 hover:underline">
+              <a href={msg.link} target="_blank" rel="noopener noreferrer" className={linkText}>
                 Open it again
               </a>
             )}
             {msg.connect && (
-              <a href={msg.connect} className="font-semibold text-brand-600 hover:underline">
+              <a href={msg.connect} className={linkText}>
                 Connect mailbox
               </a>
             )}

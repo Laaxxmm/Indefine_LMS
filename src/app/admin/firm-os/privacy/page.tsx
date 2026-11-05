@@ -2,8 +2,8 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { isAdmin } from "@/lib/access";
-import { card } from "@/components/ui";
-import { focusRing, linkText, sectionTitle } from "@/app/agents/parts";
+import { btnGhost, card, field, figure, focusRing, labelText, linkText, sectionTitle, td, tr } from "@/components/ui";
+import { DataTable, EmptyState, Section } from "@/components/firm-os";
 import { prisma } from "@/lib/prisma";
 import { istDayKey } from "@/lib/ist";
 import { listRequests } from "@/lib/privacy/register";
@@ -17,8 +17,7 @@ export const dynamic = "force-dynamic";
 // correction, erasure, grievance, nomination, consent withdrawal) with their due dates. Admins
 // work it here; the steps of each request are on its own page. Identifiers are never shown raw.
 
-const headCell = "font-semibold py-2.5";
-const control = `bg-white border border-border rounded-lg px-3 py-2 ${focusRing}`;
+const control = `${field} w-auto font-normal text-ink`;
 
 export default async function PrivacyRequestsPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const session = await auth();
@@ -49,7 +48,7 @@ export default async function PrivacyRequestsPage({ searchParams }: { searchPara
         {stats.map((s) => (
           <div key={s.label} className={card}>
             <p className={sectionTitle}>{s.label}</p>
-            <p className={`font-display text-[26px] font-extrabold tabular-nums leading-none ${s.alert ? "text-red-700" : ""}`}>{s.value}</p>
+            <p className={`${figure} ${s.alert ? "text-rose-700" : ""}`}>{s.value}</p>
           </div>
         ))}
       </div>
@@ -61,9 +60,9 @@ export default async function PrivacyRequestsPage({ searchParams }: { searchPara
         <NewRequestForm kinds={kinds} today={istDayKey(now)} />
       </section>
 
-      <form method="GET" className={`${card} mb-6 flex flex-wrap items-end gap-4`}>
-        <label className="text-sm">
-          <span className="block text-ink-mute mb-1">Status</span>
+      <form method="GET" className={`${card} mb-6 flex flex-wrap items-end gap-4`} aria-label="Filter requests">
+        <label className={`flex flex-col gap-1 ${labelText}`}>
+          Status
           <select name="status" defaultValue={filters.status} className={control}>
             <option value="">All</option>
             <option value="open">Open (not closed)</option>
@@ -74,8 +73,8 @@ export default async function PrivacyRequestsPage({ searchParams }: { searchPara
             ))}
           </select>
         </label>
-        <label className="text-sm">
-          <span className="block text-ink-mute mb-1">Kind</span>
+        <label className={`flex flex-col gap-1 ${labelText}`}>
+          Kind
           <select name="kind" defaultValue={filters.kind} className={control}>
             <option value="">All</option>
             {kinds.map((k) => (
@@ -85,52 +84,40 @@ export default async function PrivacyRequestsPage({ searchParams }: { searchPara
             ))}
           </select>
         </label>
-        <label className="text-sm inline-flex items-center gap-2 pb-2">
+        <label className="text-[13px] leading-5 inline-flex items-center gap-2 h-10">
           <input type="checkbox" name="overdue" value="1" defaultChecked={filters.overdue} className={`h-4 w-4 rounded border-border ${focusRing}`} />
           Overdue only
         </label>
-        <button className={`px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold ${focusRing}`}>Apply</button>
+        <button type="submit" className={`${btnGhost} h-10`}>
+          Apply
+        </button>
       </form>
 
-      <section className={`${card} min-w-0`}>
-        <h2 className={sectionTitle}>Requests, earliest due first</h2>
+      <Section id="requests" title="Requests, earliest due first" last className="min-w-0">
         {rows.length === 0 ? (
-          <p className="text-sm text-ink-mute">No privacy requests match these filters.</p>
+          <EmptyState title="No privacy requests match these filters." />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-ink-mute">
-                <tr className="border-b border-border">
-                  <th scope="col" className={`text-left ${headCell} pr-3`}>Request</th>
-                  <th scope="col" className={`text-left ${headCell} px-3`}>Person</th>
-                  <th scope="col" className={`text-left ${headCell} px-3`}>Status</th>
-                  <th scope="col" className={`text-left ${headCell} px-3`}>Received</th>
-                  <th scope="col" className={`text-left ${headCell} pl-3`}>Due</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id} className="border-b border-border last:border-0 h-11">
-                    <td className="pr-3">
-                      <Link href={`/admin/firm-os/privacy/${encodeURIComponent(r.id)}`} className={linkText}>
-                        {r.kindLabel}
-                      </Link>
-                    </td>
-                    <td className="px-3 break-words">{r.principalLabel}</td>
-                    <td className="px-3">
-                      <RequestStatusChip status={r.status} label={r.statusLabel} />
-                    </td>
-                    <td className="px-3 tabular-nums whitespace-nowrap">{r.receivedLabel}</td>
-                    <td className="pl-3 whitespace-nowrap">
-                      <DueDate label={r.dueLabel} overdue={r.overdue} daysLeft={r.daysLeft} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable caption="Privacy requests, earliest due first" columns={[{ label: "Request" }, { label: "Person" }, { label: "Status" }, { label: "Received" }, { label: "Due" }]}>
+            {rows.map((r) => (
+              <tr key={r.id} className={tr}>
+                <td className={td}>
+                  <Link href={`/admin/firm-os/privacy/${encodeURIComponent(r.id)}`} className={linkText}>
+                    {r.kindLabel}
+                  </Link>
+                </td>
+                <td className={`${td} break-words`}>{r.principalLabel}</td>
+                <td className={td}>
+                  <RequestStatusChip status={r.status} label={r.statusLabel} />
+                </td>
+                <td className={`${td} tabular-nums whitespace-nowrap`}>{r.receivedLabel}</td>
+                <td className={`${td} whitespace-nowrap`}>
+                  <DueDate label={r.dueLabel} overdue={r.overdue} daysLeft={r.daysLeft} />
+                </td>
+              </tr>
+            ))}
+          </DataTable>
         )}
-      </section>
+      </Section>
     </main>
   );
 }

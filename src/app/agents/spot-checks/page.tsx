@@ -4,7 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { canSeeAllRuns } from "@/lib/agents/access";
 import { canSpotCheck } from "@/lib/rbac/policy";
 import { listSpotChecks, type SpotCheckRow } from "@/lib/audit/spot-checks";
-import { BackLink, EmptyState, eyebrow, pageTitle, runsListLabel, sectionTitle, tableWrap, td, th, thead } from "../parts";
+import { DataTable, EmptyState, PageHeader, Section } from "@/components/firm-os";
+import { td, tr } from "@/components/ui";
+import { runsListLabel } from "../parts";
 import { SpotCheckAction } from "./SpotCheckAction";
 
 export const dynamic = "force-dynamic";
@@ -15,8 +17,8 @@ function JobCell({ r }: { r: SpotCheckRow }) {
   return r.job ? (
     <>
       <span className="font-semibold">{r.job.title}</span>
-      <span className="ml-2 text-[11.5px] text-ink-mute">{r.job.service}</span>
-      <span className="block text-[11.5px] text-ink-mute tabular-nums">
+      <span className="ml-2 text-[12px] text-ink-mute">{r.job.service}</span>
+      <span className="block text-[12px] text-ink-mute tabular-nums">
         {r.job.period} · FY {r.job.fy}
       </span>
     </>
@@ -28,85 +30,59 @@ function JobCell({ r }: { r: SpotCheckRow }) {
 function TuriaCell({ r }: { r: SpotCheckRow }) {
   return (
     <>
-      <span className="font-mono text-[12.5px]">{r.turiaRef ?? "—"}</span>
-      <span className="block text-[11.5px] text-ink-mute tabular-nums">{r.minutesLogged ?? "—"} min logged</span>
+      <span className="font-mono text-[12px]">{r.turiaRef ?? "—"}</span>
+      <span className="block text-[12px] text-ink-mute tabular-nums">{r.minutesLogged ?? "—"} min logged</span>
     </>
   );
 }
 
 function PendingTable({ rows }: { rows: SpotCheckRow[] }) {
   return (
-    <div className={tableWrap}>
-      <table className="w-full text-[13.5px]">
-        <caption className="sr-only">Manual Turia closes selected for a partner spot check, oldest first</caption>
-        <thead className={thead}>
-          <tr>
-            <th scope="col" className={th}>Job</th>
-            <th scope="col" className={th}>Client</th>
-            <th scope="col" className={th}>Turia task ref</th>
-            <th scope="col" className={th}>Confirmed by</th>
-            <th scope="col" className={th}>Selected (IST)</th>
-            <th scope="col" className={`${th} text-right`}>
-              <span className="sr-only">Action</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.syncId} className="border-t border-border hover:bg-muted/40 align-top">
-              <td className={td}>
-                <JobCell r={r} />
-              </td>
-              <td className={`${td} font-semibold`}>{r.job?.clientCode ?? "—"}</td>
-              <td className={td}>
-                <TuriaCell r={r} />
-              </td>
-              <td className={td}>{r.confirmedBy}</td>
-              <td className={`${td} tabular-nums whitespace-nowrap text-ink-mute`}>{r.selectedAt}</td>
-              <td className={`${td} text-right`}>
-                <SpotCheckAction syncId={r.syncId} label={jobLabel(r)} />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <DataTable
+      caption="Manual Turia closes selected for a partner spot check, oldest first"
+      columns={[{ label: "Job" }, { label: "Client" }, { label: "Turia task ref" }, { label: "Confirmed by" }, { label: "Selected (IST)" }, { label: "Action", align: "right", srOnly: true }]}
+    >
+      {rows.map((r) => (
+        <tr key={r.syncId} className={tr}>
+          <td className={td}>
+            <JobCell r={r} />
+          </td>
+          <td className={`${td} font-semibold`}>{r.job?.clientCode ?? "—"}</td>
+          <td className={td}>
+            <TuriaCell r={r} />
+          </td>
+          <td className={td}>{r.confirmedBy}</td>
+          <td className={`${td} tabular-nums whitespace-nowrap text-ink-mute`}>{r.selectedAt}</td>
+          <td className={`${td} text-right`}>
+            <SpotCheckAction syncId={r.syncId} label={jobLabel(r)} />
+          </td>
+        </tr>
+      ))}
+    </DataTable>
   );
 }
 
 function CheckedTable({ rows }: { rows: SpotCheckRow[] }) {
   return (
-    <div className={tableWrap}>
-      <table className="w-full text-[13.5px]">
-        <caption className="sr-only">Spot checks already recorded, newest first</caption>
-        <thead className={thead}>
-          <tr>
-            <th scope="col" className={th}>Job</th>
-            <th scope="col" className={th}>Client</th>
-            <th scope="col" className={th}>Turia task ref</th>
-            <th scope="col" className={th}>Checked by</th>
-            <th scope="col" className={th}>Checked (IST)</th>
-            <th scope="col" className={th}>Note</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.syncId} className="border-t border-border align-top">
-              <td className={td}>
-                <JobCell r={r} />
-              </td>
-              <td className={`${td} font-semibold`}>{r.job?.clientCode ?? "—"}</td>
-              <td className={td}>
-                <TuriaCell r={r} />
-              </td>
-              <td className={td}>{r.checked?.by}</td>
-              <td className={`${td} tabular-nums whitespace-nowrap text-ink-mute`}>{r.checked?.at}</td>
-              <td className={`${td} max-w-xs break-words`}>{r.checked?.note ?? <span className="text-ink-mute">—</span>}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <DataTable
+      caption="Spot checks already recorded, newest first"
+      columns={[{ label: "Job" }, { label: "Client" }, { label: "Turia task ref" }, { label: "Checked by" }, { label: "Checked (IST)" }, { label: "Note" }]}
+    >
+      {rows.map((r) => (
+        <tr key={r.syncId} className={tr}>
+          <td className={td}>
+            <JobCell r={r} />
+          </td>
+          <td className={`${td} font-semibold`}>{r.job?.clientCode ?? "—"}</td>
+          <td className={td}>
+            <TuriaCell r={r} />
+          </td>
+          <td className={td}>{r.checked?.by}</td>
+          <td className={`${td} tabular-nums whitespace-nowrap text-ink-mute`}>{r.checked?.at}</td>
+          <td className={`${td} max-w-xs break-words`}>{r.checked?.note ?? <span className="text-ink-mute">—</span>}</td>
+        </tr>
+      ))}
+    </DataTable>
   );
 }
 
@@ -121,28 +97,20 @@ export default async function SpotChecksPage() {
 
   return (
     <div>
-      <BackLink href="/agents">{runsListLabel(canSeeAllRuns(session.user))}</BackLink>
-      <div className="mb-6">
-        <p className={eyebrow}>Firm OS · close loop</p>
-        <h1 className={pageTitle}>Turia spot checks</h1>
-        <p className="text-ink-mute text-[15px] mt-1.5 max-w-2xl">
-          Staff record Turia closes by hand, so about one in ten is picked for a partner to check. Open the task in Turia, check the task ref and the minutes logged, then record it here.
-        </p>
-      </div>
+      <PageHeader
+        back={{ href: "/agents", label: runsListLabel(canSeeAllRuns(session.user)) }}
+        eyebrow="Firm OS · close loop"
+        title="Turia spot checks"
+        lead="Staff record Turia closes by hand, so about one in ten is picked for a partner to check. Open the task in Turia, check the task ref and the minutes logged, then record it here."
+      />
 
-      <section aria-labelledby="to-check" className="mb-8">
-        <h2 id="to-check" className={sectionTitle}>
-          To check ({pending.length})
-        </h2>
+      <Section id="to-check" title={<>To check ({pending.length})</>}>
         {pending.length === 0 ? <EmptyState title="Nothing to check">Closes picked for a spot check appear here when their job is DONE.</EmptyState> : <PendingTable rows={pending} />}
-      </section>
+      </Section>
 
-      <section aria-labelledby="checked">
-        <h2 id="checked" className={sectionTitle}>
-          Checked
-        </h2>
+      <Section id="checked" title="Checked" last>
         {checked.length === 0 ? <EmptyState title="No spot checks recorded yet" /> : <CheckedTable rows={checked} />}
-      </section>
+      </Section>
     </div>
   );
 }

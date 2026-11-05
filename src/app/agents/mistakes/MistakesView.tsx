@@ -4,8 +4,8 @@
 import Link from "next/link";
 import type { RuleDefinition } from "@/lib/agents/core/checklist";
 import type { MistakeRow } from "@/lib/agents/views";
-import { card } from "@/components/ui";
-import { BackLink, chip, eyebrow, focusRing, pageTitle, sectionTitle } from "../parts";
+import { linkText, type ChipTone } from "@/components/ui";
+import { Chip, PageHeader, Section } from "@/components/firm-os";
 import { MistakeDecision } from "./MistakeDecision";
 
 function RuleLines({ rule }: { rule: RuleDefinition }) {
@@ -33,12 +33,12 @@ function RuleLines({ rule }: { rule: RuleDefinition }) {
 }
 
 function Diff({ row }: { row: MistakeRow }) {
-  if (row.problem) return <p className="text-[12.5px] text-rose-700 mt-2">{row.problem}</p>;
+  if (row.problem) return <p className="text-[12px] text-rose-700 mt-2">{row.problem}</p>;
   if (!row.diff) return null;
   const d = row.diff;
   return (
     <div className="mt-2">
-      <p className="text-[11.5px] text-ink-mute">
+      <p className="text-[12px] text-ink-mute">
         SOP pack {d.from === "previous" ? "previous version" : `v${d.from}`} → v{d.to}
         {row.status === "PROPOSED" && " (on approval)"}
       </p>
@@ -52,25 +52,21 @@ function Diff({ row }: { row: MistakeRow }) {
   );
 }
 
-const STATUS_TONE: Record<MistakeRow["status"], string> = {
-  PROPOSED: "border-amber-200 bg-amber-50 text-amber-800",
-  APPROVED: "border-emerald-200 bg-emerald-50 text-emerald-800",
-  REJECTED: "border-border bg-muted text-ink-soft",
-};
+const STATUS_TONE: Record<MistakeRow["status"], ChipTone> = { PROPOSED: "warning", APPROVED: "success", REJECTED: "neutral" };
 
 function Row({ row, canDecide, names }: { row: MistakeRow; canDecide: boolean; names: Map<string, string> }) {
   return (
     <li className="py-4 first:pt-0 last:pb-0">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="min-w-0 flex-1">
-          <p className="text-[13.5px] font-semibold">{row.pattern}</p>
-          <p className="text-[11.5px] text-ink-mute mt-0.5">
+          <p className="text-[13px] font-semibold">{row.pattern}</p>
+          <p className="text-[12px] text-ink-mute mt-1">
             {row.agentTitle} · {row.ruleTitle} ({row.severity}) · logged by {names.get(row.createdBy) ?? row.createdBy} on {row.createdAt}
             {row.status !== "PROPOSED" && ` · decided ${row.decidedAt}`}
             {row.runId && (
               <>
                 {" · "}
-                <Link href={`/agents/${row.agent}/runs/${row.runId}`} className={`text-brand-600 hover:underline rounded ${focusRing}`}>
+                <Link href={`/agents/${row.agent}/runs/${row.runId}`} className={linkText}>
                   View the run
                 </Link>
               </>
@@ -78,10 +74,10 @@ function Row({ row, canDecide, names }: { row: MistakeRow; canDecide: boolean; n
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <span className={`${chip} ${STATUS_TONE[row.status]}`}>
+          <Chip tone={STATUS_TONE[row.status]}>
             {row.status}
             {row.promotedToVersion && ` → v${row.promotedToVersion}`}
-          </span>
+          </Chip>
           {row.status === "PROPOSED" && canDecide && !row.problem && <MistakeDecision id={row.id} label={row.ruleTitle} toVersion={row.diff?.to ?? null} />}
         </div>
       </div>
@@ -93,48 +89,19 @@ function Row({ row, canDecide, names }: { row: MistakeRow; canDecide: boolean; n
 const INTRO =
   "Findings reviewers say an agent missed or got wrong. Approving one adds its rule to a new minor version of the SOP pack; the next runs use it. Nothing is promoted without a partner.";
 
-/** The admin area's page header (eyebrow "Admin · …", title, "← Admin" on the right), as on the models and cycle-time pages. */
-function AdminHeader() {
-  return (
-    <div className="mb-6 flex items-end justify-between flex-wrap gap-4">
-      <div>
-        <p className={`${eyebrow} mb-1.5`}>Admin · Firm OS</p>
-        <h1 className="font-display text-[32px] font-extrabold tracking-[-0.02em] leading-none">Mistake log</h1>
-        <p className="text-sm text-ink-mute mt-2 max-w-2xl">{INTRO}</p>
-      </div>
-      <Link
-        href="/admin"
-        className={`text-sm text-ink-mute hover:text-ink inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white hover:bg-muted border border-border shadow-soft transition shrink-0 ${focusRing}`}
-      >
-        ← Admin
-      </Link>
-    </div>
-  );
-}
-
 /**
  * `back` renders the agents-area header (back link to the runs list, eyebrow "Firm OS"); `admin`
- * renders the admin-area header instead, so each copy matches the pages around it.
+ * renders the admin-area one (back link to Admin, eyebrow "Admin · Firm OS"). Same PageHeader.
  */
 export function MistakesView({ data, names, back, admin = false }: { data: { canDecide: boolean; proposed: MistakeRow[]; decided: MistakeRow[] }; names: Map<string, string>; back?: { href: string; label: string }; admin?: boolean }) {
   return (
     <div>
       {admin ? (
-        <AdminHeader />
+        <PageHeader back={{ href: "/admin", label: "Admin" }} eyebrow="Admin · Firm OS" title="Mistake log" lead={INTRO} />
       ) : (
-        <>
-          {back && <BackLink href={back.href}>{back.label}</BackLink>}
-          <div className="mb-6">
-            <p className={eyebrow}>Firm OS · supervised learning</p>
-            <h1 className={pageTitle}>Mistake log</h1>
-            <p className="text-ink-mute text-[15px] mt-1.5 max-w-2xl">{INTRO}</p>
-          </div>
-        </>
+        <PageHeader back={back} eyebrow="Firm OS · supervised learning" title="Mistake log" lead={INTRO} />
       )}
-      <section aria-labelledby="proposed" className={`${card} mb-6`}>
-        <h2 id="proposed" className={sectionTitle}>
-          Waiting for a decision ({data.proposed.length})
-        </h2>
+      <Section id="proposed" title={<>Waiting for a decision ({data.proposed.length})</>} card>
         {data.proposed.length === 0 ? (
           <p className="text-[13px] text-ink-mute">Nothing waiting.</p>
         ) : (
@@ -144,12 +111,9 @@ export function MistakesView({ data, names, back, admin = false }: { data: { can
             ))}
           </ul>
         )}
-        {!data.canDecide && data.proposed.length > 0 && <p className="text-[12.5px] text-ink-mute mt-3">Only a partner can approve or reject.</p>}
-      </section>
-      <section aria-labelledby="decided" className={card}>
-        <h2 id="decided" className={sectionTitle}>
-          Decided
-        </h2>
+        {!data.canDecide && data.proposed.length > 0 && <p className="text-[12px] text-ink-mute mt-3">Only a partner can approve or reject.</p>}
+      </Section>
+      <Section id="decided" title="Decided" card last>
         {data.decided.length === 0 ? (
           <p className="text-[13px] text-ink-mute">No decisions yet.</p>
         ) : (
@@ -159,7 +123,7 @@ export function MistakesView({ data, names, back, admin = false }: { data: { can
             ))}
           </ul>
         )}
-      </section>
+      </Section>
     </div>
   );
 }

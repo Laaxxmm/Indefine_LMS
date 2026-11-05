@@ -3,14 +3,16 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { FirmService } from "@prisma/client";
-import { btnGhost, call, card, errorText, field } from "@/components/ui";
+import { btnGhost, call, card, errorText, field, formWidth, hintText, labelText } from "@/components/ui";
+import { Button } from "@/components/firm-os";
 import type { DraftContext, JobOption } from "@/lib/agents/comms/service";
 import { COMMS_KINDS, COMMS_LANGUAGES, FIRM_SERVICES, KIND_LABELS, LANGUAGE_LABELS, LIMITS, type CommsKind, type CommsLanguage, type ReminderAsk } from "@/lib/agents/comms/types";
 
+const label = `flex flex-col gap-1 ${labelText}`;
+const legend = labelText;
+const hint = `${hintText} font-normal`;
+/** Focus ring for checkboxes and radios (fields carry it in ui.ts field). */
 const focusRing = "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2";
-const primary = `px-4 py-2.5 rounded-full bg-brand-500 hover:bg-brand-600 text-white text-sm font-bold transition disabled:opacity-50 ${focusRing}`;
-const label = "block text-[13px] font-semibold";
-const hint = "text-[12px] text-ink-mute font-normal";
 
 const KIND_HINT: Record<CommsKind, string> = {
   status: "Where the job stands, and its due date.",
@@ -87,11 +89,11 @@ export function DraftForm({ ctx }: { ctx: DraftContext }) {
   }
 
   return (
-    <form onSubmit={submit} className={`${card} space-y-5 max-w-[720px]`} aria-describedby={error ? "draft-error" : undefined}>
+    <form onSubmit={submit} className={`${card} space-y-6 ${formWidth}`} aria-describedby={error ? "draft-error" : undefined}>
       {ctx.jobs.length > 0 && (
         <label className={label}>
           Job
-          <select className={`${field} mt-1.5 ${focusRing}`} value={jobId} onChange={(e) => setJobId(e.target.value)}>
+          <select className={`${field} font-normal text-ink`} value={jobId} onChange={(e) => setJobId(e.target.value)}>
             <option value="">No job (a general answer to the client)</option>
             {ctx.jobs.map((j) => (
               <option key={j.id} value={j.id}>
@@ -103,12 +105,12 @@ export function DraftForm({ ctx }: { ctx: DraftContext }) {
       )}
 
       <fieldset>
-        <legend className={label}>What is the message for?</legend>
+        <legend className={legend}>What is the message for?</legend>
         <div className="mt-2 grid sm:grid-cols-2 gap-2">
           {COMMS_KINDS.map((k) => {
             const no = blocked(k, job);
             return (
-              <label key={k} className={`flex gap-2.5 rounded-lg border px-3 py-2.5 text-[13px] ${kind === k ? "border-brand-500 bg-brand-50" : "border-border"} ${no ? "opacity-60" : "cursor-pointer"}`}>
+              <label key={k} className={`flex gap-3 rounded-lg border px-3 py-3 text-[13px] ${kind === k ? "border-brand-500 bg-brand-50" : "border-border"} ${no ? "opacity-60" : "cursor-pointer"}`}>
                 <input type="radio" name="kind" value={k} checked={kind === k} disabled={!!no} onChange={() => setKind(k)} className={`mt-0.5 ${focusRing}`} />
                 <span>
                   <span className="font-semibold">{KIND_LABELS[k]}</span>
@@ -122,7 +124,7 @@ export function DraftForm({ ctx }: { ctx: DraftContext }) {
 
       {kind === "doc-chase" && (
         <fieldset className="space-y-2">
-          <legend className={label}>
+          <legend className={legend}>
             Documents to ask for <span className={hint}>(at most {LIMITS.maxItems}; edit the wording as you like)</span>
           </legend>
           {items.length === 0 && <p className={hint}>No documents suggested by the agent run. Add them below.</p>}
@@ -136,7 +138,7 @@ export function DraftForm({ ctx }: { ctx: DraftContext }) {
                 className={focusRing}
               />
               <input
-                className={`${field} ${focusRing}`}
+                className={field}
                 aria-label={`Document ${i + 1}`}
                 maxLength={LIMITS.itemChars}
                 value={it.text}
@@ -145,8 +147,8 @@ export function DraftForm({ ctx }: { ctx: DraftContext }) {
             </div>
           ))}
           <div className="flex items-center gap-2">
-            <input className={`${field} ${focusRing}`} aria-label="Another document" placeholder="Another document, e.g. Bank statement for October 2026" maxLength={LIMITS.itemChars} value={extra} onChange={(e) => setExtra(e.target.value)} />
-            <button type="button" className={`${btnGhost} ${focusRing} shrink-0`} onClick={addItem}>
+            <input className={field} aria-label="Another document" placeholder="Another document, e.g. Bank statement for October 2026" maxLength={LIMITS.itemChars} value={extra} onChange={(e) => setExtra(e.target.value)} />
+            <button type="button" className={`${btnGhost} shrink-0 h-10`} onClick={addItem}>
               Add
             </button>
           </div>
@@ -156,7 +158,7 @@ export function DraftForm({ ctx }: { ctx: DraftContext }) {
 
       {kind === "due-reminder" && (
         <fieldset>
-          <legend className={label}>The one thing the client should do</legend>
+          <legend className={legend}>The one thing the client should do</legend>
           <div className="mt-2 flex flex-wrap gap-4 text-[13px]">
             {(
               [
@@ -176,7 +178,7 @@ export function DraftForm({ ctx }: { ctx: DraftContext }) {
       {(kind === "doc-chase" || kind === "due-reminder") && (
         <label className={label}>
           Reply needed by
-          <input type="date" required className={`${field} mt-1.5 max-w-[12rem] ${focusRing}`} value={replyBy} onChange={(e) => setReplyBy(e.target.value)} />
+          <input type="date" required className={`${field} font-normal text-ink max-w-[12rem]`} value={replyBy} onChange={(e) => setReplyBy(e.target.value)} />
         </label>
       )}
 
@@ -184,7 +186,7 @@ export function DraftForm({ ctx }: { ctx: DraftContext }) {
         <label className={label}>
           {kind === "filing-completed" ? "Amount paid with the return (optional)" : ask === "payment" ? "Amount to pay" : "Amount payable (optional)"}{" "}
           <span className={hint}>₹, from the approved pack</span>
-          <input inputMode="decimal" className={`${field} mt-1.5 max-w-[14rem] tabular-nums ${focusRing}`} placeholder="1,23,456.00" value={amount} onChange={(e) => setAmount(e.target.value)} required={kind === "due-reminder" && ask === "payment"} />
+          <input inputMode="decimal" className={`${field} font-normal text-ink max-w-[14rem] tabular-nums`} placeholder="1,23,456.00" value={amount} onChange={(e) => setAmount(e.target.value)} required={kind === "due-reminder" && ask === "payment"} />
         </label>
       )}
 
@@ -193,7 +195,7 @@ export function DraftForm({ ctx }: { ctx: DraftContext }) {
           {!jobId && (
             <label className={label}>
               Department
-              <select className={`${field} mt-1.5 max-w-[16rem] ${focusRing}`} value={department} onChange={(e) => setDepartment(e.target.value as FirmService)}>
+              <select className={`${field} font-normal text-ink max-w-[16rem]`} value={department} onChange={(e) => setDepartment(e.target.value as FirmService)}>
                 {FIRM_SERVICES.map((d) => (
                   <option key={d} value={d}>
                     {DEPARTMENT_NAMES[d]}
@@ -204,18 +206,18 @@ export function DraftForm({ ctx }: { ctx: DraftContext }) {
           )}
           <label className={label}>
             The client asked about <span className={hint}>(a few words, e.g. &quot;GST on office rent&quot;)</span>
-            <input className={`${field} mt-1.5 ${focusRing}`} maxLength={LIMITS.topicChars} required value={topic} onChange={(e) => setTopic(e.target.value)} />
+            <input className={`${field} font-normal text-ink`} maxLength={LIMITS.topicChars} required value={topic} onChange={(e) => setTopic(e.target.value)} />
           </label>
           <label className={label}>
             Your answer <span className={hint}>(at most {LIMITS.answerChars} characters; one ask at most)</span>
-            <textarea className={`${field} mt-1.5 font-sans ${focusRing}`} rows={6} maxLength={LIMITS.answerChars} required value={answer} onChange={(e) => setAnswer(e.target.value)} />
+            <textarea className={`${field} font-normal text-ink font-sans`} rows={6} maxLength={LIMITS.answerChars} required value={answer} onChange={(e) => setAnswer(e.target.value)} />
           </label>
         </>
       )}
 
       <label className={label}>
         Language
-        <select className={`${field} mt-1.5 max-w-[12rem] ${focusRing}`} value={language} onChange={(e) => setLanguage(e.target.value as CommsLanguage)}>
+        <select className={`${field} font-normal text-ink max-w-[12rem]`} value={language} onChange={(e) => setLanguage(e.target.value as CommsLanguage)}>
           {COMMS_LANGUAGES.map((l) => (
             <option key={l} value={l}>
               {LANGUAGE_LABELS[l]}
@@ -227,7 +229,7 @@ export function DraftForm({ ctx }: { ctx: DraftContext }) {
         </span>
       </label>
 
-      <label className="flex items-start gap-2.5 text-[13px]">
+      <label className="flex items-start gap-3 text-[13px]">
         <input type="checkbox" checked={ids} onChange={(e) => setIds(e.target.checked)} className={`mt-0.5 ${focusRing}`} />
         <span>
           The client asked for their PAN or Aadhaar in this message <span className={hint}>(it is then shown masked to the last 4 characters; otherwise it is left out)</span>
@@ -240,9 +242,9 @@ export function DraftForm({ ctx }: { ctx: DraftContext }) {
         </p>
       )}
       <div className="flex items-center gap-3 flex-wrap">
-        <button type="submit" className={primary} disabled={busy || !!why || (kind === "doc-chase" && (picked.length === 0 || picked.length > LIMITS.maxItems))}>
-          {busy ? "Preparing…" : "Prepare draft"}
-        </button>
+        <Button type="submit" variant="primary" busy={busy} busyLabel="Preparing…" disabled={!!why || (kind === "doc-chase" && (picked.length === 0 || picked.length > LIMITS.maxItems))}>
+          Prepare draft
+        </Button>
         <span className={hint}>Nothing is sent. You will see the draft first.</span>
       </div>
     </form>

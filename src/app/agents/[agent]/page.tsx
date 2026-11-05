@@ -5,8 +5,9 @@ import { canSeeAllRuns } from "@/lib/agents/access";
 import type { FirmDb } from "@/lib/agents/core/runner";
 import { getAgent, visibleAgents } from "@/lib/agents/registry";
 import { listRunnableJobs, listRuns } from "@/lib/agents/views";
-
-import { BackLink, EmptyState, RunsTable, StateChip, eyebrow, pageTitle, runsListLabel, tableWrap, td, th, thead, sectionTitle } from "../parts";
+import { DataTable, EmptyState, PageHeader, Section, StateChip } from "@/components/firm-os";
+import { td, tr } from "@/components/ui";
+import { RunsTable, runsListLabel } from "../parts";
 import { RunAgentButton } from "./RunAgentButton";
 
 export const dynamic = "force-dynamic";
@@ -23,16 +24,9 @@ export default async function AgentPage({ params }: { params: Promise<{ agent: s
 
   return (
     <div>
-      <BackLink href="/agents">{runsListLabel(canSeeAllRuns(session.user))}</BackLink>
-      <div className="mb-6">
-        <p className={eyebrow}>Agent · {def.service}</p>
-        <h1 className={pageTitle}>{def.title}</h1>
-      </div>
+      <PageHeader back={{ href: "/agents", label: runsListLabel(canSeeAllRuns(session.user)) }} eyebrow={`Agent · ${def.service}`} title={def.title} />
 
-      <section aria-labelledby="ready" className="mb-8">
-        <h2 id="ready" className={sectionTitle}>
-          Jobs ready for the agent
-        </h2>
+      <Section id="ready" title="Jobs ready for the agent">
         {jobs.length === 0 ? (
           <EmptyState title="Nothing to run">
             {canSeeAllRuns(session.user)
@@ -40,50 +34,33 @@ export default async function AgentPage({ params }: { params: Promise<{ agent: s
               : `${def.service} jobs assigned to you appear here when they are ASSIGNED or IN_PREP.`}
           </EmptyState>
         ) : (
-          <div className={tableWrap}>
-            <table className="w-full text-[13.5px]">
-              <caption className="sr-only">Jobs the agent can prepare now</caption>
-              <thead className={thead}>
-                <tr>
-                  <th scope="col" className={th}>Job</th>
-                  <th scope="col" className={th}>Client</th>
-                  <th scope="col" className={th}>Period</th>
-                  <th scope="col" className={th}>Job state</th>
-                  <th scope="col" className={th}>Internal due</th>
-                  <th scope="col" className={`${th} text-right`}>
-                    <span className="sr-only">Action</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {jobs.map((j) => (
-                  <tr key={j.id} className="border-t border-border hover:bg-muted/40 h-11">
-                    <td className={`${td} font-semibold`}>{j.title}</td>
-                    <td className={td}>{j.clientCode}</td>
-                    <td className={`${td} tabular-nums`}>
-                      {j.period} · FY {j.fy}
-                    </td>
-                    <td className={td}>
-                      <StateChip state={j.state} />
-                    </td>
-                    <td className={`${td} tabular-nums`}>{j.internalDue}</td>
-                    <td className={`${td} text-right`}>
-                      <RunAgentButton agent={def.key} jobId={j.id} label={`Run agent on ${j.title} for ${j.clientCode}`} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            caption="Jobs the agent can prepare now"
+            columns={[{ label: "Job" }, { label: "Client" }, { label: "Period" }, { label: "Job state" }, { label: "Internal due" }, { label: "Action", align: "right", srOnly: true }]}
+          >
+            {jobs.map((j) => (
+              <tr key={j.id} className={tr}>
+                <td className={`${td} font-semibold`}>{j.title}</td>
+                <td className={td}>{j.clientCode}</td>
+                <td className={`${td} tabular-nums`}>
+                  {j.period} · FY {j.fy}
+                </td>
+                <td className={td}>
+                  <StateChip state={j.state} />
+                </td>
+                <td className={`${td} tabular-nums`}>{j.internalDue}</td>
+                <td className={`${td} text-right`}>
+                  <RunAgentButton agent={def.key} jobId={j.id} label={`Run agent on ${j.title} for ${j.clientCode}`} />
+                </td>
+              </tr>
+            ))}
+          </DataTable>
         )}
-      </section>
+      </Section>
 
-      <section aria-labelledby="runs">
-        <h2 id="runs" className={sectionTitle}>
-          Runs
-        </h2>
+      <Section id="runs" title="Runs" last>
         {runs.length === 0 ? <EmptyState title="No runs yet" /> : <RunsTable runs={runs} showAgent={false} />}
-      </section>
+      </Section>
     </div>
   );
 }

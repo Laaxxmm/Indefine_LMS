@@ -1,8 +1,6 @@
 // Display formats for Firm OS deliverables and screens (orchestrator DESIGN): amounts in Indian
 // grouping (1,23,456.00), dates DD MMM YYYY, times IST. Day math goes through src/lib/ist.ts.
-import { istDayKey, utcToIstWall } from "@/lib/ist";
-
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
+import { SHORT_MONTHS as MONTHS, istDayKey, utcToIstWall } from "@/lib/ist";
 const MAX_PAISE = Number.MAX_SAFE_INTEGER;
 
 /** Group an unsigned digit string the Indian way: last three, then pairs (12,34,56,789). */

@@ -1,12 +1,12 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { card } from "@/components/ui";
+import { card, formWidth, sectionTitle } from "@/components/ui";
 import { hasCompanionAccess } from "@/lib/companion/access";
 import { companionDb } from "@/lib/companion/defaults";
 import { COMPANION_MAX_ACTIVE_TOKENS, COMPANION_TOKEN_TTL_DAYS } from "@/lib/companion/config";
 import { MSG } from "@/lib/companion/messages";
 import { listPairings } from "@/lib/companion/tokens";
-import { eyebrow, pageTitle, sectionTitle } from "@/app/agents/parts";
+import { PageHeader } from "@/components/firm-os";
 import { CompanionPanel } from "./CompanionPanel";
 
 export const dynamic = "force-dynamic";
@@ -29,30 +29,28 @@ export default async function CompanionPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <p className={eyebrow}>Firm OS</p>
-        <h1 className={pageTitle}>Companion</h1>
-        <p className="text-ink-mute text-[15px] mt-1.5 max-w-2xl">
-          The Companion is a Chrome side panel that keeps your current task&apos;s steps beside the page you are working on, one task at a time. It only reads your task list. It never reads, fills or submits any web page, and never files, signs, pays or sends anything.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Firm OS"
+        title="Companion"
+        lead="The Companion is a Chrome side panel that keeps your current task's steps beside the page you are working on, one task at a time. It only reads your task list. It never reads, fills or submits any web page, and never files, signs, pays or sends anything."
+      />
 
       {pairings ? (
         <CompanionPanel pairings={pairings.active} inactiveCount={pairings.inactiveCount} maxActive={COMPANION_MAX_ACTIVE_TOKENS} ttlDays={COMPANION_TOKEN_TTL_DAYS} />
       ) : (
-        <section aria-labelledby="no-access" className={`${card} max-w-[640px]`}>
+        <section aria-labelledby="no-access" className={`${card} ${formWidth}`}>
           <h2 id="no-access" className={sectionTitle}>
             Not turned on for you
           </h2>
-          <p className="text-[13.5px]">{MSG.noAccess}</p>
+          <p className="text-[13px]">{MSG.noAccess}</p>
         </section>
       )}
 
-      <section aria-labelledby="setup" className="mt-8 max-w-[640px]">
+      <section aria-labelledby="setup" className={`mt-8 ${formWidth}`}>
         <h2 id="setup" className={sectionTitle}>
           How to set it up
         </h2>
-        <ol className={`${card} space-y-2 text-[13.5px]`}>
+        <ol className={`${card} space-y-2 text-[13px]`}>
           {SETUP_STEPS.map((s, i) => (
             <li key={s} className="flex gap-3">
               <span className="tabular-nums font-bold text-ink-mute w-5 shrink-0 text-right">{i + 1}.</span>

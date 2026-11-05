@@ -73,7 +73,7 @@ describe("/admin/firm-os/privacy", () => {
     expect(html).toContain("K. T. · KUMAR1 · PAN ****234F");
     expect(html).toContain("01 Oct 2026");
     expect(html).toContain("Overdue");
-    expect(html).toContain("text-red-700");
+    expect(html).toContain("text-rose-700"); // overdue in the danger red (rose-700, 6.3:1 on white)
     expect(html).toContain("05 Dec 2026");
     expect(html).not.toContain(PAN_PROP);
     expect(html).not.toContain("kiran@kumartraders.test");
@@ -182,7 +182,7 @@ describe("/admin/firm-os/breaches", () => {
     const html = clean(await renderHtml(await BreachesPage()));
     expect(html).toContain("70 h left");
     expect(html).toContain("26 h overdue");
-    expect(html).toMatch(/text-red-700[^"]*">26 h overdue/);
+    expect(html).toMatch(/text-rose-700[^"]*">26 h overdue/);
     expect(html).toContain("Board reports overdue");
     if (!fresh.ok || !old.ok) throw new Error("setup");
     const detail = clean(await renderHtml(await BreachPage(idp(old.data.id))));
