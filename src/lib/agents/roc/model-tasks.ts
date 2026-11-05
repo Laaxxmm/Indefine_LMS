@@ -16,6 +16,7 @@ import { z } from "zod";
 import { CHECK_TASK_INSTRUCTIONS, type ModelTaskSpec } from "@/lib/agents/core/guardrails/scope";
 import { INSUFFICIENT_EVIDENCE, ScopedVerdictSchema, type ScopedVerdict } from "@/lib/agents/core/guardrails/schema";
 import { EvidenceSchema, INSUFFICIENT, quoteIn } from "@/lib/agents/core/guardrails/shared";
+import { screenItems } from "@/lib/agents/core/guardrails/untrusted";
 import { FIN_HEADS, HEAD_LABELS, type FinHead, type RocInput, type TbLine } from "./parse";
 
 /** ROC department specifics, at the start of every ROC task prompt (after the framework's firm + department preambles). */
@@ -37,16 +38,32 @@ export const LedgerMappingSchema = z.object({
 });
 export type LedgerMapping = z.infer<typeof LedgerMappingSchema>;
 
+/** One trial-balance line as the model would see it (the label keeps the line's own index). */
+export type TbPromptLine = { index: number; label: string; ledger: string; text: string };
+export const tbPromptLines = (tb: TbLine[]): TbPromptLine[] =>
+  tb.map((l, i) => {
+    const label = `financials.json trialBalance[${i}]`;
+    return { index: i, label, ledger: l.ledger, text: `${label}: ${l.ledger}` };
+  });
+export const TB_SCREEN = { text: (l: TbPromptLine) => l.text, location: (l: TbPromptLine) => l.label };
+
+/**
+ * The lines the model may be shown: a ledger name that reads like an instruction to the AI is
+ * withheld (ADR-009) — never sent, never accepted from an answer, a reviewer question instead.
+ */
+export const sendableTbLines = (tb: TbLine[]): TbPromptLine[] => screenItems(tbPromptLines(tb), TB_SCREEN).clean;
+
 /** What the model is shown: one labelled line per ledger, no amounts (amounts are code's job). */
 export function ledgerPrompt(tb: TbLine[]): { labels: string[]; text: string } {
-  const labels = tb.map((_, i) => `financials.json trialBalance[${i}]`);
-  return { labels, text: tb.map((l, i) => `${labels[i]}: ${l.ledger}`).join("\n") };
+  const lines = sendableTbLines(tb);
+  return { labels: lines.map((l) => l.label), text: lines.map((l) => l.text).join("\n") };
 }
 
 export function validateLedgerMapping(out: LedgerMapping, tb: TbLine[]): string[] {
-  const { labels, text } = ledgerPrompt(tb);
-  const lines = new Map(labels.map((label, i) => [label, `${label}: ${tb[i].ledger}`]));
-  const known = new Set(tb.map((l) => l.ledger.trim().toLowerCase()));
+  const sendable = sendableTbLines(tb);
+  const text = sendable.map((l) => l.text).join("\n");
+  const lines = new Map(sendable.map((l) => [l.label, l.text]));
+  const known = new Set(sendable.map((l) => l.ledger.trim().toLowerCase()));
   const seen = new Map<string, string>();
   const issues: string[] = [];
   for (const m of out.mappings) {
@@ -99,12 +116,14 @@ export const trialBalanceOf = (input: RocInput): TbLine[] => (input.financials.k
 
 export const ROC_MAP_TASK_SPEC: ModelTaskSpec<LedgerMapping, RocInput, "roc"> = {
   name: "roc.map-ledgers",
-  version: 1,
+  version: 2,
   schema: LedgerMappingSchema,
   systemPrompt: MAP_SYSTEM,
   difficulty: "sop",
   ruleIds: ["roc.financials-tie"],
   validate: (out, input) => validateLedgerMapping(out, trialBalanceOf(input)),
+  privacy: "anonymize-then-cloud",
+  profile: { documents: "Trial-balance ledger names, one labelled line each (financials.json trialBalance[i], screened per line); the Schedule III head list; reviewer notes. No amounts." },
 };
 
 /** The AOC-2 verdict must quote the notes to accounts it was shown (abstaining needs no quote). */
@@ -113,12 +132,14 @@ export const validateAoc2Verdict = (out: ScopedVerdict, context: string): string
 
 export const ROC_AOC2_CHECK_SPEC: ModelTaskSpec<ScopedVerdict, string, "roc"> = {
   name: "roc.check:roc.aoc2-related-party",
-  version: 1,
+  version: 2,
   schema: ScopedVerdictSchema,
   systemPrompt: [ROC_PREAMBLE, CHECK_TASK_INSTRUCTIONS].join("\n"),
   difficulty: "judgement",
   ruleIds: ["roc.aoc2-related-party"],
   validate: validateAoc2Verdict,
+  privacy: "anonymize-then-cloud",
+  profile: { documents: "LLM context: the notes to accounts, one labelled line each (notes.txt line n)." },
 };
 
 /** Every model task the ROC agent may run. */

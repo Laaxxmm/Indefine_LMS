@@ -12,7 +12,8 @@ import { bumpAmountText, bumpJsonAmount, mutateCsvCell, mutateJsonInput, mutateX
 import type { AgentDefinition, InputFile, InputProbe } from "@/lib/agents/core/runner";
 import { analyseRoc, columnFromTrialBalance, type RocExtract, type RocFinancials } from "./analyse";
 import { rocDeliverables } from "./deliverables";
-import { ROC_MAP_TASK_SPEC, ROC_MODEL_TASKS, acceptedMappings, mapLedgersUserMessage } from "./model-tasks";
+import { ROC_MAP_TASK_SPEC, ROC_MODEL_TASKS, TB_SCREEN, acceptedMappings, mapLedgersUserMessage, tbPromptLines } from "./model-tasks";
+import { screenForModel } from "@/lib/agents/core/guardrails/untrusted";
 import { parseFinancialsXlsx, rocInputSchema, type RocInput } from "./parse";
 import { ROC_CHECKLIST, ROC_KEY, rocRegistry } from "./rules";
 import { dayNumber, paiseToRupeeString, rupeesToPaise } from "@/lib/agents/core/util";
@@ -106,6 +107,15 @@ async function financialsFrom(input: RocInput, model: ModelFn, notes: string | n
     return { source: "xlsx", ...cols, unmappedLedgers: [], ledgerQuestions: [] };
   }
   const tb = f.trialBalance;
+  // ADR-009: a ledger name that reads like an instruction to the AI is not sent (model-tasks.ts
+  // leaves it out of the prompt and of every accepted answer); it is recorded for the run's
+  // possible-prompt-injection flag here and becomes a reviewer question below.
+  const { clean, withheld } = screenForModel(model, ROC_MAP_TASK_SPEC.name, tbPromptLines(tb), TB_SCREEN);
+  const heldLedgers = withheld.map((w) => w.item.ledger);
+  if (!clean.length) {
+    const { column, unmapped } = columnFromTrialBalance(tb, []);
+    return { source: "tb", current: column, previous: f.previous, unmappedLedgers: unmapped.filter((l) => !heldLedgers.includes(l)), ledgerQuestions: unmapped.filter((l) => heldLedgers.includes(l)) };
+  }
   // Scoped call (ADR-008): the framework supplies the system prompt (firm + ROC preambles + task
   // prompt) and runs the task's validator as the router's contradictions.
   const out = await model({
@@ -119,7 +129,7 @@ async function financialsFrom(input: RocInput, model: ModelFn, notes: string | n
   // only the items the validator accepts are used; abstentions become reviewer questions.
   const { mappings, questions } = acceptedMappings(out, tb);
   const { column, unmapped } = columnFromTrialBalance(tb, mappings);
-  const asked = new Set(questions.map((q) => q.trim().toLowerCase()));
+  const asked = new Set([...questions, ...heldLedgers].map((q) => q.trim().toLowerCase()));
   return { source: "tb", current: column, previous: f.previous, unmappedLedgers: unmapped.filter((l) => !asked.has(l.trim().toLowerCase())), ledgerQuestions: unmapped.filter((l) => asked.has(l.trim().toLowerCase())) };
 }
 

@@ -22,6 +22,10 @@
 //     or reverse charge) is HELD BACK — not claimed in Table 4(A) — until answered: figure
 //     itcHeldBackPaise, raised by gst.model-questions and the client document requests with the
 //     amount, and shown under Open questions on the review screen.
+//   - Owner-approved 2026-11-06 (ADR-009): a ledger the injection screen withheld from the model
+//     (its text read like an instruction to the AI) is treated the same way — ITC held back
+//     (itcHeldBackPaise), a gst.model-questions question and a client document request — next to
+//     the run's block flag possible-prompt-injection, whatever the ledger would otherwise have been.
 import { createRuleRegistry, type ChecklistPack, type CheckOutcome, type RuleDefinition } from "@/lib/agents/core/checklist";
 import type { CheckInput } from "@/lib/agents/core/runner";
 import { validateGstin } from "@/lib/agents/onboarding/validators";
@@ -129,7 +133,9 @@ function modelQuestions(ci: GstCheckInput): CheckOutcome {
   const a = A(ci);
   const hits: Hit[] = [];
   for (const l of x.ledgers) {
-    const what = [l.blockedCategory === INSUFFICIENT ? "whether ITC is blocked u/s 17(5)" : "", l.rcmService === INSUFFICIENT ? "whether reverse charge applies" : ""].filter(Boolean).join(" and ");
+    const what = l.withheld
+      ? "whether ITC is blocked u/s 17(5) or reverse charge applies" // its note says why it was not sent to the AI
+      : [l.blockedCategory === INSUFFICIENT ? "whether ITC is blocked u/s 17(5)" : "", l.rcmService === INSUFFICIENT ? "whether reverse charge applies" : ""].filter(Boolean).join(" and ");
     if (!what) continue;
     const doc = a.purchases.find((p) => p.key === l.ledger);
     const held = heldBackFor(a, l.ledger);

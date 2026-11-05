@@ -72,7 +72,7 @@ describe("ctx.model refuses tasks outside the scope (ScopeViolationError → run
     const w = echoWorld();
     const out = await runAgent(def, "job-1", w.deps);
     expect(out).toMatchObject({ ok: false, code: "FAILED" });
-    expect(!out.ok && out.reason).toMatch(/^Scope violation: task "echo.undeclared" is not declared in the echo agent's scope \(declared: echo.check:echo.related-party@1, echo.party-kinds@1\)/);
+    expect(!out.ok && out.reason).toMatch(/^Scope violation: task "echo.undeclared" is not declared in the echo agent's scope \(declared: echo.check:echo.related-party@2, echo.party-kinds@1\)/);
     expect(w.router.calls).toHaveLength(0);
     expect(rows(w.db, "agentRun")[0]).toMatchObject({ status: "FAILED" });
     expect(guardEvent(w)?.meta).toMatchObject({ agent: "echo", outcome: "failed", scopeViolations: 1, modelCalls: 0 });
@@ -149,8 +149,8 @@ describe("the model sees the firm + department preambles; ModelCall records task
     expect(system).toMatch(/Never give filing, legal or audit-opinion advice/);
     expect(system).toMatch(/return "insufficient_evidence"/);
     expect(p.logged.map((r) => [r.task, r.agent, r.tier, r.status])).toEqual([
-      ["echo.check:echo.related-party@1", "echo", "SMART", "OK"],
-      ["echo.check:echo.related-party@1#2", "echo", "HARD", "OK"],
+      ["echo.check:echo.related-party@2", "echo", "SMART", "OK"],
+      ["echo.check:echo.related-party@2#2", "echo", "HARD", "OK"],
     ]);
   });
 
@@ -162,9 +162,9 @@ describe("the model sees the firm + department preambles; ModelCall records task
     const out = await runAgent(echoAgent, "job-1", w.deps);
     expect(out.ok).toBe(true);
     expect(p.logged.map((r) => [r.task, r.tier, r.status, r.escalated])).toEqual([
-      ["echo.check:echo.related-party@1", "SMART", "LOW_CONFIDENCE", false],
-      ["echo.check:echo.related-party@1", "HARD", "OK", true],
-      ["echo.check:echo.related-party@1#2", "HARD", "OK", false],
+      ["echo.check:echo.related-party@2", "SMART", "LOW_CONFIDENCE", false],
+      ["echo.check:echo.related-party@2", "HARD", "OK", true],
+      ["echo.check:echo.related-party@2#2", "HARD", "OK", false],
     ]);
     expect(p.logged[0].error).toMatch(/contradiction: location "register.csv row 99" is not a register row shown/);
     expect(related(w)).toMatchObject({ status: "pass" });

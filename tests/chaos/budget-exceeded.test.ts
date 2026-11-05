@@ -89,7 +89,8 @@ describe("budget refusal elsewhere", () => {
     expect(out.ok).toBe(true);
     const llm = rows(w.db, "checklistResult").find((r) => r.ruleId === "echo.related-party")!;
     expect(llm.status).toBe("na");
-    expect(String(llm.message)).toContain("model check failed (Daily AI budget is exhausted: ₹5.00 spent today (IST) of ₹5.00 allowed (AI_DAILY_BUDGET_INR).); review manually");
+    // Scoped agents get the plain sentence (ADR-009 guardrail session); the ModelCall row keeps BUDGET_REFUSED.
+    expect(String(llm.message)).toContain("model check failed (Today's AI budget for the firm is used up (₹5.00 of ₹5.00), so this run stopped. Run it again tomorrow, or ask an admin to raise the daily AI budget.); review manually");
     expect(m.claude.requests).toHaveLength(0);
   });
 

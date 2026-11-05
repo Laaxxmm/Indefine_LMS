@@ -82,24 +82,45 @@ export type CommsTaskSpecs = {
   translate: ModelTaskSpec<TranslateOutput, TranslateInput, typeof COMMS_KEY>;
 };
 
+// ADR-009: @2 because FIRM_PREAMBLE gained the untrusted-documents line (the @1 lock entries stay
+// as history). Both tasks carry client facts and staff-written text, so they declare
+// anonymize-then-cloud (the session refuses any other privacy), and drafting.ts screens every part
+// before the call: a part that reads like an instruction to the AI keeps the template wording /
+// the English, with a staff note, and is counted in the draft's guardrail stats.
+const SCREEN = "agent: the template subject and paragraphs (polish) or every segment (translate) are screened first (screenForModel); if any part is withheld the model is not asked and the template wording / the English is kept with a staff note; framework: every message line is screened again as a backstop";
+
 function specsFor(d: FirmService): CommsTaskSpecs {
   return {
     polish: {
       name: polishTaskName(d),
-      version: 1,
+      version: 2,
       schema: PolishOutputSchema as unknown as ModelTaskSpec<PolishOutput, PolishInput>["schema"],
       systemPrompt: POLISH_PROMPT,
       difficulty: "sop",
       validate: validatePolish,
+      privacy: "anonymize-then-cloud",
+      profile: {
+        documents: "The template's subject and paragraphs and the facts they must keep (job facts, dates, amounts; staff-written query topic and answer, document names). Client and contact names masked through the dictionary.",
+        validators: "validatePolish: same paragraph count, every fact copied exactly, no new date, amount, number, name, link or request (grounding.ts); the tone lint runs on the result.",
+        screen: SCREEN,
+        grounding: "no quotes: every fact of the template must appear exactly in the answer and nothing new may appear (validatePolish); a failed check keeps the template wording",
+      },
     },
     translate: {
       name: translateTaskName(d),
-      version: 1,
+      version: 2,
       schema: TranslateOutputSchema as unknown as ModelTaskSpec<TranslateOutput, TranslateInput>["schema"],
       systemPrompt: TRANSLATE_PROMPT,
       // Indian-language quality: the smart tier first, the hard tier on a failed check.
       difficulty: "judgement",
       validate: validateTranslation,
+      privacy: "anonymize-then-cloud",
+      profile: {
+        documents: "The finished English message as segments (subject, greeting, sentences, list items, closing) and the target language.",
+        validators: "validateTranslation: one segment per English segment, every fact copied verbatim in English digits, no native-script digits (grounding.ts).",
+        screen: SCREEN,
+        grounding: "no quotes: every fact must appear verbatim in its translated segment (validateTranslation); a failed check keeps the English on its own",
+      },
     },
   };
 }

@@ -1,0 +1,76 @@
+{
+  "chksum": "synthetic",
+  "data": {
+    "gstin": "29AAFCQ2002L1ZG",
+    "rtnprd": "102026",
+    "version": "GSTN-synthetic",
+    "gendt": "14-11-2026",
+    "docdata": {
+      "b2b": [
+        {
+          "ctin": "36AALCY6505Y1Z1",
+          "trdnm": "Tellapur Grains",
+          "supprd": "102026",
+          "inv": [
+            {
+              "inum": "TS/88",
+              "typ": "R",
+              "idt": "02-10-2026",
+              "val": 84000,
+              "pos": "29",
+              "rev": "N",
+              "itcavl": "Y",
+              "rsn": "",
+              "srctyp": "",
+              "itms": [
+                {
+                  "num": 1,
+                  "itm_det": {
+                    "rt": 5,
+                    "txval": 80000,
+                    "iamt": 4000,
+                    "camt": 0,
+                    "samt": 0,
+                    "csamt": 0
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "ctin": "29AAGCS6101U1ZN",
+          "trdnm": "Sunrise Steel",
+          "supprd": "102026",
+          "inv": [
+            {
+              "inum": "KS-2026-415",
+              "typ": "R",
+              "idt": "09-10-2026",
+              "val": 17700,
+              "pos": "29",
+              "rev": "N",
+              "itcavl": "Y",
+              "rsn": "",
+              "srctyp": "",
+              "itms": [
+                {
+                  "num": 1,
+                  "itm_det": {
+                    "rt": 18,
+                    "txval": 15000,
+                    "iamt": 0,
+                    "camt": 1350,
+                    "samt": 1350,
+                    "csamt": 0
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "cdnr": []
+    }
+  }
+}

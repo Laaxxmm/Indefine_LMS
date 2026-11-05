@@ -47,8 +47,8 @@ describe("audit agent definition", () => {
     expect(classifyAuditFile("random.csv")).toBeNull();
   });
   it("model-task registry: one versioned task, the framework system prompt, the related-party rule", () => {
-    expect(auditTaskIds()).toEqual(["audit.check:audit.related-party-disclosure@1"]);
-    expect(AUDIT_MODEL_TASKS[0]).toMatchObject({ name: AUDIT_RELATED_PARTY_TASK, version: 1, systemPrompt: AUDIT_CHECK_SYSTEM, rules: ["audit.related-party-disclosure"], ruleIds: ["audit.related-party-disclosure"] });
+    expect(auditTaskIds()).toEqual(["audit.check:audit.related-party-disclosure@2"]);
+    expect(AUDIT_MODEL_TASKS[0]).toMatchObject({ name: AUDIT_RELATED_PARTY_TASK, version: 2, systemPrompt: AUDIT_CHECK_SYSTEM, rules: ["audit.related-party-disclosure"], ruleIds: ["audit.related-party-disclosure"] });
     expect(auditAgent.scope?.tasks).toEqual([...AUDIT_MODEL_TASKS]);
   });
 });

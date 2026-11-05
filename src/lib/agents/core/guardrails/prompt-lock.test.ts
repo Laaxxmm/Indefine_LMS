@@ -21,7 +21,7 @@ import {
 } from "./prompt-lock";
 import type { ModelTaskSpec } from "./scope";
 
-const spec = (over: Partial<ModelTaskSpec> = {}): ModelTaskSpec => ({ ...(ECHO_RELATED_PARTY_SPEC as ModelTaskSpec), ...over });
+const spec = (over: Partial<ModelTaskSpec> = {}): ModelTaskSpec => ({ ...(ECHO_RELATED_PARTY_SPEC as ModelTaskSpec), version: 1, ...over });
 const agentsWith = (s: ModelTaskSpec) => ({ echo: { ...echoAgent, scope: { ...echoAgent.scope!, tasks: [s] } } });
 
 describe("promptHash", () => {
@@ -101,7 +101,7 @@ describe("scripts/verify-prompts.ts (CLI)", () => {
       expect((await cli(`--lock=${lock}`, "--update")).code).toBe(0);
       expect((await cli(`--lock=${lock}`)).code).toBe(0);
       const doc = parsePromptLock(readFileSync(lock, "utf8"));
-      doc.prompts["echo.check:echo.related-party@1"] = "0".repeat(64);
+      doc.prompts[`echo.check:echo.related-party@${ECHO_RELATED_PARTY_SPEC.version}`] = "0".repeat(64);
       writeFileSync(lock, serializePromptLock(doc));
       const stale = await cli(`--lock=${lock}`);
       expect(stale.code).toBe(1);
