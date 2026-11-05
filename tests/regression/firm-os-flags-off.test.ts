@@ -60,18 +60,27 @@ afterEach(() => {
 });
 
 describe("Firm OS surface on LMS pages with every FIRM_OS_* flag off", () => {
-  it("/dashboard: only the role-gated Agents and My day links, for every role; no board without jobs; Firm OS reads only, no writes", async () => {
+  it("/dashboard: no Firm OS link, card or query for any role (no Agents, My day, Next task, Client messages or Search)", async () => {
     for (const who of [PEOPLE.staff, PEOPLE.manager, PEOPLE.partner, PEOPLE.admin]) {
       signedIn(who);
       prismaCalls.length = 0;
       const html = await renderPage(await import("@/app/dashboard/page"));
-      expect(firmOsHrefs(html), `dashboard for ${who.user.level}/${who.user.role}`).toEqual(["/agents", "/coach"]);
-      expect(textOf(html)).not.toMatch(/Must today|Firm OS|Take a break|break reminder/i); // no open jobs → no board card; no break nudge
-      const firmOs = firmOsQueries();
-      expect(firmOs.filter((q) => !/\.(findMany|findFirst|findUnique|count|aggregate|groupBy)$/.test(q)), "no Firm OS writes from the dashboard").toEqual([]);
-      expect(firmOs.every((q) => q.startsWith("jobTask.")), `Firm OS reads: ${firmOs.join(", ")}`).toBe(true); // the morning board's own-jobs lookup
+      expect(firmOsHrefs(html), `dashboard for ${who.user.level}/${who.user.role}`).toEqual([]);
+      expect(textOf(html)).not.toMatch(/Must today|Firm OS|Take a break|break reminder|Your next task/i);
+      expect(firmOsQueries(), "LMS pages make zero Firm OS queries while Firm OS is off").toEqual([]);
+      expect(settingsReads()).toEqual([]);
       expect(prismaCalls.some((c) => c.model === "activityHeartbeat")).toBe(false); // FIRM_OS_BREAK_NUDGE off: nothing collected
     }
+  });
+
+  it("a Firm OS page sends people to the dashboard, which says Firm OS is not switched on", async () => {
+    signedIn(PEOPLE.partner);
+    for (const layout of ["agents", "onboard", "coach", "comms", "search", "focus", "workspace", "companion"]) {
+      const mod = await import(`@/app/${layout}/layout`);
+      expect(await redirectTarget(() => mod.default({ children: null })), layout).toBe("/dashboard?module-off=firm-os");
+    }
+    const html = await renderPage(await import("@/app/dashboard/page"), { searchParams: Promise.resolve({ "module-off": "firm-os" }) });
+    expect(textOf(html)).toContain("Firm OS is not switched on for the firm yet. Everything else works as before; ask an admin if you expected to use it.");
   });
 
   it("/tools: no Firm OS entry for anyone, partners and managers included", async () => {

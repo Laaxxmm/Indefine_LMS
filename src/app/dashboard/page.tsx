@@ -18,12 +18,16 @@ import {
   currentWeekStart,
 } from "@/lib/checkins";
 import { formatIst } from "@/lib/ist";
-import { canUseWork } from "@/lib/work/core";
-import { canUseAgents } from "@/lib/agents/access";
 import { isBreakNudgeEnabled } from "@/lib/agents/coach/flags";
 import { CoachCard } from "@/app/coach/CoachCard";
 import { ActivityPing } from "@/components/ActivityPing";
-import { canViewClients } from "@/lib/clients/core";
+import { ModuleOffNotice } from "@/app/workspace/ModuleOffNotice";
+import type { FirmDb } from "@/lib/agents/core/runner";
+import type { NextTaskView } from "@/lib/workspace/contract";
+import { MODULE_OFF_PARAM } from "@/lib/workspace/guard";
+import { dashboardLinks } from "@/lib/workspace/nav";
+import { getNextTaskView } from "@/lib/workspace/next-task";
+import { effectiveModules, focusModeFor } from "@/lib/workspace/settings";
 import {
   Flame,
   Sparkles,
@@ -35,6 +39,7 @@ import {
   Footprints,
   Award,
   ArrowRight,
+  ChevronDown,
   ExternalLink,
   Radio,
 } from "lucide-react";
@@ -96,11 +101,26 @@ const TRACK_COLOR: Record<string, string> = {
 
 const COURSE_ACCENTS = ["#5B4BE6", "#17B978", "#FF6B4A", "#0EA5E9", "#8B5CF6"];
 
-export default async function Dashboard() {
+const focusRing = "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2";
+const navLink = `shrink-0 whitespace-nowrap px-4 py-2 rounded-full text-ink-mute font-semibold text-[13.5px] hover:text-ink transition ${focusRing}`;
+
+// Everyone's landing page, never gated itself. What it shows follows the person's workspace
+// modules (effectiveModules: role rules, the Firm OS master switch and the workspace settings):
+// a link or section appears only when its module is on, so nothing invites a dead end. In focus
+// mode (an admin's choice per role or person) the next task is the one card on the page and the
+// rest waits behind "Show everything". ?module-off=<key> says why a module sent the person here.
+export default async function Dashboard({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> } = {}) {
   const session = await auth();
   if (!session?.user) redirect("/");
   const userId = session.user.id;
   const admin = isAdmin(session.user);
+  const moduleOff = (await searchParams)?.[MODULE_OFF_PARAM];
+  const [workspace, focusMode] = await Promise.all([effectiveModules(session.user), focusModeFor(session.user)]);
+  const on = (k: (typeof workspace)[number]) => workspace.includes(k);
+  const learning = on("learning");
+  const growth = on("leaderboard");
+  // Focus landing needs the next-task page, which belongs to the Agents module.
+  const nextTask = focusMode && on("agents") ? await getNextTaskView(session.user, { db: prisma as unknown as FirmDb }) : null;
 
   await ensureDefaultCycle();
 
@@ -303,31 +323,18 @@ export default async function Dashboard() {
       <header className="flex items-center justify-between gap-4 flex-wrap max-w-[1240px] mx-auto px-5 sm:px-10 py-[18px]">
         <Logo tagline="LEARN · GROW" size={40} />
 
-        <nav className="flex items-center gap-1 bg-card p-1.5 rounded-full border border-border">
-          <span className="px-4 py-2 rounded-full bg-brand-50 text-brand-600 font-bold text-[13.5px]">Home</span>
-          <Link href="/dashboard#courses" className="px-4 py-2 rounded-full text-ink-mute font-semibold text-[13.5px] hover:text-ink transition">Courses</Link>
-          <Link href="/leaderboard" data-tour="leaderboard" className="px-4 py-2 rounded-full text-ink-mute font-semibold text-[13.5px] hover:text-ink transition">Leaderboard</Link>
-          <Link href="/checkin" className="px-4 py-2 rounded-full text-ink-mute font-semibold text-[13.5px] hover:text-ink transition">Check-in</Link>
-          <Link href="/recap/year" className="px-4 py-2 rounded-full text-ink-mute font-semibold text-[13.5px] hover:text-ink transition">Recap</Link>
-          <Link href="/tools" className="px-4 py-2 rounded-full text-ink-mute font-semibold text-[13.5px] hover:text-ink transition">Tools</Link>
-          {/* Same predicate as the /clients layout guard: inactive users would only be bounced back here. */}
-          {canViewClients(session.user) && (
-            <Link href="/clients" className="px-4 py-2 rounded-full text-ink-mute font-semibold text-[13.5px] hover:text-ink transition">Clients</Link>
-          )}
-          {/* Same predicate as the /agents layout guard: the link shows only to people it would let in. */}
-          {canUseAgents(session.user) && (
-            <Link href="/agents" className="px-4 py-2 rounded-full text-ink-mute font-semibold text-[13.5px] hover:text-ink transition">Agents</Link>
-          )}
-          {/* Firm OS daily coach: same predicate as the /coach layout guard. */}
-          {canUseAgents(session.user) && (
-            <Link href="/coach" className="px-4 py-2 rounded-full text-ink-mute font-semibold text-[13.5px] hover:text-ink transition">My day</Link>
-          )}
-          {canUseWork(session.user.email) && (
-            <Link href="/work" className="px-4 py-2 rounded-full text-ink-mute font-semibold text-[13.5px] hover:text-ink transition">Work</Link>
-          )}
+        {/* One link per module that is on for the person (the same rule as each area's guard). */}
+        <nav aria-label="Main" className="flex items-center gap-1 bg-card p-1.5 rounded-full border border-border max-w-full overflow-x-auto">
+          <span aria-current="page" className="shrink-0 px-4 py-2 rounded-full bg-brand-50 text-brand-600 font-bold text-[13.5px]">Home</span>
+          {dashboardLinks(workspace).map((l) => (
+            <Link key={l.href} href={l.href} data-tour={l.tour} className={navLink}>
+              {l.label}
+            </Link>
+          ))}
         </nav>
 
         <div className="flex items-center gap-3">
+          {(learning || growth) && (
           <div
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-full border"
             style={{ background: "linear-gradient(135deg,#FFF4E0,#FFE9D6)", borderColor: "#FFE0B8" }}
@@ -338,6 +345,7 @@ export default async function Dashboard() {
               DAY{streak.current === 1 ? "" : "S"}
             </span>
           </div>
+          )}
           <UserMenu
             name={session.user.name ?? "You"}
             initial={initial}
@@ -352,9 +360,19 @@ export default async function Dashboard() {
       </header>
 
       <div className="max-w-[1240px] mx-auto px-5 sm:px-10 pt-2 pb-16 flex flex-col gap-[22px]">
+        <ModuleOffNotice param={moduleOff} />
+        {nextTask && <NextTaskLanding view={nextTask} />}
+        <Everything collapsed={!!nextTask}>
         {/* Directors: incentive-track status (hidden for everyone else) */}
         <NeoTrackChip />
+        {/* Without Learning and Trajectory there is no streak or level to show: just the greeting. */}
+        {!learning && !growth && (
+          <h1 className="font-display font-extrabold text-3xl tracking-[-0.03em]">
+            {greeting()}, {firstNameStr}
+          </h1>
+        )}
         {/* Hero + stat chips */}
+        {(learning || growth) && (
         <div className="grid lg:grid-cols-[1.6fr_1fr] gap-5">
           <div
             className="relative overflow-hidden rounded-[26px] p-8 sm:p-9 text-white animate-fade-in"
@@ -405,12 +423,13 @@ export default async function Dashboard() {
             ))}
           </div>
         </div>
+        )}
 
-        {/* Firm OS morning board: only for people with open Firm OS jobs (the card renders nothing otherwise) */}
-        {canUseAgents(session.user) && <CoachCard userId={userId} />}
+        {/* Firm OS morning board (Daily Coach module): only for people with open Firm OS jobs (the card renders nothing otherwise) */}
+        {on("coach") && <CoachCard userId={userId} />}
 
-        {/* Live & upcoming sessions (Teams) */}
-        {nextLive && (
+        {/* Live & upcoming sessions (Teams; recordings become training videos) */}
+        {learning && nextLive && (
           <div className="flex flex-col gap-3">
             <div
               className="rounded-[22px] p-[22px] sm:px-6 flex flex-col sm:flex-row sm:items-center gap-4 text-white relative overflow-hidden"
@@ -477,7 +496,7 @@ export default async function Dashboard() {
         )}
 
         {/* Resume card — primary action */}
-        {resume && (
+        {learning && resume && (
           <div className="bg-card border border-border rounded-[22px] p-[22px] sm:px-6 flex flex-col sm:flex-row items-start sm:items-center gap-5 shadow-lift">
             <div
               className="shrink-0 w-full sm:w-28 h-24 sm:h-[78px] rounded-2xl grid place-items-center relative"
@@ -507,7 +526,7 @@ export default async function Dashboard() {
         )}
 
         {/* Trajectory */}
-        {trajectory.cycle && (
+        {growth && trajectory.cycle && (
           <div data-tour="trajectory" className="bg-card border border-border rounded-[22px] p-6 sm:p-7">
             <div className="flex items-start justify-between gap-5 flex-wrap">
               <div className="flex gap-5 sm:gap-6 items-center">
@@ -583,8 +602,8 @@ export default async function Dashboard() {
           </div>
         )}
 
-        {/* Nudge banners */}
-        {(showCheckinBanner || (!wizardDone && trajectory.cycle)) && (
+        {/* Nudge banners (weekly check-in and the growth wizard belong to Trajectory) */}
+        {growth && (showCheckinBanner || (!wizardDone && trajectory.cycle)) && (
           <div className="grid sm:grid-cols-2 gap-4">
             {showCheckinBanner && (
               <Link
@@ -619,6 +638,7 @@ export default async function Dashboard() {
         )}
 
         {/* Courses */}
+        {learning && (
         <section id="courses">
           <div className="flex items-baseline justify-between mb-3.5">
             <div className="font-display font-extrabold text-2xl tracking-[-0.02em]">Your courses</div>
@@ -689,6 +709,7 @@ export default async function Dashboard() {
             </div>
           )}
         </section>
+        )}
 
         {/* Attendance */}
         <section data-tour="attendance">
@@ -716,7 +737,7 @@ export default async function Dashboard() {
         </section>
 
         {/* Deadline + assignments summary */}
-        {(upcoming || myAssignments.length > 0) && (
+        {learning && (upcoming || myAssignments.length > 0) && (
           <div className="grid sm:grid-cols-2 gap-4">
             {upcoming && daysUntil != null && (
               <div
@@ -759,7 +780,8 @@ export default async function Dashboard() {
           </div>
         )}
 
-        {/* Achievements */}
+        {/* Achievements (badges for learning and growth) */}
+        {(learning || growth) && (
         <section>
           <div className="flex items-baseline justify-between mb-3.5">
             <div className="font-display font-extrabold text-2xl tracking-[-0.02em]">🏅 Achievements</div>
@@ -785,9 +807,10 @@ export default async function Dashboard() {
             })}
           </div>
         </section>
+        )}
 
         {/* Assignments full list */}
-        {myAssignments.length > 0 && (
+        {learning && myAssignments.length > 0 && (
           <section id="assignments">
             <div className="font-display font-extrabold text-2xl tracking-[-0.02em] mb-3.5">My assignments</div>
             <div className="rounded-[20px] bg-card border border-border divide-y divide-border overflow-hidden">
@@ -826,12 +849,66 @@ export default async function Dashboard() {
             </div>
           </section>
         )}
+        </Everything>
       </div>
 
-      <OnboardingTour steps={TOUR_STEPS} />
-      <UrgencyModal items={urgentItems} />
-      {canUseAgents(session.user) && <ActivityPing enabled={isBreakNudgeEnabled()} />}
+      {/* The tour and the training nudge would pull attention from the one task in focus mode. */}
+      {!nextTask && learning && <OnboardingTour steps={tourSteps(on, !!trajectory.cycle)} />}
+      {!nextTask && learning && <UrgencyModal items={urgentItems} />}
+      {on("coach") && <ActivityPing enabled={isBreakNudgeEnabled()} />}
     </div>
+  );
+}
+
+/** Tour steps whose anchor is on the page for this person (a centred step needs none). */
+function tourSteps(on: (k: "learning" | "leaderboard") => boolean, cycle: boolean): TourStep[] {
+  const present: Record<string, boolean> = {
+    "#courses": on("learning"),
+    "[data-tour='trajectory']": on("leaderboard") && cycle,
+    "[data-tour='attendance']": true,
+    "[data-tour='leaderboard']": on("leaderboard"),
+  };
+  return TOUR_STEPS.filter((s) => !s.selector || present[s.selector]);
+}
+
+/** Focus mode: the one next task, with a plain way into it. */
+function NextTaskLanding({ view }: { view: NextTaskView }) {
+  const task = view.task;
+  const job = task?.job;
+  return (
+    <section aria-labelledby="next-task-heading" className="bg-card border border-border rounded-[22px] p-6 sm:p-8 shadow-lift">
+      <p className="text-[11px] font-extrabold tracking-[0.1em] text-brand-600 uppercase">Your next task</p>
+      <h1 id="next-task-heading" className="font-display font-extrabold text-[28px] sm:text-[32px] tracking-[-0.02em] leading-tight mt-1">
+        {job ? job.title : "Everything is up to date"}
+      </h1>
+      <p className="text-[13.5px] text-ink-mute font-semibold mt-1.5">
+        {job ? `${job.clientName ? `${job.clientName} (${job.clientCode})` : job.clientCode} · ${job.service} · ${job.period} · FY ${job.fy}` : "Nothing is waiting for you right now."}
+      </p>
+      {task && <p className="text-[14px] text-ink-soft mt-3 max-w-2xl">{task.why}</p>}
+      <Link
+        href="/focus"
+        className={`mt-5 inline-flex items-center gap-2 font-bold text-[15px] text-white bg-brand-500 hover:bg-brand-600 transition px-6 py-3.5 rounded-[14px] shadow-pop ${focusRing}`}
+      >
+        {task ? "Open your next task" : "Open focus"} <ArrowRight className="w-4 h-4" aria-hidden="true" />
+      </Link>
+      {task && view.remaining > 0 && <p className="text-[12.5px] text-ink-mute mt-3">{view.remaining} more waiting after this one.</p>}
+    </section>
+  );
+}
+
+/** Focus mode keeps everything else behind one "Show everything" disclosure; otherwise it is the page. */
+function Everything({ collapsed, children }: { collapsed: boolean; children: React.ReactNode }) {
+  if (!collapsed) return <>{children}</>;
+  return (
+    <details className="group">
+      <summary
+        className={`list-none cursor-pointer inline-flex items-center gap-2 px-4 py-2 rounded-full border border-border bg-card text-[13.5px] font-semibold text-ink-mute hover:text-ink transition [&::-webkit-details-marker]:hidden ${focusRing}`}
+      >
+        Show everything
+        <ChevronDown className="w-4 h-4 transition group-open:rotate-180" aria-hidden="true" />
+      </summary>
+      <div className="flex flex-col gap-[22px] mt-[22px]">{children}</div>
+    </details>
   );
 }
 

@@ -84,9 +84,12 @@ export interface WorkspaceDb {
   };
 }
 
+// Imported lazily (client panels import this module's types) and once: concurrent first reads share
+// one import. The client is read from the module on every call.
+let prismaModule: Promise<typeof import("@/lib/prisma")> | undefined;
 async function prismaDb(): Promise<WorkspaceDb> {
-  const { prisma } = await import("@/lib/prisma");
-  return prisma as unknown as WorkspaceDb;
+  prismaModule ??= import("@/lib/prisma");
+  return (await prismaModule).prisma as unknown as WorkspaceDb;
 }
 
 /**
