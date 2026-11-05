@@ -133,6 +133,15 @@ export interface AgentDefinition<I = unknown, E = unknown> {
   defaultChecklist: ChecklistPack;
   /** Framework test agents (echo): hidden unless FIRM_OS_ECHO_AGENT is on. */
   internal?: boolean;
+  /**
+   * Accuracy-harness input-sensitivity probe: return a copy of the gathered files with ONE
+   * material input value changed (e.g. one amount + ₹1). The harness re-runs every fixture on the
+   * mutated files with the same recorded model responses and requires at least one computed
+   * figure or raised flag to differ — proof the pipeline reads its input rather than the
+   * recordings. Must not modify `files`. Optional in the type; the harness fails any agent that
+   * is not `internal` and does not declare it.
+   */
+  probeMutation?(files: InputFile[]): InputFile[];
 }
 
 /** Erases the generic parameters for registries and the service layer. */

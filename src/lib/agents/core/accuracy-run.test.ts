@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, cpSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { echoAgent, ECHO_EXTRACT_TASK } from "@/lib/agents/echo";
+import { echoAgent, ECHO_RELATED_PARTY_TASK } from "@/lib/agents/echo";
 import { createRecordedRouter } from "./recorded-router";
 import {
   DEFAULT_FIXTURES_ROOT,
@@ -51,9 +51,9 @@ describe("accuracy harness self-test", () => {
     const s = await runAgentAccuracy(echoAgent, {
       routerFor: (fx, run) =>
         createRecordedRouter((req) => {
-          const out = structuredClone(fx.recorded[req.task]) as { rows?: { amountPaise: number }[] };
-          // The third run's "model" reads one amount differently.
-          if (req.task === ECHO_EXTRACT_TASK && run === 2 && out.rows?.length) out.rows[0].amountPaise += 1;
+          const out = structuredClone(fx.recorded[req.task]) as { status: string };
+          // The third run's "model" gives the opposite related-party verdict.
+          if (req.task === ECHO_RELATED_PARTY_TASK && run === 2) out.status = out.status === "fail" ? "pass" : "fail";
           return out;
         }),
     });
@@ -85,8 +85,12 @@ describe("accuracy harness self-test", () => {
   it("missing deliverable, run failure and missing recordings are failures, not passes", async () => {
     const [fx] = loadFixtures(DEFAULT_FIXTURES_ROOT, "echo").filter((f) => f.id === "clean-register");
     const pack = packWithMistakes(echoAgent, []);
-    const noRecord = await runFixtureOnce(echoAgent, { ...fx, recorded: {} }, pack);
-    expect(noRecord.error).toMatch(/^FAILED: No recorded model response/);
+    const noInput = await runFixtureOnce(echoAgent, { ...fx, inputFiles: [] }, pack);
+    expect(noInput.error).toMatch(/^FAILED: Inputs incomplete: register.csv is missing/);
+    const [related] = loadFixtures(DEFAULT_FIXTURES_ROOT, "echo").filter((f) => f.id === "trap-related-party");
+    const noRecord = await runFixtureOnce(echoAgent, { ...related, recorded: {} }, pack);
+    expect(noRecord.error).toBeUndefined();
+    expect(noRecord.flags).toEqual([]); // the LLM rule became na + llm-error: the expected warn is missed
     const wrongName = await runFixtureOnce(echoAgent, { ...fx, expected: { ...fx.expected, deliverables: [{ name: "GST pack", sheets: ["Summary"] }] } }, pack);
     expect(wrongName.deliverables).toEqual([
       { name: "GST pack", problems: ["not produced"] },
