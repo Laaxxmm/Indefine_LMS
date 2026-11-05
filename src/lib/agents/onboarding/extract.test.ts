@@ -86,9 +86,13 @@ describe("extractSpec", () => {
     expect(r.notes[0]).toMatch(/Answer the questions/);
   });
 
-  it("does not catch router errors (the route reports them)", async () => {
-    const router: ExtractRouter = { run: vi.fn().mockRejectedValue(new Error("budget")) };
-    await expect(extractSpec("x", { router, runId: "r" })).rejects.toThrow("budget");
+  it("a router failure (no key, outage, budget) degrades to the questions and says why", async () => {
+    const router: ExtractRouter = { run: vi.fn().mockRejectedValue(new Error("Daily AI budget is exhausted")) };
+    const r = await extractSpec("x", { router, runId: "r", base: { clientCode: "ABC" } });
+    expect(r.spec).toEqual({ clientCode: "ABC" });
+    expect(r.notes).toEqual(["Automatic reading failed (Daily AI budget is exhausted). Answer the questions below instead."]);
+    const odd: ExtractRouter = { run: vi.fn().mockRejectedValue("boom") };
+    expect((await extractSpec("x", { router: odd, runId: "r" })).notes[0]).toMatch(/\(boom\)/);
   });
 });
 

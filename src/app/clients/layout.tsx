@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { LogoMark } from "@/components/Logo";
 import { canViewClients, isClientsAdmin } from "@/lib/clients/core";
+import { canOnboard } from "@/lib/rbac/policy";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,7 @@ export default async function ClientsLayout({ children }: { children: React.Reac
           <nav className="flex items-center gap-1">
             <Link href="/clients" className={link}>All clients</Link>
             <Link href="/clients/new" className={link}>Onboard</Link>
+            {canOnboard(session.user) && <Link href="/onboard" className={link}>Firm OS onboarding</Link>}
             <Link href="/clients/reports" className={link}>Reports</Link>
             {isClientsAdmin(session.user) && <Link href="/clients/admin/services" className={link}>Services</Link>}
             <Link href="/dashboard" className={`${link} flex items-center gap-2`}><ArrowLeft className="w-4 h-4" /> Dashboard</Link>

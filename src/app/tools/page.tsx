@@ -1,7 +1,19 @@
 import Link from "next/link";
-import { FileBadge, ArrowRight, BookText, Wrench, LayoutDashboard, Users, CalendarClock, Newspaper } from "lucide-react";
+import { FileBadge, ArrowRight, BookText, Wrench, LayoutDashboard, Users, CalendarClock, Newspaper, UserPlus } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { canUseNeoCentra } from "@/lib/neo-centra/access";
+import { canOnboard } from "@/lib/rbac/policy";
+
+// Partners and managers only, appended like NEO_CENTRA: Firm OS plain-English onboarding (canOnboard).
+const FIRM_OS_ONBOARD = {
+  href: "/onboard",
+  title: "Firm OS onboarding",
+  tag: "Firm OS · Partners and managers",
+  blurb:
+    "Describe a new client in one sentence. Answer only what is missing, review the plan, then create the client record, Turia checklist, SharePoint site and the year's jobs in one go.",
+  icon: UserPlus,
+  accent: "#5B4BE6",
+};
 
 export const dynamic = "force-dynamic";
 
@@ -76,7 +88,11 @@ const TOOLS = [
 
 export default async function ToolsIndex() {
   const session = await auth();
-  const tools = canUseNeoCentra(session?.user) ? [...TOOLS, NEO_CENTRA] : TOOLS;
+  const tools = [
+    ...TOOLS,
+    ...(canOnboard(session?.user) ? [FIRM_OS_ONBOARD] : []),
+    ...(canUseNeoCentra(session?.user) ? [NEO_CENTRA] : []),
+  ];
   return (
     <div>
       <div className="mb-7">

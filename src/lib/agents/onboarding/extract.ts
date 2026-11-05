@@ -70,23 +70,29 @@ export function buildDictionary(prompt: string, people: Person[] = []): Dictiona
 export async function extractSpec(prompt: string, opts: ExtractOptions): Promise<ExtractResult> {
   const people = opts.people ?? [];
   const notes: string[] = [];
-  const result = await opts.router.run<ExtractedSpec>({
-    task: EXTRACT_TASK,
-    privacy: "anonymize-then-cloud",
-    difficulty: "sop",
-    messages: [
-      { role: "system", content: EXTRACT_SYSTEM },
-      { role: "user", content: prompt },
-    ],
-    schema: ExtractedSpec,
-    dictionary: buildDictionary(prompt, people),
-    runId: opts.runId,
-    maxCostInr: opts.maxCostInr,
-  });
+  // A router failure (no API key, provider outage, budget used up) must not stop onboarding:
+  // the person answers the clarifier's questions instead. The reason is shown, never hidden.
+  const result = await opts.router
+    .run<ExtractedSpec>({
+      task: EXTRACT_TASK,
+      privacy: "anonymize-then-cloud",
+      difficulty: "sop",
+      messages: [
+        { role: "system", content: EXTRACT_SYSTEM },
+        { role: "user", content: prompt },
+      ],
+      schema: ExtractedSpec,
+      dictionary: buildDictionary(prompt, people),
+      runId: opts.runId,
+      maxCostInr: opts.maxCostInr,
+    })
+    .catch((e: unknown) => ({ status: "error" as const, reason: e instanceof Error ? e.message : String(e) }));
 
   let extracted: ExtractedSpec | null = null;
   let needsReview = false;
-  if (result.status === "ok") {
+  if (result.status === "error") {
+    notes.push(`Automatic reading failed (${result.reason}). Answer the questions below instead.`);
+  } else if (result.status === "ok") {
     extracted = result.output;
     needsReview = result.needsPartnerReview;
   } else if (result.status === "needs-review") {
