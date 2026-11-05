@@ -18,7 +18,8 @@ import {
 } from "./accuracy-run";
 import { scoreboardMarkdown } from "./accuracy";
 
-const SELFTEST = "tests/fixtures/accuracy-selftest";
+/** Deliberately corrupted expectations (the audit probes live in accuracy-probes.test.ts). */
+const SELFTEST = "tests/fixtures/accuracy-selftest/corrupted";
 
 describe("accuracy harness self-test", () => {
   it("perfect echo fixtures → block and warn P = R = 1, figures / schema / replay 100%, 3 identical runs, pass", async () => {
