@@ -10,8 +10,9 @@
 //
 // Amounts never pass through floating-point multiplication: the text is split at the decimal
 // point and assembled as integer paise. More than two decimals round half away from zero.
-import ExcelJS from "exceljs";
+import type ExcelJS from "exceljs";
 import type { InputFile } from "@/lib/agents/core/runner";
+import { readWorkbookGrid, type GridOptions } from "@/lib/hardening/xlsx-guard";
 
 export type Cells = string[][];
 export type RawTable = { file: string; rows: Cells };
@@ -86,22 +87,18 @@ export function cellText(v: ExcelJS.CellValue): string {
   return String(v).trim();
 }
 
-export async function parseXlsx(bytes: Buffer): Promise<Cells> {
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(bytes as unknown as ArrayBuffer);
-  let out: Cells = [];
-  wb.eachSheet((ws) => {
-    if (out.length) return;
-    const rows: Cells = [];
-    for (let r = 1; r <= ws.rowCount; r++) {
-      const row = ws.getRow(r);
-      const cells: string[] = [];
-      for (let c = 1; c <= ws.columnCount; c++) cells.push(cellText(row.getCell(c).value));
-      rows.push(cells);
-    }
-    if (rows.some((r) => r.some((c) => c !== ""))) out = rows;
-  });
-  return out;
+/**
+ * The first sheet with data, as text cells. The workbook is inspected first (ZIP bomb, row /
+ * column / cell caps: src/lib/hardening/xlsx-guard.ts) and a large one is parsed in a worker with a
+ * time budget; a file over the limits throws XlsxLimitError with a plain message (readTable turns
+ * it into a parse issue). The cell walk and cellText are unchanged.
+ */
+export async function parseXlsx(bytes: Buffer, opts: Pick<GridOptions, "mode" | "timeoutMs" | "limits"> = {}): Promise<Cells> {
+  for (const sheet of await readWorkbookGrid(bytes, opts)) {
+    const rows: Cells = sheet.values.map((r) => r.map(cellText));
+    if (rows.some((r) => r.some((c) => c !== ""))) return rows;
+  }
+  return [];
 }
 
 export const isXlsx = (f: Pick<InputFile, "name" | "bytes">) => /\.xlsx$/i.test(f.name) || f.bytes.subarray(0, 2).toString("latin1") === "PK";

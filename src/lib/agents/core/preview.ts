@@ -1,7 +1,8 @@
 // Read-only preview of a stored XLSX deliverable: each sheet as rows of display text, capped so a
 // large register cannot flood the review screen. Also used by the accuracy harness to check a
 // deliverable's shape (sheet names, header block, column headers) against the fixture.
-import ExcelJS from "exceljs";
+import type ExcelJS from "exceljs";
+import { readWorkbookGrid, type GridOptions } from "@/lib/hardening/xlsx-guard";
 import { DRAFT_LABEL, LAYOUT } from "./templates";
 import { formatDate, formatInr } from "./format";
 
@@ -25,24 +26,21 @@ function text(v: ExcelJS.CellValue, numFmt: string | undefined): string {
   return String(v);
 }
 
-export async function previewWorkbook(bytes: Uint8Array, opts: { maxRows?: number; maxCols?: number } = {}): Promise<WorkbookPreview> {
+/**
+ * Each sheet's first rows as display text. The stored file is inspected first (ZIP bomb, row /
+ * column / cell caps: src/lib/hardening/xlsx-guard.ts) and a large one is parsed in a worker with a
+ * time budget, so a swapped-in workbook cannot stall the review screen; over the limits it throws
+ * XlsxLimitError (plain message).
+ */
+export async function previewWorkbook(bytes: Uint8Array, opts: { maxRows?: number; maxCols?: number } & Pick<GridOptions, "mode" | "timeoutMs"> = {}): Promise<WorkbookPreview> {
   const maxRows = opts.maxRows ?? PREVIEW_MAX_ROWS;
   const maxCols = opts.maxCols ?? PREVIEW_MAX_COLS;
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(Buffer.from(bytes) as unknown as ArrayBuffer);
-  const sheets: PreviewSheet[] = [];
-  wb.eachSheet((ws) => {
-    const rows: string[][] = [];
-    const last = Math.min(ws.rowCount, maxRows);
-    const cols = Math.min(ws.columnCount, maxCols);
-    for (let r = 1; r <= last; r++) {
-      const row = ws.getRow(r);
-      const cells: string[] = [];
-      for (let c = 1; c <= cols; c++) cells.push(text(row.getCell(c).value, row.getCell(c).numFmt));
-      rows.push(cells);
-    }
-    sheets.push({ name: ws.name, rows, truncated: ws.rowCount > maxRows || ws.columnCount > maxCols });
-  });
+  const grid = await readWorkbookGrid(bytes, { maxRows, maxCols, numFmt: true, mode: opts.mode, timeoutMs: opts.timeoutMs });
+  const sheets: PreviewSheet[] = grid.map((ws) => ({
+    name: ws.name,
+    rows: ws.values.map((row, r) => row.map((v, c) => text(v, ws.numFmts?.[r]?.[c]))),
+    truncated: ws.rowCount > maxRows || ws.columnCount > maxCols,
+  }));
   return { sheets };
 }
 
