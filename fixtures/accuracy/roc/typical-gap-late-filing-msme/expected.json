@@ -1,5 +1,6 @@
 {
   "description": "Typical gaps: planned filing 10-11-2026. AOC-4 due 24-10-2026 -> 17 days late (24 Oct to 10 Nov) x Rs100 = Rs1,700 (170000 paise). MGT-7 due 23-11-2026 -> not late. DIR-3 KYC all done -> no KYC fee. Total additional fee Rs1,700 (warn roc.filing-delay-fee). MSME supplier outstanding 50 days in H2 (> 45) -> MSME-1 for Oct-Mar (warn roc.msme1-applicability).",
+  "category": "typical-gap",
   "job": {
     "fy": "2025-26",
     "period": "Annual",

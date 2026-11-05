@@ -1,5 +1,6 @@
 {
   "description": "Trap: auditor's term began FY 2020-21; FY 2025-26 is year 2025 - 2020 + 1 = 6 of a 5-year term, no fresh appointment (block roc.auditor-term). Term does not end 'at this AGM' (that was year 5), so no separate ADT-1 warn.",
+  "category": "trap",
   "job": {
     "fy": "2025-26",
     "period": "Annual",

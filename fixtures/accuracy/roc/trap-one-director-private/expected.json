@@ -1,5 +1,6 @@
 {
   "description": "Mistake replay in the pack: private company with one director (minimum two, s.149(1)) -> block roc.mistake-min-directors (approved mistake mistake-roc-001). Shareholding with one holder 1,00,000 shares. Figures as the clean case.",
+  "category": "trap",
   "job": {
     "fy": "2025-26",
     "period": "Annual",

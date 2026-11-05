@@ -6,13 +6,13 @@
 // Model use: only to map trial-balance ledger names to Schedule III heads (when staff give a TB
 // instead of a summary) and for the one LLM rule (related-party contracts → AOC-2). Every total,
 // threshold, date and fee is deterministic TypeScript in integer paise (analyse.ts, data.ts).
-import type { AgentDefinition } from "@/lib/agents/core/runner";
+import type { AgentDefinition, InputFile } from "@/lib/agents/core/runner";
 import { analyseRoc, columnFromTrialBalance, type RocExtract, type RocFinancials } from "./analyse";
 import { rocDeliverables } from "./deliverables";
 import { ROC_MAP_TASK_SPEC, acceptedMappings, mapLedgersUserMessage } from "./model-tasks";
 import { parseFinancialsXlsx, rocInputSchema, type RocInput } from "./parse";
 import { ROC_CHECKLIST, ROC_KEY, rocRegistry } from "./rules";
-import { dayNumber } from "./util";
+import { dayNumber, paiseToRupeeString, rupeesToPaise } from "./util";
 
 export { ROC_CHECKLIST, ROC_KEY, rocRegistry } from "./rules";
 export { ROC_MODEL_TASKS, LedgerMappingSchema } from "./model-tasks";
@@ -21,6 +21,19 @@ export type { RocExtract } from "./analyse";
 export type { RocInput } from "./parse";
 
 export const ROC_MAP_TASK = ROC_MAP_TASK_SPEC.name;
+
+/**
+ * Accuracy-harness input-sensitivity probe: a copy of the files with paid-up capital in
+ * company.json raised by ₹1 (a figure on every fixture, and the shareholding tie-out). The
+ * originals are not modified.
+ */
+export function rocProbeMutation(files: InputFile[]): InputFile[] {
+  const f = files.find((x) => x.name.toLowerCase() === "company.json");
+  if (!f) return files;
+  const company = JSON.parse(f.bytes.toString("utf8")) as Record<string, unknown>;
+  company.paidUpCapital = paiseToRupeeString(rupeesToPaise(company.paidUpCapital, "paidUpCapital") + 100);
+  return files.map((x) => (x === f ? { ...x, bytes: Buffer.from(JSON.stringify(company, null, 2), "utf8") } : { ...x }));
+}
 
 type ModelFn = Parameters<AgentDefinition<RocInput, RocExtract>["extract"]>[0]["model"];
 
@@ -103,6 +116,7 @@ export const rocAgent: AgentDefinition<RocInput, RocExtract> = {
   inputSchema: rocInputSchema,
   defaultChecklist: ROC_CHECKLIST,
   checklistRegistry: rocRegistry,
+  probeMutation: rocProbeMutation,
 
   async extract({ input, job, model, notes }) {
     return {

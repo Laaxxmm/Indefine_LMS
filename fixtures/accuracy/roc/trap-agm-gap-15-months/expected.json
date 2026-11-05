@@ -1,5 +1,6 @@
 {
   "description": "Trap: previous AGM 20-06-2025, this AGM 25-09-2026: 15-month limit is 20-09-2026 -> exceeded (block roc.agm-gap) although 25-09-2026 is within the 30-09-2026 six-month due date. Figures as the clean case.",
+  "category": "trap",
   "job": {
     "fy": "2025-26",
     "period": "Annual",

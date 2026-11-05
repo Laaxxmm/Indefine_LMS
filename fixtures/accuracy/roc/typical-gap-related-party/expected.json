@@ -1,5 +1,6 @@
 {
   "description": "Typical gap found by the LLM rule: notes describe office rent paid to a director's relative above market rate, not in the ordinary course at arm's length -> AOC-2 needed (warn roc.aoc2-related-party). Figures as the clean case.",
+  "category": "typical-gap",
   "job": {
     "fy": "2025-26",
     "period": "Annual",

@@ -1,5 +1,6 @@
 {
   "description": "Typical gaps: auditor's five-year term began FY 2021-22, so FY 2025-26 is year 5 and the term ends at this AGM, but no reappointment / new appointment is recorded (warn roc.adt1-trigger). DPT-3 not filed although Rs5,00,000 loan outstanding (warn roc.dpt3-applicability). Other figures as the clean case; auditorTermYear = 2025 - 2021 + 1 = 5.",
+  "category": "typical-gap",
   "job": {
     "fy": "2025-26",
     "period": "Annual",

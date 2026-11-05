@@ -1,5 +1,6 @@
 {
   "description": "Trap: preceding-year turnover Rs100,00,00,001 is Rs1 over the Rs100 crore small-company limit -> not small -> MGT-7 applies, but MGT-7A declared (block roc.annual-return-form). Preceding-year PBT = 1,00,00,00,001 + 1,00,000 - 99,01,00,001 = 1,00,00,000; turnover 100000000100 paise (< 5 cr) and net worth 1,26,00,000 -> no CSR. Current year unchanged from the clean case.",
+  "category": "trap",
   "job": {
     "fy": "2025-26",
     "period": "Annual",

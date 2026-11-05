@@ -1,5 +1,6 @@
 {
   "description": "Trap: trial balance input; the model's mapping leaves out 'GST Input Credit' (Dr 5,00,000). Code never guesses a head: the ledger is reported (block roc.financials-tie) and assets total 65L - 5L = 60L (600000000 paise), balance-sheet difference -5,00,000 (-50000000 paise). Other figures as the clean case.",
+  "category": "trap",
   "job": {
     "fy": "2025-26",
     "period": "Annual",

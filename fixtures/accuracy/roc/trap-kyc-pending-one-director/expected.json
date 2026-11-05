@@ -1,5 +1,6 @@
 {
   "description": "Trap: three directors, DIR-3 KYC pending for Rohan Kini (blank) -> block roc.din-kyc; directorsKycPending = 1. Planned filing 15-10-2026 is after the KYC due date 30-09-2026 -> late fee Rs5,000 (500000 paise) for the one pending director; total additional fee Rs5,000 (warn roc.filing-delay-fee). AOC-4 / MGT-7 in time.",
+  "category": "trap",
   "job": {
     "fy": "2025-26",
     "period": "Annual",

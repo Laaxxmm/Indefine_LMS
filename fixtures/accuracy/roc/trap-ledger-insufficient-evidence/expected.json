@@ -1,5 +1,6 @@
 {
   "description": "Abstain case: the trial balance has 'Suspense Account - pending clarification' (Dr 5,00,000) in place of the GST input ledger. The right model answer is insufficient_evidence (the name does not show a Schedule III head); it becomes a reviewer question (block roc.financials-tie) and is never defaulted to a head. Assets 65L - 5L = 60L (600000000 paise), difference -50000000 paise; other figures as the clean case.",
+  "category": "trap",
   "job": {
     "fy": "2025-26",
     "period": "Annual",

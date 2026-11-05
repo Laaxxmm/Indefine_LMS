@@ -1,5 +1,6 @@
 {
   "description": "Trap: AGM held 01-10-2026, one day after the 30-09-2026 due date (block roc.agm-due-date), agmDelayDays = 1. Filing anchors on the AGM actually held: AOC-4 = 01-10 + 29 = 30-10-2026; MGT-7 = 01-10 + 59 = 29-11-2026 (01 Oct + 30 = 31 Oct, + 29 = 29 Nov). Planned filing 15-10-2026 -> no fee. Gap from previous AGM 26-09-2025 is under 15 months.",
+  "category": "trap",
   "job": {
     "fy": "2025-26",
     "period": "Annual",

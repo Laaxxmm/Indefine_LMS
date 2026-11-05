@@ -1,5 +1,6 @@
 {
   "description": "Trap: unlisted public company with paid-up Rs12 crore (>= Rs10 crore -> rotation class). Individual auditor in year 5 (term began FY 2021-22) and reappointed at this AGM for another 5 years: 5 + 5 = 10 > 5-year individual limit (block roc.auditor-term). ADT-1 required for the reappointment: AGM 25-09-2026 + 14 = 09-10-2026; filing 15-10-2026 -> 6 days late -> 2 x normal fee. Authorised Rs15 crore -> normal fee Rs600; ADT-1 additional fee Rs1,200 (120000 paise); total additional fee Rs1,200 (warn roc.filing-delay-fee). Public company -> MGT-7, declared MGT-7. Shares 1,20,00,000 x Rs10 = Rs12,00,00,000 (12000000000 paise). BS: share capital 12 cr, reserves 3 cr, borrowings 5L ST, payables 12L, other 3L = 15,20,00,000; assets fixed 9,00,00,000, inventories 3,00,00,000, receivables 2,00,00,000, cash 1,15,00,000, other 5,00,000 = 15,20,00,000. Net worth 15 cr. Three directors (public minimum).",
+  "category": "trap",
   "job": {
     "fy": "2025-26",
     "period": "Annual",

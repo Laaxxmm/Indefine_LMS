@@ -34,6 +34,12 @@ export function rupeesToPaise(v: unknown, field = "amount"): number {
   return (neg || m[1] ? -1 : 1) * paise || 0;
 }
 
+/** Integer paise → a plain rupee string the parsers accept ("123456.78", "-5.00"). */
+export function paiseToRupeeString(paise: number): string {
+  const abs = Math.abs(paise);
+  return `${paise < 0 ? "-" : ""}${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, "0")}`;
+}
+
 /** Optional amount: blank / null / undefined → 0. */
 export function optPaise(v: unknown, field = "amount"): number {
   if (v === null || v === undefined || (typeof v === "string" && v.trim() === "")) return 0;

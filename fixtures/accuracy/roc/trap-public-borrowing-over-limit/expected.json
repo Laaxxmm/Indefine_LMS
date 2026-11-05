@@ -1,5 +1,6 @@
 {
   "description": "Mistake replay in the pack: public company (paid-up Rs10,00,000, authorised Rs50,00,000) with long-term borrowings Rs50,00,000 + short-term Rs5,00,000 = Rs55,00,000 above paid-up + reserves (10L + 35L = 45L): s.180(1)(c) special resolution (warn roc.mistake-borrowing-limit, approved mistake mistake-roc-003). Assets: fixed 70,00,000 so assets 1,15,00,000 = equity 45L + liabilities (50L + 5L + 12L + 3L = 70L). Public -> MGT-7 (declared MGT-7). Three directors. Auditor firm year 4.",
+  "category": "trap",
   "job": {
     "fy": "2025-26",
     "period": "Annual",

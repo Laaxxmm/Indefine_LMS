@@ -1,5 +1,6 @@
 {
   "description": "Trap: register shows 59,999 + 40,000 = 99,999 shares x Rs10 = Rs9,99,990 (99999000 paise) against paid-up Rs10,00,000: difference -Rs10 = -1000 paise (block roc.shareholding-ties). Balance sheet itself ties.",
+  "category": "trap",
   "job": {
     "fy": "2025-26",
     "period": "Annual",
