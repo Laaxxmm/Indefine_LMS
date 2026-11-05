@@ -33,7 +33,8 @@ describe("audit SOP pack", () => {
     for (const r of AUDIT_CHECKLIST.rules) {
       if (Object.entries(r.params ?? {}).some(([k, v]) => typeof v === "number" && k !== "tolerancePaise")) expect(typeof r.params?.verify, r.id).toBe("string");
     }
-    expect(AUDIT_CHECKLIST.rules.filter((r) => r.severity === "block").map((r) => r.id)).toEqual(["audit.tb-balanced", "audit.lead-tie"]);
+    expect(AUDIT_CHECKLIST.rules.filter((r) => r.severity === "block").map((r) => r.id)).toEqual(["audit.tb-balanced", "audit.lead-tie", "audit.sample-below-minimum"]);
+    expect(String(AUDIT_CHECKLIST.rules.find((r) => r.id === "audit.sample-below-minimum")?.params?.verify)).toMatch(/partner to confirm SOP/);
   });
   it("the related-party question carries the department preamble and the abstain instruction", () => {
     const q = AUDIT_CHECKLIST.rules.find((r) => r.kind === "llm")!.check;

@@ -1,0 +1,146 @@
+{
+  "description": "Trap (opening TB unbalanced by ₹1): Furniture and Fixtures was brought forward into FY 2026-27 at ₹1,64,201 against ₹1,64,200 in the closed books, and the export carries no 'Difference in opening balances' line, so the October TB inherits the ₹1 opening difference. Debits 13,96,600 + 1 = 13,96,601 (139660100 paise), credits 13,96,600 (139660000) -> difference ₹1 (100 paise) -> block books.tb-balanced. Everything else as clean-month: bank reconciles (7 matched, cheque 452 ₹4,250 unpresented, difference 0), TDS ₹20,000 deposited, GST ties, no reminders. (The books agent has no separate check that the prior-month TB balances — partner item.)",
+  "category": "trap",
+  "flags": [
+    {
+      "ruleId": "books.tb-balanced",
+      "severity": "block"
+    }
+  ],
+  "figures": {
+    "tbDebitPaise": 139660100,
+    "tbCreditPaise": 139660000,
+    "tbDifferencePaise": 100,
+    "tbLedgerCount": 17,
+    "bankMatchedCount": 7,
+    "bankUnmatchedStatementCount": 0,
+    "bankUnmatchedLedgerCount": 1,
+    "balancePerBankPaise": 34675000,
+    "balancePerBooksPaise": 34250000,
+    "bankReconDifferencePaise": 0,
+    "tdsDeductedPaise": 2000000,
+    "tdsDepositedPaise": 2000000,
+    "tdsShortfallPaise": 0,
+    "gstAbsDifferencePaise": 0,
+    "suspensePaise": 0,
+    "cashBalancePaise": 1825000,
+    "suggestionCount": 0,
+    "classificationQuestionCount": 0,
+    "parseIssueCount": 0,
+    "bankAmountOnlyCount": 0
+  },
+  "deliverables": [
+    {
+      "name": "Month-end pack",
+      "sheets": [
+        {
+          "name": "Summary",
+          "columns": [
+            "Item",
+            "Amount",
+            "Count",
+            "Note"
+          ]
+        },
+        {
+          "name": "Trial balance",
+          "columns": [
+            "Ledger",
+            "Group",
+            "Debit",
+            "Credit"
+          ]
+        },
+        {
+          "name": "Bank reconciliation",
+          "columns": [
+            "Particulars",
+            "Amount",
+            "Note"
+          ]
+        },
+        {
+          "name": "Bank matching",
+          "columns": [
+            "Side",
+            "Line",
+            "Date",
+            "Reference",
+            "Narration",
+            "Amount",
+            "Status",
+            "Matched with",
+            "Note"
+          ]
+        },
+        {
+          "name": "Expense suggestions",
+          "columns": [
+            "Line",
+            "Date",
+            "Narration",
+            "Amount",
+            "Suggested ledger",
+            "Confidence",
+            "Reason",
+            "Status"
+          ]
+        },
+        {
+          "name": "Suspense and unreconciled",
+          "columns": [
+            "Item",
+            "Source",
+            "Date",
+            "Amount",
+            "Age (days)",
+            "Note"
+          ]
+        },
+        {
+          "name": "Accrual-prepaid reminders",
+          "columns": [
+            "Type",
+            "Item",
+            "Ledger",
+            "Amount",
+            "Note"
+          ]
+        },
+        {
+          "name": "TDS check",
+          "columns": [
+            "Section",
+            "Month",
+            "Deducted",
+            "Deposited",
+            "Shortfall",
+            "Due date",
+            "Last deposit",
+            "Status"
+          ]
+        },
+        {
+          "name": "GST tie-out",
+          "columns": [
+            "Head",
+            "Per books",
+            "Per return",
+            "Difference",
+            "Status"
+          ]
+        },
+        {
+          "name": "Checklist",
+          "columns": [
+            "Rule",
+            "Severity",
+            "Status",
+            "Message",
+            "Evidence"
+          ]
+        }
+      ]
+    }
+  ]
+}

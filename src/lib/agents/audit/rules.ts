@@ -3,6 +3,9 @@
 // carries a `verify` note. No rule expresses or implies an audit opinion.
 // audit.caro-small-company-pending-verification (warn): CARO applicability would change under
 // small-company limits held as data but not yet partner-verified (they are never applied).
+// Severity — PARTNER TO CONFIRM SOP: a planned sample below the SOP minimum (25 items, population
+// larger than the sample) is a BLOCK, so the working papers cannot be approved on an under-sized
+// sample without the partner's recorded decision (it was a warn before).
 import { createRuleRegistry, type ChecklistPack, type CheckOutcome, type DeterministicCheck, type RuleDefinition } from "@/lib/agents/core/checklist";
 import { formatDayKey, formatInr } from "@/lib/agents/core/format";
 import type { CheckInput } from "@/lib/agents/core/runner";
@@ -243,11 +246,15 @@ export const AUDIT_CHECKLIST: ChecklistPack = {
     rule({
       id: "audit.sample-below-minimum",
       title: "Sample sizes meet the SOP minimum",
-      severity: "warn",
+      severity: "block",
       kind: "deterministic",
       check: "audit.sample-below-minimum",
       evidence: "population and planned sample size",
-      params: { minSampleSize: SAMPLING.minSampleSize, confidenceFactorTenths: SAMPLING.confidenceFactorTenths, verify: SAMPLING.verify },
+      params: {
+        minSampleSize: SAMPLING.minSampleSize,
+        confidenceFactorTenths: SAMPLING.confidenceFactorTenths,
+        verify: `${SAMPLING.verify} Severity block (an under-sized sample needs the partner's recorded decision) — partner to confirm SOP.`,
+      },
     }),
     rule({ id: "audit.population-tie", title: "Sampling populations agree to the trial balance", severity: "warn", kind: "deterministic", check: "audit.population-tie", evidence: "population file, population total and TB ledger balance" }),
     rule({ id: "audit.opinion-language-in-inputs", title: "No audit-opinion wording in texts carried into the working papers", severity: "warn", kind: "deterministic", check: "audit.opinion-language-in-inputs", evidence: "the phrase and its source row", params: { verify: OPINION_VERIFY } }),
