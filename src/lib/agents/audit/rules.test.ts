@@ -64,6 +64,10 @@ describe("block rules", () => {
     const py = run("audit.lead-tie", ex({ priorTb: tb(`${TB}\nOdd,,1.00,`, "tb-prior.csv") }));
     expect(py.evidence?.location).toBe("tb-prior.csv row 6");
     expect(run("audit.lead-tie", ex({ tb: null })).status).toBe("na");
+    // Zoho account types mapped through a noted pattern: still a pass, with the grouping to confirm.
+    const zoho = run("audit.lead-tie", ex({ tb: tb("Machine,Fixed Asset,100.00,\nCapital,Equity,,100.00"), priorTb: null }));
+    expect(zoho.status).toBe("pass");
+    expect(zoho.message).toBe('Lead schedules tie. Groupings to confirm: "Fixed Asset" → L-E (Zoho "Fixed Asset" (singular) → property, plant and equipment — partner to confirm Schedule III grouping.)');
   });
 });
 

@@ -271,6 +271,27 @@ describe("gst.negative-outward-tax (warn)", () => {
   });
 });
 
+describe("gst.negative-rcm (warn)", () => {
+  const legal = cls("Legal Fees", { rcmService: "legal" });
+  const bill = (taxable: number) => purchase({ number: "KD/91", gstin: null, reverseCharge: true, ledger: "Legal Fees", lines: [line(taxable)] });
+  const note = (taxable: number) => purchase({ number: "KD/CN/12", gstin: null, reverseCharge: true, docType: "CRN", ledger: "Legal Fees", lines: [line(taxable)], loc: "purchases.csv row 9" });
+  it("fails with both carried-forward amounts and the credit note when reverse-charge notes exceed a head's bills", () => {
+    const o = check("gst.negative-rcm", extract({ purchases: [bill(R(20000)), note(R(50000))], ledgers: [legal] }));
+    expect(o).toMatchObject({ status: "fail", evidence: { quote: "KD/CN/12: IGST 0.00, CGST 4500.00, SGST 4500.00", location: "purchases.csv row 9" } });
+    expect(o.message).toMatch(/3\.1\(d\) excess CGST ₹2700\.00, SGST ₹2700\.00 and Table 4\(A\)\(3\) excess CGST ₹2700\.00, SGST ₹2700\.00/);
+    expect(o.message).toMatch(/carried forward/);
+    expect(o.message).toMatch(/partner to verify/);
+  });
+  it("boundary: notes equal to the bills → pass; one rupee more → fail; no reverse charge → pass", () => {
+    expect(status(check("gst.negative-rcm", extract({ purchases: [bill(R(20000)), note(R(20000))], ledgers: [legal] })))).toBe("pass");
+    expect(status(check("gst.negative-rcm", extract({ purchases: [bill(R(20000)), note(R(20001))], ledgers: [legal] })))).toBe("fail");
+    expect(status(check("gst.negative-rcm", extract({ ...matched(purchase()) })))).toBe("pass");
+  });
+  it("a forward-charge supplier credit note never trips it (it is not reverse charge)", () => {
+    expect(status(check("gst.negative-rcm", extract({ ...matched(purchase({ docType: "CRN" })) })))).toBe("pass");
+  });
+});
+
 describe("gst.late-fee-interest (warn)", () => {
   const prof = (d: string | null) => ({ ...extract().profile, expectedFilingDate: d });
   it("fails when filing is expected after the due date, with interest and fee", () => {

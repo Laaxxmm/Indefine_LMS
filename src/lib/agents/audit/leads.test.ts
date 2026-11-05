@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { parseCsv } from "@/lib/agents/books/table";
 import { parseTb } from "@/lib/agents/books/tb";
-import { LEAD_AREAS } from "./config";
-import { areaOf, buildLeads, isMaterialVariance, varianceBps } from "./leads";
+import { LEAD_AREAS, LEAD_GROUPING_NOTES } from "./config";
+import { areaOf, buildLeads, isMaterialVariance, matchArea, varianceBps } from "./leads";
 import { OpinionLanguageError, WITHHELD, assertNoOpinion, findOpinionInSheets, opinionHits, sanitizeSheets, sanitizeText } from "./opinion";
 
 const tb = (csv: string) => parseTb("tb.csv", parseCsv(`Ledger,Group,Debit,Credit\n${csv}`)).tb!;
@@ -46,6 +46,86 @@ describe("grouping map", () => {
     ["Other Liability", "L-D"],
     ["Expense", "L-N"],
   ])("%s → %s", (group, wp) => expect(areaOf({ group, ledger: "x" })?.wp).toBe(wp));
+  describe("Zoho Books standard account types (audit round 2: these were unmapped and blocked)", () => {
+    it.each([
+      ["Fixed Asset", "L-E"],
+      ["Other Asset", "L-J"],
+      ["Non Current Asset", "L-J"],
+      ["Non-Current Asset", "L-J"],
+      ["Stock", "L-G"],
+      ["Input Tax", "L-J"],
+      ["Output Tax", "L-D"],
+      ["Credit Card", "L-D"],
+      ["Deferred Tax Asset", "L-O"],
+      ["Deferred Tax Assets", "L-O"],
+      ["Deferred Tax Liability", "L-P"],
+      ["Deferred Tax Liabilities", "L-P"],
+      ["FIXED ASSET", "L-E"],
+    ])("%s → %s", (group, wp) => {
+      // Before the fix every one of these was unmapped (null), except Deferred Tax Liability, which the
+      // catch-all "liabilit" put in L-D (other current liabilities).
+      const hit = matchArea({ group, ledger: "x" });
+      expect(hit?.area.wp).toBe(wp);
+      expect(hit?.rule?.verify).toMatch(/partner to confirm Schedule III grouping\.$/);
+    });
+    it("Payment Clearing goes by its balance: debit (or nil) → L-J other current assets, credit → L-D other current liabilities", () => {
+      expect(areaOf({ group: "Payment Clearing", ledger: "Razorpay Clearing", debitPaise: 5000, creditPaise: 0 })?.wp).toBe("L-J");
+      expect(areaOf({ group: "Payment Clearing", ledger: "Razorpay Clearing", debitPaise: 0, creditPaise: 5000 })?.wp).toBe("L-D");
+      expect(areaOf({ group: "Payment Clearing", ledger: "Razorpay Clearing", debitPaise: 100, creditPaise: 100 })?.wp).toBe("L-J");
+      expect(areaOf({ group: "Payment Clearing", ledger: "x" })?.wp).toBe("L-J"); // no amounts: nil balance
+      // In buildLeads the same ledger can sit in L-J one year and L-D the other (classified at each balance-sheet date).
+      const r = buildLeads(tb("Clearing,Payment Clearing,50,\nCapital,Equity,,50"), tb("Clearing,Payment Clearing,,30\nCapital,Equity,30,"));
+      expect(r.schedules.map((s) => [s.wp, s.cyPaise, s.pyPaise])).toEqual([
+        ["L-A", -5000, 3000],
+        ["L-D", 0, -3000],
+        ["L-J", 5000, 0],
+      ]);
+      expect(r.unmapped).toEqual([]);
+    });
+    it.each([
+      // Neighbours that must not move.
+      ["Fixed Assets", "L-E"],
+      ["Stock-in-Hand", "L-G"],
+      ["Closing Stock", "L-G"],
+      ["Other Current Asset", "L-J"],
+      ["Other Assets", "L-J"],
+      ["Non-Current Assets", "L-J"],
+      ["Current Assets", "L-J"],
+      ["Duties & Taxes", "L-D"],
+      ["Other Current Liability", "L-D"],
+      ["Other Liability", "L-D"],
+      ["Non Current Liability", "L-D"],
+      ["Long Term Liability", "L-B"],
+      ["Provisions", "L-D"],
+      ["Intangible Asset", "L-E"],
+      ["Accounts Receivable", "L-H"],
+      ["Accounts Payable", "L-C"],
+      ["Cost Of Goods Sold", "L-M"],
+      ["Other Expense", "L-N"],
+      ["Income", "L-L"],
+      ["Equity", "L-A"],
+    ])("neighbour %s stays → %s (no partner note)", (group, wp) => {
+      const hit = matchArea({ group, ledger: "x" });
+      expect(hit?.area.wp).toBe(wp);
+      expect(hit?.rule).toBeNull();
+    });
+    it.each(["Stock in Trade", "Input Tax Credit Reversal", "Credit Cards Payable", "Tax", "Suspense A/c", "Branch / Divisions", "Overseas Tax Payable"])("anchored: %s is not caught by the new patterns", (group) => {
+      expect(matchArea({ group, ledger: "x" })?.rule ?? null).toBeNull();
+      expect(["L-E", "L-G", "L-J", "L-O", "L-P"]).not.toContain(areaOf({ group, ledger: "x" })?.wp ?? "none");
+    });
+    it("every conditional pattern carries a verify note; the grouping notes of a run are listed once per group", () => {
+      expect(LEAD_GROUPING_NOTES).toHaveLength(11);
+      for (const n of LEAD_GROUPING_NOTES) expect(n.verify).toMatch(/^Zoho ".+" .+ — partner to confirm Schedule III grouping\.$/);
+      const r = buildLeads(tb("Machine,Fixed Asset,100,\nVan,Fixed Asset,50,\nGST In,Input Tax,10,\nCapital,Equity,,160"), null);
+      expect(r.groupingNotes.map((n) => [n.group, n.wp])).toEqual([
+        ["Fixed Asset", "L-E"],
+        ["Input Tax", "L-J"],
+      ]);
+      expect(r.unmapped).toEqual([]);
+      expect(r.tie.cyLeadsPaise).toBe(r.tie.cyTbNetPaise);
+      expect(buildLeads(tb("Cash,Cash-in-Hand,1,\nCapital,Capital Account,,1"), null).groupingNotes).toEqual([]);
+    });
+  });
   it("suspense / blank groups stay unmapped; a ledger pattern can map", () => {
     expect(areaOf({ group: "Suspense A/c", ledger: "Suspense" })).toBeNull();
     expect(areaOf({ group: "", ledger: "x" })).toBeNull();

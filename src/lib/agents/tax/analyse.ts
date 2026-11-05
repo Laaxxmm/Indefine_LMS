@@ -23,6 +23,7 @@ import {
   type CgResult,
   type InstalmentRow,
   type MsmeFinding,
+  type Stage234B,
   type TaxBreakdown,
   type TaxContext,
 } from "./compute";
@@ -103,7 +104,8 @@ export type TaxAnalysis = {
   /** Income test for s.44AB(d)/(e) and s.44AD(4): new-regime total income against the basic exemption (0 for firms / companies). */
   auditIncomeTest: { totalIncomePaise: number; basicExemptionPaise: number };
   itrForm: "ITR-1" | "ITR-2" | "ITR-3" | "ITR-4" | "ITR-5" | "ITR-6";
-  advance: { liable: boolean; exempt: boolean; presumptiveOnly: boolean; assessedTaxPaise: number; paidPaise: number; rows: InstalmentRow[]; i234B: number; i234C: number };
+  /** `stages234B`: the s.234B(2) stages (one when no tax is paid after 31 March; empty when 234B does not apply). */
+  advance: { liable: boolean; exempt: boolean; presumptiveOnly: boolean; assessedTaxPaise: number; paidPaise: number; rows: InstalmentRow[]; i234B: number; i234C: number; stages234B: Stage234B[] };
   i234A: number;
   fee234F: number;
   netPayablePaise: number;
@@ -502,7 +504,8 @@ function analyse(x: TaxExtract): TaxAnalysis {
   else if (!hasBiz) itrForm = p.status === "individual" && simple && !p.isDirector && !p.hasUnlistedShares ? "ITR-1" : "ITR-2";
   else itrForm = simple && presOk && !p.isDirector && !p.hasUnlistedShares ? "ITR-4" : "ITR-3";
 
-  // Advance tax, 234B / 234C, 234A, 234F.
+  // Advance tax, 234B / 234C, 234A, 234F. Payments dated after 31 March are self-assessment tax:
+  // they do not count towards the 90% test, but s.234B(2) charges the reduced shortfall after them.
   const taxLiability = chosenFull.tax.total;
   const assessed = Math.max(0, taxLiability - tds.credit);
   const exempt = p.status === "individual" && resident && ageBand !== "below60" && !hasBiz;
@@ -562,7 +565,7 @@ function analyse(x: TaxExtract): TaxAnalysis {
     audit,
     auditIncomeTest: { totalIncomePaise: resNew.totalIncome, basicExemptionPaise: exemptLimit },
     itrForm,
-    advance: { liable: adv.liable, exempt, presumptiveOnly: presOk, assessedTaxPaise: assessed, paidPaise: paid, rows: adv.rows, i234B: adv.i234B, i234C: adv.i234C },
+    advance: { liable: adv.liable, exempt, presumptiveOnly: presOk, assessedTaxPaise: assessed, paidPaise: paid, rows: adv.rows, i234B: adv.i234B, i234C: adv.i234C, stages234B: adv.stages234B },
     i234A,
     fee234F,
     netPayablePaise,

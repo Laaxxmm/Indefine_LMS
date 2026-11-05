@@ -115,7 +115,8 @@ export const taxRegistry = createRuleRegistry<TaxCheckInput>({
     if (a.exempt) return na("resident senior citizen without business income: no advance tax (s.207(2))");
     const total = a.i234B + a.i234C;
     if (total <= 0) return pass(a.liable ? "advance tax paid in time" : "assessed tax below ₹10,000: no advance tax");
-    return fail(`Interest u/s 234B ${inr(a.i234B)} and 234C ${inr(a.i234C)} on assessed tax ${inr(a.assessedTaxPaise)} with advance tax paid ${inr(a.paidPaise)}`, `advance tax paid ${formatInr(a.paidPaise / 100)}`, "organiser.json advanceTax");
+    const staged = a.stages234B.length > 1 ? ` (s.234B(2), reduced after tax paid after 31 March: ${a.stages234B.map((s) => `${inr(s.shortfallPaise)} × ${s.months} month(s) to ${day(s.to)}`).join(", then ")})` : "";
+    return fail(`Interest u/s 234B ${inr(a.i234B)}${staged} and 234C ${inr(a.i234C)} on assessed tax ${inr(a.assessedTaxPaise)} with advance tax paid ${inr(a.paidPaise)}`, `advance tax paid ${formatInr(a.paidPaise / 100)}`, "organiser.json advanceTax");
   },
   "tax.late-filing": ({ extracted: x }) => {
     const a = analyseTax(x);
