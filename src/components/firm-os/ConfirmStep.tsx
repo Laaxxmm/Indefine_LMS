@@ -63,6 +63,7 @@ export function ConfirmStep({
   triggerVariant = "secondary",
   confirmLabel,
   confirmVariant,
+  busyLabel,
   consequence,
   disabled = false,
   align = "end",
@@ -77,6 +78,8 @@ export function ConfirmStep({
   confirmLabel: React.ReactNode;
   /** Defaults to the trigger's variant (a danger action stays red when confirmed). */
   confirmVariant?: ButtonVariant;
+  /** What the confirm button says while it runs (default "Saving…"). */
+  busyLabel?: React.ReactNode;
   consequence: React.ReactNode;
   disabled?: boolean;
   align?: "start" | "end";
@@ -112,6 +115,7 @@ export function ConfirmStep({
           confirmLabel={confirmLabel}
           confirmVariant={confirmVariant ?? triggerVariant}
           busy={busy}
+          busyLabel={busyLabel}
           align={align}
           size={size}
           onCancel={() => {

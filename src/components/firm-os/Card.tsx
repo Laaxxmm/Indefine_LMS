@@ -1,5 +1,5 @@
 // Card (padding 24), Section (a titled region, 32 below it) and SectionTitle (the shared h2).
-import { card, sectionGap, sectionTitle } from "@/components/ui";
+import { card, cx, sectionGap, sectionTitle } from "@/components/ui";
 
 type Tag = "div" | "section" | "article" | "aside" | "form";
 
@@ -10,7 +10,7 @@ export function Card({
   ...rest
 }: { as?: Tag; className?: string; children: React.ReactNode } & Omit<React.HTMLAttributes<HTMLElement>, "className" | "children">) {
   return (
-    <As className={`${card} ${className}`} {...rest}>
+    <As className={cx(card, className)} {...rest}>
       {children}
     </As>
   );
@@ -18,7 +18,7 @@ export function Card({
 
 export function SectionTitle({ id, as: As = "h2", className = "", children }: { id?: string; as?: "h2" | "h3" | "dt"; className?: string; children: React.ReactNode }) {
   return (
-    <As id={id} className={`${sectionTitle} ${className}`}>
+    <As id={id} className={cx(sectionTitle, className)}>
       {children}
     </As>
   );
@@ -44,7 +44,7 @@ export function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section aria-labelledby={id} className={`${framed ? card : ""} ${last ? "" : sectionGap} ${className}`}>
+    <section aria-labelledby={id} className={cx(framed && card, !last && sectionGap, className) || undefined}>
       <SectionTitle id={id}>{title}</SectionTitle>
       {children}
     </section>

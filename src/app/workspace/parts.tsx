@@ -1,8 +1,9 @@
 // Pieces shared by /focus and /workspace/[jobId]: the SOP steps with the current one marked, the
 // "before you move on" checklist, open questions and the portal note. Server components; classes
-// from src/components/ui.ts and src/app/agents/parts.tsx, nothing restyled per page.
-import { CheckCircle2, Circle, CircleHelp, Info } from "lucide-react";
-import { sectionTitle } from "@/app/agents/parts";
+// from src/components/ui.ts and the shared Firm OS pieces, nothing restyled per page.
+import { CheckCircle2, Circle, CircleHelp } from "lucide-react";
+import { sectionTitle } from "@/components/ui";
+import { Alert } from "@/components/firm-os";
 import type { NextTask } from "@/lib/workspace/contract";
 
 type Steps = NextTask["sopSteps"];
@@ -22,7 +23,7 @@ export function SopStepsList({ steps, headingId }: { steps: Steps; headingId: st
             <li
               key={s.number}
               aria-current={current ? "step" : undefined}
-              className={`flex items-start gap-3 rounded-lg px-3 py-2.5 border ${current ? "border-brand-200 bg-brand-50" : "border-transparent"}`}
+              className={`flex items-start gap-3 rounded-lg px-3 py-3 border ${current ? "border-brand-200 bg-brand-50" : "border-transparent"}`}
             >
               <span
                 aria-hidden="true"
@@ -33,12 +34,12 @@ export function SopStepsList({ steps, headingId }: { steps: Steps; headingId: st
                 {done ? <CheckCircle2 className="w-3.5 h-3.5" /> : s.number}
               </span>
               <span className="min-w-0">
-                <span className={`block text-[13.5px] ${current ? "font-bold text-ink" : done ? "font-semibold text-ink-soft" : "font-semibold text-ink"}`}>
+                <span className={`block text-[13px] ${current ? "font-bold text-ink" : done ? "font-semibold text-ink-soft" : "font-semibold text-ink"}`}>
                   <span className="sr-only">Step {s.number}{current ? ", current step" : done ? ", done" : ""}: </span>
                   {s.title}
                   {current && <span className="ml-2 text-[11px] font-bold uppercase tracking-wide text-brand-700" aria-hidden="true">Now</span>}
                 </span>
-                {(current || !done) && <span className={`block text-[12.5px] mt-0.5 ${current ? "text-ink-soft" : "text-ink-mute"}`}>{s.detail}</span>}
+                {(current || !done) && <span className={`block text-[12px] mt-1 ${current ? "text-ink-soft" : "text-ink-mute"}`}>{s.detail}</span>}
               </span>
             </li>
           );
@@ -56,7 +57,7 @@ export function ChecklistList({ items, headingId }: { items: string[]; headingId
       </h2>
       <ul className="space-y-2">
         {items.map((t) => (
-          <li key={t} className="flex items-start gap-2.5 text-[13.5px]">
+          <li key={t} className="flex items-start gap-3 text-[13px]">
             <Circle className="w-4 h-4 mt-0.5 shrink-0 text-ink-mute" aria-hidden="true" />
             <span>{t}</span>
           </li>
@@ -74,11 +75,11 @@ export function OpenQuestionsList({ questions, headingId }: { questions: NextTas
       </h2>
       <ul className="space-y-2">
         {questions.map((q) => (
-          <li key={q.ruleId} className="flex items-start gap-2.5 text-[13.5px]">
+          <li key={q.ruleId} className="flex items-start gap-3 text-[13px]">
             <CircleHelp className="w-4 h-4 mt-0.5 shrink-0 text-amber-800" aria-hidden="true" />
             <span className="min-w-0">
               {q.question}
-              <span className="block text-[11.5px] text-ink-mute">
+              <span className="block text-[12px] text-ink-mute">
                 {q.clientRequest ? "Ask the client for this document" : q.kind === "model-disagreement" ? "Two reads disagreed: decide it yourself" : "Outside this agent's scope: check it by hand"}
                 {q.location ? ` · ${q.location}` : ""}
               </span>
@@ -93,10 +94,9 @@ export function OpenQuestionsList({ questions, headingId }: { questions: NextTas
 /** Plain note for portal-filed jobs: no links, no embedding (the firm never automates portals). */
 export function PortalNote({ note }: { note: string }) {
   return (
-    <p className="flex items-start gap-2.5 rounded-xl border border-sky-200 bg-sky-50 text-sky-800 px-4 py-3 text-[13px]" role="note">
-      <Info className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
-      <span>{note}</span>
-    </p>
+    <Alert tone="info" role="note">
+      {note}
+    </Alert>
   );
 }
 

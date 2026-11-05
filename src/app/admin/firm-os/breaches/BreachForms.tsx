@@ -6,20 +6,14 @@
 // Closing is final, so it asks for confirmation first (MistakeDecision pattern).
 import { useId, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
-import { btnDanger, btnGhost, btnPrimary, call, errorText, field } from "@/components/ui";
-import { focusRing } from "@/app/agents/parts";
+import { call, errorText, field, focusRing, labelText } from "@/components/ui";
+import { Button } from "@/components/firm-os";
 
-const labelText = "text-[11px] font-bold text-ink-mute";
 const severities = [
   { value: "low", label: "Low" },
   { value: "medium", label: "Medium" },
   { value: "high", label: "High" },
 ];
-
-function Spinner({ on }: { on: boolean }) {
-  return on ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : null;
-}
 
 function ErrorLine({ error }: { error: string | null }) {
   return error ? (
@@ -101,10 +95,9 @@ export function NewBreachForm({ nowLocal }: { nowLocal: string }) {
       </div>
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <ErrorLine error={error} />
-        <button type="submit" disabled={busy} className={`${btnPrimary} ${focusRing} inline-flex items-center gap-1.5 ml-auto`}>
-          <Spinner on={busy} />
-          {busy ? "Recording…" : "Record incident"}
-        </button>
+        <Button type="submit" variant="primary" busy={busy} busyLabel="Recording…" className="ml-auto">
+          Record incident
+        </Button>
       </div>
     </form>
   );
@@ -216,22 +209,21 @@ export function BreachActions({ id, nowLocal, boardDone, principalsDone, severit
       )}
       <ErrorLine error={error} />
       {confirming && FINAL[step] ? (
+        // The confirm group of ConfirmPanel, with a submit button: the form's own submit records the step.
         <div className="flex items-center gap-2 flex-wrap justify-end" role="group" aria-label={`Confirm: ${steps.find((s) => s.value === step)?.label ?? step}`}>
-          <span className="text-[12px] text-ink-soft max-w-md text-right">{FINAL[step]!.consequence}</span>
-          <button type="button" disabled={busy} onClick={() => setConfirming(false)} className={`${btnGhost} ${focusRing}`}>
+          <span className="text-[12px] leading-4 text-ink-soft max-w-md text-right">{FINAL[step]!.consequence}</span>
+          <Button disabled={busy} onClick={() => setConfirming(false)}>
             Cancel
-          </button>
-          <button type="submit" disabled={busy} className={`${step === "close" ? btnDanger : btnPrimary} ${focusRing} inline-flex items-center gap-1.5`}>
-            <Spinner on={busy} />
-            {busy ? "Saving…" : FINAL[step]!.confirm}
-          </button>
+          </Button>
+          <Button type="submit" variant={step === "close" ? "danger" : "primary"} busy={busy} busyLabel="Saving…">
+            {FINAL[step]!.confirm}
+          </Button>
         </div>
       ) : (
         <div className="flex justify-end">
-          <button type="submit" disabled={busy} className={`${step === "close" ? btnDanger : btnPrimary} ${focusRing} inline-flex items-center gap-1.5`}>
-            <Spinner on={busy} />
-            {busy ? "Saving…" : step === "close" ? "Close incident…" : FINAL[step] ? "Record notice…" : "Save step"}
-          </button>
+          <Button type="submit" variant={step === "close" ? "danger" : "primary"} busy={busy} busyLabel="Saving…">
+            {step === "close" ? "Close incident…" : FINAL[step] ? "Record notice…" : "Save step"}
+          </Button>
         </div>
       )}
     </form>

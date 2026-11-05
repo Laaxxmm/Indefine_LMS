@@ -15,6 +15,9 @@ export async function call(url: string, body?: unknown, method = "POST"): Promis
   return { ok: res.ok, error: res.ok ? null : String(data.error ?? "Something went wrong"), data };
 }
 
+/** Joins class names, skipping empty ones (no stray spaces in the rendered class attribute). */
+export const cx = (...classes: (string | false | null | undefined)[]) => classes.filter(Boolean).join(" ");
+
 // ------------------------------------------------------------------ focus
 
 /** Visible keyboard focus for every interactive element (links, buttons, fields, summaries). */
@@ -40,12 +43,14 @@ export const stack = "space-y-6";
 
 // ------------------------------------------------------------------ type
 // One scale: 11 (eyebrow, section title, chip, table head) · 12 (label, hint, caption) ·
-// 13 (body, buttons) · 15 (lead) · 28/32 (page title) · 28 (figure). Numbers in tables, figures,
+// 13 (body, buttons) · 15 (lead) · 20 (card title) · 28/32 (page title) · 28 (figure). Numbers in tables, figures,
 // dates and durations use tabular numerals.
 
 export const eyebrow = "text-[11px] leading-4 font-extrabold tracking-[0.14em] uppercase text-ink-mute";
 export const pageTitle = "font-display font-extrabold text-[28px] leading-8 sm:text-[32px] sm:leading-10 tracking-[-0.02em] text-ink";
 export const lead = "text-[15px] leading-6 text-ink-mute max-w-2xl";
+/** A heading inside a card that names its subject (the client in the onboarding plan). */
+export const cardTitle = "font-display font-bold text-xl leading-7";
 /** Section title (the shared h2). ink-mute: ink-faint's old #b7b5c6 was 2:1 on white, below AA. */
 export const h2 = "text-[11px] leading-4 font-extrabold tracking-[0.12em] text-ink-mute uppercase mb-4";
 export const sectionTitle = h2;
@@ -98,7 +103,8 @@ export function firstName(name: string | null | undefined): string {
 
 /** Card: padding 24. */
 export const card = "rounded-2xl bg-card border border-border shadow-lift p-6";
-export const field = "rounded-lg border border-border bg-page/60 px-3 py-2 text-[13px] leading-5 w-full";
+/** Text field / select / textarea: 36 px tall (20 line + 2 × 8), the shared focus ring. */
+export const field = `rounded-lg border border-border bg-page/60 px-3 py-2 text-[13px] leading-5 w-full ${focusRing}`;
 /** Field-level or action-level error text. rose-700 is 6.3:1 on white (red-600 was 4.4:1 on the page tint). */
 export const errorText = "text-[13px] leading-5 text-rose-700";
 

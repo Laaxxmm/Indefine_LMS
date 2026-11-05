@@ -3,8 +3,8 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { ExternalLink } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-import { card } from "@/components/ui";
-import { BackLink, RunStatusChip, StateChip, chip, eyebrow, linkText, pageTitle, sectionTitle } from "@/app/agents/parts";
+import { card, eyebrow, linkText, pageTitle, sectionTitle, type ChipTone } from "@/components/ui";
+import { BackLink, Chip, RunStatusChip, Section, StateChip } from "@/components/firm-os";
 import { DeliverablesPanel } from "@/app/agents/[agent]/runs/[id]/ReviewPanels";
 import { DOC_TYPES } from "@/lib/clients/core";
 import { loadWorkspaceView, type WorkspaceView, type WorkspaceViewDb } from "@/lib/workspace/view";
@@ -21,19 +21,16 @@ export const dynamic = "force-dynamic";
 // above the viewer. Government portals are never embedded or linked: a person files in their own
 // browser, with this page beside it.
 
-const SEV_TONE = { block: "border-rose-200 bg-rose-50 text-rose-700", warn: "border-amber-200 bg-amber-50 text-amber-800", info: "border-sky-200 bg-sky-50 text-sky-800" } as const;
+const SEV_TONE: Record<"block" | "warn" | "info", ChipTone> = { block: "danger", warn: "warning", info: "info" };
 const SEV_LABEL = { block: "Block", warn: "Warning", info: "Note" } as const;
 const newTab = { target: "_blank", rel: "noopener noreferrer" } as const;
 
 function ClientDocsPanel({ docs }: { docs: WorkspaceView["clientDocs"] }) {
   return (
-    <section aria-labelledby="client-docs" className={card}>
-      <h2 id="client-docs" className={sectionTitle}>
-        Client documents
-      </h2>
+    <Section id="client-docs" title="Client documents" card last>
       {docs.folderUrl && (
         <p className="mb-4">
-          <a href={docs.folderUrl} {...newTab} className={`${linkText} inline-flex items-center gap-1.5 text-[13.5px]`}>
+          <a href={docs.folderUrl} {...newTab} className={`${linkText} inline-flex items-center gap-2 text-[13px]`}>
             <ExternalLink className="w-4 h-4" aria-hidden="true" /> Open this period&apos;s ClientDocs folder in SharePoint
             <span className="sr-only"> (opens in a new tab)</span>
           </a>
@@ -44,13 +41,13 @@ function ClientDocsPanel({ docs }: { docs: WorkspaceView["clientDocs"] }) {
       ) : (
         <ul className="divide-y divide-border">
           {docs.files.map((d) => (
-            <li key={d.id} className="py-2.5 flex items-center justify-between gap-3 flex-wrap">
+            <li key={d.id} className="py-3 flex items-center justify-between gap-3 flex-wrap">
               <div className="min-w-0">
-                <a href={d.webUrl} {...newTab} className={`${linkText} text-[13.5px] break-all`}>
+                <a href={d.webUrl} {...newTab} className={`${linkText} text-[13px] break-all`}>
                   {d.name}
                   <span className="sr-only"> (opens in a new tab)</span>
                 </a>
-                <p className="text-[11.5px] text-ink-mute tabular-nums">
+                <p className="text-[12px] text-ink-mute tabular-nums">
                   {DOC_TYPES[d.docType] ?? d.docType} · added {d.uploaded}
                   {d.forThisJob ? " · this job" : ""}
                 </p>
@@ -60,44 +57,38 @@ function ClientDocsPanel({ docs }: { docs: WorkspaceView["clientDocs"] }) {
           ))}
         </ul>
       )}
-    </section>
+    </Section>
   );
 }
 
 function SopPackPanel({ pack, service }: { pack: WorkspaceView["sopPack"]; service: string }) {
   if (!pack) {
     return (
-      <section aria-labelledby="sop-pack" className={card}>
-        <h2 id="sop-pack" className={sectionTitle}>
-          SOP pack
-        </h2>
+      <Section id="sop-pack" title="SOP pack" card last>
         <p className="text-[13px] text-ink-mute">No SOP pack for {service} yet: there is no agent for this service, so there are no checks to show. Follow the SOP steps on this page.</p>
-      </section>
+      </Section>
     );
   }
   return (
-    <section aria-labelledby="sop-pack" className={card}>
-      <h2 id="sop-pack" className={sectionTitle}>
-        SOP pack
-      </h2>
+    <Section id="sop-pack" title="SOP pack" card last>
       <p className="text-[13px] text-ink-mute mb-4">
         {pack.title}
         {pack.version ? ` · v${pack.version}` : ""} · {pack.source === "published" ? "the active published pack" : "the built-in pack (nothing published yet)"} · {pack.rules.length} checks the agent runs
       </p>
-      <ol className="space-y-2.5">
+      <ol className="space-y-3">
         {pack.rules.map((r) => (
-          <li key={r.id} className="rounded-lg border border-border px-3.5 py-2.5">
-            <p className="text-[13.5px] font-semibold flex items-start gap-2 flex-wrap">
-              <span className={`${chip} ${SEV_TONE[r.severity]}`}>{SEV_LABEL[r.severity]}</span>
+          <li key={r.id} className="rounded-lg border border-border px-4 py-3">
+            <p className="text-[13px] font-semibold flex items-start gap-2 flex-wrap">
+              <Chip tone={SEV_TONE[r.severity]}>{SEV_LABEL[r.severity]}</Chip>
               <span className="min-w-0">{r.title}</span>
             </p>
-            <p className="text-[11.5px] text-ink-mute mt-0.5">
+            <p className="text-[12px] text-ink-mute mt-1">
               Evidence: {r.evidence} · {r.kind === "llm" ? "model check, quoted from the documents" : "rule in code"} · <span className="font-mono">{r.id}</span>
             </p>
           </li>
         ))}
       </ol>
-    </section>
+    </Section>
   );
 }
 
@@ -114,7 +105,7 @@ export default async function WorkspacePage({ params }: { params: Promise<{ jobI
   const deliverables = run ? (
     <>
       <DeliverablesPanel deliverables={view.deliverables} />
-      <p className="text-[11.5px] text-ink-mute mt-3 tabular-nums">
+      <p className="text-[12px] text-ink-mute mt-3 tabular-nums">
         From attempt {run.attempt}, started {run.started}.{" "}
         <Link href={`/agents/${run.agent}/runs/${run.id}`} className={linkText}>
           Open the pack review screen
@@ -122,12 +113,9 @@ export default async function WorkspacePage({ params }: { params: Promise<{ jobI
       </p>
     </>
   ) : (
-    <section aria-labelledby="no-deliverables" className={card}>
-      <h2 id="no-deliverables" className={sectionTitle}>
-        Deliverables
-      </h2>
+    <Section id="no-deliverables" title="Deliverables" card last>
       <p className="text-[13px] text-ink-mute">No agent run yet. The draft pack&apos;s files appear here after the agent runs.</p>
-    </section>
+    </Section>
   );
 
   const tabs = [
@@ -143,11 +131,11 @@ export default async function WorkspacePage({ params }: { params: Promise<{ jobI
         {/* Not an <aside>: it holds the page's title and its one primary action. The padding keeps the cards' shadow inside the scroll box. */}
         <div data-panel="job" className="space-y-6 lg:sticky lg:top-20 lg:self-start lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:px-3 lg:-mx-3 lg:pb-6">
           <section aria-labelledby="job" className={card}>
-            <p className={eyebrow}>Guided workspace</p>
-            <h1 id="job" className={pageTitle}>
+            <p className={`${eyebrow} mb-2`}>Guided workspace</p>
+            <h1 id="job" className={`${pageTitle} break-words`}>
               {job.title}
             </h1>
-            <p className="text-ink-mute text-[13.5px] mt-1.5">
+            <p className="text-ink-mute text-[13px] mt-2">
               {job.clientName ? `${job.clientName} (${job.clientCode})` : job.clientCode} · {job.service} · <span className="tabular-nums">{job.period} · FY {job.fy}</span>
             </p>
             <div className="flex items-center gap-2 flex-wrap mt-3">
@@ -157,14 +145,14 @@ export default async function WorkspacePage({ params }: { params: Promise<{ jobI
             <div className="mt-2">
               <DueLine internalDue={job.internalDue} statutoryDue={job.statutoryDue} overdue={job.overdue} />
             </div>
-            <div className="mt-5 pt-4 border-t border-border">
+            <div className="mt-6 pt-4 border-t border-border">
               <h2 className={sectionTitle}>Next action</h2>
               {action?.kind === "prepare-by-hand" ? (
-                <p className="text-[13.5px] text-ink-soft">There is no agent for {job.service} yet. Prepare the work by hand in the job&apos;s Working folder, following the steps below.</p>
+                <p className="text-[13px] text-ink-soft">There is no agent for {job.service} yet. Prepare the work by hand in the job&apos;s Working folder, following the steps below.</p>
               ) : action ? (
                 <NextActionButton action={action} jobId={job.id} context={context} />
               ) : (
-                <p className="text-[13.5px] text-ink-soft" role="status">
+                <p className="text-[13px] text-ink-soft" role="status">
                   Nothing for you to do here right now. {view.waitingOn}
                 </p>
               )}

@@ -7,8 +7,8 @@
 // the box, Enter opens; Escape in the box clears it.
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { btn, btnGhost, btnPrimary, card, field } from "@/components/ui";
-import { EmptyState, chip, focusRing, sectionTitle } from "@/app/agents/parts";
+import { btn, btnGhost, btnPrimary, card, chip, field, focusRing, sectionTitle } from "@/components/ui";
+import { Alert, EmptyState } from "@/components/firm-os";
 import { requestSearch } from "@/lib/search/client";
 import { ENTER_HINT, HELP_TEXT, LOGGED_NOTE, START_TIP, noResultsText } from "@/lib/search/copy";
 import { TYPE_DELAY_MS, moveActive } from "@/lib/search/keyboard";
@@ -16,9 +16,6 @@ import { searchPageLink } from "@/lib/search/links";
 import { classifyQuery, isSensitiveQuery } from "@/lib/search/query";
 import { IDENTIFIER_LABELS, SEARCH_TYPE_LABELS, SEARCH_TYPE_SINGULAR, type SearchResponse, type SearchType } from "@/lib/search/types";
 
-// The Firm OS panel boxes (OnboardPanel's error box, the run page's notes).
-const alertBox = "rounded-xl border border-rose-200 bg-rose-50 text-rose-700 px-4 py-3 text-[13px] mb-4";
-const noteBox = "rounded-xl border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-[13px] mb-4";
 // Pressed toggle: the run page's sheet tabs (bg-muted, text-ink) built on ui.ts `btn` instead of on
 // btnGhost, so the pressed colours do not depend on CSS order; the darker border keeps the pressed
 // state visible beside the white unpressed chips.
@@ -174,14 +171,14 @@ export function SearchPanel({ types, initialQuery, initialType, initial, initial
             className={`${field} ${focusRing}`}
           />
           {type && <input type="hidden" name="type" value={type} />}
-          <button type="submit" className={`${btnPrimary} ${focusRing} shrink-0`}>
+          <button type="submit" className={`${btnPrimary} shrink-0`}>
             Search
           </button>
         </div>
         <p id="search-help" className="text-[12px] text-ink-mute mt-2">
           {sensitive ? ENTER_HINT : HELP_TEXT}
         </p>
-        <div role="group" aria-label="Filter by type" className="flex flex-wrap gap-1.5 mt-3">
+        <div role="group" aria-label="Filter by type" className="flex flex-wrap gap-2 mt-3">
           <button type="button" aria-pressed={type === null} onClick={() => chooseType(null)} className={`${type === null ? pressed : btnGhost} ${focusRing}`}>
             All types
           </button>
@@ -198,14 +195,14 @@ export function SearchPanel({ types, initialQuery, initialType, initial, initial
       </div>
 
       {error && (
-        <div role="alert" className={alertBox}>
+        <Alert tone="error" className="mb-4">
           {error}
-        </div>
+        </Alert>
       )}
       {notice && (
-        <p role="status" className={noteBox}>
+        <Alert tone="warning" className="mb-4">
           {notice}
-        </p>
+        </Alert>
       )}
 
       {!result && !error && !notice && <EmptyState title="Search for anything you work on">{START_TIP}</EmptyState>}
@@ -248,14 +245,14 @@ export function SearchPanel({ types, initialQuery, initialType, initial, initial
                           <span className="font-semibold text-brand-600">{h.label}</span>
                           <span className={`${chip} border-border bg-muted text-ink-soft`}>{SEARCH_TYPE_SINGULAR[h.type]}</span>
                         </span>
-                        {h.context && <span className="block text-[12.5px] text-ink-mute mt-0.5">{h.context}</span>}
+                        {h.context && <span className="block text-[12px] text-ink-mute mt-1">{h.context}</span>}
                       </Link>
                     </li>
                   );
                 })}
               </ul>
               {g.more && (
-                <p className="text-[12.5px] text-ink-mute mt-2">
+                <p className="text-[12px] text-ink-mute mt-2">
                   Showing the first {g.hits.length}.{" "}
                   {type === g.type ? (
                     "Add a word to narrow the search."

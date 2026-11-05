@@ -12,8 +12,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { X } from "lucide-react";
-import { field } from "@/components/ui";
-import { chip, focusRing, linkText, sectionTitle } from "@/app/agents/parts";
+import { chip, field, focusRing, linkText, sectionTitle } from "@/components/ui";
+import { Alert } from "@/components/firm-os";
 import { requestSearch } from "@/lib/search/client";
 import { ENTER_HINT, KEYS_TIP, LOGGED_NOTE, PALETTE_TIP, noResultsText } from "@/lib/search/copy";
 import { TYPE_DELAY_MS, isPaletteShortcut, moveActive } from "@/lib/search/keyboard";
@@ -28,9 +28,6 @@ export function openCommandPalette(): void {
   window.dispatchEvent(new Event(OPEN_PALETTE_EVENT));
 }
 
-// The Firm OS panel boxes (OnboardPanel's error box, the run page's notes).
-const alertBox = "rounded-xl border border-rose-200 bg-rose-50 text-rose-700 px-4 py-3 text-[13px]";
-const noteBox = "rounded-xl border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-[13px]";
 const FOCUSABLE = 'input, button, a[href], [tabindex]:not([tabindex="-1"])';
 
 export function CommandPalette({ defaultOpen = false }: { defaultOpen?: boolean }) {
@@ -217,7 +214,7 @@ export function CommandPalette({ defaultOpen = false }: { defaultOpen?: boolean 
           <label id={ids.title} htmlFor={ids.input} className="block text-[11px] font-bold text-ink-mute">
             Search Firm OS
           </label>
-          <button type="button" onClick={close} aria-label="Close search" className={`p-1.5 -mr-1.5 text-ink-mute hover:text-ink hover:bg-muted rounded-lg ${focusRing}`}>
+          <button type="button" onClick={close} aria-label="Close search" className={`p-2 -mr-2 text-ink-mute hover:text-ink hover:bg-muted rounded-lg ${focusRing}`}>
             <X className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
@@ -249,14 +246,14 @@ export function CommandPalette({ defaultOpen = false }: { defaultOpen?: boolean 
           {status}
         </div>
         {error && (
-          <div role="alert" className={`${alertBox} mx-4 mb-3`}>
+          <Alert tone="error" className="mx-4 mb-3">
             {error}
-          </div>
+          </Alert>
         )}
         {notice && (
-          <p role="status" className={`${noteBox} mx-4 mb-3`}>
+          <Alert tone="warning" className="mx-4 mb-3">
             {notice}
-          </p>
+          </Alert>
         )}
         {result && result.total === 0 && (
           <p role="status" className="mx-4 mb-3 text-[13px] text-ink-soft">
@@ -292,7 +289,7 @@ export function CommandPalette({ defaultOpen = false }: { defaultOpen?: boolean 
                       <span className="font-semibold text-brand-600">{h.label}</span>
                       <span className={`${chip} border-border bg-card text-ink-soft`}>{SEARCH_TYPE_SINGULAR[h.type]}</span>
                     </span>
-                    {h.context && <span className="block text-[12.5px] text-ink-mute mt-0.5">{h.context}</span>}
+                    {h.context && <span className="block text-[12px] text-ink-mute mt-1">{h.context}</span>}
                   </div>
                 );
               })}

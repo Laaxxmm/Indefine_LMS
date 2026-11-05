@@ -3,10 +3,12 @@
 // when no agent has run on it yet. Laid out like the page's Jobs card (card, h2, compact table);
 // headings use the Firm OS ink-mute (AA on white) where the LMS card uses ink-faint.
 import Link from "next/link";
-import { card } from "@/components/ui";
+import { card, linkText, sectionTitle } from "@/components/ui";
 import type { ClientJobRow } from "@/lib/agents/client-jobs";
-import { StateChip, linkText, runsListLabel, sectionTitle } from "@/app/agents/parts";
+import { StateChip } from "@/components/firm-os";
+import { runsListLabel } from "@/app/agents/parts";
 
+// Compact cells to match the page's own Jobs card; rows are the shared 44 px.
 const th = "py-2 pr-3 font-bold";
 const td = "py-2 pr-3";
 
@@ -46,7 +48,7 @@ export function FirmOsJobs({ jobs, seesAll, commsHref }: { jobs: ClientJobRow[];
               </thead>
               <tbody>
                 {jobs.map((j) => (
-                  <tr key={j.id} className="border-t border-border">
+                  <tr key={j.id} className="border-t border-border h-11">
                     <td className={`${td} font-semibold`}>{j.service}</td>
                     <td className={`${td} tabular-nums whitespace-nowrap`}>
                       {j.period} · FY {j.fy}
@@ -63,7 +65,7 @@ export function FirmOsJobs({ jobs, seesAll, commsHref }: { jobs: ClientJobRow[];
                           <Link href={j.run.href} className={linkText} aria-label={`Open run for ${j.title} ${j.period}`}>
                             Open run
                           </Link>
-                          <span className="ml-2 text-[11.5px] text-ink-mute">attempt {j.run.attempt}</span>
+                          <span className="ml-2 text-[12px] text-ink-mute">attempt {j.run.attempt}</span>
                         </>
                       ) : (
                         <>

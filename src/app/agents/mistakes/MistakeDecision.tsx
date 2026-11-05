@@ -2,9 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
-import { btnDanger, btnGhost, btnSuccess, call, errorText } from "@/components/ui";
-import { focusRing } from "../parts";
+import { Button, ConfirmPanel } from "@/components/firm-os";
+import { call, errorText } from "@/components/ui";
 
 type Decision = "approve" | "reject";
 
@@ -18,7 +17,7 @@ export function decisionConsequence(decision: Decision, toVersion: string | null
 /**
  * Approve (→ new SOP pack minor version) or reject a proposed rule. Partners only (an SOP rule change).
  * Neither can be undone from the screen, so the first click asks for confirmation and says what
- * will happen; the second sends it.
+ * will happen (the shared confirm step); the second sends it.
  */
 export function MistakeDecision({ id, label, toVersion }: { id: string; label: string; toVersion: string | null }) {
   const router = useRouter();
@@ -36,34 +35,26 @@ export function MistakeDecision({ id, label, toVersion }: { id: string; label: s
     router.refresh();
   }
 
-  const consequence = pending ? decisionConsequence(pending, toVersion) : "";
-
   return (
-    <span className="inline-flex flex-col items-end gap-1.5">
+    <span className="inline-flex flex-col items-end gap-2">
       {pending ? (
-        <span className="inline-flex items-center gap-2 flex-wrap justify-end" role="group" aria-label={`Confirm: ${pending} rule ${label}`}>
-          <span className="text-[12px] text-ink-soft max-w-xs text-right">{consequence}</span>
-          <button type="button" disabled={busy} onClick={() => setPending(null)} className={`${btnGhost} ${focusRing}`}>
-            Cancel
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => decide(pending)}
-            className={`${pending === "approve" ? btnSuccess : btnDanger} ${focusRing} inline-flex items-center gap-1.5`}
-          >
-            {busy && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />}
-            {busy ? "Saving…" : pending === "approve" ? "Confirm approval" : "Confirm rejection"}
-          </button>
-        </span>
+        <ConfirmPanel
+          label={`${pending} rule ${label}`}
+          consequence={decisionConsequence(pending, toVersion)}
+          confirmLabel={pending === "approve" ? "Confirm approval" : "Confirm rejection"}
+          confirmVariant={pending === "approve" ? "success" : "danger"}
+          busy={busy}
+          onCancel={() => setPending(null)}
+          onConfirm={() => decide(pending)}
+        />
       ) : (
         <span className="inline-flex items-center gap-2 flex-wrap">
-          <button type="button" onClick={() => setPending("reject")} aria-label={`Reject rule: ${label}`} className={`${btnDanger} ${focusRing}`}>
+          <Button variant="danger" onClick={() => setPending("reject")} aria-label={`Reject rule: ${label}`}>
             Reject
-          </button>
-          <button type="button" onClick={() => setPending("approve")} aria-label={`Approve rule: ${label}`} className={`${btnSuccess} ${focusRing}`}>
+          </Button>
+          <Button variant="success" onClick={() => setPending("approve")} aria-label={`Approve rule: ${label}`}>
             Approve rule
-          </button>
+          </Button>
         </span>
       )}
       {error && (

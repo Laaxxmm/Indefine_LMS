@@ -2,13 +2,12 @@ import { auth } from "@/lib/auth";
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { listClientOptions, loadDraftContext, type CommsDb } from "@/lib/agents/comms/service";
-import { card, field } from "@/components/ui";
-import { BackLink, eyebrow, focusRing, pageTitle } from "@/app/agents/parts";
+import { card, field, formWidth, labelText } from "@/components/ui";
+import { Alert, Button, PageHeader } from "@/components/firm-os";
 import { DraftForm } from "./DraftForm";
 
 export const dynamic = "force-dynamic";
 
-const primary = `px-4 py-2.5 rounded-full bg-brand-500 hover:bg-brand-600 text-white text-sm font-bold transition ${focusRing}`;
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 const CODE = /^[A-Z0-9]{3,10}$/;
 
@@ -29,25 +28,29 @@ export default async function NewDraftPage({ searchParams }: { searchParams: Pro
   if (!r.ok && r.status === 404) notFound();
 
   return (
-    <div className="max-w-[880px]">
-      <BackLink href="/comms">Client messages</BackLink>
-      <p className={eyebrow}>Draft only · you send it yourself</p>
-      <h1 className={pageTitle}>New client message</h1>
+    <div>
+      <PageHeader
+        back={{ href: "/comms", label: "Client messages" }}
+        eyebrow="Draft only · you send it yourself"
+        title="New client message"
+        lead={
+          r.ok && r.data ? (
+            <>
+              For <span className="font-semibold text-ink">{r.data.client.name}</span> ({r.data.client.code}). Code writes the message from the job&apos;s facts; the model may only polish the
+              wording, and translate it when the client prefers another language. You check it before anything goes out.
+            </>
+          ) : undefined
+        }
+      />
 
       {!r.ok ? (
-        <p className="mt-6 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-[13.5px]" role="alert">
+        <Alert tone="warning" role="alert" className={formWidth}>
           {r.error}
-        </p>
+        </Alert>
       ) : r.data === null ? (
         <ClientPicker clients={await listClientOptions(db, session.user)} />
       ) : (
-        <>
-          <p className="text-ink-mute text-[14px] mt-1.5 mb-6">
-            For <span className="font-semibold text-ink">{r.data.client.name}</span> ({r.data.client.code}). Code writes the message from the job&apos;s facts; the model may only
-            polish the wording, and translate it when the client prefers another language. You check it before anything goes out.
-          </p>
-          <DraftForm ctx={r.data} />
-        </>
+        <DraftForm ctx={r.data} />
       )}
     </div>
   );
@@ -56,10 +59,10 @@ export default async function NewDraftPage({ searchParams }: { searchParams: Pro
 function ClientPicker({ clients }: { clients: { code: string; name: string }[] }) {
   return (
     // A GET form without an action submits to this page (/comms/new?client=…).
-    <form method="get" className={`${card} mt-6 max-w-[640px] space-y-4`}>
-      <label className="block text-[13px] font-semibold">
+    <form method="get" className={`${card} ${formWidth} space-y-4`}>
+      <label className={`flex flex-col gap-1 ${labelText}`}>
         Which client is the message for?
-        <select name="client" required className={`${field} mt-1.5 ${focusRing}`} defaultValue="">
+        <select name="client" required className={`${field} font-normal text-ink`} defaultValue="">
           <option value="" disabled>
             Pick a client
           </option>
@@ -71,9 +74,9 @@ function ClientPicker({ clients }: { clients: { code: string; name: string }[] }
         </select>
       </label>
       {clients.length === 0 && <p className="text-[13px] text-ink-mute">No Firm OS clients you prepare or review yet.</p>}
-      <button type="submit" className={primary} disabled={clients.length === 0}>
+      <Button type="submit" variant="primary" disabled={clients.length === 0}>
         Continue
-      </button>
+      </Button>
     </form>
   );
 }

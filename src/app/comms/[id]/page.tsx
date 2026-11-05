@@ -2,14 +2,15 @@ import { auth } from "@/lib/auth";
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { loadDraft, type CommsDb } from "@/lib/agents/comms/service";
-import { card } from "@/components/ui";
+import { card, formWidth, sectionTitle } from "@/components/ui";
 import { HistoryLink } from "@/components/CorrectionHistory";
-import { BackLink, eyebrow, pageTitle, sectionTitle } from "@/app/agents/parts";
+import { Alert, BackLink, PageHeader } from "@/components/firm-os";
 import { DraftActions } from "./DraftActions";
 
 export const dynamic = "force-dynamic";
 
-const text = "whitespace-pre-wrap break-words text-[14px] leading-relaxed font-sans";
+/** The message as the client reads it: the 15/24 reading size. */
+const text = "whitespace-pre-wrap break-words text-[15px] leading-6 font-sans";
 
 // One client message draft: the text (a translation shown beside its English), staff notes and
 // tone warnings, and the actions. One primary action, "Open in Outlook draft", plus "Copy".
@@ -26,34 +27,29 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
     return (
       <div>
         <BackLink href="/comms">Client messages</BackLink>
-        <p className="rounded-xl border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-[13.5px]" role="alert">
+        <Alert tone="warning" role="alert" className={formWidth}>
           {r.error}
-        </p>
+        </Alert>
       </div>
     );
   }
   const d = r.data;
   return (
     <div>
-      <BackLink href={`/comms?client=${d.client.code}`}>Client messages</BackLink>
-      <p className={eyebrow}>
-        {d.kind} · {d.languageLabel} · prepared by {d.by} on {d.createdAt} IST
-      </p>
-      <h1 className={pageTitle}>
-        {d.client.name} ({d.client.code})
-      </h1>
-      <p className="text-ink-mute text-[13.5px] mt-1.5">{d.job ? d.job.label : "General message (no job)"}</p>
+      <PageHeader
+        back={{ href: `/comms?client=${d.client.code}`, label: "Client messages" }}
+        eyebrow={<>{d.kind} · {d.languageLabel} · prepared by {d.by} on {d.createdAt} IST</>}
+        title={<>{d.client.name} ({d.client.code})</>}
+        meta={d.job ? d.job.label : "General message (no job)"}
+      />
       {/* The draft's correction history, and a fix for a wrong entry. */}
-      <div className="mt-5">
+      <div className="mb-6">
         <HistoryLink entity="CommsDraft" id={d.id} />
       </div>
 
       {(d.notes.length > 0 || d.tone.length > 0) && (
-        <section aria-labelledby="draft-notes" className="mt-5 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 px-4 py-3 text-[13px]">
-          <h2 id="draft-notes" className="font-bold">
-            Check before you send
-          </h2>
-          <ul className="list-disc pl-5 mt-1 space-y-0.5">
+        <Alert tone="warning" role="note" title="Check before you send" titleAs="h2" titleId="draft-notes" className="mb-6">
+          <ul className="list-disc pl-6 space-y-1">
             {d.notes.map((n) => (
               <li key={n}>{n}</li>
             ))}
@@ -61,21 +57,21 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
               <li key={t}>Tone: {t}</li>
             ))}
           </ul>
-        </section>
+        </Alert>
       )}
 
-      <section aria-labelledby="draft-subject" className={`${card} mt-5`}>
+      <section aria-labelledby="draft-subject" className={card}>
         <h2 id="draft-subject" className={sectionTitle}>
           Subject
         </h2>
-        <p className="text-[14px] font-semibold break-words">{d.subject}</p>
-        <p className="text-[12.5px] text-ink-mute mt-2">
+        <p className="text-[15px] leading-6 font-semibold break-words">{d.subject}</p>
+        <p className="text-[12px] text-ink-mute mt-2">
           {d.client.contactEmail ? `To: ${d.client.contactEmail} (the client's contact e-mail; change it in Outlook if needed)` : "No contact e-mail on the client record: add the recipient in Outlook."}
         </p>
       </section>
 
       {d.translated ? (
-        <div className="grid lg:grid-cols-2 gap-5 mt-5 items-start">
+        <div className="grid lg:grid-cols-2 gap-6 mt-6 items-start">
           <section aria-labelledby="draft-translated" className={card} lang={d.language}>
             <h2 id="draft-translated" className={sectionTitle}>
               {d.languageLabel}
@@ -90,7 +86,7 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
           </section>
         </div>
       ) : (
-        <section aria-labelledby="draft-english" className={`${card} mt-5 max-w-[760px]`} lang="en">
+        <section aria-labelledby="draft-english" className={`${card} mt-6 max-w-3xl`} lang="en">
           <h2 id="draft-english" className={sectionTitle}>
             Message
           </h2>

@@ -6,7 +6,7 @@ import { isSensitiveQuery } from "@/lib/search/query";
 import { SEARCH_MESSAGES } from "@/lib/search/schema";
 import { search, searchableTypes } from "@/lib/search/service";
 import { isSearchType, type SearchResponse } from "@/lib/search/types";
-import { eyebrow, pageTitle } from "@/app/agents/parts";
+import { PageHeader } from "@/components/firm-os";
 import { SearchPanel } from "./SearchPanel";
 
 export const dynamic = "force-dynamic";
@@ -40,13 +40,7 @@ export default async function SearchPage({ searchParams }: Props) {
 
   return (
     <div>
-      <div className="mb-6">
-        <p className={eyebrow}>Firm OS</p>
-        <h1 className={pageTitle}>Search</h1>
-        <p className="text-ink-mute text-[15px] mt-1.5 max-w-2xl">
-          Find clients, jobs, agent runs, deliverables, comms drafts and onboarding records. You see only what you are allowed to open.
-        </p>
-      </div>
+      <PageHeader eyebrow="Firm OS" title="Search" lead="Find clients, jobs, agent runs, deliverables, comms drafts and onboarding records. You see only what you are allowed to open." />
       <SearchPanel types={types} initialQuery={query} initialType={type} initial={initial} initialNotice={notice} />
     </div>
   );

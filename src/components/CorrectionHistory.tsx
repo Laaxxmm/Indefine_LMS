@@ -10,8 +10,9 @@
 // they are tied to the request; only the person's own Client / FirmClient records are accepted.
 import { useEffect, useId, useState } from "react";
 import { useRouter } from "next/navigation";
-import { History, Loader2 } from "lucide-react";
-import { btnGhost, btnPrimary, call, card, errorText, field } from "@/components/ui";
+import { History } from "lucide-react";
+import { btnGhost, call, card, errorText, field, focusRing, labelText, sectionTitle } from "@/components/ui";
+import { Button, Spinner } from "@/components/firm-os";
 
 export type HistoryEntity = "FirmClient" | "Client" | "JobTask" | "Engagement" | "CommsDraft";
 
@@ -19,11 +20,6 @@ type Entry = { id: string; atLabel: string; actorName: string; label: string; be
 type Editable = { field: string; label: string; input: "text" | "textarea" | "date" | "number" | "select" | "user"; options?: { value: string; label: string }[] };
 type View = { noun: string; entries: Entry[]; editable: Editable[]; people: { id: string; name: string }[] };
 
-// Same strings as focusRing / sectionTitle in src/app/agents/parts.tsx; repeated here because a
-// shared component should not import from an app route folder. Move both into ui.ts when it next changes.
-const focusRing = "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2";
-const sectionTitle = "text-[10.5px] font-extrabold tracking-[0.12em] text-ink-mute uppercase";
-const labelText = "text-[11px] font-bold text-ink-mute";
 
 export function HistoryLink({
   entity,
@@ -121,8 +117,8 @@ export function HistoryLink({
 
   return (
     <div className="inline-block w-full max-w-2xl align-top">
-      <button type="button" onClick={toggle} disabled={loading} aria-busy={loading} aria-expanded={open} aria-controls={panelId} className={`${btnGhost} ${focusRing} inline-flex items-center gap-1.5`}>
-        {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <History className="w-3.5 h-3.5" aria-hidden="true" />}
+      <button type="button" onClick={toggle} disabled={loading} aria-busy={loading} aria-expanded={open} aria-controls={panelId} className={btnGhost}>
+        {loading ? <Spinner /> : <History className="w-3.5 h-3.5" aria-hidden="true" />}
         {label}
       </button>
       {open && (
@@ -134,14 +130,14 @@ export function HistoryLink({
           )}
           {view && (
             <>
-              <h3 className={`${sectionTitle} mb-3`}>Corrections</h3>
+              <h3 className={sectionTitle}>Corrections</h3>
               {view.entries.length === 0 ? (
                 <p className="text-[13px] text-ink-mute">No corrections to this {view.noun} yet.</p>
               ) : (
                 <ol className="space-y-3">
                   {view.entries.map((e) => (
                     <li key={e.id} className="text-[13px]">
-                      <p className="text-[11.5px] text-ink-mute tabular-nums">
+                      <p className="text-[12px] text-ink-mute tabular-nums">
                         {e.actorName} · {e.atLabel} IST
                       </p>
                       <p>
@@ -204,13 +200,12 @@ export function HistoryLink({
                           {saveError}
                         </p>
                       ) : saved ? (
-                        <p className="text-[12.5px] text-emerald-800">{saved}</p>
+                        <p className="text-[12px] text-emerald-800">{saved}</p>
                       ) : null}
                     </div>
-                    <button type="submit" disabled={saving || !fieldName || reason.trim().length < 5} className={`${btnPrimary} ${focusRing} inline-flex items-center gap-1.5`}>
-                      {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />}
-                      {saving ? "Saving…" : "Save correction"}
-                    </button>
+                    <Button type="submit" variant="primary" busy={saving} busyLabel="Saving…" disabled={!fieldName || reason.trim().length < 5}>
+                      Save correction
+                    </Button>
                   </div>
                 </form>
               )}

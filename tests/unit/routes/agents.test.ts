@@ -481,10 +481,10 @@ describe("mistake log pages", () => {
     expect(admin).toContain("Missed the big invoice");
     expect(admin).not.toContain("Approve rule");
     expect(admin).toContain("Only a partner can approve or reject.");
-    // The admin copy uses the admin area's header, like /admin/firm-os/models and cycle-time.
+    // The admin copy uses the admin pages' header (PageHeader: back link to Admin, eyebrow "Admin · Firm OS"), like /admin/firm-os/models and cycle-time.
     expect(admin).toContain("Admin · Firm OS");
     expect(admin).toContain('href="/admin"');
-    expect(admin).toContain("← Admin");
+    expect(admin).toMatch(/<a [^>]*href="\/admin"[^>]*>(<svg[^]*?<\/svg>)? ?Admin<\/a>/); // the back link to Admin
     expect(admin).not.toContain(">Agent runs<");
   });
 });

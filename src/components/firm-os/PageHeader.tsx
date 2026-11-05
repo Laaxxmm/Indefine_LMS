@@ -3,7 +3,7 @@
 // right for the page's single primary action (or its status chips). Type and spacing from ui.ts.
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { eyebrow as eyebrowText, focusRing, headerGap, lead as leadText, pageTitle } from "@/components/ui";
+import { cx, eyebrow as eyebrowText, focusRing, headerGap, lead as leadText, pageTitle } from "@/components/ui";
 
 /** Back link to the parent page (arrow + the parent's own title, top left). */
 export function BackLink({ href, children }: { href: string; children: React.ReactNode }) {
@@ -37,7 +37,7 @@ export function PageHeader({
   return (
     <>
       {back && <BackLink href={back.href}>{back.label}</BackLink>}
-      <div className={`${headerGap} flex items-start justify-between gap-4 flex-wrap ${className}`}>
+      <div className={cx(headerGap, "flex items-start justify-between gap-4 flex-wrap", className)}>
         <div className="min-w-0 max-w-full">
           {eyebrow && <p className={`${eyebrowText} mb-2`}>{eyebrow}</p>}
           <h1 className={`${pageTitle} break-words`}>{title}</h1>

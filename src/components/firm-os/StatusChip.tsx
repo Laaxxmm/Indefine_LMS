@@ -1,11 +1,11 @@
 // Status chips. JobTask states are shown by their exact state-machine names (DRAFT … DONE), as
 // DESIGN asks; every other status uses Chip with a tone from ui.ts chipTone (-50 fill, -800 text).
 import type { JobTaskState } from "@prisma/client";
-import { chip, chipTone, type ChipTone } from "@/components/ui";
+import { chip, chipTone, cx, type ChipTone } from "@/components/ui";
 
 export function Chip({ tone = "neutral", title, className = "", children }: { tone?: ChipTone; title?: string; className?: string; children: React.ReactNode }) {
   return (
-    <span className={`${chip} ${chipTone[tone]} ${className}`} title={title}>
+    <span className={cx(chip, chipTone[tone], className)} title={title}>
       {children}
     </span>
   );

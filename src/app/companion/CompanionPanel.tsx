@@ -6,24 +6,21 @@
 // server (router.refresh) after each change.
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Copy, Loader2 } from "lucide-react";
-import { btnDanger, btnGhost, btnPrimary, btnSm, call, card, errorText, field } from "@/components/ui";
+import { Check, Copy } from "lucide-react";
+import { btnGhost, btnSm, call, card, field, formWidth, hintText, labelText, sectionTitle, td } from "@/components/ui";
 import { MSG } from "@/lib/companion/messages";
 import type { PairingView } from "@/lib/companion/tokens";
-import { EmptyState, focusRing, sectionTitle, tableWrap, td, th, thead } from "@/app/agents/parts";
+import { Alert, Button, ConfirmStep, DataTable, EmptyState, Section } from "@/components/firm-os";
 
 const API = "/api/firm-os/companion/tokens";
-const focusField = "focus:outline-none focus:ring-4 focus:ring-brand-500/15 focus:border-brand-500";
-const label = "text-[11px] font-bold text-ink-mute";
-const primary = `${btnPrimary} ${focusRing} inline-flex items-center gap-2`;
-const ghost = `${btnGhost} ${focusRing} inline-flex items-center gap-1.5`;
+const ghost = btnGhost;
 
 function ErrorBox({ text }: { text: string | null }) {
   if (!text) return null;
   return (
-    <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 text-rose-700 px-4 py-3 text-[13px] mt-4">
+    <Alert tone="error" className="mt-4">
       {text}
-    </div>
+    </Alert>
   );
 }
 
@@ -85,7 +82,7 @@ function CreateForm({ atLimit, maxActive, ttlDays, onCreated }: { atLimit: boole
 
   return (
     <form
-      className={`${card} max-w-[640px]`}
+      className={`${card} ${formWidth}`}
       aria-labelledby="pair-title"
       onSubmit={async (e) => {
         e.preventDefault();
@@ -110,7 +107,7 @@ function CreateForm({ atLimit, maxActive, ttlDays, onCreated }: { atLimit: boole
         Pair a browser
       </h2>
       <div className="flex flex-col gap-1">
-        <label htmlFor="companion-label" className={label}>
+        <label htmlFor="companion-label" className={labelText}>
           Name for this pairing
         </label>
         <input
@@ -122,31 +119,25 @@ function CreateForm({ atLimit, maxActive, ttlDays, onCreated }: { atLimit: boole
           autoComplete="off"
           placeholder="e.g. Office desktop, Chrome"
           aria-describedby="companion-label-help"
-          className={`${field} ${focusField}`}
+          className={field}
         />
-        <span id="companion-label-help" className="text-[12px] text-ink-mute">
+        <span id="companion-label-help" className={hintText}>
           So you can tell your pairings apart. Each one works for {ttlDays} days, in one browser.
         </span>
       </div>
       {atLimit && (
-        <p className="text-[13px] text-amber-800 mt-4">
+        <Alert tone="warning" className="mt-4">
           You have {maxActive} active pairings, the most allowed. Revoke one you no longer use to create another.
-        </p>
+        </Alert>
       )}
       <ErrorBox text={error} />
       <div aria-live="polite" className="sr-only">
         {busy ? "Creating the pairing token…" : ""}
       </div>
       <div className="mt-4">
-        <button type="submit" disabled={busy || atLimit || !name.trim()} className={primary}>
-          {busy ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> Creating…
-            </>
-          ) : (
-            "Create pairing token"
-          )}
-        </button>
+        <Button type="submit" variant="primary" busy={busy} busyLabel="Creating…" disabled={atLimit || !name.trim()}>
+          Create pairing token
+        </Button>
       </div>
     </form>
   );
@@ -154,18 +145,18 @@ function CreateForm({ atLimit, maxActive, ttlDays, onCreated }: { atLimit: boole
 
 function TokenReveal({ created, ttlDays, onDone }: { created: Created; ttlDays: number; onDone: () => void }) {
   return (
-    <section className={`${card} max-w-[640px]`} aria-labelledby="token-title">
+    <section className={`${card} ${formWidth}`} aria-labelledby="token-title">
       <h2 id="token-title" className={sectionTitle}>
         Pairing token for {created.pairing.label}
       </h2>
-      <p role="status" className="text-[13.5px] font-semibold">
+      <p role="status" className="text-[13px] font-semibold">
         Copy this token now. It is shown only once.
       </p>
       <div className="mt-3 flex items-center gap-2 flex-wrap">
         <code className="font-mono font-semibold bg-muted rounded px-2 py-1 break-all text-[13px]">{created.token}</code>
         <CopyButton text={created.token} what="pairing token" />
       </div>
-      <p className="text-[12.5px] text-ink-mute mt-3">
+      <p className="text-[12px] text-ink-mute mt-3">
         Paste it on the companion&apos;s Options page. It works for {ttlDays} days, until {created.pairing.expires}, or until you revoke it. Firm OS keeps only a fingerprint of it, so it cannot be shown again; if you lose it, revoke this pairing and create a new one.
       </p>
       <div className="mt-4">
@@ -181,104 +172,57 @@ function TokenReveal({ created, ttlDays, onDone }: { created: Created; ttlDays: 
 
 function PairingsTable({ pairings, inactiveCount, onRevoked }: { pairings: PairingView[]; inactiveCount: number; onRevoked: () => void }) {
   return (
-    <section aria-labelledby="pairings-title">
-      <h2 id="pairings-title" className={sectionTitle}>
-        Active pairings ({pairings.length})
-      </h2>
+    <Section id="pairings-title" title={<>Active pairings ({pairings.length})</>} last>
       {pairings.length === 0 ? (
         <EmptyState title="No active pairings">Create a pairing token above, then paste it on the companion&apos;s Options page.</EmptyState>
       ) : (
-        <div className={tableWrap}>
-          <table className="w-full text-[13.5px]">
-            <caption className="sr-only">Your active companion pairings, newest first</caption>
-            <thead className={thead}>
-              <tr>
-                <th scope="col" className={th}>Name</th>
-                <th scope="col" className={th}>Created</th>
-                <th scope="col" className={th}>Last used (IST)</th>
-                <th scope="col" className={th}>Expires</th>
-                <th scope="col" className={`${th} text-right`}>
-                  <span className="sr-only">Action</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {pairings.map((p) => (
-                <PairingRow key={p.id} pairing={p} onRevoked={onRevoked} />
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          caption="Your active companion pairings, newest first"
+          columns={[{ label: "Name" }, { label: "Created" }, { label: "Last used (IST)" }, { label: "Expires" }, { label: "Action", align: "right", srOnly: true }]}
+        >
+          {pairings.map((p) => (
+            <PairingRow key={p.id} pairing={p} onRevoked={onRevoked} />
+          ))}
+        </DataTable>
       )}
       {inactiveCount > 0 && (
-        <p className="text-[12.5px] text-ink-mute mt-3">
+        <p className="text-[12px] text-ink-mute mt-3">
           {inactiveCount} revoked or expired {inactiveCount === 1 ? "pairing is" : "pairings are"} kept for the record. They no longer work.
         </p>
       )}
-    </section>
+    </Section>
   );
 }
 
 function PairingRow({ pairing, onRevoked }: { pairing: PairingView; onRevoked: () => void }) {
-  const [confirming, setConfirming] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const consequence = `revoke-${pairing.id}`;
-
-  async function revoke() {
-    setBusy(true);
-    setError(null);
+  async function revoke(): Promise<{ ok: boolean; error?: string | null }> {
     try {
       const r = await call(`${API}/${encodeURIComponent(pairing.id)}/revoke`, {});
-      if (!r.ok) setError(r.error);
-      else onRevoked();
+      if (!r.ok) return { ok: false, error: r.error };
+      onRevoked();
+      return { ok: true };
     } catch {
-      setError(MSG.unreachable);
-    } finally {
-      setBusy(false);
+      return { ok: false, error: MSG.unreachable };
     }
   }
 
   return (
-    <tr className="border-t border-border hover:bg-muted/40 h-11 align-top">
+    <tr className="border-t border-border hover:bg-muted/40 h-11">
       <td className={`${td} font-semibold break-words`}>{pairing.label}</td>
       <td className={`${td} tabular-nums whitespace-nowrap`}>{pairing.created}</td>
       <td className={`${td} tabular-nums whitespace-nowrap`}>{pairing.lastUsed ?? <span className="text-ink-mute">Not used yet</span>}</td>
       <td className={`${td} tabular-nums whitespace-nowrap`}>{pairing.expires}</td>
       <td className={`${td} text-right`}>
-        {confirming ? (
-          <div className="flex flex-col items-end gap-2">
-            <p id={consequence} className="text-[12.5px] text-ink-soft max-w-[280px] text-left">
-              The browser using {pairing.label} stops showing your tasks at its next refresh. This cannot be undone; you can create a new pairing at any time.
-            </p>
-            <div className="flex items-center gap-2">
-              <button type="button" disabled={busy} onClick={() => { setConfirming(false); setError(null); }} className={`${btnGhost} ${focusRing}`}>
-                Cancel
-              </button>
-              <button type="button" disabled={busy} onClick={revoke} aria-describedby={consequence} className={`${btnDanger} ${focusRing} inline-flex items-center gap-1.5`}>
-                {busy ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> Revoking…
-                  </>
-                ) : (
-                  "Confirm revoke"
-                )}
-              </button>
-            </div>
-            <span aria-live="polite" className="sr-only">
-              {busy ? `Revoking ${pairing.label}…` : ""}
-            </span>
-            {error && (
-              <p role="alert" className={`${errorText} text-left max-w-[280px]`}>
-                {error}
-              </p>
-            )}
-          </div>
-        ) : (
-          <button type="button" onClick={() => setConfirming(true)} aria-label={`Revoke ${pairing.label}`} className={`${btnDanger} ${focusRing}`}>
-            Revoke
-          </button>
-        )}
+        <ConfirmStep
+          label={`Revoke ${pairing.label}`}
+          triggerLabel="Revoke"
+          triggerAriaLabel={`Revoke ${pairing.label}`}
+          triggerVariant="danger"
+          confirmLabel="Confirm revoke"
+          busyLabel="Revoking…"
+          consequence={`The browser using ${pairing.label} stops showing your tasks at its next refresh. This cannot be undone; you can create a new pairing at any time.`}
+          onConfirm={revoke}
+        />
       </td>
     </tr>
   );

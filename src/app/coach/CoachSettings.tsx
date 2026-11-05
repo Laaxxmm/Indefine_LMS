@@ -5,18 +5,17 @@
 // when the firm has turned break reminders on.
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
-import { btnGhost, call, errorText } from "@/components/ui";
-import { focusRing } from "@/app/agents/parts";
+import { call, errorText, focusRing } from "@/components/ui";
 import { formatDateTimeIst } from "@/lib/agents/core/format";
 import type { PreferencesView } from "@/lib/agents/coach/activity";
+import { Button } from "@/components/firm-os";
 
 type Change = { breakNudges?: boolean; morningBoard?: boolean; snoozeMinutes?: number };
 
 const checkbox = `h-4 w-4 accent-brand-500 ${focusRing}`;
-const row = "flex items-start gap-2 text-[13.5px]";
+const row = "flex items-start gap-2 text-[13px] leading-5";
 /** In-card subheading (the OnboardPanel card pattern); the section title sits above it in the card. */
-const subheading = "font-bold text-[14px] mb-2";
+const subheading = "font-bold text-[13px] leading-5 mb-2";
 
 export function CoachSettings({ prefs, breakFeature }: { prefs: PreferencesView; breakFeature: boolean }) {
   const router = useRouter();
@@ -39,7 +38,6 @@ export function CoachSettings({ prefs, breakFeature }: { prefs: PreferencesView;
     router.refresh();
   }
 
-  const spin = (key: string) => busy === key && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />;
 
   return (
     <div>
@@ -54,7 +52,7 @@ export function CoachSettings({ prefs, breakFeature }: { prefs: PreferencesView;
         />
         <span>
           A notice at 09:00 IST on working days with what must be done today and this week.
-          <span className="block text-[12.5px] text-ink-mute">The board on this page and on your dashboard stays either way.</span>
+          <span className="block text-[12px] text-ink-mute">The board on this page and on your dashboard stays either way.</span>
         </span>
       </label>
 
@@ -71,7 +69,7 @@ export function CoachSettings({ prefs, breakFeature }: { prefs: PreferencesView;
             />
             <span>
               A short reminder after about 100 minutes of continuous work, at most 3 a day.
-              <span className="block text-[12.5px] text-ink-mute">
+              <span className="block text-[12px] text-ink-mute">
                 To time these, the LMS notes when you are active (no page content) and keeps it for 7 days. Only you see it; nothing about breaks is reported to anyone.
               </span>
             </span>
@@ -81,23 +79,15 @@ export function CoachSettings({ prefs, breakFeature }: { prefs: PreferencesView;
               {p.snoozeUntil ? (
                 <>
                   <span className="text-[13px] text-ink-soft tabular-nums">Snoozed until {formatDateTimeIst(new Date(p.snoozeUntil))} IST.</span>
-                  <button type="button" disabled={busy !== null} onClick={() => save("resume", { snoozeMinutes: 0 }, "Break reminders are back on.")} className={`${btnGhost} ${focusRing} inline-flex items-center gap-1.5`}>
-                    {spin("resume")}
+                  <Button busy={busy === "resume"} disabled={busy !== null} onClick={() => save("resume", { snoozeMinutes: 0 }, "Break reminders are back on.")}>
                     Resume now
-                  </button>
+                  </Button>
                 </>
               ) : (
                 [30, 60].map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    disabled={busy !== null}
-                    onClick={() => save(`snooze-${m}`, { snoozeMinutes: m }, `Break reminders snoozed for ${m} minutes.`)}
-                    className={`${btnGhost} ${focusRing} inline-flex items-center gap-1.5`}
-                  >
-                    {spin(`snooze-${m}`)}
+                  <Button key={m} busy={busy === `snooze-${m}`} disabled={busy !== null} onClick={() => save(`snooze-${m}`, { snoozeMinutes: m }, `Break reminders snoozed for ${m} minutes.`)}>
                     Snooze {m} min
-                  </button>
+                  </Button>
                 ))
               )}
             </div>
