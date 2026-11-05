@@ -33,7 +33,10 @@
     "sample.sales.selectedPaise": 750000000,
     "sample.expenses.populationPaise": 79500000,
     "sample.expenses.plannedSize": 25,
-    "sample.expenses.selected": 25
+    "sample.expenses.selected": 25,
+    "sample.expenses.fingerprint48": 77961382352025,
+    "sample.sales.randomStart": 4344147,
+    "sample.sales.fingerprint48": 223368761907135
   },
   "deliverables": [
     {

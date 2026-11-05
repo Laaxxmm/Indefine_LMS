@@ -5,26 +5,41 @@
 //
 // Versioned entries carry `effectiveFrom` (a day key); the entry in force on the company's
 // financial-year end applies. A new notification = a new entry, never an edit of an old one.
+//
+// Partner-verification gate (same pattern as the tax agent's Income-tax Act 2025 rule set): an
+// entry that changes a legal threshold carries `verified` and a `source`. Only verified entries
+// are applied. A later unverified entry is kept as data and reported, never applied: when it
+// would classify the company differently, the analysis says so and a WARN rule asks the reviewer
+// to get the limits verified. Verifying = a new data entry (or flipping `verified`) after a
+// partner has read the notification, in the same change that re-runs the accuracy gate.
 
 export type Versioned<T> = T & { effectiveFrom: string; verify: string };
+/** A threshold entry applied only once a partner has verified it; `source` names the notification relied on. */
+export type Verifiable<T> = Versioned<T> & { verified: boolean; source: string };
 
 const CRORE = 1_00_00_000_00; // ₹1 crore in paise
 const LAKH = 1_00_000_00; // ₹1 lakh in paise
 
+export type SmallCompanyLimits = { paidUpMaxPaise: number; turnoverMaxPaise: number };
+
 /** s.2(85) small company: paid-up capital AND turnover (immediately preceding FY) must not exceed these. */
-export const SMALL_COMPANY_LIMITS: Versioned<{ paidUpMaxPaise: number; turnoverMaxPaise: number }>[] = [
+export const SMALL_COMPANY_LIMITS: Verifiable<SmallCompanyLimits>[] = [
   {
     effectiveFrom: "2022-09-15",
     paidUpMaxPaise: 4 * CRORE,
     turnoverMaxPaise: 40 * CRORE,
-    verify: "Companies (Specification of Definitions Details) Amendment Rules, 2022: paid-up ≤ ₹4 crore and turnover ≤ ₹40 crore.",
+    verified: true,
+    source: "Companies (Specification of Definitions Details) Amendment Rules, 2022 (in force from 15 Sep 2022)",
+    verify: "Companies (Specification of Definitions Details) Amendment Rules, 2022: paid-up ≤ ₹4 crore and turnover ≤ ₹40 crore. Verified rule on record; applied.",
   },
   {
     effectiveFrom: "2025-12-01",
     paidUpMaxPaise: 10 * CRORE,
     turnoverMaxPaise: 100 * CRORE,
+    verified: false,
+    source: "Reported MCA amendment to the Companies (Specification of Definitions Details) Rules, 2014 — G.S.R. number and date not yet confirmed by a partner",
     verify:
-      "PARTNER TO VERIFY: MCA amendment raising the small-company limits to paid-up ≤ ₹10 crore and turnover ≤ ₹100 crore (effective date taken as 1 Dec 2025). Confirm the G.S.R. number and date before relying on MGT-7A for FY 2025-26.",
+      "PARTNER TO VERIFY — NOT APPLIED: MCA amendment raising the small-company limits to paid-up ≤ ₹10 crore and turnover ≤ ₹100 crore (effective date taken as 1 Dec 2025). Until a partner confirms the G.S.R. number, date and which financial years it governs, the agent applies the 2022 limits and raises roc.small-company-pending-verification (audit: audit.caro-small-company-pending-verification) whenever the classification would differ under these limits.",
   },
 ];
 
@@ -147,10 +162,23 @@ export function inForce<T extends { effectiveFrom: string }>(entries: readonly T
   return hit;
 }
 
+/**
+ * Verification-gated lookup. `applied` = the latest VERIFIED entry in force on `day`; `pending` =
+ * unverified entries also in force on `day` that are later than `applied` (they would supersede it
+ * once verified), latest first. Pending entries are never applied. `day` null (financial year not
+ * known) = consider every entry. Throws when no verified entry applies.
+ */
+export function inForceVerified<T extends { effectiveFrom: string; verified: boolean }>(entries: readonly T[], day: string | null, what: string): { applied: T; pending: T[] } {
+  const candidates = [...entries].filter((e) => day === null || e.effectiveFrom <= day).sort((a, b) => (a.effectiveFrom < b.effectiveFrom ? 1 : -1));
+  const applied = candidates.find((e) => e.verified);
+  if (!applied) throw new Error(`no verified ${what} in force on ${day ?? "any date"}`);
+  return { applied, pending: candidates.filter((e) => !e.verified && e.effectiveFrom > applied.effectiveFrom) };
+}
+
 /** All verify notes (for the deliverable's "Verify" sheet and the report). */
 export function rocVerifyNotes(): { item: string; verify: string }[] {
   return [
-    ...SMALL_COMPANY_LIMITS.map((v) => ({ item: `Small company limits from ${v.effectiveFrom}`, verify: v.verify })),
+    ...SMALL_COMPANY_LIMITS.map((v) => ({ item: `Small company limits from ${v.effectiveFrom} (${v.verified ? "verified — applied" : "NOT verified — not applied"})`, verify: `${v.verify} Source: ${v.source}.` })),
     ...CSR_THRESHOLDS.map((v) => ({ item: "CSR thresholds and spend", verify: v.verify })),
     { item: "AGM due date", verify: AGM_RULES.verify },
     { item: "OPC AOC-4 due date", verify: OPC_RULES.verify },

@@ -1,5 +1,5 @@
 {
-  "description": "Typical gap: the sampling plan sets 20 items for sales, below the SOP minimum of 25 for a 40-invoice population.",
+  "description": "Typical gap: the sampling plan sets 20 items for sales, below the SOP minimum of 25 for a 40-invoice population. A sample below the SOP minimum blocks approval (severity block — partner to confirm SOP).",
   "category": "typical-gap",
   "job": {
     "fy": "2025-26",
@@ -9,7 +9,7 @@
   "flags": [
     {
       "ruleId": "audit.sample-below-minimum",
-      "severity": "warn"
+      "severity": "block"
     }
   ],
   "figures": {
@@ -38,7 +38,10 @@
     "sample.sales.selectedPaise": 600000000,
     "sample.expenses.populationPaise": 79500000,
     "sample.expenses.plannedSize": 25,
-    "sample.expenses.selected": 25
+    "sample.expenses.selected": 25,
+    "sample.expenses.fingerprint48": 77961382352025,
+    "sample.sales.randomStart": 5430183,
+    "sample.sales.fingerprint48": 930900378211
   },
   "deliverables": [
     {

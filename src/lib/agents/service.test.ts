@@ -208,7 +208,10 @@ describe("comments, mistakes and files", () => {
 });
 
 describe("defaultAgentDeps", () => {
-  it("builds production wiring lazily and caches it", async () => {
+  // The first call cold-imports the whole production wiring (Prisma client, router, SharePoint,
+  // every registered agent). Alone it takes ~1.6 s; under full-suite load it exceeded the 5 s
+  // default once. There is no race to fix — only import time — so this test gets 30 s.
+  it("builds production wiring lazily and caches it", { timeout: 30_000 }, async () => {
     const a = await defaultAgentDeps();
     expect(await defaultAgentDeps()).toBe(a);
     expect(typeof a.router.run).toBe("function");

@@ -5,6 +5,7 @@
 // All amounts are integer paise; every threshold comes from ./data.ts. No model, no clock.
 import { packDueDates } from "@/lib/agents/core/calendar";
 import { DEFAULT_CALENDAR } from "@/lib/agents/core/calendar-defaults";
+import { formatDayKey } from "@/lib/agents/core/format";
 import {
   ADDITIONAL_FEE,
   AGM_RULES,
@@ -17,6 +18,7 @@ import {
   OPC_RULES,
   SMALL_COMPANY_LIMITS,
   inForce,
+  inForceVerified,
 } from "./data";
 import { BS_ASSETS, BS_LIABILITIES, DEBIT_HEADS, FIN_HEADS, type Auditor, type Company, type Director, type FinColumn, type FinHead, type Holding, type MsmeDue, type TbLine } from "./parse";
 import { addDays, addMonthsClamped, addYears, daysBetween, divRoundHalfUp, fyEndKey, fyStart } from "@/lib/agents/core/util";
@@ -126,6 +128,8 @@ export type FormDue = {
 
 export type DirectorStatus = Director & { kycValid: boolean; issue: string | null };
 
+export type PendingSmallLimits = { effectiveFrom: string; paidUpMaxPaise: number; turnoverMaxPaise: number; source: string; wouldBeSmall: boolean };
+
 export type RocAnalysis = {
   fy: string;
   fyEnd: string;
@@ -134,7 +138,18 @@ export type RocAnalysis = {
   balanceSheetDiffPaise: number;
   capitalDiffPaise: number;
   shareholding: { totalPaise: number; totalShares: number; diffPaise: number };
-  small: { eligibleClass: boolean; isSmall: boolean; paidUpMaxPaise: number; turnoverMaxPaise: number; turnoverTestedPaise: number; reason: string };
+  small: {
+    eligibleClass: boolean;
+    isSmall: boolean;
+    /** The verified limits applied (data.ts SMALL_COMPANY_LIMITS). */
+    paidUpMaxPaise: number;
+    turnoverMaxPaise: number;
+    limitsSource: string;
+    turnoverTestedPaise: number;
+    reason: string;
+    /** Unverified later limits in force for this FY under which the classification would differ. Never applied. */
+    pendingVerification: PendingSmallLimits[];
+  };
   annualReturnForm: "MGT-7" | "MGT-7A";
   csr: { applicable: boolean; reasons: string[]; avgNetProfitPaise: number; obligationPaise: number; yearsAveraged: number };
   agm: { required: boolean; dueDate: string | null; heldOn: string | null; delayDays: number; gapLimit: string | null; gapExceeded: boolean; basis: string };
@@ -189,19 +204,27 @@ function analyse(x: RocExtract): RocAnalysis {
   const totalPaise = x.shareholding.reduce((s, h) => s + h.shares * h.paidUpPerSharePaise, 0);
   const totalShares = x.shareholding.reduce((s, h) => s + h.shares, 0);
 
-  // Small company (s.2(85)) / OPC → MGT-7A.
-  const limits = inForce(SMALL_COMPANY_LIMITS, fyEnd, "small-company limit");
+  // Small company (s.2(85)) / OPC → MGT-7A. Only partner-verified limits are applied; later
+  // unverified limits are tested too and reported when they would change the classification.
+  const { applied: limits, pending } = inForceVerified(SMALL_COMPANY_LIMITS, fyEnd, "small-company limit");
   const eligibleClass = co.companyClass === "private" && !co.section8 && !co.holdingOrSubsidiary && !co.specialAct;
+  const smallUnder = (l: { paidUpMaxPaise: number; turnoverMaxPaise: number }) => eligibleClass && co.paidUpCapitalPaise <= l.paidUpMaxPaise && previous.turnover <= l.turnoverMaxPaise;
   const capOk = co.paidUpCapitalPaise <= limits.paidUpMaxPaise;
-  const turnOk = previous.turnover <= limits.turnoverMaxPaise;
-  const isSmall = eligibleClass && capOk && turnOk;
-  const reason = !eligibleClass
+  const isSmall = smallUnder(limits);
+  const pendingVerification: PendingSmallLimits[] = pending
+    .filter((l) => smallUnder(l) !== isSmall)
+    .map((l) => ({ effectiveFrom: l.effectiveFrom, paidUpMaxPaise: l.paidUpMaxPaise, turnoverMaxPaise: l.turnoverMaxPaise, source: l.source, wouldBeSmall: smallUnder(l) }));
+  const baseReason = !eligibleClass
     ? opc
       ? "One Person Company (MGT-7A applies as an OPC)"
       : "not a small company: only a private company that is not a holding/subsidiary, section 8 or special-Act company qualifies"
     : isSmall
-      ? "small company: paid-up and preceding-year turnover within the limits"
-      : `not a small company: ${!capOk ? "paid-up capital" : "preceding-year turnover"} exceeds the limit`;
+      ? "small company: paid-up and preceding-year turnover within the verified limits"
+      : `not a small company: ${!capOk ? "paid-up capital" : "preceding-year turnover"} exceeds the verified limit`;
+  const p0 = pendingVerification[0];
+  const reason = p0
+    ? `${baseReason}; PENDING PARTNER VERIFICATION — under the unverified limits from ${formatDayKey(p0.effectiveFrom)} it would ${p0.wouldBeSmall ? "" : "not "}be a small company`
+    : baseReason;
 
   // CSR (s.135): any threshold in the immediately preceding FY.
   const csrT = inForce(CSR_THRESHOLDS, fyEnd, "CSR threshold");
@@ -338,7 +361,7 @@ function analyse(x: RocExtract): RocAnalysis {
     balanceSheetDiffPaise: current.assets - current.equityAndLiabilities,
     capitalDiffPaise: x.financials.current.shareCapital - co.paidUpCapitalPaise,
     shareholding: { totalPaise, totalShares, diffPaise: totalPaise - co.paidUpCapitalPaise },
-    small: { eligibleClass, isSmall, paidUpMaxPaise: limits.paidUpMaxPaise, turnoverMaxPaise: limits.turnoverMaxPaise, turnoverTestedPaise: previous.turnover, reason },
+    small: { eligibleClass, isSmall, paidUpMaxPaise: limits.paidUpMaxPaise, turnoverMaxPaise: limits.turnoverMaxPaise, limitsSource: limits.source, turnoverTestedPaise: previous.turnover, reason, pendingVerification },
     annualReturnForm: isSmall || opc ? "MGT-7A" : "MGT-7",
     csr: { applicable, reasons, avgNetProfitPaise: avg, obligationPaise, yearsAveraged: history.length },
     agm,

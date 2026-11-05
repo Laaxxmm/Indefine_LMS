@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { baseExtract, CUR } from "./__fixtures__/base";
 import { analyseRoc, columnFromTrialBalance, finTotals, multipleAdditionalFee, normalFeePaise, perDayAdditionalFee } from "./analyse";
-import { inForce, rocVerifyNotes, SMALL_COMPANY_LIMITS } from "./data";
+import { inForce, inForceVerified, rocVerifyNotes, SMALL_COMPANY_LIMITS } from "./data";
 
 const CR = 1_00_00_000_00;
 const LAKH = 1_00_000_00;
@@ -33,15 +33,40 @@ describe("fees (hand-computed)", () => {
 });
 
 describe("data", () => {
-  it("picks the entry in force on the FY end", () => {
+  it("inForce picks the entry in force on the FY end (verification not considered)", () => {
     expect(inForce(SMALL_COMPANY_LIMITS, "2025-03-31", "x").paidUpMaxPaise).toBe(4 * CR);
     expect(inForce(SMALL_COMPANY_LIMITS, "2026-03-31", "x").paidUpMaxPaise).toBe(10 * CR);
     expect(() => inForce(SMALL_COMPANY_LIMITS, "2020-03-31", "small-company limit")).toThrow(/no small-company limit in force/);
   });
-  it("every verify note is filled", () => {
+  it("small-company limits: only the 2022 rule is verified; the ₹10 cr / ₹100 cr entry is kept unverified with its note", () => {
+    expect(SMALL_COMPANY_LIMITS.map((l) => [l.effectiveFrom, l.verified, l.paidUpMaxPaise / CR, l.turnoverMaxPaise / CR])).toEqual([
+      ["2022-09-15", true, 4, 40],
+      ["2025-12-01", false, 10, 100],
+    ]);
+    expect(SMALL_COMPANY_LIMITS[1].verify).toMatch(/PARTNER TO VERIFY — NOT APPLIED/);
+    expect(SMALL_COMPANY_LIMITS.every((l) => l.source.length > 20)).toBe(true);
+  });
+  it("inForceVerified applies the latest verified entry and lists later unverified ones as pending", () => {
+    const fy26 = inForceVerified(SMALL_COMPANY_LIMITS, "2026-03-31", "small-company limit");
+    expect(fy26.applied.paidUpMaxPaise).toBe(4 * CR);
+    expect(fy26.pending.map((p) => p.effectiveFrom)).toEqual(["2025-12-01"]);
+    // FY 2024-25 ends before the unverified entry: nothing pending.
+    expect(inForceVerified(SMALL_COMPANY_LIMITS, "2025-03-31", "x").pending).toEqual([]);
+    // FY unknown: every entry is considered.
+    expect(inForceVerified(SMALL_COMPANY_LIMITS, null, "x").pending).toHaveLength(1);
+    expect(() => inForceVerified(SMALL_COMPANY_LIMITS, "2020-03-31", "small-company limit")).toThrow(/no verified small-company limit in force/);
+    // A verified later entry would be applied and leave nothing pending.
+    const both = SMALL_COMPANY_LIMITS.map((l) => ({ ...l, verified: true }));
+    expect(inForceVerified(both, "2026-03-31", "x")).toMatchObject({ applied: { paidUpMaxPaise: 10 * CR }, pending: [] });
+  });
+  it("every verify note is filled; the Verify sheet says which limits are applied", () => {
     const notes = rocVerifyNotes();
     expect(notes.length).toBeGreaterThan(10);
     expect(notes.every((n) => n.verify.length > 20)).toBe(true);
+    expect(notes.filter((n) => n.item.startsWith("Small company limits")).map((n) => n.item)).toEqual([
+      "Small company limits from 2022-09-15 (verified — applied)",
+      "Small company limits from 2025-12-01 (NOT verified — not applied)",
+    ]);
   });
 });
 
@@ -71,20 +96,38 @@ describe("financials", () => {
 });
 
 describe("small company / MGT-7A (boundaries)", () => {
-  it("at the limit is small; one paisa over is not", () => {
-    expect(analyseRoc(baseExtract({ previous: { revenueFromOperations: 100 * CR } })).small.isSmall).toBe(true);
-    const over = analyseRoc(baseExtract({ previous: { revenueFromOperations: 100 * CR + 1 } }));
+  it("verified limits (₹4 cr / ₹40 cr) applied for FY 2025-26: at the limit is small; one paisa over is not", () => {
+    const at = analyseRoc(baseExtract({ previous: { revenueFromOperations: 40 * CR } }));
+    expect(at.small).toMatchObject({ isSmall: true, paidUpMaxPaise: 4 * CR, turnoverMaxPaise: 40 * CR, pendingVerification: [] });
+    const over = analyseRoc(baseExtract({ previous: { revenueFromOperations: 40 * CR + 1 } }));
     expect(over.small.isSmall).toBe(false);
-    expect(over.small.reason).toMatch(/turnover exceeds/);
+    expect(over.small.reason).toMatch(/turnover exceeds the verified limit/);
     expect(over.annualReturnForm).toBe("MGT-7");
+    // Under the unverified ₹100 cr limit it would be small → reported, not applied.
+    expect(over.small.pendingVerification).toEqual([{ effectiveFrom: "2025-12-01", paidUpMaxPaise: 10 * CR, turnoverMaxPaise: 100 * CR, source: expect.any(String), wouldBeSmall: true }]);
+    expect(over.small.reason).toMatch(/PENDING PARTNER VERIFICATION — under the unverified limits from 01 Dec 2025 it would be a small company/);
   });
-  it("paid-up over the limit", () => {
-    const a = analyseRoc(baseExtract({ company: { paidUpCapitalPaise: 10 * CR + 1 } }));
+  it("paid-up over the verified limit", () => {
+    const a = analyseRoc(baseExtract({ company: { paidUpCapitalPaise: 4 * CR + 1 } }));
     expect(a.small.isSmall).toBe(false);
     expect(a.small.reason).toMatch(/paid-up capital exceeds/);
+    expect(a.small.pendingVerification).toHaveLength(1);
   });
-  it("uses the 2022 limits for FY 2024-25", () => {
-    expect(analyseRoc(baseExtract({ fy: "2024-25", previous: { revenueFromOperations: 40 * CR + 1 } })).small.isSmall).toBe(false);
+  it("between the two limit sets (paid-up ₹6 cr, turnover ₹70 cr): MGT-7 applied, pending verification", () => {
+    const a = analyseRoc(baseExtract({ company: { paidUpCapitalPaise: 6 * CR }, previous: { revenueFromOperations: 70 * CR } }));
+    expect(a.annualReturnForm).toBe("MGT-7");
+    expect(a.small.pendingVerification.map((p) => p.wouldBeSmall)).toEqual([true]);
+  });
+  it("over both limit sets, or not an eligible class: nothing pending", () => {
+    expect(analyseRoc(baseExtract({ previous: { revenueFromOperations: 100 * CR + 1 } })).small.pendingVerification).toEqual([]);
+    expect(analyseRoc(baseExtract({ company: { paidUpCapitalPaise: 10 * CR + 1 } })).small.pendingVerification).toEqual([]);
+    expect(analyseRoc(baseExtract({ company: { companyClass: "public" }, previous: { revenueFromOperations: 50 * CR } })).small.pendingVerification).toEqual([]);
+    expect(analyseRoc(baseExtract({ company: { holdingOrSubsidiary: true }, previous: { revenueFromOperations: 50 * CR } })).small.pendingVerification).toEqual([]);
+  });
+  it("uses the 2022 limits for FY 2024-25 with nothing pending", () => {
+    const a = analyseRoc(baseExtract({ fy: "2024-25", previous: { revenueFromOperations: 40 * CR + 1 } }));
+    expect(a.small.isSmall).toBe(false);
+    expect(a.small.pendingVerification).toEqual([]);
   });
   it("public, holding/subsidiary, section 8 never small; OPC files MGT-7A", () => {
     expect(analyseRoc(baseExtract({ company: { companyClass: "public" } })).annualReturnForm).toBe("MGT-7");

@@ -1,5 +1,5 @@
 {
-  "description": "Trap: 4-digit HSN on a B2B invoice of a client with AATO above â‚¹5 crore (6 digits required).",
+  "description": "Trap: 4-digit HSN on a B2B invoice of a client with AATO above â‚¹5 crore (6 digits required). Core 3B figures (hand): outward 5,00,000 + 2,00,000 = 7,00,000; IGST 36,000, CGST 45,000, SGST 45,000 (tax 1,26,000). ITC CGST 27,000 + SGST 27,000 = 54,000. Cash IGST 36,000, CGST 18,000, SGST 18,000 = 72,000; no expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee.",
   "category": "trap",
   "job": {
     "fy": "2026-27",
@@ -19,7 +19,18 @@
     "cashIgstPaise": 3600000,
     "cashCgstPaise": 1800000,
     "cashSgstPaise": 1800000,
-    "cashTaxPaise": 7200000
+    "cashTaxPaise": 7200000,
+    "outwardSgstPaise": 4500000,
+    "outwardCessPaise": 0,
+    "outwardTaxPaise": 12600000,
+    "itcAvailablePaise": 5400000,
+    "itcBlockedPaise": 0,
+    "itcOtherReversalPaise": 0,
+    "itcNetPaise": 5400000,
+    "cashCessPaise": 0,
+    "daysLate": 0,
+    "interestPaise": 0,
+    "lateFeePaise": 0
   },
   "deliverables": [
     {
@@ -117,7 +128,9 @@
             "Sr. No. To",
             "Total Number",
             "Cancelled",
-            "Net Issued"
+            "Net Issued",
+            "Gaps — to be explained",
+            "Missing numbers (cancelled or not in the register?)"
           ]
         }
       ]

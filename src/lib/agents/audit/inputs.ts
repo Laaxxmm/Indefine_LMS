@@ -62,6 +62,8 @@ export type Explanation = { row: number; key: string; text: string };
 export type Notes = { file: string; lines: string[] };
 
 export type AuditExtract = {
+  /** The financial year audited (job FY, e.g. "2025-26"); selects the statutory limits in force. Absent in older extracts. */
+  fy?: string | null;
   files: { name: string; kind: AuditFileKind | null }[];
   tb: TbData | null;
   priorTb: TbData | null;
@@ -190,7 +192,7 @@ const popName = (file: string) =>
 
 export async function parseAuditFiles(input: AuditInput, job: Pick<JobContext, "clientCode" | "fy">): Promise<AuditExtract> {
   const issues: ParseIssue[] = [];
-  const out: AuditExtract = { files: input.files.map((f) => ({ name: f.name, kind: f.kind })), tb: null, priorTb: null, profile: null, populations: [], explanations: [], notes: null, issues };
+  const out: AuditExtract = { fy: job.fy, files: input.files.map((f) => ({ name: f.name, kind: f.kind })), tb: null, priorTb: null, profile: null, populations: [], explanations: [], notes: null, issues };
   let map: Record<string, Record<string, string>> = {};
   let sampling: z.infer<typeof SamplingFileSchema> = {};
   for (const f of input.files) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CARO_CLAUSES, caroChecklist, determineCaro, type EntityProfile } from "./caro";
+import { CARO_CLAUSES, caroChecklist, caroPendingVerification, determineCaro, fyEndOf, type EntityProfile } from "./caro";
 import { CARO, OPINION_PHRASES, WP_INDEX } from "./config";
 import { opinionHits } from "./opinion";
 
@@ -30,18 +30,21 @@ describe("determineCaro — para 1(2)", () => {
     expect(d.reasons[0]).toMatch(/Excluded by para 1\(2\)/);
   });
   it("public company → applicable", () => expect(determineCaro(p({ companyClass: "public" }), tbNone).status).toBe("applicable"));
-  it("small company (≤ ₹10 crore paid-up and ≤ ₹100 crore preceding-year turnover) → not applicable", () => {
-    const d = determineCaro(p({ paidUpCapitalPaise: 10 * CR, priorTurnoverPaise: 100 * CR, reservesPaise: 50 * CR }), tbNone);
+  it("small company under the VERIFIED limits (≤ ₹4 crore paid-up and ≤ ₹40 crore preceding-year turnover) → not applicable", () => {
+    const d = determineCaro(p({ paidUpCapitalPaise: 4 * CR, priorTurnoverPaise: 40 * CR, reservesPaise: 50 * CR }), tbNone, "2026-03-31");
     expect(d.status).toBe("not-applicable");
-    expect(d.reasons[0]).toMatch(/Small company/);
+    expect(d.reasons[0]).toBe("Small company: paid-up capital ≤ ₹4 crore and preceding-year turnover ≤ ₹40 crore (limits as tested), not a holding/subsidiary");
   });
-  it("paid-up ₹10 crore + 1 paisa → not small; exemption fails on capital → applicable", () => {
-    const d = determineCaro(p({ paidUpCapitalPaise: 10 * CR + 1 }), tbNone);
+  it("paid-up ₹4 crore + 1 paisa → not small; exemption fails on capital → applicable", () => {
+    const d = determineCaro(p({ paidUpCapitalPaise: 4 * CR + 1 }), tbNone, "2026-03-31");
     expect(d.status).toBe("applicable");
     expect(d.reasons.join(" ")).toMatch(/Not a small company.*paid-up capital \+ reserves above/);
   });
-  it("preceding-year turnover above ₹100 crore → not small", () => {
-    expect(determineCaro(p({ priorTurnoverPaise: 100 * CR + 1, turnoverPaise: 100 * CR }), tbNone).reasons[0]).toBe("Not a small company");
+  it("preceding-year turnover above ₹40 crore → not small (the unverified ₹100 crore limit is never applied)", () => {
+    expect(determineCaro(p({ priorTurnoverPaise: 40 * CR + 1, turnoverPaise: 40 * CR }), tbNone, "2026-03-31").reasons[0]).toBe("Not a small company");
+    expect(determineCaro(p({ priorTurnoverPaise: 100 * CR, turnoverPaise: 40 * CR }), tbNone, "2026-03-31").status).toBe("applicable");
+    // FY unknown → still only verified limits applied.
+    expect(determineCaro(p({ paidUpCapitalPaise: 6 * CR }), tbNone).status).toBe("applicable");
   });
   it("prior turnover falls back to the prior-year TB revenue", () => {
     expect(determineCaro(p({ priorTurnoverPaise: null }), { revenuePaise: null, priorRevenuePaise: 1 * CR }).status).toBe("not-applicable");
@@ -82,6 +85,38 @@ describe("determineCaro — para 1(2)", () => {
       const d = determineCaro(p({ holdingOrSubsidiary: undefined, maxBorrowingsPaise: 2 * CR }), tbNone);
       expect(d.status).toBe("undetermined");
     });
+  });
+});
+
+describe("small-company limits awaiting partner verification", () => {
+  it("fyEndOf", () => {
+    expect(fyEndOf("2025-26")).toBe("2026-03-31");
+    expect(fyEndOf(null)).toBeNull();
+    expect(fyEndOf("FY26")).toBeNull();
+  });
+  it("CARO.smallCompany is the ROC table: ₹4 cr / ₹40 cr verified, ₹10 cr / ₹100 cr unverified", () => {
+    expect(CARO.smallCompany.map((l) => [l.verified, l.paidUpMaxPaise / CR, l.turnoverMaxPaise / CR])).toEqual([
+      [true, 4, 40],
+      [false, 10, 100],
+    ]);
+  });
+  it("between the limit sets (paid-up ₹6 cr, prior turnover ₹70 cr): applicable as applied, not applicable under the pending limits", () => {
+    const prof = p({ paidUpCapitalPaise: 6 * CR, priorTurnoverPaise: 70 * CR, turnoverPaise: 75 * CR, reservesPaise: 4.5 * CR, maxBorrowingsPaise: 2 * CR });
+    expect(determineCaro(prof, tbNone, "2026-03-31").status).toBe("applicable");
+    const pend = caroPendingVerification(prof, tbNone, "2026-03-31");
+    expect(pend).toHaveLength(1);
+    expect(pend[0]).toMatchObject({ effectiveFrom: "2025-12-01", paidUpMaxPaise: 10 * CR, turnoverMaxPaise: 100 * CR, status: "not-applicable", applied: { effectiveFrom: "2022-09-15", paidUpMaxPaise: 4 * CR, turnoverMaxPaise: 40 * CR } });
+    expect(pend[0].reasons[0]).toMatch(/^Small company: paid-up capital ≤ ₹10 crore/);
+  });
+  it("same outcome either way, or an FY that ends before the unverified entry → nothing pending", () => {
+    expect(caroPendingVerification(base, tbNone, "2026-03-31")).toEqual([]); // small under both
+    expect(caroPendingVerification(p({ paidUpCapitalPaise: 11 * CR }), tbNone, "2026-03-31")).toEqual([]); // not small under either
+    expect(caroPendingVerification(p({ companyClass: "public", paidUpCapitalPaise: 6 * CR }), tbNone, "2026-03-31")).toEqual([]);
+    // Subsidiary of a private company, exempt by the para 1(2)(v) limits whatever its small status.
+    expect(caroPendingVerification(p({ holdingOrSubsidiary: true }), tbNone, "2026-03-31")).toEqual([]);
+    expect(caroPendingVerification(p({ paidUpCapitalPaise: 6 * CR }), tbNone, "2025-03-31")).toEqual([]);
+    // FY unknown → the pending entry is considered (conservative).
+    expect(caroPendingVerification(p({ paidUpCapitalPaise: 6 * CR }), tbNone)).toHaveLength(1);
   });
 });
 

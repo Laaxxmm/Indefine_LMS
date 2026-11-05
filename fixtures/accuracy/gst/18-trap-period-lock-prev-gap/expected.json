@@ -1,5 +1,5 @@
 {
-  "description": "Trap: previous period GSTR-1 liability exceeds GSTR-3B Table 3.1 (DRC-01B risk); opening IGST credit used against the CGST deficit first.",
+  "description": "Trap: previous period GSTR-1 liability exceeds GSTR-3B Table 3.1 (DRC-01B risk); opening IGST credit used against the CGST deficit first. Core 3B figures (hand): outward 1,00,000; CGST 9,000, SGST 9,000. Period ITC CGST 4,500 + SGST 4,500 = 9,000; opening IGST credit 3,000 (September closing) goes first to the CGST deficit (9,000 - 4,500): IGST 3,000 vs CGST, CGST 4,500 vs CGST, SGST 4,500 vs SGST -> cash CGST 1,500, SGST 4,500 = 6,000 (credit used 12,000); no expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee.",
   "category": "trap",
   "job": {
     "fy": "2026-27",
@@ -19,7 +19,21 @@
     "cashSgstPaise": 450000,
     "cashTaxPaise": 600000,
     "creditUtilisedPaise": 1200000,
-    "closingCreditPaise": 0
+    "closingCreditPaise": 0,
+    "outwardTaxablePaise": 10000000,
+    "outwardIgstPaise": 0,
+    "outwardCgstPaise": 900000,
+    "outwardSgstPaise": 900000,
+    "outwardCessPaise": 0,
+    "outwardTaxPaise": 1800000,
+    "itcAvailablePaise": 900000,
+    "itcBlockedPaise": 0,
+    "itcOtherReversalPaise": 0,
+    "itcNetPaise": 900000,
+    "cashCessPaise": 0,
+    "daysLate": 0,
+    "interestPaise": 0,
+    "lateFeePaise": 0
   },
   "deliverables": [
     {
@@ -117,7 +131,9 @@
             "Sr. No. To",
             "Total Number",
             "Cancelled",
-            "Net Issued"
+            "Net Issued",
+            "Gaps — to be explained",
+            "Missing numbers (cancelled or not in the register?)"
           ]
         }
       ]

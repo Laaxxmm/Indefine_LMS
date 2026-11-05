@@ -37,6 +37,8 @@ const has = (user: SessionUser, ...want: FirmRole[]) => firmRolesOf(user).some((
 export const canUseAgents = (user: SessionUser) => isActive(user);
 export const canSeeAllRuns = (user: SessionUser) => has(user, "manager", "partner", "admin");
 export const canDecideMistakes = (user: SessionUser) => has(user, "manager", "partner");
+/** /agents/mistakes: the deciders plus admins, who may look. The nav link and the page guard both use this. */
+export const canSeeMistakeLog = (user: SessionUser) => canDecideMistakes(user) || canSeeAllRuns(user);
 
 export type JobAccessView = { id: string; state: JobTaskState; service: FirmService; assigneeId: string | null; reviewerId: string | null };
 
@@ -62,6 +64,8 @@ export type ReviewActions = {
   run: boolean;
   /** AGENT_DONE → IN_REVIEW. */
   submit: boolean;
+  /** AGENT_DONE → IN_PREP with a note, then a new run ("Re-run with a note"). */
+  rerun: boolean;
   /** IN_REVIEW → IN_PREP with a note, then a new run. */
   requestChanges: boolean;
   /** IN_REVIEW → APPROVED. */
@@ -72,7 +76,7 @@ export type ReviewActions = {
   proposeMistake: boolean;
 };
 
-const NONE: ReviewActions = { run: false, submit: false, requestChanges: false, approve: false, approveNeedsNote: false, proposeMistake: false };
+const NONE: ReviewActions = { run: false, submit: false, rerun: false, requestChanges: false, approve: false, approveNeedsNote: false, proposeMistake: false };
 
 /**
  * What the person may do on a job right now. `blockingFailures` = block-severity failures on the
@@ -88,6 +92,7 @@ export function reviewActions(user: SessionUser, job: JobAccessView, blockingFai
   return {
     run: (job.state === "ASSIGNED" && may("ASSIGNED", "IN_PREP")) || (job.state === "IN_PREP" && preparer),
     submit: may("AGENT_DONE", "IN_REVIEW"),
+    rerun: may("AGENT_DONE", "IN_PREP", "note"),
     requestChanges: may("IN_REVIEW", "IN_PREP", "note"),
     approve: may("IN_REVIEW", "APPROVED", "note"),
     approveNeedsNote: job.state === "IN_REVIEW" && blockingFailures > 0,

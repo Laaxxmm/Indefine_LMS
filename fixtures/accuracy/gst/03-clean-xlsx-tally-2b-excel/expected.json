@@ -1,5 +1,5 @@
 {
-  "description": "Clean month from XLSX: Tally registers with title rows and a continuation item row; GSTR-2B Excel with a two-row header.",
+  "description": "Clean month from XLSX: Tally registers with title rows and a continuation item row; GSTR-2B Excel with a two-row header. Core 3B figures (hand): outward 2,00,000 + 5,000 + 1,00,000 = 3,05,000; IGST 18,000, CGST 18,000 + 450 = 18,450, SGST 18,450 (tax 54,900). ITC IGST 3,600 + CGST 13,500 + SGST 13,500 = 30,600. Cash IGST 14,400, CGST 4,950, SGST 4,950 = 24,300; no expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee.",
   "category": "clean",
   "job": {
     "fy": "2026-27",
@@ -21,7 +21,16 @@
     "b2bTaxablePaise": 30500000,
     "hsnRowCount": 2,
     "reconMatchedCount": 2,
-    "salesDocCount": 2
+    "salesDocCount": 2,
+    "outwardCessPaise": 0,
+    "outwardTaxPaise": 5490000,
+    "itcBlockedPaise": 0,
+    "itcOtherReversalPaise": 0,
+    "itcNetPaise": 3060000,
+    "cashCessPaise": 0,
+    "daysLate": 0,
+    "interestPaise": 0,
+    "lateFeePaise": 0
   },
   "deliverables": [
     {
@@ -119,7 +128,9 @@
             "Sr. No. To",
             "Total Number",
             "Cancelled",
-            "Net Issued"
+            "Net Issued",
+            "Gaps — to be explained",
+            "Missing numbers (cancelled or not in the register?)"
           ]
         }
       ]

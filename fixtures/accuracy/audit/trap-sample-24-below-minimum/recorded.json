@@ -1,0 +1,10 @@
+{
+  "audit.check:audit.related-party-disclosure": {
+    "status": "pass",
+    "message": "The notes state there were no related-party transactions and no related-party ledger appears.",
+    "evidence": {
+      "quote": "No transactions with related parties during the year.",
+      "location": "notes.txt line 4"
+    }
+  }
+}

@@ -173,7 +173,7 @@ function gaps(ci: GstCheckInput, rule: RuleDefinition): CheckOutcome {
   const rows = A(ci).gstr1.docs.filter((r) => r.missing.length);
   const file = ci.extracted.sources.sales.file;
   const hits = rows.map((r) => ({ quote: r.missing.slice(0, max).join(", "), loc: `${file} series ${r.prefix || "(no prefix)"} ${r.from} to ${r.to}`, text: `${r.nature} ${r.from}–${r.to}: ${r.missing.length} number(s) missing (${r.missing.slice(0, 3).join(", ")}${r.missing.length > 3 ? ", …" : ""})` }));
-  return listFail(hits, `Gaps in the document series; reported as cancelled in the Docs table unless explained`);
+  return listFail(hits, `Gaps in the document series; listed under "Gaps — to be explained" in the Docs table (not reported as cancelled): confirm each number was cancelled, or find the missing invoice`);
 }
 
 function b2cl(ci: GstCheckInput): CheckOutcome {

@@ -84,7 +84,7 @@ export function DeliverablesPanel({ deliverables }: { deliverables: DeliverableV
               ))}
             </div>
           )}
-          <div className="overflow-auto max-h-[480px] rounded-lg border border-border" role="region" tabIndex={0} aria-label={`Preview of sheet ${current.name}`}>
+          <div className={`relative overflow-auto max-h-[480px] rounded-lg border border-border ${focusRing}`} role="region" tabIndex={0} aria-label={`Preview of sheet ${current.name}`}>
             <table className="text-[12px] tabular-nums">
               <caption className="sr-only">Sheet {current.name}, read-only</caption>
               <tbody>
@@ -290,9 +290,11 @@ export function MistakeForm({ runId, checks }: { runId: string; checks: string[]
 // ------------------------------------------------------------------ filing and close
 //
 // After approval a person files on the portal; Firm OS never files, submits or sends anything.
-// "Mark filed" records the acknowledgement (/api/firm-os/jobs/[id]/filed); "Close in Turia"
+// "Mark filed" records the acknowledgement (/api/firm-os/jobs/[id]/filed); "Record Turia close"
 // records the Turia task ref + minutes (/turia-close), which tries the close gate. DONE is set only
-// by the gate. The form helpers are plain functions so tests can drive them with a mocked call().
+// by the gate. A manager or partner can "Retract filing" (FILED_BY_HUMAN / CLOSING → APPROVED
+// through /state, note required) when the filing was recorded by mistake or with the wrong ack ref.
+// The form helpers are plain functions so tests can drive them with a mocked call().
 
 type Send = (url: string, body?: unknown) => Promise<CallResult>;
 type Fail = { ok: false; error: string };
@@ -320,7 +322,7 @@ export function filedBody(ack: CloseLoopView["ack"], f: FilingForm): { ok: true;
   return { ok: true, body: { ackRef: ackRef || null, turiaTaskRef: f.turiaTaskRef.trim() || null, minutes: m.minutes } };
 }
 
-/** Body for "Close in Turia": both the task ref and minutes (> 0) are required. */
+/** Body for "Record Turia close": both the task ref and minutes (> 0) are required. */
 export function turiaCloseBody(f: Pick<FilingForm, "turiaTaskRef" | "minutes">): { ok: true; body: TuriaCloseBody } | Fail {
   const turiaTaskRef = f.turiaTaskRef.trim();
   if (!turiaTaskRef) return { ok: false, error: "Enter the Turia task ref" };
@@ -329,7 +331,7 @@ export function turiaCloseBody(f: Pick<FilingForm, "turiaTaskRef" | "minutes">):
   return { ok: true, body: { turiaTaskRef, minutes: m.minutes! } };
 }
 
-const jobUrl = (jobId: string, what: "filed" | "turia-close") => `/api/firm-os/jobs/${encodeURIComponent(jobId)}/${what}`;
+const jobUrl = (jobId: string, what: "filed" | "turia-close" | "state") => `/api/firm-os/jobs/${encodeURIComponent(jobId)}/${what}`;
 
 /** POST /filed. The job moves to CLOSING (the hook issues the Turia close step). */
 export async function recordFiling(jobId: string, ack: CloseLoopView["ack"], f: FilingForm, send: Send = call): Promise<{ ok: true; state: string } | Fail> {
@@ -353,8 +355,29 @@ export async function recordTuriaClose(jobId: string, f: Pick<FilingForm, "turia
   return { ok: true, done: false, reasons: Array.isArray(close.reasons) ? close.reasons.map(String) : [] };
 }
 
+/**
+ * What "Retract filing" does, shown with the note box before the retraction is sent. The state
+ * machine clears filedAt / filedById / ackRef and writes the old ref into the event note.
+ */
+export function retractConsequence(ack: CloseLoopView["ack"], ackRef: string | null): string {
+  const cleared = ackRef ? `who filed it, when, and the ${ack.label} ${ackRef}` : "who filed it and when";
+  const kept = ackRef ? `The cleared ${ack.label} is kept in the job's history with your note.` : "The earlier filing is kept in the job's history with your note.";
+  return `Retracting moves the job back to APPROVED and clears the filing record: ${cleared}. ${kept} Mark it filed again with the right details. Firm OS changes nothing on the portal or in Turia.`;
+}
+
+export type RetractFrom = Extract<JobTaskState, "FILED_BY_HUMAN" | "CLOSING">;
+
+/** POST /state FILED_BY_HUMAN / CLOSING → APPROVED with the note (required; managers and partners only). */
+export async function retractFiling(jobId: string, from: RetractFrom, note: string, send: Send = call): Promise<{ ok: true; state: string } | Fail> {
+  const n = note.trim();
+  if (!n) return { ok: false, error: "Say why the filing is being retracted" };
+  const r = await send(jobUrl(jobId, "state"), { to: "APPROVED", expectedState: from, note: n });
+  if (!r.ok) return { ok: false, error: r.error ?? "Something went wrong" };
+  return { ok: true, state: String(r.data.state ?? "") };
+}
+
 const turiaLine = (t: CloseLoopView["turia"]) =>
-  t.status === "closed" ? `Closed in Turia · ${t.ref} · ${t.minutes} min logged` : t.status === "issued" ? "Close step issued; not recorded as done yet" : "Not recorded yet";
+  t.status === "closed" ? `Turia close recorded · ${t.ref} · ${t.minutes} min logged` : t.status === "issued" ? "Close step issued; not recorded as done yet" : "Not recorded yet";
 
 /** Where the job's close loop stands: Final file, filing, Turia close, the gate's reasons, DONE. */
 export function CloseLoopStatus({ view }: { view: CloseLoopView }) {
@@ -404,16 +427,32 @@ export function CloseLoopStatus({ view }: { view: CloseLoopView }) {
 
 const fieldLabel = "flex flex-col gap-1 text-[11px] font-bold text-ink-mute";
 
-/** The bar's content for the close-loop action: Mark filed, Close in Turia, or Check again. */
+/** The bar's content for the close-loop action: Mark filed, Record Turia close, or Check again. */
 export function CloseLoopActions({ view }: { view: CloseLoopView }) {
   const router = useRouter();
   const id = useId();
   const [f, setF] = useState<FilingForm>({ ackRef: "", turiaTaskRef: view.turia.ref ?? view.suggestedTuriaRef ?? "", minutes: view.turia.minutes ? String(view.turia.minutes) : "" });
-  const [busy, setBusy] = useState<CloseLoopAction | null>(null);
+  const [busy, setBusy] = useState<CloseLoopAction | "retract" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [retracting, setRetracting] = useState(false);
+  const [note, setNote] = useState("");
   const set = (k: keyof FilingForm) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
   const { ack } = view;
+
+  async function retract() {
+    if (view.state !== "FILED_BY_HUMAN" && view.state !== "CLOSING") return;
+    setBusy("retract");
+    setError(null);
+    setNotice(null);
+    const r = await retractFiling(view.jobId, view.state, note);
+    setBusy(null);
+    if (!r.ok) return setError(r.error);
+    setRetracting(false);
+    setNote("");
+    setNotice("Filing retracted. The job is APPROVED again; mark it filed with the right details.");
+    router.refresh();
+  }
 
   async function markFiled() {
     setBusy("mark-filed");
@@ -425,7 +464,7 @@ export function CloseLoopActions({ view }: { view: CloseLoopView }) {
     router.refresh();
   }
 
-  async function closeInTuria(input: Pick<FilingForm, "turiaTaskRef" | "minutes">) {
+  async function recordClose(input: Pick<FilingForm, "turiaTaskRef" | "minutes">) {
     setBusy(view.action);
     setError(null);
     setNotice(null);
@@ -437,7 +476,28 @@ export function CloseLoopActions({ view }: { view: CloseLoopView }) {
   }
 
   const spinner = busy && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />;
-  const primary = `${btnPrimary} ${focusRing} inline-flex items-center gap-1.5 ml-auto`;
+  const primaryBtn = `${btnPrimary} ${focusRing} inline-flex items-center gap-1.5`;
+  const primary = `${primaryBtn} ml-auto`;
+  /** The bar's buttons in FILED_BY_HUMAN / CLOSING: "Retract filing" (secondary, managers and partners) beside the primary. */
+  const withRetract = (button: React.ReactNode) => (
+    <div className="flex items-center gap-2 ml-auto">
+      {view.canRetract && (
+        <button
+          type="button"
+          disabled={!!busy}
+          onClick={() => {
+            setRetracting(true);
+            setError(null);
+            setNotice(null);
+          }}
+          className={`${btnWarn} ${focusRing} inline-flex items-center gap-1.5`}
+        >
+          Retract filing
+        </button>
+      )}
+      {button}
+    </div>
+  );
   const refField = (label: string, required: boolean) => (
     <label htmlFor={`${id}-ref`} className={`${fieldLabel} w-full sm:w-[200px]`}>
       {label}
@@ -472,15 +532,52 @@ export function CloseLoopActions({ view }: { view: CloseLoopView }) {
           <span className="font-bold text-ink">Filed by you on the portal — record the acknowledgement here.</span>{" "}
           {view.hasFinal ? "Pack approved and in Final." : "Pack approved; no Final file is recorded yet, and the job cannot close without one."} Firm OS never files anything.
         </p>
+        <p id={`${id}-filed`} className="text-[12.5px] text-ink-mute w-full">
+          Mark filed records the filing against your name and moves the job on to closing. Only a manager or partner can retract it afterwards, with a note.
+        </p>
         <label htmlFor={`${id}-ack`} className={`${fieldLabel} w-full sm:w-[240px]`}>
           {ack.label} {ack.required ? "(required)" : "(optional)"}
           <input id={`${id}-ack`} value={f.ackRef} onChange={set("ackRef")} maxLength={64} required={ack.required} autoComplete="off" className={`${field} font-mono ${focusRing}`} />
         </label>
         {refField("Turia task ref (optional)", false)}
         {minutesField("Minutes logged in Turia (optional)", false)}
-        <button type="button" disabled={!!busy || (ack.required && !f.ackRef.trim())} onClick={markFiled} className={primary}>
+        <button type="button" disabled={!!busy || (ack.required && !f.ackRef.trim())} onClick={markFiled} aria-describedby={`${id}-filed`} className={primary}>
           {spinner}Mark filed
         </button>
+        {messages}
+      </>
+    );
+  }
+
+  // "Retract filing", second step: the note (required) and what retracting does, then Confirm
+  // retraction. The Turia close form and its primary button step aside until Cancel.
+  if (view.canRetract && retracting) {
+    return (
+      <>
+        <label htmlFor={`${id}-note`} className={`${fieldLabel} w-full sm:w-[420px]`}>
+          Why is the filing being retracted? (required)
+          <textarea id={`${id}-note`} value={note} onChange={(e) => setNote(e.target.value)} rows={2} maxLength={2000} required autoFocus className={`${field} ${focusRing}`} />
+        </label>
+        <p id={`${id}-retract`} className="text-[13px] text-ink-soft w-full sm:w-auto sm:max-w-[520px]">
+          {retractConsequence(ack, view.ackRef)}
+        </p>
+        <div className="flex items-center gap-2 ml-auto">
+          <button
+            type="button"
+            disabled={!!busy}
+            onClick={() => {
+              setRetracting(false);
+              setError(null);
+            }}
+            className={`${btnGhost} ${focusRing}`}
+          >
+            Cancel
+          </button>
+          <button type="button" disabled={!!busy || !note.trim()} onClick={retract} aria-describedby={`${id}-retract`} className={`${btnWarn} ${focusRing} inline-flex items-center gap-1.5`}>
+            {busy === "retract" && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />}
+            Confirm retraction
+          </button>
+        </div>
         {messages}
       </>
     );
@@ -492,9 +589,11 @@ export function CloseLoopActions({ view }: { view: CloseLoopView }) {
         <p className="text-[13px] text-ink-soft">
           Turia close recorded ({view.turia.ref}, {view.turia.minutes} min). The job closes when every check under Filing and close passes.
         </p>
-        <button type="button" disabled={!!busy} onClick={() => closeInTuria({ turiaTaskRef: view.turia.ref ?? "", minutes: String(view.turia.minutes ?? "") })} className={primary}>
-          {spinner}Check again
-        </button>
+        {withRetract(
+          <button type="button" disabled={!!busy} onClick={() => recordClose({ turiaTaskRef: view.turia.ref ?? "", minutes: String(view.turia.minutes ?? "") })} className={primaryBtn}>
+            {spinner}Check again
+          </button>,
+        )}
         {messages}
       </>
     );
@@ -508,9 +607,11 @@ export function CloseLoopActions({ view }: { view: CloseLoopView }) {
       </p>
       {refField("Turia task ref", true)}
       {minutesField("Minutes logged in Turia", true)}
-      <button type="button" disabled={!!busy || !f.turiaTaskRef.trim() || !f.minutes.trim()} onClick={() => closeInTuria(f)} className={primary}>
-        {spinner}Close in Turia
-      </button>
+      {withRetract(
+        <button type="button" disabled={!!busy || !f.turiaTaskRef.trim() || !f.minutes.trim()} onClick={() => recordClose(f)} className={primaryBtn}>
+          {spinner}Record Turia close
+        </button>,
+      )}
       {messages}
     </>
   );
@@ -520,12 +621,46 @@ export function CloseLoopActions({ view }: { view: CloseLoopView }) {
 
 /** What the bar says when this person has no action (never a file, submit or send action). */
 const IDLE: Partial<Record<JobTaskState, string>> = {
+  ASSIGNED: "Assigned. The preparer runs the agent when the documents are ready.",
+  IN_PREP: "In preparation. The preparer runs the agent again when the documents are ready.",
+  AGENT_DONE: "The agent has prepared the pack. The preparer checks it and submits it for review, or re-runs the agent with a note.",
+  IN_REVIEW: "Submitted for review. The reviewer approves the pack or requests changes.",
   APPROVED: "Pack approved and in Final. A person files it on the portal and records the acknowledgement.",
   FILED_BY_HUMAN: "Filed by a person on the portal. The job closes when the Final file and the Turia close are confirmed.",
   CLOSING: "Filed by a person on the portal. The job closes when the Final file and the Turia close are confirmed.",
   DONE: "Done: filed, Final file in SharePoint and the Turia task closed.",
 };
 const IDLE_APPROVED_NO_FINAL = "Pack approved; no Final file is recorded yet. A person files it on the portal and records the acknowledgement.";
+
+/** What "Approve pack" does, shown before the approval is sent (it cannot be undone from this screen). */
+export function approveConsequence(deliverables: number): string {
+  const copy =
+    deliverables === 0
+      ? "This run has no files to copy to Final."
+      : `It copies ${deliverables === 1 ? "the file" : `the ${deliverables} files`} to Final as a new version (nothing is overwritten).`;
+  return `Approving moves the job to APPROVED. ${copy} A person then files it on the portal; Firm OS never files anything.`;
+}
+
+/** What "Re-run with a note" does, shown with the note box before the re-run is sent. */
+export const RERUN_CONSEQUENCE =
+  "Re-running moves the job back to IN_PREP and starts a new agent run with your note. This run is kept for the record; submit the new run for review when it is ready.";
+
+const RERUN_NOTE_MIN = 3; // as the route's schema (rerunZ)
+
+/** Body for "Re-run with a note": the note is required (at least 3 characters, as the route asks). */
+export function rerunBody(note: string): { ok: true; body: { note: string } } | Fail {
+  const n = note.trim();
+  return n.length < RERUN_NOTE_MIN ? { ok: false, error: "Say why the agent is being re-run" } : { ok: true, body: { note: n } };
+}
+
+/** POST /rerun: AGENT_DONE → IN_PREP with the note, then a new run; returns the new run's id. */
+export async function requestRerun(runId: string, note: string, send: Send = call): Promise<{ ok: true; runId: string } | Fail> {
+  const b = rerunBody(note);
+  if (!b.ok) return b;
+  const r = await send(`/api/firm-os/agents/runs/${encodeURIComponent(runId)}/rerun`, b.body);
+  if (!r.ok) return { ok: false, error: r.error ?? "Something went wrong" };
+  return { ok: true, runId: String(r.data.runId ?? "") };
+}
 
 export function ActionBar({
   agent,
@@ -534,6 +669,7 @@ export function ActionBar({
   jobState,
   actions,
   blockFails,
+  deliverables = 0,
   closeLoop = null,
 }: {
   agent: string;
@@ -542,11 +678,13 @@ export function ActionBar({
   jobState: JobTaskState;
   actions: RunReview["actions"];
   blockFails: number;
+  /** Working files the run produced (what approval copies to Final). */
+  deliverables?: number;
   closeLoop?: CloseLoopView | null;
 }) {
   const router = useRouter();
   const id = useId();
-  const [mode, setMode] = useState<"idle" | "changes" | "approve">("idle");
+  const [mode, setMode] = useState<"idle" | "changes" | "approve" | "rerun">("idle");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -556,12 +694,27 @@ export function ActionBar({
     setBusy(true);
     setError(null);
     const r = await call(url, body);
-    setBusy(false);
-    if (!r.ok) return setError(r.error);
-    setMode("idle");
+    if (!r.ok) {
+      setBusy(false);
+      return setError(r.error);
+    }
     setNote("");
-    if (after) after(r.data);
-    else router.refresh();
+    if (after) return after(r.data); // navigating: stay busy so nothing is sent twice
+    setBusy(false);
+    setMode("idle");
+    router.refresh();
+  }
+
+  async function rerun() {
+    setBusy(true);
+    setError(null);
+    const r = await requestRerun(runId, note);
+    if (!r.ok) {
+      setBusy(false);
+      return setError(r.error);
+    }
+    setNote("");
+    router.push(`/agents/${agent}/runs/${r.runId}`); // navigating: stay busy so nothing is sent twice
   }
 
   const spinner = busy && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />;
@@ -579,6 +732,16 @@ export function ActionBar({
       <>
         {mode === "changes" && noteBox("What needs to change? The agent re-runs with this note.")}
         {mode === "approve" && actions.approveNeedsNote && noteBox(`Partner note: approving over ${blockFails} block finding(s)`)}
+        {mode === "approve" && (
+          <p id={`${id}-approve`} className="text-[13px] text-ink-soft w-full sm:w-auto sm:max-w-[520px]">
+            {approveConsequence(deliverables)}
+          </p>
+        )}
+        {mode === "idle" && !actions.approve && blockFails > 0 && jobState === "IN_REVIEW" && (
+          <p className="text-[13px] text-ink-soft">
+            {blockFails} block finding{blockFails === 1 ? "" : "s"}: only a partner can approve over {blockFails === 1 ? "it" : "them"}. Request changes, or ask a partner to review.
+          </p>
+        )}
         <div className="flex items-center gap-2 ml-auto">
           {mode !== "idle" && (
             <button type="button" onClick={() => setMode("idle")} className={`${btnGhost} ${focusRing}`}>
@@ -597,24 +760,57 @@ export function ActionBar({
             </button>
           )}
           {actions.approve && mode !== "changes" && (
+            // First click shows what approval does (and the partner note box when needed); the second sends it.
             <button
               type="button"
               disabled={busy || (mode === "approve" && actions.approveNeedsNote && !note.trim())}
-              onClick={() => (actions.approveNeedsNote && mode !== "approve" ? setMode("approve") : go(`${base}/approve`, { note: note || null }))}
+              onClick={() => (mode !== "approve" ? setMode("approve") : go(`${base}/approve`, { note: note || null }))}
+              aria-describedby={mode === "approve" ? `${id}-approve` : undefined}
               className={primary}
             >
               {mode === "approve" && spinner}
-              Approve pack
+              {mode === "approve" ? "Confirm approval" : "Approve pack"}
             </button>
           )}
         </div>
       </>
     );
-  } else if (actions.submit) {
+  } else if (actions.submit || actions.rerun) {
+    // Submit for review is the one primary action; "Re-run with a note" is secondary. Its first click
+    // opens the note box and says what a re-run does; the second sends it (note required).
     content = (
-      <button type="button" disabled={busy} onClick={() => go(`${base}/submit`)} className={`${primary} ml-auto`}>
-        {spinner}Submit for review
-      </button>
+      <>
+        {mode === "rerun" && noteBox("Why re-run? The agent runs again with this note.")}
+        {mode === "rerun" && (
+          <p id={`${id}-rerun`} className="text-[13px] text-ink-soft w-full sm:w-auto sm:max-w-[520px]">
+            {RERUN_CONSEQUENCE}
+          </p>
+        )}
+        <div className="flex items-center gap-2 ml-auto">
+          {mode === "rerun" && (
+            <button type="button" onClick={() => setMode("idle")} className={`${btnGhost} ${focusRing}`}>
+              Cancel
+            </button>
+          )}
+          {actions.rerun && (
+            <button
+              type="button"
+              disabled={busy || (mode === "rerun" && !rerunBody(note).ok)}
+              onClick={() => (mode === "rerun" ? rerun() : setMode("rerun"))}
+              aria-describedby={mode === "rerun" ? `${id}-rerun` : undefined}
+              className={`${btnWarn} ${focusRing} inline-flex items-center gap-1.5`}
+            >
+              {mode === "rerun" && spinner}
+              {mode === "rerun" ? "Re-run agent with this note" : "Re-run with a note"}
+            </button>
+          )}
+          {actions.submit && mode !== "rerun" && (
+            <button type="button" disabled={busy} onClick={() => go(`${base}/submit`)} className={primary}>
+              {spinner}Submit for review
+            </button>
+          )}
+        </div>
+      </>
     );
   } else if (actions.finalize) {
     content = (
@@ -646,9 +842,13 @@ export function ActionBar({
     content = <p className="text-[13px] text-ink-mute">{idle ?? "No action for you on this job right now."}</p>;
   }
 
+  // Sticky, not fixed: the bar sticks to the bottom of the window while the page scrolls but keeps
+  // its own place at the end, so a tall bar never hides the last panels. On a phone it is not sticky
+  // at all (the Mark filed form would cover most of the screen); it sits at the end of the page.
+  // It bleeds to the edges of the layout's padding, and scrolls itself if taller than 70vh.
   return (
-    <div className="fixed bottom-0 inset-x-0 z-20 border-t border-border bg-card/95 backdrop-blur" role="region" aria-label="Review actions">
-      <div className="max-w-[1280px] mx-auto px-5 sm:px-8 py-3 flex items-end gap-3 flex-wrap">
+    <div className="sticky max-sm:static bottom-0 z-20 -mx-5 sm:-mx-8 -mb-8 mt-8 max-h-[70vh] max-sm:max-h-none overflow-y-auto border-t border-border bg-card/95 backdrop-blur" role="region" aria-label="Review actions">
+      <div className="px-5 sm:px-8 py-3 flex items-end gap-3 flex-wrap">
         {content}
         {error && (
           <p role="alert" className={`${errorText} w-full`}>

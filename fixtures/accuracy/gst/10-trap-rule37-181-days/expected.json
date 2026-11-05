@@ -1,5 +1,5 @@
 {
-  "description": "Trap: payables ageing with one invoice unpaid 181 days (reverse), one at exactly 180 days (not yet) and one partly paid after 204 days (proportionate).",
+  "description": "Trap: payables ageing with one invoice unpaid 181 days (reverse), one at exactly 180 days (not yet) and one partly paid after 204 days (proportionate). Core 3B figures (hand): outward 2,00,000; CGST 18,000, SGST 18,000. ITC CGST 9,000 + SGST 9,000 = 18,000; rule 37 (period end 31 Oct 2026): CC/450 181 days unpaid -> IGST 18,000; PC-3001 180 days -> nil; WL/77 204 days, 40,000 of 1,00,000 unpaid -> 10,000 x 40% = 4,000; 4(B)(2) IGST 22,000. Net per head IGST 0 (excess 22,000 to liability), CGST 9,000, SGST 9,000 = 18,000. Cash IGST 22,000, CGST 9,000, SGST 9,000 = 40,000; no expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee.",
   "category": "trap",
   "job": {
     "fy": "2026-27",
@@ -20,7 +20,18 @@
     "cashIgstPaise": 2200000,
     "cashCgstPaise": 900000,
     "cashSgstPaise": 900000,
-    "cashTaxPaise": 4000000
+    "cashTaxPaise": 4000000,
+    "outwardTaxablePaise": 20000000,
+    "outwardIgstPaise": 0,
+    "outwardCgstPaise": 1800000,
+    "outwardSgstPaise": 1800000,
+    "outwardCessPaise": 0,
+    "outwardTaxPaise": 3600000,
+    "itcBlockedPaise": 0,
+    "cashCessPaise": 0,
+    "daysLate": 0,
+    "interestPaise": 0,
+    "lateFeePaise": 0
   },
   "deliverables": [
     {
@@ -118,7 +129,9 @@
             "Sr. No. To",
             "Total Number",
             "Cancelled",
-            "Net Issued"
+            "Net Issued",
+            "Gaps — to be explained",
+            "Missing numbers (cancelled or not in the register?)"
           ]
         }
       ]

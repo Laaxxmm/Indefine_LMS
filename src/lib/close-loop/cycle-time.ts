@@ -14,7 +14,8 @@
 // assignedToDone = first entry into ASSIGNED (or the first event, if the job was created
 // already assigned) → the DONE event. DRAFT time is not counted.
 import type { JobTaskState } from "@prisma/client";
-import { addDays, istDayKey, istDayStart, istLabel, parseDayKey } from "@/lib/ist";
+import { addDays, istDayKey, istDayStart, parseDayKey } from "@/lib/ist";
+import { formatDayKey as formatDayKeyStrict } from "@/lib/agents/core/format";
 
 export const STAGES = ["queue", "prep", "review", "waitOnClient", "filing", "filingToDone"] as const;
 export type Stage = (typeof STAGES)[number];
@@ -209,10 +210,12 @@ export function formatShare(share: number): string {
   return `${Math.round(share * 100)}%`;
 }
 
-/** "2026-11-05" → "05 Nov 2026" (DD MMM YYYY, IST). */
+/**
+ * "2026-11-05" → "05 Nov 2026" (DD MMM YYYY, IST). Fixed English month names: en-IN locale data
+ * writes September as "Sept", which is not MMM.
+ */
 export function formatDayKey(key: string): string {
-  const d = parseDayKey(key);
-  return d ? istLabel(d, { day: "2-digit", month: "short", year: "numeric" }) : key;
+  return parseDayKey(key) ? formatDayKeyStrict(key) : key;
 }
 
 export interface CycleRange {

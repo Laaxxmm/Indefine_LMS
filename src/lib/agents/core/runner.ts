@@ -118,7 +118,8 @@ export type ExtractContext<I> = {
   model: ModelCaller;
 };
 
-export type CheckInput<I, E> = { input: I; extracted: E; figures: Figures; job: JobContext };
+/** `preparedAt`: when this run prepares the pack (deps.now()); absent in mistake replays — rules that need "today" fall back conservatively. */
+export type CheckInput<I, E> = { input: I; extracted: E; figures: Figures; job: JobContext; preparedAt?: Date };
 export type DeliverableContext<I, E> = CheckInput<I, E> & { results: ChecklistResultItem[] };
 
 export type DeliverableDraft =
@@ -386,7 +387,7 @@ export async function runAgent<I, E>(def: AgentDefinition<I, E>, jobTaskId: stri
     for (const [k, v] of Object.entries(figures)) {
       if (!Number.isSafeInteger(v)) throw new AgentRunError(`compute returned a non-integer figure ${k}=${String(v)} (amounts must be integer paise)`);
     }
-    const checkInput: CheckInput<I, E> = { input, extracted, figures, job };
+    const checkInput: CheckInput<I, E> = { input, extracted, figures, job, preparedAt: deps.now() };
     // The documents text an LLM rule sees is also what its quote is verified against (engine).
     const llmContext: LlmContextFn<CheckInput<I, E>> = (_rule, ci) => (def.llmContext ? def.llmContext(ci) : JSON.stringify(ci.extracted, null, 2));
     const llmCheck: LlmCheck<CheckInput<I, E>> = session

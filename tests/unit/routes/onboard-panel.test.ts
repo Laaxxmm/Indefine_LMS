@@ -68,10 +68,19 @@ describe("OnboardPanel screens", () => {
     expect(html).toContain("11 Dec 2026"); // GSTR-1 for Nov 2026
     expect(html).toMatch(/AGM/); // AOC-4 / MGT-7 / ADT-1 dates wait for the AGM date
     expect((html.match(/>Create</g) ?? []).length).toBe(1);
+    // Create is irreversible: the consequence is spelled out next to it and tied to the button.
+    expect(html).toContain("Create starts all of the above now");
+    expect(html).toContain("nothing is deleted");
+    expect(html).toContain('aria-describedby="create-consequence"');
 
     const done = await svc.create(v0.id, "u");
     const after = await render(done);
     expect(after).toContain("Onboarded");
+    // The summary links go where each created thing lives, named after it.
+    expect(after).toMatch(/href="\/clients\/[^"]+"[^>]*>[^<]*in Clients</);
+    expect(after).toContain("CL-ACME01 SharePoint site");
+    expect(after).toContain('href="/agents"');
+    expect(after).toContain('rel="noopener noreferrer"');
     expect(after).toContain("Waiting on you");
     expect(after).toContain("Done in Turia");
     expect(after).toContain('aria-label="Copy PAN"');
