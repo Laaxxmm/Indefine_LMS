@@ -201,7 +201,7 @@ const FY_2025_26: TaxRuleSet = {
     interestBpPerMonth: 100,
     roundDownToPaise: 100_00,
     verify:
-      "ss.208-211, 234B, 234C, 234A: no advance tax below â‚¹10,000; resident seniors without business income exempt (s.207(2)); 15/45/75/100% (12%/36% relief) and presumptive 100% by 15 Mar; 1% per month or part, amounts rounded down to â‚¹100 (rule 119A). The 234C proviso for capital gains / dividends arising after an instalment date is NOT modelled; self-assessment tax is taken as paid on the filing date.",
+      "ss.208-211, 234B, 234C, 234A: no advance tax below â‚¹10,000; resident seniors without business income exempt (s.207(2)); 15/45/75/100% (12%/36% relief) and presumptive 100% by 15 Mar; 1% per month or part, amounts rounded down to â‚¹100 (rule 119A). The 234C proviso for capital gains / dividends arising after an instalment date is NOT modelled. s.234A: the base is assessed tax less tax paid on or before the s.139(1) due date (advance tax and self-assessment tax u/s 140A; later payments do not reduce it) - s.234A(1) lists advance tax, TDS/TCS and reliefs but does not name self-assessment tax: PARTNER TO CONFIRM FIRM PRACTICE. s.234B: self-assessment tax is taken as paid on the filing date (the s.234B(2) step-down from the date of payment is NOT modelled).",
   },
   lateFee234F: { feePaise: 5_000_00, smallIncomeFeePaise: 1_000_00, smallIncomeLimitPaise: 5 * L, verify: "s.234F: â‚¹5,000 for a return after the s.139(1) due date; â‚¹1,000 where total income â‰¤ â‚¹5,00,000." },
   lossCarryForwardYears: 8,

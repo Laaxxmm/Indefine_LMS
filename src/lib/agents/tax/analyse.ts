@@ -488,7 +488,14 @@ function analyse(x: TaxExtract): TaxAnalysis {
     { assessedTaxPaise: assessed, payments: o.advanceTax, instalmentDates: instalmentDates(x.fy), presumptiveOnly: presOk, exempt, aprilFirst: `${fy0 + 1}-04-01`, filingDate: p.plannedFilingDate },
     rules,
   );
-  const i234A = interest234A(assessed - adv.paidByMarch, due139, p.plannedFilingDate, rules, addDays(due139, 1));
+  // s.234A(1) (1961 Act; s.423 of the 2025 Act): interest runs from the day after the s.139(1) due
+  // date to the date of filing, on the tax on total income "as reduced by" advance tax, TDS / TCS
+  // and the listed reliefs. The text does not name self-assessment tax (s.140A); tax already paid
+  // on or before the due date is read as reducing the base because the interest is for default
+  // after the due date only. Payments dated after the due date do not reduce it.
+  // PARTNER TO CONFIRM firm practice (verify note "Advance tax and interest").
+  const paidByDue = o.advanceTax.filter((a2) => a2.date <= due139).reduce((s, a2) => s + a2.amountPaise, 0);
+  const i234A = interest234A(assessed - paidByDue, due139, p.plannedFilingDate, rules, addDays(due139, 1));
   const fee234F = lateFee234F(chosenFull.totalIncome, due139, p.plannedFilingDate, rules);
   const netPayablePaise = roundPayableTo10(taxLiability + i234A + adv.i234B + adv.i234C + fee234F - tds.credit - paid);
 

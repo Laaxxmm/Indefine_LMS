@@ -204,6 +204,32 @@ describe("missing documents, rule-set guard, 234A", () => {
     expect(x.i234A).toBe(rs(2_106));
     expect(x.fee234F).toBe(rs(5_000));
   });
+  describe("s.234A base: tax paid on or before the due date reduces it (audit counterexample)", () => {
+    // Salary 20,00,000 − 75,000 = 19,25,000 (new regime); tax 20,000 + 40,000 + 60,000 + 3,25,000 × 20% = 1,85,000;
+    // cess 7,400 → 1,92,400; no TDS, so assessed tax = 1,92,400. Due date 31 Jul 2026.
+    const at = (payments: { date: string; amount: string }[], filed: string) =>
+      a("clean-salaried-new", (o) => Object.assign(o, { tdsInBooks: [], otherSources: [], advanceTax: payments }) && Object.assign(o.salary, { gross: "20,00,000" }) && (o.profile.plannedFilingDate = filed), {
+        files: { "26as.csv": "tan,deductor,section,amount_paid,tds_deposited\n" },
+      });
+    it("self-assessment tax 1,92,400 paid 1 May, filed 1 Aug: 234A nil (the old base gave 1,924)", () => {
+      const x = at([{ date: "2026-05-01", amount: "1,92,400" }], "2026-08-01");
+      expect(x.advance.assessedTaxPaise).toBe(rs(1_92_400));
+      expect(x.belated).toBe(true);
+      expect(x.i234A).toBe(0);
+      expect(x.fee234F).toBe(rs(5_000));
+    });
+    it("boundary: paid ON the due date reduces the base; paid the day after does not", () => {
+      expect(at([{ date: "2026-07-31", amount: "1,92,400" }], "2026-08-10").i234A).toBe(0);
+      // 1,92,400 x 1% x 1 month (1 Aug – 10 Aug)
+      expect(at([{ date: "2026-08-01", amount: "1,92,400" }], "2026-08-10").i234A).toBe(rs(1_924));
+      // Split: 1,00,000 on the due date, 92,400 the day after → base 92,400 → 924.
+      expect(at([{ date: "2026-07-31", amount: "1,00,000" }, { date: "2026-08-01", amount: "92,400" }], "2026-08-10").i234A).toBe(rs(924));
+    });
+    it("advance tax by 31 March still reduces it; a return filed by the due date has no 234A", () => {
+      expect(at([{ date: "2026-03-15", amount: "1,00,000" }], "2026-08-10").i234A).toBe(rs(924));
+      expect(at([], "2026-07-31").i234A).toBe(0);
+    });
+  });
   it("caches per extracted object", () => {
     const x = extractOf("clean-salaried-new");
     expect(analyseTax(x)).toBe(analyseTax(x));
