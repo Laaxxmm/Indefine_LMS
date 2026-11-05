@@ -1,7 +1,10 @@
 // CARO 2020: whether the Order applies (para 1(2)) and a per-clause applicability checklist
 // (para 3). Applicability only: the agent never answers a clause or expresses an opinion; the
-// engagement partner concludes. Thresholds are data (config.ts CARO, INTERNAL_AUDIT).
+// engagement partner concludes. Thresholds are data (config.ts CARO, INTERNAL_AUDIT). The
+// small-company limits applied are only the partner-verified ones; limits awaiting verification
+// are tested separately (caroPendingVerification) and never change the determination.
 import { z } from "zod";
+import { inForceVerified, type SmallCompanyLimits } from "@/lib/agents/roc/data";
 import { CARO, INTERNAL_AUDIT } from "./config";
 
 const amount = z.union([z.number(), z.string()]);
@@ -47,11 +50,44 @@ export type CaroDetermination = { status: CaroStatus; reasons: string[]; missing
 const NON_COMPANY = new Set(["llp", "partnership", "proprietorship", "trust", "other-non-company"]);
 const crore = (p: number) => `₹${(p / 1_00_00_000_00).toLocaleString("en-IN")} crore`;
 
+type TbFallback = { revenuePaise: number | null; priorRevenuePaise: number | null };
+
+/** "2025-26" → "2026-03-31" (the balance-sheet date the limits are read at); null when unknown. */
+export function fyEndOf(fy: string | null | undefined): string | null {
+  const m = /^(\d{4})-\d{2}$/.exec(fy ?? "");
+  return m ? `${Number(m[1]) + 1}-03-31` : null;
+}
+
 /**
  * `revenuePaise` / `priorRevenuePaise`: from the profile when given, else from the TB (revenue +
  * other income for the exemption test; prior revenue from operations for the small-company test).
+ * `fyEnd`: the year audited (null = unknown → the latest verified limits). Only verified
+ * small-company limits are applied.
  */
-export function determineCaro(p: EntityProfile | null, tbFallback: { revenuePaise: number | null; priorRevenuePaise: number | null }): CaroDetermination {
+export function determineCaro(p: EntityProfile | null, tbFallback: TbFallback, fyEnd: string | null = null): CaroDetermination {
+  return determineWith(p, tbFallback, inForceVerified(CARO.smallCompany, fyEnd, "small-company limit").applied);
+}
+
+type LimitsRef = { effectiveFrom: string; paidUpMaxPaise: number; turnoverMaxPaise: number; source: string };
+/** One unverified limit set (and the CARO outcome under it) next to the verified set actually applied. */
+export type CaroPendingVerification = LimitsRef & { status: CaroStatus; reasons: string[]; applied: LimitsRef };
+
+/**
+ * Small-company limits awaiting partner verification (in force for the year, later than the
+ * verified limits applied) under which the CARO determination would come out differently.
+ * Reported to the reviewer; never applied.
+ */
+export function caroPendingVerification(p: EntityProfile | null, tbFallback: TbFallback, fyEnd: string | null = null): CaroPendingVerification[] {
+  const { applied, pending } = inForceVerified(CARO.smallCompany, fyEnd, "small-company limit");
+  const base = determineWith(p, tbFallback, applied).status;
+  const ref = (l: LimitsRef): LimitsRef => ({ effectiveFrom: l.effectiveFrom, paidUpMaxPaise: l.paidUpMaxPaise, turnoverMaxPaise: l.turnoverMaxPaise, source: l.source });
+  return pending
+    .map((l) => ({ l, d: determineWith(p, tbFallback, l) }))
+    .filter(({ d }) => d.status !== base)
+    .map(({ l, d }) => ({ ...ref(l), status: d.status, reasons: d.reasons, applied: ref(applied) }));
+}
+
+function determineWith(p: EntityProfile | null, tbFallback: TbFallback, sc: SmallCompanyLimits): CaroDetermination {
   if (!p) return { status: "undetermined", reasons: ["No entity profile (entity.json)"], missing: ["entity profile: company class, paid-up capital, reserves, borrowings, turnover"] };
   if (NON_COMPANY.has(p.companyClass)) return { status: "not-applicable", reasons: [`Not a company (${p.companyClass}); CARO 2020 applies to companies only`], missing: [] };
   const excluded: Record<string, string> = { banking: "banking company", insurance: "insurance company", section8: "company licensed under section 8", opc: "One Person Company" };
@@ -61,7 +97,6 @@ export function determineCaro(p: EntityProfile | null, tbFallback: { revenuePais
   // Private company: small company (s.2(85)), then the private-company exemption (para 1(2)(v)).
   const missing: string[] = [];
   const reasons: string[] = [];
-  const sc = CARO.smallCompany;
   const priorTurnover = p.priorTurnoverPaise ?? tbFallback.priorRevenuePaise;
   let small: boolean | null;
   if (p.holdingOrSubsidiary === true || p.specialAct === true) small = false;
@@ -73,7 +108,7 @@ export function determineCaro(p: EntityProfile | null, tbFallback: { revenuePais
     if (priorTurnover === null) missing.push("turnover of the preceding financial year (or the prior-year TB)");
     if (p.holdingOrSubsidiary === undefined) missing.push("whether the company is a holding or subsidiary company");
   } else small = true;
-  if (small) return { status: "not-applicable", reasons: [`Small company: paid-up capital ≤ ${crore(sc.paidUpMaxPaise)} and preceding-year turnover ≤ ${crore(sc.turnoverMaxPaise)}, not a holding/subsidiary`], missing: [] };
+  if (small) return { status: "not-applicable", reasons: [`Small company: paid-up capital ≤ ${crore(sc.paidUpMaxPaise)} and preceding-year turnover ≤ ${crore(sc.turnoverMaxPaise)} (limits as tested), not a holding/subsidiary`], missing: [] };
   if (small === false) reasons.push("Not a small company");
 
   const ex = CARO.privateExemption;

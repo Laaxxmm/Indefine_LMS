@@ -1,8 +1,10 @@
 // Audit Assist checklist: deterministic rule bodies, the related-party LLM rule, and the default
 // SOP pack v1.0.0. Thresholds are rule params (data) with config.ts defaults; every threshold
 // carries a `verify` note. No rule expresses or implies an audit opinion.
+// audit.caro-small-company-pending-verification (warn): CARO applicability would change under
+// small-company limits held as data but not yet partner-verified (they are never applied).
 import { createRuleRegistry, type ChecklistPack, type CheckOutcome, type DeterministicCheck, type RuleDefinition } from "@/lib/agents/core/checklist";
-import { formatInr } from "@/lib/agents/core/format";
+import { formatDayKey, formatInr } from "@/lib/agents/core/format";
 import type { CheckInput } from "@/lib/agents/core/runner";
 import { matchRows, netPaise } from "@/lib/agents/books/tb";
 import { analyzeAudit, normalizeAuditExtract } from "./analysis";
@@ -85,6 +87,19 @@ export const auditRegistry = createRuleRegistry<AuditCheckInput>(
       const c = A(ci).caro;
       if (c.status !== "undetermined") return pass();
       return { status: "fail", message: `CARO 2020 applicability cannot be determined: ${c.missing.join("; ") || c.reasons.join("; ")}`, evidence: { location: ci.extracted.files.find((f) => f.kind === "entity")?.name ?? "entity profile" } };
+    },
+
+    "audit.caro-small-company-pending-verification": (ci) => {
+      const a = A(ci);
+      const d = a.caroPending[0];
+      if (!d) return pass();
+      const status = (s: string) => (s === "applicable" ? "applicable" : s === "not-applicable" ? "not applicable" : "undetermined");
+      const crore = (p: number) => `₹${p / 1_00_00_000_00} crore`;
+      return {
+        status: "fail",
+        message: `CARO 2020 applicability depends on small-company limits awaiting partner verification. Applied (verified — ${d.applied.source}: paid-up ≤ ${crore(d.applied.paidUpMaxPaise)}, preceding-year turnover ≤ ${crore(d.applied.turnoverMaxPaise)}): the Order is ${status(a.caro.status)}. Unverified limits from ${formatDayKey(d.effectiveFrom)} (paid-up ≤ ${crore(d.paidUpMaxPaise)}, turnover ≤ ${crore(d.turnoverMaxPaise)}): it would be ${status(d.status)} (${d.reasons.join("; ")}). The working papers follow the verified limits; the engagement partner confirms the notification before relying on the small-company exclusion.`,
+        evidence: { location: ci.extracted.files.find((f) => f.kind === "entity")?.name ?? "entity profile" },
+      };
     },
 
     "audit.caro-applicable": (ci) => {
@@ -215,6 +230,15 @@ export const AUDIT_CHECKLIST: ChecklistPack = {
       params: { minPercent: VARIANCE.minPercent, performancePercent: MATERIALITY.performancePercent, revenueBps: MATERIALITY.revenueBps, verify: `${VARIANCE.verify} ${MATERIALITY.verify}` },
     }),
     rule({ id: "audit.caro-undetermined", title: "CARO 2020 applicability can be determined", severity: "warn", kind: "deterministic", check: "audit.caro-undetermined", evidence: "entity profile fields missing", params: { verify: CARO.verify } }),
+    rule({
+      id: "audit.caro-small-company-pending-verification",
+      title: "CARO applicability does not hang on unverified small-company limits",
+      severity: "warn",
+      kind: "deterministic",
+      check: "audit.caro-small-company-pending-verification",
+      evidence: "entity profile: paid-up capital, preceding-year turnover; verified and unverified limits",
+      params: { verify: CARO.verify },
+    }),
     rule({ id: "audit.caro-applicable", title: "CARO 2020 applies — clause checklist to complete", severity: "info", kind: "deterministic", check: "audit.caro-applicable", evidence: "CARO determination", params: { verify: CARO.verify } }),
     rule({
       id: "audit.sample-below-minimum",

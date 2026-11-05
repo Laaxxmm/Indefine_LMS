@@ -3,7 +3,7 @@
 // sampling selections and population ties. Pure: the same extract always gives the same result.
 import { nameKey } from "@/lib/agents/books/table";
 import { netByLedger, tbTotals, type TbTotals } from "@/lib/agents/books/tb";
-import { caroChecklist, determineCaro, type CaroClause, type CaroDetermination, type CaroFacts } from "./caro";
+import { caroChecklist, caroPendingVerification, determineCaro, fyEndOf, type CaroClause, type CaroDetermination, type CaroFacts, type CaroPendingVerification } from "./caro";
 import { MATERIALITY, SAMPLING, VARIANCE } from "./config";
 import type { AuditExtract, Population } from "./inputs";
 import { buildLeads, isMaterialVariance, type LeadResult, type LeadSchedule } from "./leads";
@@ -12,6 +12,7 @@ import { musSample, musSampleSize, randomSample, type SampleResult } from "./sam
 
 export function normalizeAuditExtract(e: Partial<AuditExtract> | null | undefined): AuditExtract {
   return {
+    fy: e?.fy ?? null,
     files: e?.files ?? [],
     tb: e?.tb ?? null,
     priorTb: e?.priorTb ?? null,
@@ -38,6 +39,8 @@ export type AuditAnalysis = {
   materialityBasis: string;
   variances: Variance[];
   caro: CaroDetermination;
+  /** CARO outcomes under small-company limits awaiting partner verification that differ from `caro` (never applied). */
+  caroPending: CaroPendingVerification[];
   clauses: CaroClause[];
   samples: { population: Population; result: SampleResult }[];
   ties: PopulationTie[];
@@ -91,7 +94,10 @@ export function analyzeAudit(e: AuditExtract): AuditAnalysis {
   const variances: Variance[] =
     leads && e.priorTb ? leads.schedules.filter((s) => isMaterialVariance(s, performancePaise, VARIANCE.minPercent)).map((schedule) => ({ schedule, explanation: explanationFor(schedule) })) : [];
 
-  const caro = determineCaro(e.profile, { revenuePaise: revenuePaise === null ? null : revenuePaise + otherIncomePaise, priorRevenuePaise });
+  const caroTb = { revenuePaise: revenuePaise === null ? null : revenuePaise + otherIncomePaise, priorRevenuePaise };
+  const fyEnd = fyEndOf(e.fy);
+  const caro = determineCaro(e.profile, caroTb, fyEnd);
+  const caroPending = caroPendingVerification(e.profile, caroTb, fyEnd);
   const abs = (wp: string) => Math.abs(areaNet(leads, wp, "cy"));
   const facts: CaroFacts = { ppePaise: abs("L-E"), inventoryPaise: abs("L-G"), investmentsPaise: abs("L-F"), loansAdvancesPaise: abs("L-J"), borrowingsPaise: abs("L-B") };
   const clauses = caroChecklist(caro, e.profile, facts);
@@ -126,7 +132,7 @@ export function analyzeAudit(e: AuditExtract): AuditAnalysis {
   if (!e.populations.length) missingInputs.push("Ledger detail for sampling (population-*.csv)");
   if (!e.notes) missingInputs.push("Disclosure notes (related parties)");
 
-  const a: AuditAnalysis = { tb, priorTb: e.priorTb ? tbTotals(e.priorTb) : null, leads, revenuePaise, priorRevenuePaise, materialityPaise, performancePaise, materialityBasis, variances, caro, clauses, samples, ties, opinionInInputs, missingInputs };
+  const a: AuditAnalysis = { tb, priorTb: e.priorTb ? tbTotals(e.priorTb) : null, leads, revenuePaise, priorRevenuePaise, materialityPaise, performancePaise, materialityBasis, variances, caro, caroPending, clauses, samples, ties, opinionInInputs, missingInputs };
   cache.set(e, a);
   return a;
 }

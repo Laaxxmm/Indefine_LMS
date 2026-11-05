@@ -6,6 +6,7 @@ import { parseTb } from "@/lib/agents/books/tb";
 import { normalizeAuditExtract } from "./analysis";
 import type { EntityProfile } from "./caro";
 import type { AuditExtract, Population } from "./inputs";
+import { opinionHits } from "./opinion";
 import { AUDIT_CHECKLIST, auditLlmContext, auditRegistry, type AuditCheckInput } from "./rules";
 
 const JOB: JobContext = { jobTaskId: "j", title: "Audit", service: "Audit", fy: "2025-26", period: "Annual", clientCode: "ACME01", clientName: "Acme", assigneeId: null, reviewerId: null };
@@ -83,6 +84,20 @@ describe("warn / info rules", () => {
     const pub = run("audit.caro-applicable", ex({ profile: { ...PROFILE, companyClass: "public" } }));
     expect(pub.status).toBe("fail");
     expect(pub.message).toMatch(/clause\(s\) applicable/);
+  });
+  it("caro-small-company-pending-verification: fails only when the unverified limits would change CARO applicability", () => {
+    const CR = 1_000_000_000;
+    expect(run("audit.caro-small-company-pending-verification", ex({ fy: "2025-26" })).status).toBe("pass");
+    const between = { ...PROFILE, paidUpCapitalPaise: 6 * CR, reservesPaise: 4.5 * CR, maxBorrowingsPaise: 2 * CR, turnoverPaise: 75 * CR, priorTurnoverPaise: 70 * CR };
+    const r = run("audit.caro-small-company-pending-verification", ex({ fy: "2025-26", profile: between, files: [{ name: "entity.json", kind: "entity" }] }));
+    expect(r.status).toBe("fail");
+    expect(r.message).toMatch(/Applied \(verified — Companies \(Specification of Definitions Details\) Amendment Rules, 2022 .*: paid-up ≤ ₹4 crore, preceding-year turnover ≤ ₹40 crore\): the Order is applicable\. Unverified limits from 01 Dec 2025 \(paid-up ≤ ₹10 crore, turnover ≤ ₹100 crore\): it would be not applicable/);
+    expect(r.evidence).toEqual({ location: "entity.json" });
+    expect(opinionHits(r.message ?? "")).toEqual([]);
+    // The year audited ends before the unverified entry: nothing pending.
+    expect(run("audit.caro-small-company-pending-verification", ex({ fy: "2024-25", profile: between })).status).toBe("pass");
+    // The applied determination stays on the verified limits.
+    expect(run("audit.caro-applicable", ex({ fy: "2025-26", profile: between })).status).toBe("fail");
   });
   it("sample-below-minimum: 25 passes, 24 fails, smaller population is fine, na without populations", () => {
     expect(run("audit.sample-below-minimum", ex()).status).toBe("pass");

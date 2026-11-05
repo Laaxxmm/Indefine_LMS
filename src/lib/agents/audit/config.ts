@@ -1,5 +1,6 @@
 // Audit Assist: every threshold, grouping and phrase list as data, each with a `verify` note for
 // the engagement partner. Amounts in paise (₹1 crore = 1,00,00,000 rupees = 1_000_000_000 paise).
+import { SMALL_COMPANY_LIMITS } from "@/lib/agents/roc/data";
 
 const CRORE = 1_00_00_000_00; // paise
 
@@ -47,15 +48,16 @@ export const CARO = {
     borrowingsMaxPaise: 1 * CRORE,
     revenueMaxPaise: 10 * CRORE,
   },
-  /** s.2(85) small company. */
-  smallCompany: {
-    paidUpMaxPaise: 10 * CRORE,
-    turnoverMaxPaise: 100 * CRORE,
-  },
+  /**
+   * s.2(85) small company: the verification-gated table shared with the ROC agent (one source of
+   * truth, src/lib/agents/roc/data.ts). Only `verified` entries are applied; a later unverified
+   * entry is tested and reported (audit.caro-small-company-pending-verification), never applied.
+   */
+  smallCompany: SMALL_COMPANY_LIMITS,
   /** Clause (ii)(b): working-capital limits sanctioned above this. */
   workingCapitalLimitPaise: 5 * CRORE,
   verify:
-    "CARO 2020 private-company exemption: paid-up capital + reserves ≤ ₹1 crore (balance-sheet date), borrowings from banks/FIs ≤ ₹1 crore at any time in the year, total revenue (Schedule III, incl. discontinuing operations) ≤ ₹10 crore, and not a holding/subsidiary of a public company. Small company (s.2(85)): paid-up ≤ ₹10 crore and turnover of the preceding FY ≤ ₹100 crore as amended by the Companies (Specification of Definitions Details) Amendment Rules, 2025 (w.e.f. 01 Dec 2025; earlier ₹4 crore / ₹40 crore) — verify the notification and which limits apply to the year audited. Clause (ii)(b) working-capital threshold ₹5 crore.",
+    "CARO 2020 private-company exemption: paid-up capital + reserves ≤ ₹1 crore (balance-sheet date), borrowings from banks/FIs ≤ ₹1 crore at any time in the year, total revenue (Schedule III, incl. discontinuing operations) ≤ ₹10 crore, and not a holding/subsidiary of a public company. Small company (s.2(85)): the limits APPLIED are the verified ones on record — paid-up ≤ ₹4 crore and turnover of the preceding FY ≤ ₹40 crore (Companies (Specification of Definitions Details) Amendment Rules, 2022). PARTNER TO VERIFY: a reported amendment raising them to ₹10 crore / ₹100 crore (effective date taken as 1 Dec 2025) is held as unverified data and NOT applied; where it would change CARO applicability the agent raises audit.caro-small-company-pending-verification. Confirm the notification and which limits govern the year audited. Clause (ii)(b) working-capital threshold ₹5 crore.",
 } as const;
 
 /** s.138 internal audit (Companies (Accounts) Rules, 2014, rule 13) — CARO clause (xiv). */

@@ -3,6 +3,8 @@
 // may be overridden per rule through `params` in a later pack. One LLM rule (related-party
 // contracts → AOC-2) reads the notes to accounts. Three parameterised checks are registered for
 // approved MistakeLog rules only (minimum directors, resident director, s.180 borrowing limit).
+// roc.small-company-pending-verification (warn) fires when the MGT-7 / MGT-7A classification
+// would change under small-company limits that are in data.ts but not yet partner-verified.
 import { createRuleRegistry, type ChecklistPack, type CheckOutcome, type RuleDefinition } from "@/lib/agents/core/checklist";
 import { formatDayKey, formatInr } from "@/lib/agents/core/format";
 import type { CheckInput } from "@/lib/agents/core/runner";
@@ -75,11 +77,23 @@ export const rocRegistry = createRuleRegistry<RocCheckInput>({
     if (!declared) return pass(`${a.annualReturnForm} applies (${a.small.reason})`);
     if (declared !== a.annualReturnForm)
       return fail(
-        `Declared ${declared} but ${a.annualReturnForm} applies: ${a.small.reason} (limits paid-up ${inr(a.small.paidUpMaxPaise)}, turnover ${inr(a.small.turnoverMaxPaise)}; tested turnover ${inr(a.small.turnoverTestedPaise)})`,
+        `Declared ${declared} but ${a.annualReturnForm} applies: ${a.small.reason} (verified limits paid-up ${inr(a.small.paidUpMaxPaise)}, turnover ${inr(a.small.turnoverMaxPaise)}; tested turnover ${inr(a.small.turnoverTestedPaise)})${a.small.pendingVerification.length ? ". See roc.small-company-pending-verification: do not file the declared form on the strength of limits a partner has not verified" : ""}`,
         `declaredAnnualReturnForm: ${declared}`,
         "company.json declaredAnnualReturnForm",
       );
     return pass(`${declared} is right (${a.small.reason})`);
+  },
+  "roc.small-company-pending-verification": ({ extracted: x }) => {
+    const a = analyseRoc(x);
+    const s = a.small;
+    const p = s.pendingVerification[0];
+    if (!p) return pass(s.eligibleClass ? "classification does not depend on any small-company limits awaiting partner verification" : "not eligible for small-company status whatever the limits");
+    const altForm = p.wouldBeSmall ? "MGT-7A" : "MGT-7";
+    return fail(
+      `Small-company classification depends on limits awaiting partner verification. Applied (verified — ${s.limitsSource}): paid-up ≤ ${inr(s.paidUpMaxPaise)} and preceding-year turnover ≤ ${inr(s.turnoverMaxPaise)} → ${s.isSmall ? "small company" : "not a small company"} → ${a.annualReturnForm}. Unverified limits from ${day(p.effectiveFrom)} (paid-up ≤ ${inr(p.paidUpMaxPaise)}, turnover ≤ ${inr(p.turnoverMaxPaise)}) → ${p.wouldBeSmall ? "small company" : "not a small company"} → ${altForm}. Tested: paid-up ${inr(x.company.paidUpCapitalPaise)}, preceding-year turnover ${inr(s.turnoverTestedPaise)}. A partner must confirm the notification (G.S.R. number, date, years governed) before ${altForm} is relied on; until then the pack follows the verified limits.`,
+      `paidUpCapital ${formatInr(x.company.paidUpCapitalPaise / 100)}; previous revenueFromOperations ${formatInr(s.turnoverTestedPaise / 100)}`,
+      "company.json paidUpCapital / financials previous revenueFromOperations",
+    );
   },
   "roc.financials-tie": ({ extracted: x }) => {
     const a = analyseRoc(x);
@@ -170,6 +184,7 @@ export const ROC_CHECKLIST: ChecklistPack = {
     d("roc.shareholding-ties", "Shareholding totals equal paid-up capital", "block", "shareholding total and paid-up capital"),
     d("roc.annual-return-form", "MGT-7 / MGT-7A classification right", "block", "declared form, limits and tested figures"),
     d("roc.financials-tie", "Balance sheet ties and share capital agrees", "block", "assets, equity and liabilities"),
+    d("roc.small-company-pending-verification", "Small-company classification does not hang on unverified limits", "warn", "paid-up capital, preceding-year turnover, verified and unverified limits"),
     d("roc.adt1-trigger", "ADT-1 / auditor appointment at this AGM", "warn", "auditor term start and term years"),
     d("roc.csr-applicability", "CSR applicability (s.135)", "warn", "preceding-year net worth, turnover, net profit"),
     d("roc.msme1-applicability", "MSME-1 half-yearly return", "warn", "supplier, half-year and days outstanding"),
