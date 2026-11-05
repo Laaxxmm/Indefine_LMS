@@ -64,13 +64,40 @@ Two callers may still carry client data and are recorded as known gaps, not fixe
 No Firm OS file may import `@/lib/gemini`. `verify:ai-boundary` allowlists the legacy files listed
 in `docs/inventory.md` H-7 by path and fails on any new Gemini caller.
 
+**Update 2026-11-06 (security audit #7, #11): the two gaps are closed by a mask gate.**
+
+- Every legacy Gemini text prompt goes through `src/lib/ai/legacy-gate.ts` before it leaves:
+  `mask()` with the firm's name dictionary (every active client's name and contact plus staff
+  names, `src/lib/ai/name-directory.ts`), then the independent leak detector (`detectPii`). If the
+  detector still finds client data the call is refused with a plain message and nothing is sent;
+  the answer gets the original values back. `callGemini` (SOP Builder, statutory digests),
+  `generateQuiz` and `distillTranscript` all gate their own prompts. If the dictionary cannot be
+  loaded, SOP Builder and live-session quizzes send nothing (fail closed).
+- Live-session recordings: the video is never uploaded to Gemini (an upload cannot be masked). The
+  Teams transcript is checked first (`transcriptGate`); when masking cannot cover it — the detector
+  still finds client data, or numbers are spoken as words — the session is **parked for an admin**:
+  an `AuditEvent` `gemini.parked` (reasons as kinds, never values, and a plain message), no data
+  sent, and the 15-minute cron leaves the session alone from then on.
+- `verify:ai-boundary` is an import-graph rule (see scripts/lib/guards.ts): the four legacy egress
+  files and their direct callers are allow-listed by path with a reason, and each must reach the
+  mask gate.
+
+**Gemini data handling (owner to confirm the paid tier).** The legacy features use the Gemini API
+with `GEMINI_API_KEY`. Google's Gemini API terms distinguish the free tier (prompts and responses
+may be used to improve Google's products and may be reviewed by people) from the paid tier (Cloud
+Billing enabled on the key's project: not used for product improvement; kept for a limited period
+for abuse monitoring). No request option can opt out of retention, so the tier is the control.
+**Owner to confirm the paid tier** is active on the project behind `GEMINI_API_KEY`, and to
+re-check Google's current terms; until then, treat every legacy prompt as possibly retained — which
+is why the mask gate above applies to all of them.
+
 ## Consequences
 
 - Moving to a local model in week 2 changes only `providers/local.ts` and configuration. If any other file must change, the abstraction failed and gets its own ADR.
 - `local-only` tasks pile up in a human queue during week 1. That is intended: they are visible work, not silently sent to the cloud.
 - Every call is costed and attributable; `/admin/firm-os/models` reports spend by day, agent and provider.
 - Prompt hashes allow duplicate detection and audit without keeping client text in the log.
-- The two Gemini gaps remain until a partner decides (route SOP Builder through the anonymizer, or a notice to staff; confirm recorded sessions never cover client matters).
+- The two Gemini gaps were closed on 2026-11-06 by the mask gate and the live-session park (see "Legacy Gemini" above); the paid-tier confirmation remains with the owner.
 
 ## Alternatives considered
 

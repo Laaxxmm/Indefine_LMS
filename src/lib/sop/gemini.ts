@@ -1,11 +1,30 @@
 import { z } from "zod";
 import { callGemini } from "@/lib/gemini";
+import type { DictionaryEntry } from "@/lib/ai/types";
 import type { SopAnalysis, SopBrief, SopContent } from "./types";
 
 // Reuses the LMS Gemini key/model. Two guardrailed calls:
 //   1. analyze — is this a legitimate SOP request for a CA firm? If yes, produce a brief.
 //   2. generate — turn the confirmed brief into a STRUCTURED SOP (validated JSON).
 // The firm's departments bound the allowed scope; off-topic requests are rejected.
+//
+// DPDP (security audit #7): staff free text may name clients or quote their identifiers. Both
+// calls go through callGemini's mask gate with the firm's name dictionary (every active client's
+// name and contact + staff names); a prompt the leak detector still flags is not sent and the
+// author is told why. If the dictionary cannot be loaded, nothing is sent either (fail closed).
+
+/** Injectable for tests; production loads client master + staff names from the database. */
+export type SopAiDeps = { dictionary?: () => Promise<DictionaryEntry[]> };
+
+async function sopDictionary(deps: SopAiDeps = {}): Promise<DictionaryEntry[]> {
+  if (deps.dictionary) return deps.dictionary();
+  try {
+    const [{ prisma }, { loadFirmNameDictionary }] = await Promise.all([import("@/lib/prisma"), import("@/lib/ai/name-directory")]);
+    return await loadFirmNameDictionary(prisma as unknown as Parameters<typeof loadFirmNameDictionary>[0]);
+  } catch {
+    throw new Error("The list of client and staff names to hide from the AI could not be loaded, so nothing was sent. Try again in a minute.");
+  }
+}
 
 const DEPARTMENTS = ["AUDIT", "TAX", "ACCOUNTS", "ROC", "TECH", "ADMIN", "GENERAL"];
 
@@ -45,7 +64,8 @@ const ANALYSIS_SCHEMA = {
   required: ["valid"],
 };
 
-export async function analyzeSopRequest(input: { title: string; department: string; workCategory: string; purpose: string; rawProcedure: string }): Promise<SopAnalysis> {
+export async function analyzeSopRequest(input: { title: string; department: string; workCategory: string; purpose: string; rawProcedure: string }, deps: SopAiDeps = {}): Promise<SopAnalysis> {
+  const dictionary = await sopDictionary(deps);
   const prompt = `You are the gatekeeper and technical lead for the Standard Operating Procedure (SOP) system of a Chartered Accountancy / professional-services firm. Its departments are: Audit, Tax, Accounts, ROC (Registrar of Companies compliance), Tech (internal engineering), and Admin (operations/HR/finance/front-office).
 
 Decide whether the request below is a legitimate professional or operational SOP for such a firm. REJECT (valid=false, with a short reason) if it is off-topic (e.g. recipes, personal life, entertainment), harmful, disallowed, spam/gibberish, or clearly not an operational procedure. Do NOT invent an SOP for an out-of-scope topic.
@@ -61,7 +81,7 @@ REQUEST
 
 Return JSON matching the schema.`;
 
-  const raw = await callGemini(prompt, ANALYSIS_SCHEMA);
+  const raw = await callGemini(prompt, ANALYSIS_SCHEMA, { dictionary, what: "This procedure" });
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -106,7 +126,8 @@ const CONTENT_SCHEMA = {
   required: ["purpose", "scope", "procedure"],
 };
 
-export async function generateSop(brief: SopBrief, rawProcedure: string, meta: { effectiveDate: string; revision: string }): Promise<SopContent> {
+export async function generateSop(brief: SopBrief, rawProcedure: string, meta: { effectiveDate: string; revision: string }, deps: SopAiDeps = {}): Promise<SopContent> {
+  const dictionary = await sopDictionary(deps);
   const prompt = `You are an expert technical writer and quality specialist. Produce a professional, concise, industry-standard Standard Operating Procedure for a Chartered Accountancy / professional-services firm, using ONLY the confirmed brief and the raw description below. Do not add unrelated content.
 
 CONFIRMED BRIEF
@@ -130,7 +151,7 @@ Write:
 - references: standards/policies referenced (may be empty).
 Keep it tight enough to fit ~2 A4 pages. Return JSON matching the schema.`;
 
-  const raw = await callGemini(prompt, CONTENT_SCHEMA);
+  const raw = await callGemini(prompt, CONTENT_SCHEMA, { dictionary, what: "This procedure" });
   let parsed: Record<string, unknown>;
   try {
     parsed = JSON.parse(raw);

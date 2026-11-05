@@ -15,6 +15,8 @@
 import { z } from "zod";
 import { resolveGeminiModel, isThinkingModel } from "@/lib/gemini";
 import { normalise } from "@/lib/quiz-gen";
+import { LegacyGateError, gateForGemini } from "@/lib/ai/legacy-gate";
+import type { DictionaryEntry } from "@/lib/ai/types";
 
 const MAX_TRANSCRIPT_INPUT_CHARS = 200_000; // ~2.5h of speech, fits flash context
 const MAX_NOTES_CHARS = 28_000; // stays under generateQuiz's source ceiling
@@ -80,10 +82,20 @@ export async function distillTranscript(input: {
   title: string;
   transcript: string;
   apiKey: string;
+  /** DPDP (audit #11): client / staff names to mask before the transcript is sent (legacy-gate.ts). */
+  dictionary?: DictionaryEntry[];
 }): Promise<DistillResult> {
   const transcript = input.transcript.trim().slice(0, MAX_TRANSCRIPT_INPUT_CHARS);
   if (transcript.length < 200) {
     return { ok: false, error: "Transcript too short to distill." };
+  }
+  // Mask + gate before anything leaves; quotes are verified against the unmasked transcript below.
+  let gated: ReturnType<typeof gateForGemini>;
+  try {
+    gated = gateForGemini(buildPrompt(input.title, transcript), { dictionary: input.dictionary, what: "The transcript" });
+  } catch (e) {
+    if (e instanceof LegacyGateError) return { ok: false, error: e.message };
+    throw e;
   }
 
   const model = await resolveGeminiModel(input.apiKey);
@@ -102,7 +114,7 @@ export async function distillTranscript(input: {
       },
       body: JSON.stringify({
         contents: [
-          { role: "user", parts: [{ text: buildPrompt(input.title, transcript) }] },
+          { role: "user", parts: [{ text: gated.prompt }] },
         ],
         generationConfig: {
           temperature: 0.2,
@@ -124,8 +136,9 @@ export async function distillTranscript(input: {
   const json = (await res.json().catch(() => null)) as {
     candidates?: { content?: { parts?: { text?: string }[] } }[];
   } | null;
-  const text =
-    json?.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
+  const text = gated.restore(
+    json?.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? ""
+  );
   if (!text.trim()) return { ok: false, error: "Empty distillation response." };
 
   let parsed: unknown;

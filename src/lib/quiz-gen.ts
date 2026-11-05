@@ -21,6 +21,8 @@
 
 import { z } from "zod";
 import { resolveGeminiModel, isThinkingModel } from "@/lib/gemini";
+import { LegacyGateError, gateForGemini } from "@/lib/ai/legacy-gate";
+import type { DictionaryEntry } from "@/lib/ai/types";
 
 export type Difficulty = "EASY" | "MEDIUM" | "HARD" | "MIXED";
 
@@ -37,6 +39,8 @@ export type GenerateInput = {
   sourceText: string;
   count: number;
   difficulty: Difficulty;
+  /** DPDP (audit #11): client / staff names to mask before the source text is sent (legacy-gate.ts). */
+  dictionary?: DictionaryEntry[];
 };
 
 export type GenerateResult =
@@ -286,19 +290,32 @@ async function generateBatch(args: {
   difficulty: Difficulty;
   count: number;
   avoid: string[];
+  dictionary?: DictionaryEntry[];
 }): Promise<BatchResult> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
     args.model
   )}:generateContent`;
 
-  const prompt = buildPrompt({
-    videoTitle: args.videoTitle,
-    videoDescription: args.videoDescription,
-    sourceText: args.sourceText,
-    count: args.count,
-    difficulty: args.difficulty,
-    avoid: args.avoid,
-  });
+  // DPDP (audit #11): mask + gate the prompt before it leaves; the answer gets its values back
+  // before it is checked against the (unmasked) source.
+  let gated: ReturnType<typeof gateForGemini>;
+  try {
+    gated = gateForGemini(
+      buildPrompt({
+        videoTitle: args.videoTitle,
+        videoDescription: args.videoDescription,
+        sourceText: args.sourceText,
+        count: args.count,
+        difficulty: args.difficulty,
+        avoid: args.avoid,
+      }),
+      { dictionary: args.dictionary, what: "The source text" },
+    );
+  } catch (e) {
+    if (e instanceof LegacyGateError) return { ok: false, error: e.message };
+    throw e;
+  }
+  const prompt = gated.prompt;
 
   // Gemini 2.5+ "thinking" eats the output-token budget before writing the JSON,
   // which truncates structured output. Disable it and give extra headroom.
@@ -363,7 +380,7 @@ async function generateBatch(args: {
     return { ok: false, error: `Gemini stopped early (${candidate.finishReason}). Try again.` };
   }
 
-  const text = candidate.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
+  const text = gated.restore(candidate.content?.parts?.map((p) => p.text ?? "").join("") ?? "");
   if (!text.trim()) return { ok: false, error: "Gemini returned an empty response." };
 
   let parsed: unknown;
@@ -460,6 +477,7 @@ export async function generateQuiz(input: GenerateInput): Promise<GenerateResult
       difficulty: input.difficulty,
       count: askFor,
       avoid,
+      dictionary: input.dictionary,
     });
 
     if (!res.ok) {
