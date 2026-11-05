@@ -19,7 +19,9 @@ vi.mock("next/navigation", async () => (await import("./harness")).navigationMoc
 
 const { auth } = await import("@/lib/auth");
 const { ackRefFor, loadCloseLoopView } = await import("@/lib/close-loop/review");
-const { ActionBar, CloseLoopStatus, filedBody, parseMinutes, recordFiling, recordTuriaClose, turiaCloseBody } = await import("@/app/agents/[agent]/runs/[id]/ReviewPanels");
+const { ActionBar, CloseLoopStatus, filedBody, parseMinutes, recordFiling, recordTuriaClose, retractConsequence, retractFiling, turiaCloseBody } = await import(
+  "@/app/agents/[agent]/runs/[id]/ReviewPanels"
+);
 const routes = {
   filed: (await import("@/app/api/firm-os/jobs/[id]/filed/route")).POST,
   "turia-close": (await import("@/app/api/firm-os/jobs/[id]/turia-close/route")).POST,
@@ -30,6 +32,8 @@ const PORTAL_OR_SEND = />\s*(Submit to portal|Send[^<]*|File on portal)\s*</i;
 const NO_ACTIONS = { run: false, submit: false, rerun: false, requestChanges: false, approve: false, approveNeedsNote: false, proposeMistake: false, finalize: false };
 const signedIn = (s: unknown) => (auth as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(s);
 const priya = () => activeSession({ id: "u-priya" });
+const meera = () => activeSession({ id: "u-meera", level: "MANAGER" });
+const partner = () => activeSession({ id: "u-partner", level: "PARTNER" });
 const html = async (el: Parameters<typeof renderRaw>[0]) => (await renderRaw(el)).replace(/<!-- -->/g, "");
 const bar = (view: CloseLoopView | null, state: JobTaskState = view?.state ?? "APPROVED") =>
   html(createElement(ActionBar, { agent: "gst", runId: "run-1", jobId: view?.jobId ?? "job-1", jobState: state, actions: NO_ACTIONS, blockFails: 0, closeLoop: view }));
@@ -196,6 +200,92 @@ describe("panel per state", () => {
   });
 });
 
+describe("Retract filing (FILED_BY_HUMAN / CLOSING → APPROVED)", () => {
+  const filedJob = async (service: FirmService = "GST") => {
+    const job = approvedJob(service);
+    await recordFiling(job.id, ackRefFor(service), { ackRef: service === "Books" ? "" : "AA2710260012345", turiaTaskRef: "", minutes: "" }, send);
+    return job;
+  };
+  const RETRACT_BTN = /<button[^>]*class="[^"]*bg-amber-50[^"]*"[^>]*>Retract filing<\/button>/;
+
+  it("shown as a secondary action to managers and partners only, beside the one primary; the note and confirm step come on the first click", async () => {
+    const job = await filedJob();
+    for (const who of [meera(), partner()]) {
+      const v = (await view(job.id, who.user))!;
+      expect(v).toMatchObject({ state: "CLOSING", action: "turia-close", canRetract: true });
+      const out = await bar(v);
+      expect(out).toMatch(RETRACT_BTN);
+      expect(out).toMatch(/>Close in Turia<\/button>/);
+      expect((out.match(/bg-brand-500/g) ?? []).length).toBe(1);
+      expect(out).not.toContain("Confirm retraction");
+      expect(out).not.toContain("<textarea");
+      expect(out).not.toMatch(PORTAL_OR_SEND);
+    }
+    // The assignee and the reviewer (staff), an admin, and a superseded run: no retract.
+    for (const who of [priya(), activeSession({ id: "u-ravi" }), activeSession({ id: "u-admin", role: "ADMIN" })]) {
+      const v = (await view(job.id, who.user))!;
+      expect(v.canRetract).toBe(false);
+      expect(await bar(v)).not.toContain("Retract filing");
+    }
+    expect((await view(job.id, meera().user, false))!.canRetract).toBe(false);
+    // Also once the Turia close is recorded and the gate still refuses (Check again: no Final file),
+    // and straight after filing (FILED_BY_HUMAN).
+    const noFinal = approvedJob("GST", false);
+    await recordFiling(noFinal.id, ackRefFor("GST"), { ackRef: "AA2710260012345", turiaTaskRef: "", minutes: "" }, send);
+    await recordTuriaClose(noFinal.id, { turiaTaskRef: "TT-77", minutes: "60" }, send);
+    const retry = (await view(noFinal.id, meera().user))!;
+    expect(retry).toMatchObject({ action: "retry-close", canRetract: true });
+    expect(await bar(retry)).toMatch(RETRACT_BTN);
+    const filed = w.addJob({ state: "FILED_BY_HUMAN", ackRef: "AA1", filedAt: new Date(), filedById: "u-priya" });
+    expect((await view(filed.id, partner().user))!.canRetract).toBe(true);
+    // Never before filing, nor once DONE.
+    expect((await view(approvedJob().id, meera().user))!.canRetract).toBe(false);
+    expect(await recordTuriaClose(job.id, { turiaTaskRef: "TT-88", minutes: "45" }, send)).toEqual({ ok: true, done: true });
+    const done = (await view(job.id, meera().user))!;
+    expect(done).toMatchObject({ state: "DONE", canRetract: false });
+    expect(await bar(done)).not.toContain("Retract filing");
+  });
+
+  it("the confirm step says the acknowledgement reference is cleared and kept in the history", () => {
+    expect(retractConsequence(ackRefFor("GST"), "AA2710260012345")).toBe(
+      "Retracting moves the job back to APPROVED and clears the filing record: who filed it, when, and the GST ARN AA2710260012345. The cleared GST ARN is kept in the job's history with your note. Mark it filed again with the right details. Firm OS changes nothing on the portal or in Turia.",
+    );
+    expect(retractConsequence(ackRefFor("Books"), null)).toBe(
+      "Retracting moves the job back to APPROVED and clears the filing record: who filed it and when. The earlier filing is kept in the job's history with your note. Mark it filed again with the right details. Firm OS changes nothing on the portal or in Turia.",
+    );
+  });
+
+  it("goes through /state (mocked call): note required; a manager retracts from CLOSING, the ack ref is cleared and kept in the event note; Mark filed is back", async () => {
+    const job = await filedJob();
+    signedIn(meera());
+    expect(await retractFiling(job.id, "CLOSING", "   ", send)).toEqual({ ok: false, error: "Say why the filing is being retracted" });
+    expect(send).toHaveBeenCalledTimes(1); // only the filing above; the blank note never reached the route
+    const r = await retractFiling(job.id, "CLOSING", " Wrong ARN typed ", send);
+    expect(send).toHaveBeenLastCalledWith(`/api/firm-os/jobs/${job.id}/state`, { to: "APPROVED", expectedState: "CLOSING", note: "Wrong ARN typed" });
+    expect(r).toEqual({ ok: true, state: "APPROVED" });
+    expect(w.job(job.id)).toMatchObject({ state: "APPROVED", ackRef: null, filedAt: null, filedById: null });
+    const ev = w.events.filter((e) => e.jobTaskId === job.id).at(-1)!;
+    expect(ev).toMatchObject({ fromState: "CLOSING", toState: "APPROVED", actorId: "u-meera" });
+    expect(ev.note).toContain("Wrong ARN typed");
+    expect(ev.note).toContain("retracted ack ref AA2710260012345");
+    const v = (await view(job.id, meera().user))!;
+    expect(v).toMatchObject({ state: "APPROVED", action: "mark-filed", ackRef: null, canRetract: false });
+    expect(await bar(v)).toContain("Only a manager or partner can retract it afterwards, with a note.");
+  });
+
+  it("a partner retracts from FILED_BY_HUMAN; staff on the job get the route's refusal; a stale state is a conflict", async () => {
+    const job = w.addJob({ state: "FILED_BY_HUMAN", service: "Books", ackRef: null, filedAt: new Date(), filedById: "u-priya" });
+    signedIn(priya());
+    expect(await retractFiling(job.id, "FILED_BY_HUMAN", "Filed in error", send)).toMatchObject({ ok: false, error: expect.stringMatching(/Only a manager or partner may retract/) });
+    expect(w.job(job.id).state).toBe("FILED_BY_HUMAN");
+    signedIn(partner());
+    expect(await retractFiling(job.id, "CLOSING", "Filed in error", send)).toMatchObject({ ok: false }); // the job is not CLOSING
+    expect(w.job(job.id).state).toBe("FILED_BY_HUMAN");
+    expect(await retractFiling(job.id, "FILED_BY_HUMAN", "Filed in error", send)).toEqual({ ok: true, state: "APPROVED" });
+    expect(w.job(job.id)).toMatchObject({ state: "APPROVED", filedAt: null, filedById: null });
+  });
+});
+
 describe("panel calls through the routes (mocked call)", () => {
   it("Mark filed posts the ack ref, Turia ref and minutes to /filed", async () => {
     const job = approvedJob("ROC");
@@ -227,6 +317,19 @@ describe("panel calls through the routes (mocked call)", () => {
     expect(await recordTuriaClose(job.id, { turiaTaskRef: "TT-88", minutes: "45" }, send)).toEqual({ ok: true, done: true });
     expect(send).toHaveBeenLastCalledWith(`/api/firm-os/jobs/${job.id}/turia-close`, { turiaTaskRef: "TT-88", minutes: 45 });
     expect(w.job(job.id).state).toBe("DONE");
+  });
+
+  it("DONE is refused by /state for a manager and a partner too, from CLOSING and from FILED_BY_HUMAN", async () => {
+    const closing = approvedJob("GST");
+    await recordFiling(closing.id, ackRefFor("GST"), { ackRef: "AA2710260012345", turiaTaskRef: "", minutes: "" }, send);
+    const filed = w.addJob({ state: "FILED_BY_HUMAN", ackRef: "AA1", filedAt: new Date(), filedById: "u-priya" });
+    for (const who of [meera(), partner()]) {
+      signedIn(who);
+      expect(await send(`/api/firm-os/jobs/${closing.id}/state`, { to: "DONE", expectedState: "CLOSING" })).toMatchObject({ ok: false, error: expect.stringMatching(/only by the close gate/) });
+      expect(await send(`/api/firm-os/jobs/${filed.id}/state`, { to: "DONE", expectedState: "FILED_BY_HUMAN" })).toMatchObject({ ok: false, error: expect.stringMatching(/only by the close gate/) });
+    }
+    expect(w.job(closing.id).state).toBe("CLOSING");
+    expect(w.job(filed.id).state).toBe("FILED_BY_HUMAN");
   });
 
   it("negative: filed but Turia skipped → stays CLOSING and DONE is refused", async () => {

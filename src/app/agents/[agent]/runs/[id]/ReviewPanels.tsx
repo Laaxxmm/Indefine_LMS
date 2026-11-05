@@ -292,7 +292,9 @@ export function MistakeForm({ runId, checks }: { runId: string; checks: string[]
 // After approval a person files on the portal; Firm OS never files, submits or sends anything.
 // "Mark filed" records the acknowledgement (/api/firm-os/jobs/[id]/filed); "Close in Turia"
 // records the Turia task ref + minutes (/turia-close), which tries the close gate. DONE is set only
-// by the gate. The form helpers are plain functions so tests can drive them with a mocked call().
+// by the gate. A manager or partner can "Retract filing" (FILED_BY_HUMAN / CLOSING → APPROVED
+// through /state, note required) when the filing was recorded by mistake or with the wrong ack ref.
+// The form helpers are plain functions so tests can drive them with a mocked call().
 
 type Send = (url: string, body?: unknown) => Promise<CallResult>;
 type Fail = { ok: false; error: string };
@@ -329,7 +331,7 @@ export function turiaCloseBody(f: Pick<FilingForm, "turiaTaskRef" | "minutes">):
   return { ok: true, body: { turiaTaskRef, minutes: m.minutes! } };
 }
 
-const jobUrl = (jobId: string, what: "filed" | "turia-close") => `/api/firm-os/jobs/${encodeURIComponent(jobId)}/${what}`;
+const jobUrl = (jobId: string, what: "filed" | "turia-close" | "state") => `/api/firm-os/jobs/${encodeURIComponent(jobId)}/${what}`;
 
 /** POST /filed. The job moves to CLOSING (the hook issues the Turia close step). */
 export async function recordFiling(jobId: string, ack: CloseLoopView["ack"], f: FilingForm, send: Send = call): Promise<{ ok: true; state: string } | Fail> {
@@ -351,6 +353,27 @@ export async function recordTuriaClose(jobId: string, f: Pick<FilingForm, "turia
   const close = (r.data.close ?? {}) as { ok?: boolean; reasons?: unknown };
   if (close.ok) return { ok: true, done: true };
   return { ok: true, done: false, reasons: Array.isArray(close.reasons) ? close.reasons.map(String) : [] };
+}
+
+/**
+ * What "Retract filing" does, shown with the note box before the retraction is sent. The state
+ * machine clears filedAt / filedById / ackRef and writes the old ref into the event note.
+ */
+export function retractConsequence(ack: CloseLoopView["ack"], ackRef: string | null): string {
+  const cleared = ackRef ? `who filed it, when, and the ${ack.label} ${ackRef}` : "who filed it and when";
+  const kept = ackRef ? `The cleared ${ack.label} is kept in the job's history with your note.` : "The earlier filing is kept in the job's history with your note.";
+  return `Retracting moves the job back to APPROVED and clears the filing record: ${cleared}. ${kept} Mark it filed again with the right details. Firm OS changes nothing on the portal or in Turia.`;
+}
+
+export type RetractFrom = Extract<JobTaskState, "FILED_BY_HUMAN" | "CLOSING">;
+
+/** POST /state FILED_BY_HUMAN / CLOSING → APPROVED with the note (required; managers and partners only). */
+export async function retractFiling(jobId: string, from: RetractFrom, note: string, send: Send = call): Promise<{ ok: true; state: string } | Fail> {
+  const n = note.trim();
+  if (!n) return { ok: false, error: "Say why the filing is being retracted" };
+  const r = await send(jobUrl(jobId, "state"), { to: "APPROVED", expectedState: from, note: n });
+  if (!r.ok) return { ok: false, error: r.error ?? "Something went wrong" };
+  return { ok: true, state: String(r.data.state ?? "") };
 }
 
 const turiaLine = (t: CloseLoopView["turia"]) =>
@@ -409,11 +432,27 @@ export function CloseLoopActions({ view }: { view: CloseLoopView }) {
   const router = useRouter();
   const id = useId();
   const [f, setF] = useState<FilingForm>({ ackRef: "", turiaTaskRef: view.turia.ref ?? view.suggestedTuriaRef ?? "", minutes: view.turia.minutes ? String(view.turia.minutes) : "" });
-  const [busy, setBusy] = useState<CloseLoopAction | null>(null);
+  const [busy, setBusy] = useState<CloseLoopAction | "retract" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [retracting, setRetracting] = useState(false);
+  const [note, setNote] = useState("");
   const set = (k: keyof FilingForm) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
   const { ack } = view;
+
+  async function retract() {
+    if (view.state !== "FILED_BY_HUMAN" && view.state !== "CLOSING") return;
+    setBusy("retract");
+    setError(null);
+    setNotice(null);
+    const r = await retractFiling(view.jobId, view.state, note);
+    setBusy(null);
+    if (!r.ok) return setError(r.error);
+    setRetracting(false);
+    setNote("");
+    setNotice("Filing retracted. The job is APPROVED again; mark it filed with the right details.");
+    router.refresh();
+  }
 
   async function markFiled() {
     setBusy("mark-filed");
@@ -437,7 +476,28 @@ export function CloseLoopActions({ view }: { view: CloseLoopView }) {
   }
 
   const spinner = busy && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />;
-  const primary = `${btnPrimary} ${focusRing} inline-flex items-center gap-1.5 ml-auto`;
+  const primaryBtn = `${btnPrimary} ${focusRing} inline-flex items-center gap-1.5`;
+  const primary = `${primaryBtn} ml-auto`;
+  /** The bar's buttons in FILED_BY_HUMAN / CLOSING: "Retract filing" (secondary, managers and partners) beside the primary. */
+  const withRetract = (button: React.ReactNode) => (
+    <div className="flex items-center gap-2 ml-auto">
+      {view.canRetract && (
+        <button
+          type="button"
+          disabled={!!busy}
+          onClick={() => {
+            setRetracting(true);
+            setError(null);
+            setNotice(null);
+          }}
+          className={`${btnWarn} ${focusRing} inline-flex items-center gap-1.5`}
+        >
+          Retract filing
+        </button>
+      )}
+      {button}
+    </div>
+  );
   const refField = (label: string, required: boolean) => (
     <label htmlFor={`${id}-ref`} className={`${fieldLabel} w-full sm:w-[200px]`}>
       {label}
@@ -473,7 +533,7 @@ export function CloseLoopActions({ view }: { view: CloseLoopView }) {
           {view.hasFinal ? "Pack approved and in Final." : "Pack approved; no Final file is recorded yet, and the job cannot close without one."} Firm OS never files anything.
         </p>
         <p id={`${id}-filed`} className="text-[12.5px] text-ink-mute w-full">
-          Mark filed records the filing against your name and moves the job on to closing; it cannot be undone from this screen.
+          Mark filed records the filing against your name and moves the job on to closing. Only a manager or partner can retract it afterwards, with a note.
         </p>
         <label htmlFor={`${id}-ack`} className={`${fieldLabel} w-full sm:w-[240px]`}>
           {ack.label} {ack.required ? "(required)" : "(optional)"}
@@ -489,15 +549,51 @@ export function CloseLoopActions({ view }: { view: CloseLoopView }) {
     );
   }
 
+  // "Retract filing", second step: the note (required) and what retracting does, then Confirm
+  // retraction. The Turia close form and its primary button step aside until Cancel.
+  if (view.canRetract && retracting) {
+    return (
+      <>
+        <label htmlFor={`${id}-note`} className={`${fieldLabel} w-full sm:w-[420px]`}>
+          Why is the filing being retracted? (required)
+          <textarea id={`${id}-note`} value={note} onChange={(e) => setNote(e.target.value)} rows={2} maxLength={2000} required autoFocus className={`${field} ${focusRing}`} />
+        </label>
+        <p id={`${id}-retract`} className="text-[13px] text-ink-soft w-full sm:w-auto sm:max-w-[520px]">
+          {retractConsequence(ack, view.ackRef)}
+        </p>
+        <div className="flex items-center gap-2 ml-auto">
+          <button
+            type="button"
+            disabled={!!busy}
+            onClick={() => {
+              setRetracting(false);
+              setError(null);
+            }}
+            className={`${btnGhost} ${focusRing}`}
+          >
+            Cancel
+          </button>
+          <button type="button" disabled={!!busy || !note.trim()} onClick={retract} aria-describedby={`${id}-retract`} className={`${btnWarn} ${focusRing} inline-flex items-center gap-1.5`}>
+            {busy === "retract" && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />}
+            Confirm retraction
+          </button>
+        </div>
+        {messages}
+      </>
+    );
+  }
+
   if (view.action === "retry-close") {
     return (
       <>
         <p className="text-[13px] text-ink-soft">
           Turia close recorded ({view.turia.ref}, {view.turia.minutes} min). The job closes when every check under Filing and close passes.
         </p>
-        <button type="button" disabled={!!busy} onClick={() => closeInTuria({ turiaTaskRef: view.turia.ref ?? "", minutes: String(view.turia.minutes ?? "") })} className={primary}>
-          {spinner}Check again
-        </button>
+        {withRetract(
+          <button type="button" disabled={!!busy} onClick={() => closeInTuria({ turiaTaskRef: view.turia.ref ?? "", minutes: String(view.turia.minutes ?? "") })} className={primaryBtn}>
+            {spinner}Check again
+          </button>,
+        )}
         {messages}
       </>
     );
@@ -511,9 +607,11 @@ export function CloseLoopActions({ view }: { view: CloseLoopView }) {
       </p>
       {refField("Turia task ref", true)}
       {minutesField("Minutes logged in Turia", true)}
-      <button type="button" disabled={!!busy || !f.turiaTaskRef.trim() || !f.minutes.trim()} onClick={() => closeInTuria(f)} className={primary}>
-        {spinner}Close in Turia
-      </button>
+      {withRetract(
+        <button type="button" disabled={!!busy || !f.turiaTaskRef.trim() || !f.minutes.trim()} onClick={() => closeInTuria(f)} className={primaryBtn}>
+          {spinner}Close in Turia
+        </button>,
+      )}
       {messages}
     </>
   );

@@ -285,7 +285,8 @@ describe("/agents/[agent]/runs/[id] review screen", () => {
     expect(done).toContain("Filing and close");
     expect(done).toContain("Filed by you on the portal — record the acknowledgement here.");
     expect(done).toMatch(/<button[^>]*>Mark filed<\/button>/);
-    expect(done).toContain("Mark filed records the filing against your name and moves the job on to closing; it cannot be undone from this screen.");
+    expect(done).toContain("Mark filed records the filing against your name and moves the job on to closing. Only a manager or partner can retract it afterwards, with a note.");
+    expect(done).not.toContain("cannot be undone from this screen");
     expect(done).not.toMatch(PORTAL_OR_SEND);
     expect(old).not.toContain("Mark filed"); // superseded run: read-only
   });
@@ -313,6 +314,17 @@ describe("/agents/[agent]/runs/[id] review screen", () => {
     expect(closing).toContain("Turia task not closed");
     expect(closing).toContain("BOOKS-1");
     expect(closing).not.toMatch(PORTAL_OR_SEND);
+    expect(closing).not.toContain("Retract filing"); // the assignee is staff: managers and partners retract
+    for (const who of ["meera", "partner"] as const) {
+      as(user(who));
+      const manager = await review("run-1");
+      expect(manager).toMatch(/<button[^>]*class="[^"]*bg-amber-50[^"]*"[^>]*>Retract filing<\/button>/);
+      expect(manager).not.toContain("Confirm retraction");
+      expect(manager).not.toMatch(PORTAL_OR_SEND);
+    }
+    as(user("ravi"));
+    expect(await review("run-1")).not.toContain("Retract filing");
+    as(user("priya"));
 
     state.turia.push({ jobTaskId: "job-1", operation: "closeTask", status: "CLOSED", turiaRef: "TT-9", minutesLogged: 40, updatedAt: new Date() });
     expect(await review("run-1")).toMatch(/<button[^>]*>Check again<\/button>/);

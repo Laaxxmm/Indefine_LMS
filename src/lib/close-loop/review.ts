@@ -2,13 +2,15 @@
 // job's close loop looks like now and the one human action that moves it on. Server-side only.
 //   APPROVED                 → "Mark filed" (ack ref: GST ARN / MCA SRN / ITR or TDS ack no.)
 //   FILED_BY_HUMAN, CLOSING  → "Close in Turia" (task ref + minutes), or "Check again" once the
-//                              Turia close is recorded and the gate still refuses
+//                              Turia close is recorded and the gate still refuses; managers and
+//                              partners may also "Retract filing" (→ APPROVED, note required)
 //   DONE                     → nothing to do; DONE chip with the cycle time
 // Firm OS never files anything: the person files on the portal and records it here. Access is the
 // close-loop rule (actions.ts canActOnJob): assignee, reviewer, manager or partner, active.
 import type { FirmService, JobTaskState } from "@prisma/client";
 import type { SessionUser } from "@/lib/access";
-import { ACK_REF_REQUIRED } from "@/lib/agents/core/state";
+import { actorOf } from "@/lib/agents/access";
+import { ACK_REF_REQUIRED, canTransition } from "@/lib/agents/core/state";
 import { formatDateTimeIst } from "@/lib/agents/core/format";
 import { canActOnJob } from "./actions";
 import { cycleTimes, formatDuration } from "./cycle-time";
@@ -33,6 +35,12 @@ export interface CloseLoopView {
   done: { at: string; cycleTime: string } | null;
   /** The one action this person can take now (latest run only); null when none. */
   action: CloseLoopAction | null;
+  /**
+   * FILED_BY_HUMAN / CLOSING → APPROVED ("Retract filing", edge `retract-filing`): a manager or
+   * partner, latest run only. Decided by the state machine with a placeholder note; the route still
+   * needs the real one.
+   */
+  canRetract: boolean;
 }
 
 const CLOSE_LOOP_STATES: readonly JobTaskState[] = ["APPROVED", "FILED_BY_HUMAN", "CLOSING", "DONE"];
@@ -138,9 +146,15 @@ export async function loadCloseLoopView(db: CloseLoopViewDb, user: SessionUser, 
   }
 
   let action: CloseLoopAction | null = null;
+  let canRetract = false;
   if (opts.isLatest && canActOnJob(user, job)) {
     if (job.state === "APPROVED") action = "mark-filed";
     else if (closing) action = turia.status === "closed" && turia.ref && turia.minutes ? "retry-close" : "turia-close";
+    const actor = actorOf(user);
+    canRetract =
+      closing &&
+      !!actor &&
+      canTransition(job.state, "APPROVED", { actor, jobTaskId: job.id, service: job.service, assigneeId: job.assigneeId, reviewerId: job.reviewerId, note: "note", now: new Date() }).ok;
   }
 
   return {
@@ -156,5 +170,6 @@ export async function loadCloseLoopView(db: CloseLoopViewDb, user: SessionUser, 
     gate,
     done,
     action,
+    canRetract,
   };
 }
