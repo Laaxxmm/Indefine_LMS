@@ -87,10 +87,30 @@ describe("roc.shareholding-ties", () => {
 
 describe("roc.annual-return-form", () => {
   it("declared MGT-7A for a non-small company fails; right form passes; none declared passes", () => {
-    expect(run("roc.annual-return-form", baseExtract({ previous: { revenueFromOperations: 100 * CR + 100 } })).status).toBe("fail");
-    expect(run("roc.annual-return-form", baseExtract({ previous: { revenueFromOperations: 100 * CR } })).status).toBe("pass");
+    const over = run("roc.annual-return-form", baseExtract({ previous: { revenueFromOperations: 40 * CR + 100 } }));
+    expect(over.status).toBe("fail");
+    expect(over.message).toMatch(/do not file the declared form on the strength of limits a partner has not verified/);
+    expect(run("roc.annual-return-form", baseExtract({ previous: { revenueFromOperations: 40 * CR } })).status).toBe("pass");
+    // ₹100 cr is small only under the unverified limits: MGT-7A declared still fails.
+    expect(run("roc.annual-return-form", baseExtract({ previous: { revenueFromOperations: 100 * CR } })).status).toBe("fail");
     expect(run("roc.annual-return-form", baseExtract({ company: { declaredAnnualReturnForm: null } })).message).toMatch(/MGT-7A applies/);
     expect(run("roc.annual-return-form", baseExtract({ company: { companyClass: "public", declaredAnnualReturnForm: "MGT-7" } })).status).toBe("pass");
+  });
+});
+
+describe("roc.small-company-pending-verification", () => {
+  it("between the verified and unverified limits: fails naming both limit sets and both forms", () => {
+    const r = run("roc.small-company-pending-verification", baseExtract({ company: { paidUpCapitalPaise: 6 * CR, declaredAnnualReturnForm: "MGT-7" }, previous: { revenueFromOperations: 70 * CR } }));
+    expect(r.status).toBe("fail");
+    expect(r.message).toMatch(/Applied \(verified — Companies \(Specification of Definitions Details\) Amendment Rules, 2022/);
+    expect(r.message).toMatch(/not a small company → MGT-7\. Unverified limits from 01 Dec 2025 .* → small company → MGT-7A/);
+    expect(r.evidence).toEqual({ quote: "paidUpCapital 6,00,00,000.00; previous revenueFromOperations 70,00,00,000.00", location: "company.json paidUpCapital / financials previous revenueFromOperations" });
+  });
+  it("within both, over both, an ineligible class or an FY before the unverified entry: passes", () => {
+    expect(run("roc.small-company-pending-verification", baseExtract()).status).toBe("pass");
+    expect(run("roc.small-company-pending-verification", baseExtract({ previous: { revenueFromOperations: 100 * CR + 1 } })).status).toBe("pass");
+    expect(run("roc.small-company-pending-verification", baseExtract({ company: { companyClass: "opc", agmDate: null }, previous: { revenueFromOperations: 70 * CR } })).status).toBe("pass");
+    expect(run("roc.small-company-pending-verification", baseExtract({ fy: "2024-25", previous: { revenueFromOperations: 70 * CR } })).status).toBe("pass");
   });
 });
 

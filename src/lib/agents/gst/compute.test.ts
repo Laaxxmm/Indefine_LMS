@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { GSTIN, R, extract, line, lineTax, matched, payable, purchase, sale, twin } from "./__tests__/kit";
 import { analyse, computeFigures, docsRows, dueDateOf, interestOn, lateFeeFor, rule37Rows, seriesOf } from "./compute";
+import { GSTR1_COLUMNS, missingList } from "./deliverables";
 import { periodInfo, zeroTax } from "./money";
 import { setOff } from "./setoff";
 
@@ -233,14 +234,21 @@ describe("analysis: GSTR-1 tables, 3.1, 4, set-off", () => {
 });
 
 describe("document series (GSTR-1 Table 13)", () => {
-  it("prefix + number, gaps counted as cancelled, non-numeric numbers on their own row", () => {
+  it("prefix + number, gaps listed separately (never presumed cancelled), non-numeric numbers on their own row", () => {
     expect(seriesOf(" inv/26/0101 ")).toEqual({ prefix: "INV/26/", num: 101, width: 4 });
     expect(seriesOf("ABC")).toEqual({ prefix: "ABC", num: null, width: 0 });
     const rows = docsRows([sale({ number: "INV/26/1001" }), sale({ number: "INV/26/1004" }), sale({ number: "inv/26/1001 " }), sale({ number: "CASH" }), sale({ number: "CN-1", docType: "CRN" })]);
-    expect(rows.map((r) => [r.nature, r.from, r.to, r.total, r.cancelled, r.net, r.missing])).toEqual([
-      ["Invoices for outward supply", "CASH", "CASH", 1, 0, 1, []],
-      ["Invoices for outward supply", "INV/26/1001", "INV/26/1004", 4, 2, 2, ["INV/26/1002", "INV/26/1003"]],
-      ["Credit Note", "CN-1", "CN-1", 1, 0, 1, []],
+    expect(rows.map((r) => [r.nature, r.from, r.to, r.total, r.cancelled, r.gaps, r.net, r.missing])).toEqual([
+      ["Invoices for outward supply", "CASH", "CASH", 1, 0, 0, 1, []],
+      ["Invoices for outward supply", "INV/26/1001", "INV/26/1004", 4, 0, 2, 2, ["INV/26/1002", "INV/26/1003"]],
+      ["Credit Note", "CN-1", "CN-1", 1, 0, 0, 1, []],
     ]);
+    // Total = net issued + cancelled + gaps on every row.
+    for (const r of rows) expect(r.net + r.cancelled + r.gaps).toBe(r.total);
+  });
+  it("the Docs sheet shows gaps in their own column and caps the missing-number list", () => {
+    expect(missingList(["A1", "A2"])).toBe("A1, A2");
+    expect(missingList(Array.from({ length: 23 }, (_, i) => `N${i + 1}`))).toBe(`${Array.from({ length: 20 }, (_, i) => `N${i + 1}`).join(", ")} … (+3 more)`);
+    expect(GSTR1_COLUMNS.Docs.map((c) => c.header)).toEqual(["Nature of Document", "Sr. No. From", "Sr. No. To", "Total Number", "Cancelled", "Net Issued", "Gaps — to be explained", "Missing numbers (cancelled or not in the register?)"]);
   });
 });

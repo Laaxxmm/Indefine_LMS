@@ -1,5 +1,5 @@
 {
-  "description": "Trap: preceding-year turnover Rs100,00,00,001 is Rs1 over the Rs100 crore small-company limit -> not small -> MGT-7 applies, but MGT-7A declared (block roc.annual-return-form). Preceding-year PBT = 1,00,00,00,001 + 1,00,000 - 99,01,00,001 = 1,00,00,000; turnover 100000000100 paise (< 5 cr) and net worth 1,26,00,000 -> no CSR. Current year unchanged from the clean case.",
+  "description": "Trap (verified boundary): preceding-year turnover Rs40,00,00,001 is Rs1 over the verified Rs40 crore small-company limit (Companies (Specification of Definitions Details) Amendment Rules 2022: paid-up <= Rs4 cr AND turnover <= Rs40 cr) -> not small -> MGT-7 applies, but MGT-7A declared (block roc.annual-return-form). Under the UNVERIFIED Rs10 cr / Rs100 cr limits (entry from 01-12-2025, not applied) paid-up Rs10,00,000 and turnover Rs40,00,00,001 would be small -> classification differs -> warn roc.small-company-pending-verification. Preceding-year PBT = 40,00,00,001 + 1,00,000 - 39,01,00,001 = 1,00,00,000 (< Rs5 cr); turnover 40 cr (< Rs1,000 cr); net worth 10,00,000 + 1,16,00,000 = 1,26,00,000 (< Rs500 cr) -> no CSR. turnoverPreviousPaise = Rs40,00,00,001 = 400000001 rupees x 100 = 40000000100 paise. Current year unchanged from the clean case (paid-up 1e8 paise, turnover 2,40,00,000, net worth 45L, PBT 12L, assets 65L, AGM 25-09-2026 -> AOC-4 24-10-2026, MGT-7 23-11-2026, fee Rs500, auditor year 4, DPT-3 applicable and filed).",
   "category": "trap",
   "job": {
     "fy": "2025-26",
@@ -10,6 +10,10 @@
     {
       "ruleId": "roc.annual-return-form",
       "severity": "block"
+    },
+    {
+      "ruleId": "roc.small-company-pending-verification",
+      "severity": "warn"
     }
   ],
   "figures": {
@@ -18,7 +22,7 @@
     "shareholdingDiffPaise": 0,
     "sharesTotal": 100000,
     "turnoverPaise": 2400000000,
-    "turnoverPreviousPaise": 100000000100,
+    "turnoverPreviousPaise": 40000000100,
     "netWorthPaise": 450000000,
     "profitBeforeTaxPaise": 120000000,
     "totalAssetsPaise": 650000000,

@@ -51,6 +51,9 @@ export function computeAuditFigures(raw: Partial<AuditExtract>): Record<string, 
     f[`sample.${p.name}.selected`] = r.selections.length;
     f[`sample.${p.name}.selectedPaise`] = r.selectedPaise;
     if (r.intervalPaise !== null) f[`sample.${p.name}.intervalPaise`] = r.intervalPaise;
+    // Seed-sensitive pins: the MUS random start and the selection fingerprint's first 48 bits.
+    if (r.randomStart !== null) f[`sample.${p.name}.randomStart`] = r.randomStart;
+    f[`sample.${p.name}.fingerprint48`] = parseInt(r.fingerprint.slice(0, 12), 16);
   }
   return f;
 }

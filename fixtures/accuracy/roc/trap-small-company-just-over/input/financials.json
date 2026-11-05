@@ -30,9 +30,9 @@
     "tradeReceivables": "1,04,00,000",
     "cashAndBank": "5,00,000",
     "otherAssets": "3,00,000",
-    "revenueFromOperations": "1,00,00,00,001",
+    "revenueFromOperations": "40,00,00,001",
     "otherIncome": "1,00,000",
-    "totalExpenses": "99,01,00,001",
+    "totalExpenses": "39,01,00,001",
     "taxExpense": "2,50,000"
   }
 }

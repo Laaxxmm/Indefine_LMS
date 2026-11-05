@@ -1,5 +1,5 @@
 {
-  "description": "Trap: IGST charged on a sale to a Karnataka customer by a Karnataka supplier; also exercises CGST â†’ IGST and SGST â†’ IGST set-off.",
+  "description": "Trap: IGST charged on a sale to a Karnataka customer by a Karnataka supplier; also exercises CGST â†’ IGST and SGST â†’ IGST set-off. Core 3B figures (hand): outward 1,00,000 + 50,000 = 1,50,000 with IGST 18,000 + 9,000 = 27,000 as charged (the intra-state IGST is the block flag), CGST/SGST 0. ITC CGST 5,400 + SGST 5,400 = 10,800: CGST credit against IGST, then SGST credit against IGST (CGST credit exhausted) -> cash IGST 16,200; no expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee.",
   "category": "trap",
   "job": {
     "fy": "2026-27",
@@ -20,7 +20,19 @@
     "cashSgstPaise": 0,
     "cashTaxPaise": 1620000,
     "creditUtilisedPaise": 1080000,
-    "closingCreditPaise": 0
+    "closingCreditPaise": 0,
+    "outwardTaxablePaise": 15000000,
+    "outwardSgstPaise": 0,
+    "outwardCessPaise": 0,
+    "outwardTaxPaise": 2700000,
+    "itcAvailablePaise": 1080000,
+    "itcBlockedPaise": 0,
+    "itcOtherReversalPaise": 0,
+    "itcNetPaise": 1080000,
+    "cashCessPaise": 0,
+    "daysLate": 0,
+    "interestPaise": 0,
+    "lateFeePaise": 0
   },
   "deliverables": [
     {
@@ -118,7 +130,9 @@
             "Sr. No. To",
             "Total Number",
             "Cancelled",
-            "Net Issued"
+            "Net Issued",
+            "Gaps — to be explained",
+            "Missing numbers (cancelled or not in the register?)"
           ]
         }
       ]

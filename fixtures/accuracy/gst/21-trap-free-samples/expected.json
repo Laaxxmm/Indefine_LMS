@@ -1,5 +1,5 @@
 {
-  "description": "Trap: Diwali gift hampers given free to dealers booked under Sales Promotion with ITC (s.17(5)(h)); LLM rule cites the narration.",
+  "description": "Trap: Diwali gift hampers given free to dealers booked under Sales Promotion with ITC (s.17(5)(h)); LLM rule cites the narration. Core 3B figures (hand): outward 1,00,000; CGST 9,000, SGST 9,000. ITC 5,400 + 5,400 + 1,800 + 1,800 (gift hampers) = 14,400; 4(B)(1) blocked s.17(5)(h) 3,600; net 10,800. Cash CGST 3,600, SGST 3,600 = 7,200; no expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee.",
   "category": "trap",
   "job": {
     "fy": "2026-27",
@@ -22,7 +22,19 @@
     "itcNetPaise": 1080000,
     "cashCgstPaise": 360000,
     "cashSgstPaise": 360000,
-    "cashTaxPaise": 720000
+    "cashTaxPaise": 720000,
+    "outwardTaxablePaise": 10000000,
+    "outwardIgstPaise": 0,
+    "outwardCgstPaise": 900000,
+    "outwardSgstPaise": 900000,
+    "outwardCessPaise": 0,
+    "outwardTaxPaise": 1800000,
+    "itcOtherReversalPaise": 0,
+    "cashIgstPaise": 0,
+    "cashCessPaise": 0,
+    "daysLate": 0,
+    "interestPaise": 0,
+    "lateFeePaise": 0
   },
   "deliverables": [
     {
@@ -120,7 +132,9 @@
             "Sr. No. To",
             "Total Number",
             "Cancelled",
-            "Net Issued"
+            "Net Issued",
+            "Gaps — to be explained",
+            "Missing numbers (cancelled or not in the register?)"
           ]
         }
       ]

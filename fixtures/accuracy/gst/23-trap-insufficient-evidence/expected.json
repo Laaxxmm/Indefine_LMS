@@ -1,5 +1,5 @@
 {
-  "description": "Abstain case: no HSN written for a B2B line and a vague 'Miscellaneous Expenses' bill; the right answer is insufficient_evidence, raised as questions and client requests.",
+  "description": "Abstain case: no HSN written for a B2B line and a vague 'Miscellaneous Expenses' bill; the right answer is insufficient_evidence, raised as questions and client requests. Core 3B figures (hand): outward 50,000; CGST 4,500, SGST 4,500. ITC 5,400 + 5,400 + 900 + 900 = 12,600 (the abstained Miscellaneous Expenses bill is neither blocked nor RCM in the figures; it is a reviewer question). Cash nil; closing credit CGST 1,800 + SGST 1,800; no expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee.",
   "category": "trap",
   "job": {
     "fy": "2026-27",
@@ -23,7 +23,21 @@
     "cashTaxPaise": 0,
     "creditUtilisedPaise": 900000,
     "closingCreditPaise": 360000,
-    "hsnRowCount": 1
+    "hsnRowCount": 1,
+    "outwardTaxablePaise": 5000000,
+    "outwardIgstPaise": 0,
+    "outwardCgstPaise": 450000,
+    "outwardSgstPaise": 450000,
+    "outwardCessPaise": 0,
+    "outwardTaxPaise": 900000,
+    "itcOtherReversalPaise": 0,
+    "cashIgstPaise": 0,
+    "cashCgstPaise": 0,
+    "cashSgstPaise": 0,
+    "cashCessPaise": 0,
+    "daysLate": 0,
+    "interestPaise": 0,
+    "lateFeePaise": 0
   },
   "deliverables": [
     {
@@ -121,7 +135,9 @@
             "Sr. No. To",
             "Total Number",
             "Cancelled",
-            "Net Issued"
+            "Net Issued",
+            "Gaps — to be explained",
+            "Missing numbers (cancelled or not in the register?)"
           ]
         }
       ]

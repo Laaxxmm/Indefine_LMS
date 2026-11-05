@@ -58,6 +58,8 @@ describe("pack", () => {
       if (numeric.length) expect(typeof r.params?.verify, r.id).toBe("string");
     }
     expect(BOOKS_CHECKLIST.rules.filter((r) => r.severity === "block").map((r) => r.id)).toEqual(["books.tb-balanced", "books.bank-recon-difference", "books.tds-not-deposited"]);
+    expect(BOOKS_CHECKLIST.rules.find((r) => r.id === "books.tds-due-soon")?.severity).toBe("warn");
+    expect(String(BOOKS_CHECKLIST.rules.find((r) => r.id === "books.tds-not-deposited")?.params?.verify)).toMatch(/partner to confirm SOP/);
   });
 });
 
@@ -153,12 +155,47 @@ describe("TB-based warn rules", () => {
 
 describe("TDS rules", () => {
   const DED = "Section,Deductee,Date,TDS Amount\n194I,L,07/10/2026,6000.00";
-  it("not deposited: full deposit passes, ₹0.01 short fails (boundary), na without files", () => {
+  // Preparation clock: IST days. 06:30 UTC = 12:00 IST; 20:00 UTC on 6 Nov = 01:30 IST on 7 Nov.
+  const at = (iso: string) => new Date(iso);
+  const runAt = (id: string, e: BooksExtract, preparedAt: Date | undefined) => booksRegistry.get(id)!({ input: { files: [] }, extracted: e, figures: {}, job: JOB, preparedAt } as BooksCheckInput, ruleOf(id));
+  const NONE = extract({ tdsDeducted: DED, tdsChallans: "Challan No,Section,Deposit Date,For Month,Amount" });
+  const SHORT = extract({ tdsDeducted: DED, tdsChallans: "Challan No,Section,Deposit Date,For Month,Amount\nC1,194I,07/11/2026,Oct-2026,5999.99" });
+  it("not deposited: full deposit passes, ₹0.01 short fails (boundary), na without files; no clock → treated as overdue", () => {
     expect(run("books.tds-not-deposited", extract({ tdsDeducted: DED, tdsChallans: "Challan No,Section,Deposit Date,For Month,Amount\nC1,194I,07/11/2026,Oct-2026,6000.00" })).status).toBe("pass");
-    const r = run("books.tds-not-deposited", extract({ tdsDeducted: DED, tdsChallans: "Challan No,Section,Deposit Date,For Month,Amount\nC1,194I,07/11/2026,Oct-2026,5999.99" }));
+    const r = run("books.tds-not-deposited", SHORT);
     expect(r.status).toBe("fail");
-    expect(r.message).toContain("due 07 Nov 2026");
+    expect(r.message).toContain("due 07 Nov 2026; preparation date unknown — treated as overdue");
     expect(run("books.tds-not-deposited", extract({ tdsDeducted: DED })).status).toBe("na");
+    expect(run("books.tds-due-soon", SHORT).status).toBe("na");
+  });
+  it("prepared before the due date (5 Nov, due 7 Nov): warn reminder with the due date, no block", () => {
+    const soon = runAt("books.tds-due-soon", NONE, at("2026-11-05T06:30:00Z"));
+    expect(soon.status).toBe("fail");
+    expect(soon.message).toBe("Reminder — TDS deducted, not yet deposited, due date not reached (prepared 05 Nov 2026): 1 section/month line(s), ₹6,000.00 in all; first: section 194I for 2026-10, ₹6,000.00 to deposit by 07 Nov 2026 (2 day(s) left).");
+    expect(soon.evidence).toEqual({ quote: "194I 2026-10 deducted 6000.00 deposited 0.00", location: "tds-deducted.csv row 2" });
+    expect(runAt("books.tds-not-deposited", NONE, at("2026-11-05T06:30:00Z")).status).toBe("pass");
+    // 01:30 IST on 7 Nov is the due date in India even though it is still 6 Nov in UTC.
+    expect(runAt("books.tds-due-soon", NONE, at("2026-11-06T20:00:00Z")).status).toBe("pass");
+    expect(runAt("books.tds-not-deposited", NONE, at("2026-11-06T20:00:00Z")).status).toBe("fail");
+  });
+  it("prepared on the due date blocks; after it blocks with the days overdue", () => {
+    const onDue = runAt("books.tds-not-deposited", SHORT, at("2026-11-07T06:30:00Z"));
+    expect(onDue.status).toBe("fail");
+    expect(onDue.message).toContain("short by ₹0.01 (due 07 Nov 2026; prepared 07 Nov 2026, the due date itself)");
+    expect(runAt("books.tds-due-soon", SHORT, at("2026-11-07T06:30:00Z")).status).toBe("pass");
+    const late = runAt("books.tds-not-deposited", NONE, at("2026-11-20T06:30:00Z"));
+    expect(late.message).toContain("prepared 20 Nov 2026, 13 day(s) after the due date");
+  });
+  it("mixed months: the overdue month blocks, the month not yet due warns", () => {
+    const two = extract({ tdsDeducted: "Section,Deductee,Date,TDS Amount\n194C,A,20/09/2026,1000.00\n194C,B,20/10/2026,2500.00", tdsChallans: "Challan No,Section,Deposit Date,For Month,Amount" });
+    const block = runAt("books.tds-not-deposited", two, at("2026-11-05T06:30:00Z"));
+    expect(block.message).toMatch(/^TDS deducted but not deposited by the due date: 1 section\/month line\(s\), ₹1,000\.00 in all; first: section 194C for 2026-09/);
+    const warn = runAt("books.tds-due-soon", two, at("2026-11-05T06:30:00Z"));
+    expect(warn.message).toContain("1 section/month line(s), ₹2,500.00 in all; first: section 194C for 2026-10");
+    // March deductions: due 30 April.
+    const mar = extract({ tdsDeducted: "Section,Deductee,Date,TDS Amount\n194J,K,15/03/2027,10000", tdsChallans: "Challan No,Section,Deposit Date,For Month,Amount" });
+    expect(runAt("books.tds-due-soon", mar, at("2027-04-29T06:30:00Z")).message).toContain("to deposit by 30 Apr 2027 (1 day(s) left)");
+    expect(runAt("books.tds-not-deposited", mar, at("2027-04-30T06:30:00Z")).status).toBe("fail");
   });
   it("late: 7th is on time, 8th is late; March due 30 April", () => {
     expect(run("books.tds-late", extract({ tdsDeducted: DED, tdsChallans: "Challan No,Section,Deposit Date,For Month,Amount\nC1,194I,07/11/2026,Oct-2026,6000" })).status).toBe("pass");

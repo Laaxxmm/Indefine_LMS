@@ -1,5 +1,5 @@
 {
-  "description": "Trap: the same supplier bill keyed twice with different spacing; ITC must not be taken twice.",
+  "description": "Trap: the same supplier bill keyed twice with different spacing; ITC must not be taken twice. Core 3B figures (hand): outward 2,00,000; CGST 18,000, SGST 18,000. ITC: SS/7007 matched once 9,000 + 9,000 = 18,000; the re-keyed \"SS / 7007\" finds no unused 2B document -> missing in 2B, deferred 18,000, not claimed. Cash CGST 9,000, SGST 9,000 = 18,000; no expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee.",
   "category": "trap",
   "job": {
     "fy": "2026-27",
@@ -23,7 +23,21 @@
     "reconMissingIn2bCount": 1,
     "cashCgstPaise": 900000,
     "cashSgstPaise": 900000,
-    "cashTaxPaise": 1800000
+    "cashTaxPaise": 1800000,
+    "outwardTaxablePaise": 20000000,
+    "outwardIgstPaise": 0,
+    "outwardCgstPaise": 1800000,
+    "outwardSgstPaise": 1800000,
+    "outwardCessPaise": 0,
+    "outwardTaxPaise": 3600000,
+    "itcBlockedPaise": 0,
+    "itcOtherReversalPaise": 0,
+    "itcNetPaise": 1800000,
+    "cashIgstPaise": 0,
+    "cashCessPaise": 0,
+    "daysLate": 0,
+    "interestPaise": 0,
+    "lateFeePaise": 0
   },
   "deliverables": [
     {
@@ -121,7 +135,9 @@
             "Sr. No. To",
             "Total Number",
             "Cancelled",
-            "Net Issued"
+            "Net Issued",
+            "Gaps — to be explained",
+            "Missing numbers (cancelled or not in the register?)"
           ]
         }
       ]

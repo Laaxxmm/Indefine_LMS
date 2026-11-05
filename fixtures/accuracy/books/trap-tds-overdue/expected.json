@@ -1,0 +1,146 @@
+{
+  "description": "Trap (overdue): September 2026 close prepared on 05 Nov 2026 (harness clock). September deductions: 194J ₹10,000 (15 Sep) deposited 07 Oct 2026 = the due date -> on time; 194C ₹2,500 (22 Sep, 2% of contract charges ₹1,25,000) has no challan. Due date for September = 07 Oct 2026 (7th of the next month); prepared 05 Nov 2026, 29 days after it -> block books.tds-not-deposited (no reminder: nothing is still before its due date). Deducted 10,000 + 2,500 = 12,500 (1250000 paise); deposited 10,000 (1000000); shortfall 2,500 (250000). TB at 30 Sep 2026: debits HDFC Bank 2,37,500 + Professional Fees 1,00,000 + Contract Charges 1,25,000 = 4,62,500; credits Share Capital 3,00,000 + TDS Payable 12,500 + Sales 1,50,000 = 4,62,500 (46250000 paise), 6 ledgers, no suspense, no cash ledger (cash 0). Bank, GST, prior TB and schedules not provided -> books.inputs-missing (info).",
+  "category": "trap",
+  "job": {
+    "fy": "2026-27",
+    "period": "2026-09"
+  },
+  "flags": [
+    {
+      "ruleId": "books.tds-not-deposited",
+      "severity": "block"
+    },
+    {
+      "ruleId": "books.inputs-missing",
+      "severity": "info"
+    }
+  ],
+  "figures": {
+    "tbDebitPaise": 46250000,
+    "tbCreditPaise": 46250000,
+    "tbDifferencePaise": 0,
+    "tbLedgerCount": 6,
+    "suspensePaise": 0,
+    "cashBalancePaise": 0,
+    "tdsDeductedPaise": 1250000,
+    "tdsDepositedPaise": 1000000,
+    "tdsShortfallPaise": 250000,
+    "suggestionCount": 0,
+    "classificationQuestionCount": 0,
+    "parseIssueCount": 0
+  },
+  "deliverables": [
+    {
+      "name": "Month-end pack",
+      "sheets": [
+        {
+          "name": "Summary",
+          "columns": [
+            "Item",
+            "Amount",
+            "Count",
+            "Note"
+          ]
+        },
+        {
+          "name": "Trial balance",
+          "columns": [
+            "Ledger",
+            "Group",
+            "Debit",
+            "Credit"
+          ]
+        },
+        {
+          "name": "Bank reconciliation",
+          "columns": [
+            "Particulars",
+            "Amount",
+            "Note"
+          ]
+        },
+        {
+          "name": "Bank matching",
+          "columns": [
+            "Side",
+            "Line",
+            "Date",
+            "Reference",
+            "Narration",
+            "Amount",
+            "Status",
+            "Matched with",
+            "Note"
+          ]
+        },
+        {
+          "name": "Expense suggestions",
+          "columns": [
+            "Line",
+            "Date",
+            "Narration",
+            "Amount",
+            "Suggested ledger",
+            "Confidence",
+            "Reason",
+            "Status"
+          ]
+        },
+        {
+          "name": "Suspense and unreconciled",
+          "columns": [
+            "Item",
+            "Source",
+            "Date",
+            "Amount",
+            "Age (days)",
+            "Note"
+          ]
+        },
+        {
+          "name": "Accrual-prepaid reminders",
+          "columns": [
+            "Type",
+            "Item",
+            "Ledger",
+            "Amount",
+            "Note"
+          ]
+        },
+        {
+          "name": "TDS check",
+          "columns": [
+            "Section",
+            "Month",
+            "Deducted",
+            "Deposited",
+            "Shortfall",
+            "Due date",
+            "Last deposit",
+            "Status"
+          ]
+        },
+        {
+          "name": "GST tie-out",
+          "columns": [
+            "Head",
+            "Per books",
+            "Per return",
+            "Difference",
+            "Status"
+          ]
+        },
+        {
+          "name": "Checklist",
+          "columns": [
+            "Rule",
+            "Severity",
+            "Status",
+            "Message",
+            "Evidence"
+          ]
+        }
+      ]
+    }
+  ]
+}
