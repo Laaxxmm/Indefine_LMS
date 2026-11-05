@@ -3,7 +3,9 @@
 // Sign convention: every line carries a signed amount from the bank account's point of view —
 // money in is positive (statement deposit / ledger debit), money out is negative (statement
 // withdrawal / ledger credit). A row whose narration reads "opening balance" / "b/f" is the
-// opening balance, not a transaction.
+// opening balance, not a transaction. Balances follow each side's own Cr / Dr wording: on the
+// statement "Cr" is a balance in the customer's favour (+) and "Dr" an overdraft (−); in the
+// ledger "Dr" is + and "Cr" − (see parseBalancePaise).
 //
 // MATCHING ALGORITHM (documented; deterministic for the same input order):
 //   0. Lines are taken in (date, file row) order on both sides. References are normalised:
@@ -28,7 +30,7 @@
 // pairs have equal amounts, the difference equals (statement opening − ledger opening): a non-zero
 // difference means the two opening balances do not agree (missing brought-forward items).
 import { BANK_MATCH } from "./config";
-import { cell, daysBetween, locateColumns, parseAmountPaise, parseDay, type Cells, type ColumnAliases, type ParseIssue } from "./table";
+import { cell, daysBetween, locateColumns, parseAmountPaise, parseDay, type AmountParse, type Cells, type ColumnAliases, type ParseIssue } from "./table";
 
 export type BankLine = {
   /** "S3" (statement) / "L7" (ledger): side + 1-based position among parsed lines. */
@@ -68,6 +70,26 @@ export const LEDGER_ALIASES: ColumnAliases<BankField> = {
 const OPENING = /opening\s+balance|^b\/?f$|brought\s+forward|balance\s+b\/?f/i;
 const CLOSING = /closing\s+balance|^c\/?f$|carried\s+forward|^total$|^grand\s+total$/i;
 
+/** A trailing or leading Dr / Cr marker, as parseAmountPaise detects it. */
+const CR_DR = /\s*(dr|cr)\.?$|^(dr|cr)\.?\s*/i;
+
+/**
+ * Balance and opening-balance cells. A bank statement (side "S") writes them from the customer's
+ * side: "5,000.00 Cr" = the account is in credit (money in the bank, +), "5,000.00 Dr" = overdrawn
+ * (−). The books (side "L") use the ledger reading of parseAmountPaise: Dr +, Cr −. Unmarked
+ * amounts read the same on both sides (a leading minus or parentheses = negative).
+ */
+function parseBalancePaise(side: "S" | "L", text: string): AmountParse {
+  const p = parseAmountPaise(text);
+  if (side === "L" || !p.ok || !CR_DR.test(text.trim())) return p;
+  return { ok: true, paise: p.paise === 0 ? 0 : -p.paise };
+}
+
+/** A statement opening row's Withdrawal / Deposit cell: the column gives the sign, a Cr / Dr marker is ignored. */
+function parseColumnSigned(side: "S" | "L", text: string): AmountParse {
+  return side === "S" ? parseAmountPaise(text.trim().replace(CR_DR, "")) : parseAmountPaise(text);
+}
+
 export function parseBank(
   side: "S" | "L",
   file: string,
@@ -89,10 +111,15 @@ export function parseBank(
     const inn = parseAmountPaise(cell(row, c.in));
     const out = parseAmountPaise(cell(row, c.out));
     const amt = parseAmountPaise(cell(row, c.amount));
-    const bal = parseAmountPaise(cell(row, c.balance));
+    const bal = parseBalancePaise(side, cell(row, c.balance));
     if (OPENING.test(narration)) {
-      // Opening row: the amount sits in the in/out/amount column, or in the balance column.
-      const v = inn.ok && out.ok && amt.ok ? inn.paise - out.paise + amt.paise : 0;
+      // Opening row: the amount sits in the in/out/amount column, or in the balance column. On a
+      // statement every cell of this row is a balance: the signed Amount cell reads like the
+      // balance column, a Withdrawal / Deposit cell takes its sign from the column.
+      const oIn = parseColumnSigned(side, cell(row, c.in));
+      const oOut = parseColumnSigned(side, cell(row, c.out));
+      const oAmt = parseBalancePaise(side, cell(row, c.amount));
+      const v = oIn.ok && oOut.ok && oAmt.ok ? oIn.paise - oOut.paise + oAmt.paise : 0;
       openingPaise = v !== 0 ? v : bal.ok ? bal.paise : 0;
       continue;
     }

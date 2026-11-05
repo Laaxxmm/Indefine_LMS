@@ -49,6 +49,46 @@ describe("parseBank", () => {
   });
 });
 
+describe("parseBank — Cr / Dr on balances (statement: bank wording; ledger: books wording)", () => {
+  const stmt = (csv: string) => parseBank("S", "s.csv", parseCsv(csv), STATEMENT_ALIASES);
+  it("audit counterexample: Deposit 1,000.00 with Balance '5,000.00 Cr' → opening +4,000.00 (was −6,000.00)", () => {
+    const { data: d, issues } = stmt('Date,Narration,Withdrawal,Deposit,Balance\n02/10/2026,NEFT IN,,"1,000.00","5,000.00 Cr"');
+    expect(issues).toEqual([]);
+    expect(d!.openingPaise).toBe(400000);
+    expect(d!.lines.map((l) => l.amountPaise)).toEqual([100000]);
+  });
+  it("audit counterexample: opening row '4,000.00 Cr' → +4,000.00 (was −4,000.00)", () => {
+    expect(stmt('Date,Narration,Withdrawal,Deposit,Balance\n01/10/2026,Opening Balance,,,"4,000.00 Cr"\n02/10/2026,X,1.00,,"3,999.00 Cr"').data!.openingPaise).toBe(400000);
+    expect(stmt('Date,Narration,Withdrawal,Deposit,Balance\n01/10/2026,Opening Balance,,,"Cr 4,000.00"').data!.openingPaise).toBe(400000);
+  });
+  it("overdraft statement: Dr balances are negative, on the opening row and on the first running balance", () => {
+    expect(stmt('Date,Narration,Withdrawal,Deposit,Balance\n01/10/2026,Opening Balance,,,"2,000.00 Dr"').data!.openingPaise).toBe(-200000);
+    // First row: withdrawal 500, balance 2,500.00 Dr → opening = −2,50,000 − (−50,000) = −2,00,000 paise.
+    const derived = stmt('Date,Narration,Withdrawal,Deposit,Balance\n02/10/2026,CHQ OUT,500.00,,"2,500.00 Dr"\n03/10/2026,NEFT IN,,"3,000.00","500.00 Cr"').data!;
+    expect(derived.openingPaise).toBe(-200000);
+    // An overdrawn account (ledger opening on the credit side) reconciles to zero.
+    const ledger = parseBank("L", "l.csv", parseCsv('Date,Particulars,Debit,Credit\n01/10/2026,Opening Balance,,"2,000.00"\n02/10/2026,Chq,,500.00\n03/10/2026,Receipt,"3,000.00",'), LEDGER_ALIASES).data!;
+    expect(ledger.openingPaise).toBe(-200000);
+    const r = reconcile(derived, ledger);
+    expect(r.summary).toMatchObject({ balancePerBankPaise: 50000, balancePerBooksPaise: 50000, differencePaise: 0 });
+  });
+  it("statement opening row in the Deposit / Withdrawal / Amount column: the bank's marker never flips the sign", () => {
+    expect(stmt('Date,Narration,Withdrawal,Deposit\n01/10/2026,Opening Balance,,"4,000.00 Cr"').data!.openingPaise).toBe(400000);
+    expect(stmt('Date,Narration,Withdrawal,Deposit\n01/10/2026,Opening Balance,"4,000.00 Dr",').data!.openingPaise).toBe(-400000);
+    expect(stmt('Date,Narration,Amount\n01/10/2026,Opening Balance,"4,000.00 Cr"').data!.openingPaise).toBe(400000);
+    expect(stmt('Date,Narration,Amount\n01/10/2026,Opening Balance,"4,000.00 Dr"').data!.openingPaise).toBe(-400000);
+  });
+  it("unmarked statement balances are unchanged: plain = in credit, minus = overdrawn", () => {
+    expect(stmt('Date,Narration,Withdrawal,Deposit,Balance\n02/10/2026,X,100.00,,"-2,100.00"').data!.openingPaise).toBe(-200000);
+    expect(stmt('Date,Narration,Withdrawal,Deposit,Balance\n01/10/2026,Opening Balance,,,"0.00 Cr"').data!.openingPaise).toBe(0);
+  });
+  it("ledger keeps the books wording: balance Cr = negative, Dr = positive", () => {
+    const led = (bal: string) => parseBank("L", "l.csv", parseCsv(`Date,Particulars,Debit,Credit,Balance\n,Opening Balance,,,"${bal}"\n02/10/2026,X,1,,`), LEDGER_ALIASES).data!.openingPaise;
+    expect(led("75.00 Cr")).toBe(-7500);
+    expect(led("75.00 Dr")).toBe(7500);
+  });
+});
+
 describe("normRef", () => {
   it.each([
     ["000451", "451"],
