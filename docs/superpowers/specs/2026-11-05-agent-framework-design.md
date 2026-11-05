@@ -80,6 +80,17 @@ Hardening after the independent audit (a "pass" could be produced without the ag
 - **No thin fixture sets** (production agents; `internal` agents exempt): at least `FIXTURE_MINIMUMS[agent]` fixtures (gst / roc / tax 15, books / audit 10, any other 15), every fixture has `category`, at least one fixture per category, at least one expected block and one expected warn flag across the set. Every fixture (all agents) must have non-empty `figures` when compute returns figures. Expected flags for rules the pack does not have fail the run.
 - **Self-tests** (`tests/fixtures/accuracy-selftest/`): the audit's probes are permanent fixtures that must FAIL (input amount + ₹1 with the recording unchanged; a duplicate ref injected only in the input; `_mistakes` removed; an LLM verdict quoting text absent from the input) or document behaviour (a changed stale extraction recording no longer affects figures).
 
+## Agent conventions (owner-approved 2026-11-05)
+
+The conservative answers to the round-2 questions ("Agent conventions to confirm" in PROGRESS.md):
+
+| Agent | Convention | Where |
+|---|---|---|
+| GST | A credit note dated after the s.34(2) time limit (30 Nov after the FY of its original invoice, `GST_CONFIG.creditNoteDeadlineMonthDay`) does **not** reduce outward liability in the draft: it is excluded from Table 3.1 and the GSTR-1 CDNR / B2CS / HSN figures. `gst.credit-note-time-limit` still blocks and lists it as `time-barred credit note excluded: <no>, ₹<value>`; the GSTR-3B Notes sheet repeats it. GSTR-1 Table 13 still counts the note. The limit is stated in `gst.pack-config`; if the pack's rule parameter differs from the computation's, the rule lists every note the two treat differently. | `gst/compute.ts`, `gst/rules.ts`; fixture 12 |
+| GST | ITC on a purchase bill whose ledger the model answered `insufficient_evidence` on (blocked credit or reverse charge; ungrounded answers count the same) is **held back**: not claimed in 4(A)(5), or 4(A)(3) for a reverse-charge bill, until the reviewer answers. Figure `itcHeldBackPaise` (part of the core 3B figure set pinned by every GST fixture), a memo row in Table 4, and the amount in `gst.model-questions` and the client document request. A supplier credit note on such a ledger still reduces ITC; RCM liability is unchanged. | `gst/compute.ts`, `gst/rules.ts`, `gst/deliverables.ts`; fixture 23 |
+| Books | When a prior-month (opening) trial balance is supplied it must balance to the paisa: **warn** `books.prior-tb-balanced` (also when it cannot be read; `na` without one). Only the month-end TB blocks (`books.tb-balanced`). Figures `priorTb{Debit,Credit,Difference}Paise`. | `books/rules.ts`; fixture `trap-prior-month-tb-off-by-1` |
+| Review screen | `RunReview.openQuestions` is shown as "Open questions" beside the checklist, abstentions first, marked "Client document request", with the row's evidence and the amount held back. Besides the flagged LLM rows (`core/guardrails/review.ts`) it carries the abstentions an agent reports through its own deterministic rule (`ABSTENTION_RULES` in `views.ts`: `gst.model-questions` with `itcHeldBackPaise`, `books.classification-questions`). No action on the panel; nothing is sent to the client. | `src/lib/agents/views.ts`, `src/app/agents/[agent]/runs/[id]/page.tsx` |
+
 ## UI decisions
 
 - Theme: the LMS brand (purple `brand-*`, `ink-*`), not the spec's fallback teal — the spec says extend the existing theme.

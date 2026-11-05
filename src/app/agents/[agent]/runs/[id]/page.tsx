@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { AlertTriangle, CheckCircle2, CircleHelp, Info, XCircle } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import type { FirmDb } from "@/lib/agents/core/runner";
-import { loadRunReview, type ChecklistView } from "@/lib/agents/views";
+import { loadRunReview, type ChecklistView, type OpenQuestionView } from "@/lib/agents/views";
 import { loadCloseLoopView, type CloseLoopViewDb } from "@/lib/close-loop/review";
 import { card } from "@/components/ui";
 import { BackLink, PartnerChip, RunStatusChip, StateChip, eyebrow, focusRing, pageTitle, sectionTitle } from "../../../parts";
@@ -11,7 +11,8 @@ import { ActionBar, CloseLoopStatus, CommentsPanel, DeliverablesPanel, MistakeFo
 
 export const dynamic = "force-dynamic";
 
-// Agent pack review (DESIGN): left = checklist results with evidence, right = deliverables with
+// Agent pack review (DESIGN): left = checklist results with evidence, right = open questions (when
+// any: abstentions / client document requests first, with any amount held back), deliverables with
 // preview, comments; bottom bar = the one action the person can take now ("Approve pack",
 // "Request changes", "Submit for review" with "Re-run with a note" beside it, "Run agent"; after
 // approval "Mark filed", then "Record Turia close"). The person files on the portal; there is no
@@ -28,6 +29,20 @@ function tone(c: ChecklistView): Tone {
 }
 
 const SOURCE: Record<string, string> = { deterministic: "rule", llm: "model check", mistake: "learned rule" };
+
+// Open questions (ADR-008): what the model could not answer from the documents (a document or
+// confirmation for staff to ask the client for), two model reads that disagreed, or a rule outside
+// the agent's scope. Same item look as the checklist; nothing here contacts the client.
+function questionTone(q: OpenQuestionView): Omit<Tone, "icon"> {
+  if (q.clientRequest) return { label: "Client document request", box: "border-l-sky-500 bg-sky-50/60", iconClass: "text-sky-800" };
+  return { label: q.kind === "model-disagreement" ? "Reviewer decides" : "Check by hand", box: "border-l-ink-mute bg-muted/60", iconClass: "text-ink-soft" };
+}
+
+const QUESTION_KIND: Record<OpenQuestionView["kind"], string> = {
+  "insufficient-evidence": "the documents do not show the answer",
+  "model-disagreement": "two model reads disagree",
+  "out-of-scope": "not one of this agent's checks",
+};
 
 export default async function RunReviewPage({ params }: { params: Promise<{ agent: string; id: string }> }) {
   const session = await auth();
@@ -150,6 +165,59 @@ export default async function RunReviewPage({ params }: { params: Promise<{ agen
         </section>
 
         <div className="space-y-6">
+          {review.openQuestions.length > 0 && (
+            <section aria-labelledby="open-questions" className={card}>
+              <h2 id="open-questions" className={sectionTitle}>
+                Open questions
+              </h2>
+              <p className="text-[13px] text-ink-soft mb-4">
+                {review.openQuestions.length} question{review.openQuestions.length === 1 ? "" : "s"} for the reviewer: what the documents did not show, model reads that disagreed, or rules outside
+                this agent&apos;s checks. Approval does not wait on them, so settle each first; a client document request is for staff to raise with the client — Firm OS does not contact the client.
+              </p>
+              <ul className="space-y-2.5">
+                {review.openQuestions.map((q) => {
+                  const t = questionTone(q);
+                  return (
+                    <li key={q.id} className={`rounded-lg border border-border border-l-4 ${t.box} px-3.5 py-2.5`}>
+                      <div className="flex items-start gap-2.5">
+                        <CircleHelp className={`w-4 h-4 mt-0.5 shrink-0 ${t.iconClass}`} aria-hidden="true" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[13.5px] font-semibold">
+                            <span className={`${t.iconClass} font-bold`}>{t.label}:</span> {q.question}
+                          </p>
+                          <p className="text-[11.5px] text-ink-mute mt-0.5">
+                            {q.ruleId} · {QUESTION_KIND[q.kind]}
+                          </p>
+                          {(q.quote || q.location) && (
+                            <figure className="mt-1.5">
+                              {q.quote && <blockquote className="text-[12.5px] font-mono bg-card border border-border rounded px-2 py-1 break-words">“{q.quote}”</blockquote>}
+                              {q.location && (
+                                <figcaption className="text-[11.5px] text-ink-mute mt-0.5">
+                                  {q.link ? (
+                                    <a href={q.link} target="_blank" rel="noopener noreferrer" className={`text-brand-600 hover:underline rounded ${focusRing}`}>
+                                      {q.location}
+                                    </a>
+                                  ) : (
+                                    q.location
+                                  )}
+                                </figcaption>
+                              )}
+                            </figure>
+                          )}
+                          {q.heldBack && (
+                            <p className="text-[13px] mt-1.5 tabular-nums">
+                              <span className="text-ink-mute">{q.heldBack.label}: </span>
+                              <span className="font-bold">{q.heldBack.amount}</span>
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          )}
           {closeLoop && <CloseLoopStatus view={closeLoop} />}
           <DeliverablesPanel deliverables={review.deliverables} />
           <CommentsPanel runId={run.id} comments={comments} />

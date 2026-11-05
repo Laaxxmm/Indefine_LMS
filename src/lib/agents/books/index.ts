@@ -76,6 +76,12 @@ export function computeBooksFigures(raw: Partial<BooksExtract>): Record<string, 
     f.suspensePaise = suspenseRows(e.tb).reduce((s, r) => s + Math.abs(netPaise(r)), 0);
     f.cashBalancePaise = cashRows(e.tb).reduce((s, r) => s + netPaise(r), 0);
   }
+  if (e.priorTb) {
+    const t = tbTotals(e.priorTb);
+    f.priorTbDebitPaise = t.debitPaise;
+    f.priorTbCreditPaise = t.creditPaise;
+    f.priorTbDifferencePaise = t.differencePaise;
+  }
   if (e.statement && e.ledger) {
     const r = reconcile(e.statement, e.ledger, BANK_MATCH);
     f.bankMatchedCount = r.pairs.length;

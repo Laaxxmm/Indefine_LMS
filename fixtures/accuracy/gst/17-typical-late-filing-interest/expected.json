@@ -1,5 +1,5 @@
 {
-  "description": "Typical: GSTR-3B expected 10 days late; interest u/s 50 on cash per head and late fee estimated; previous return clean. Core 3B figures (hand): same supplies as fixture 01: outward 1,70,000, IGST 9,000, CGST 10,800, SGST 10,800 (tax 30,600); ITC 17,100; cash IGST 7,200, CGST 3,150, SGST 3,150 = 13,500. Due 20 Nov 2026, expected filing 30 Nov 2026 -> 10 days. Interest s.50(1) 18% on cash per head, 365-day year: IGST 7,20,000 paise x 1800 x 10 / 3,650,000 = 3,550.7 -> 3,551; CGST 3,15,000 x 18,000 / 3,650,000 = 1,553.4 -> 1,553; SGST 1,553; total 6,657 paise. Late fee 10 x Rs50 = Rs500 (AATO Rs2 cr -> cap Rs5,000) = 50,000 paise.",
+  "description": "Typical: GSTR-3B expected 10 days late; interest u/s 50 on cash per head and late fee estimated; previous return clean. Core 3B figures (hand): same supplies as fixture 01: outward 1,70,000, IGST 9,000, CGST 10,800, SGST 10,800 (tax 30,600); ITC 17,100; cash IGST 7,200, CGST 3,150, SGST 3,150 = 13,500. Due 20 Nov 2026, expected filing 30 Nov 2026 -> 10 days. Interest s.50(1) 18% on cash per head, 365-day year: IGST 7,20,000 paise x 1800 x 10 / 3,650,000 = 3,550.7 -> 3,551; CGST 3,15,000 x 18,000 / 3,650,000 = 1,553.4 -> 1,553; SGST 1,553; total 6,657 paise. Late fee 10 x Rs50 = Rs500 (AATO Rs2 cr -> cap Rs5,000) = 50,000 paise. ITC held back 0: no purchase ledger the model answered insufficient_evidence on.",
   "category": "typical-gap",
   "job": {
     "fy": "2026-27",
@@ -28,6 +28,7 @@
     "itcBlockedPaise": 0,
     "itcOtherReversalPaise": 0,
     "itcNetPaise": 1710000,
+    "itcHeldBackPaise": 0,
     "cashIgstPaise": 720000,
     "cashCgstPaise": 315000,
     "cashSgstPaise": 315000,

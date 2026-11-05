@@ -18,13 +18,27 @@
 //   net-negative head of 4(A)(5)). 4(C) = 4(A) − 4(B). 4(D)(2) memo = 2B documents with ITC not available.
 // - B2CL: unregistered recipient, inter-state, invoice value > GST_CONFIG.b2clThresholdPaise.
 //   Notes to unregistered persons are netted into B2CS (CDNUR is not produced in v1.0.0).
+// - Time-barred credit notes (owner-approved 2026-11-05): a credit note dated after the s.34(2)
+//   time limit (GST_CONFIG.creditNoteDeadlineMonthDay after the FY of its original invoice) does
+//   NOT reduce outward liability: it is left out of 3.1(a)/(c), the GSTR-1 CDNR / B2CS rows and the
+//   HSN summary. Rule gst.credit-note-time-limit still blocks and lists each excluded note; the
+//   GSTR-3B Notes sheet repeats them. GSTR-1 Table 13 still counts the note (it was issued).
+// - ITC held back on abstained bills (owner-approved 2026-11-05): when the model answered
+//   insufficient_evidence for a bill's ledger (whether ITC is blocked u/s 17(5), or whether reverse
+//   charge applies — an ungrounded answer is recorded the same way, classify.ts), the ITC that bill
+//   would add to 4(A)(5) (or 4(A)(3) for a reverse-charge bill) is NOT claimed: it is held back
+//   (itc.heldBack, figure itcHeldBackPaise, a memo row in Table 4) and raised by rule
+//   gst.model-questions and the client document requests with the amount. A supplier credit note
+//   on such a ledger still reduces ITC; RCM liability (3.1(d)) is unchanged.
 import { BLOCKED_CATEGORIES, GST_CONFIG, RCM_SERVICES, type BlockedCategory, type RcmService } from "./config";
 import { hsnFromText, ledgerKeyOf } from "./classify";
 import {
   HEADS,
   addTax,
+  dayAfterFyEnd,
   dayOfNextMonth,
   daysBetween,
+  fyOfDay,
   minTax,
   mulDivRound,
   periodInfo,
@@ -46,7 +60,15 @@ export const sign = (t: DocType) => (t === "CRN" ? -1 : 1);
 export type HsnSource = "register" | "text" | "model" | null;
 export type LineA = Line & { hsnSource: HsnSource };
 export type Gstr1Table = "B2B" | "B2CL" | "B2CS" | "CDNR";
-export type SalesA = Omit<SalesDoc, "lines"> & { posResolved: string; interState: boolean; registered: boolean; table: Gstr1Table; lines: LineA[] };
+export type SalesA = Omit<SalesDoc, "lines"> & {
+  posResolved: string;
+  interState: boolean;
+  registered: boolean;
+  table: Gstr1Table;
+  lines: LineA[];
+  /** Credit note past the s.34(2) time limit: kept out of 3.1 and the GSTR-1 value tables. */
+  timeBarred: boolean;
+};
 
 export type ReconStatus = "matched" | "value-diff" | "missing-in-2b" | "missing-in-books" | "itc-unavailable";
 export type ReconRow = {
@@ -64,6 +86,8 @@ export type ReconRow = {
   twoBTax: TaxSplit;
   /** Signed ITC taken into 4(A)(5) from this row. */
   claimed: TaxSplit;
+  /** ITC this row would have claimed but holds back: the model abstained on the bill's ledger. */
+  heldBack: TaxSplit;
 };
 
 export type PurchaseA = PurchaseDoc & {
@@ -75,6 +99,10 @@ export type PurchaseA = PurchaseDoc & {
   rcm: boolean;
   /** Classified as a notified RCM service but not marked RCM in the books. */
   rcmUnmarked: boolean;
+  /** The model answered insufficient_evidence for this ledger (blocked credit or reverse charge): ITC held back. */
+  abstained: boolean;
+  /** ITC on this document held back from Table 4(A) (positive; zero unless `abstained`). */
+  heldBack: TaxSplit;
   /** Signed RCM tax (3.1(d)) for rcm documents. */
   rcmTax: TaxSplit;
   rcmTaxable: number;
@@ -96,7 +124,10 @@ export type DocsRow = { nature: string; prefix: string; from: string; to: string
 export type Analysis = {
   clientState: string;
   periodInfo: PeriodInfo;
+  /** Every sales document in the register (time-barred credit notes included). */
   sales: SalesA[];
+  /** Credit notes past the s.34(2) time limit, excluded from 3.1 and the GSTR-1 value tables. */
+  timeBarredNotes: SalesA[];
   purchases: PurchaseA[];
   gstr1: { b2b: SalesA[]; b2cl: SalesA[]; b2cs: B2csRow[]; cdnr: SalesA[]; hsn: HsnRow[]; docs: DocsRow[] };
   outward: { taxable: number; tax: TaxSplit; nilExempt: number };
@@ -110,6 +141,8 @@ export type Analysis = {
     b2: TaxSplit;
     rule37: TaxSplit;
     net: TaxSplit;
+    /** ITC not claimed because the model abstained on the bill (a reviewer question / client request). */
+    heldBack: TaxSplit;
     deferred: TaxSplit;
     unavailable2b: TaxSplit;
     notBooked: TaxSplit;
@@ -146,6 +179,20 @@ function resolveLines(d: SalesDoc, reads: Map<string, string | null>): LineA[] {
   });
 }
 
+/**
+ * s.34(2) time limit of a credit note: `monthDay` (default GST_CONFIG) after the end of the FY of
+ * its original invoice. Null for invoices, debit notes and notes without an original invoice date.
+ */
+export function creditNoteDeadline(d: Pick<SalesDoc, "docType" | "origDate">, monthDay: string = GST_CONFIG.creditNoteDeadlineMonthDay): string | null {
+  return d.docType === "CRN" && d.origDate ? dayAfterFyEnd(fyOfDay(d.origDate), monthDay) : null;
+}
+
+/** True when the credit note is dated after its s.34(2) time limit (the limit day itself is in time). */
+export function isTimeBarredNote(d: Pick<SalesDoc, "docType" | "origDate" | "date">, monthDay: string = GST_CONFIG.creditNoteDeadlineMonthDay): boolean {
+  const deadline = creditNoteDeadline(d, monthDay);
+  return deadline !== null && d.date > deadline;
+}
+
 function analyseSales(x: GstExtract, clientState: string): SalesA[] {
   const reads = new Map(x.hsnReads.map((r) => [r.description, r.hsn]));
   return x.sales.map((d) => {
@@ -156,7 +203,7 @@ function analyseSales(x: GstExtract, clientState: string): SalesA[] {
     if (d.docType !== "INV") table = registered ? "CDNR" : "B2CS";
     else if (registered) table = "B2B";
     else table = interState && d.value > GST_CONFIG.b2clThresholdPaise ? "B2CL" : "B2CS";
-    return { ...d, posResolved, interState, registered, table, lines: resolveLines(d, reads) };
+    return { ...d, posResolved, interState, registered, table, lines: resolveLines(d, reads), timeBarred: isTimeBarredNote(d) };
   });
 }
 
@@ -246,15 +293,19 @@ export function docsRows(sales: SalesDoc[]): DocsRow[] {
 
 // ------------------------------------------------------------------ purchases / ITC
 
-// insufficient_evidence is neither blocked nor RCM in the figures; it surfaces as a reviewer question (gst.model-questions).
+// insufficient_evidence is neither blocked nor RCM in the figures, and the bill's ITC is held back
+// (not claimed); it surfaces as a reviewer question (gst.model-questions) and a client document request.
 const isBlocked = (v: string): v is BlockedCategory => Object.prototype.hasOwnProperty.call(BLOCKED_CATEGORIES, v);
 const isRcm = (v: string): v is RcmService => Object.prototype.hasOwnProperty.call(RCM_SERVICES, v);
+/** The model could not say whether ITC is blocked or whether reverse charge applies (or its answer was ungrounded). */
+export const isAbstained = (c: LedgerClass | null): boolean => !!c && (c.blockedCategory === "insufficient_evidence" || c.rcmService === "insufficient_evidence");
 
 function analysePurchases(x: GstExtract, clientState: string): PurchaseA[] {
   const cls = new Map(x.ledgers.map((l) => [l.ledger, l]));
   return x.purchases.map((d) => {
     const key = ledgerKeyOf(d);
     const c = cls.get(key) ?? null;
+    const abstained = isAbstained(c);
     const blocked = c && isBlocked(c.blockedCategory) ? c.blockedCategory : null;
     const rcmService = c && isRcm(c.rcmService) ? c.rcmService : null;
     const booksTax = lineTax(d.lines);
@@ -278,7 +329,9 @@ function analysePurchases(x: GstExtract, clientState: string): PurchaseA[] {
         rcmTaxable += k * l.taxable;
       }
     }
-    return { ...d, key, cls: c, blocked, rcmService, rcm, rcmUnmarked: rcm && !d.reverseCharge, rcmTax, rcmTaxable, booksTax, booksTaxable };
+    // A reverse-charge bill's 4(A)(3) ITC is held back here; a forward-charge bill's in reconcile().
+    const heldBack = rcm && abstained && d.docType !== "CRN" ? pos0(rcmTax) : zeroTax();
+    return { ...d, key, cls: c, blocked, rcmService, rcm, rcmUnmarked: rcm && !d.reverseCharge, abstained, heldBack, rcmTax, rcmTaxable, booksTax, booksTaxable };
   });
 }
 
@@ -303,7 +356,7 @@ function reconcile(purchases: PurchaseA[], gstr2b: B2bDoc[]): ReconRow[] {
     if (p.rcm || !p.gstin) continue;
     const k = sign(p.docType);
     const cand = (index.get(reconKey(p.gstin, p.docType, p.number)) ?? []).find((d) => !used.has(d)) ?? null;
-    const base = { gstin: p.gstin, party: p.supplier, docType: p.docType, number: p.number, date: p.date, books: p, booksTaxable: p.booksTaxable, booksTax: p.booksTax };
+    const base = { gstin: p.gstin, party: p.supplier, docType: p.docType, number: p.number, date: p.date, books: p, booksTaxable: p.booksTaxable, booksTax: p.booksTax, heldBack: zeroTax() };
     if (!cand) {
       rows.push({ ...base, status: "missing-in-2b", twoB: null, twoBTaxable: 0, twoBTax: zeroTax(), claimed: k < 0 ? scaleTax(p.booksTax, -1) : zeroTax() });
       continue;
@@ -313,11 +366,15 @@ function reconcile(purchases: PurchaseA[], gstr2b: B2bDoc[]): ReconRow[] {
     if (!cand.itcAvailable) rows.push({ ...both, status: "itc-unavailable", claimed: zeroTax() });
     else {
       const status: ReconStatus = differs(p.booksTaxable, p.booksTax, cand.taxable, cand.tax, GST_CONFIG.reconTolerancePaise) ? "value-diff" : "matched";
-      rows.push({ ...both, status, claimed: minTax(scaleTax(p.booksTax, k), scaleTax(cand.tax, k)) });
+      const claim = minTax(scaleTax(p.booksTax, k), scaleTax(cand.tax, k));
+      // Abstained ledger: the ITC is held back, not claimed (a supplier credit note still reduces ITC).
+      const heldBack = p.abstained && k > 0 ? pos0(claim) : zeroTax();
+      p.heldBack = heldBack; // p was created by analysePurchases for this analysis only
+      rows.push({ ...both, status, claimed: subTax(claim, heldBack), heldBack });
     }
   }
   for (const d of twoB.filter((x) => !used.has(x))) {
-    rows.push({ status: "missing-in-books", gstin: d.ctin, party: d.tradeName, docType: d.docType, number: d.number, date: d.date, books: null, twoB: d, booksTaxable: 0, booksTax: zeroTax(), twoBTaxable: d.taxable, twoBTax: d.tax, claimed: zeroTax() });
+    rows.push({ status: "missing-in-books", gstin: d.ctin, party: d.tradeName, docType: d.docType, number: d.number, date: d.date, books: null, twoB: d, booksTaxable: 0, booksTax: zeroTax(), twoBTaxable: d.taxable, twoBTax: d.tax, claimed: zeroTax(), heldBack: zeroTax() });
   }
   return rows;
 }
@@ -370,12 +427,14 @@ export function analyse(x: GstExtract): Analysis {
   const clientState = clientStateOf(x);
   const pi = periodInfo(x.period, x.fy);
   const sales = analyseSales(x, clientState);
+  // Documents the return reports: everything except credit notes past the s.34(2) time limit.
+  const reported = sales.filter((s) => !s.timeBarred);
 
   // 3.1(a) / (c)
   let taxable = 0;
   let nilExempt = 0;
   let outTax = zeroTax();
-  for (const d of sales) {
+  for (const d of reported) {
     if (d.reverseCharge) continue;
     const k = sign(d.docType);
     for (const l of d.lines) {
@@ -392,7 +451,9 @@ export function analyse(x: GstExtract): Analysis {
   const rcmTax = sumTax(rcmDocs.map((p) => p.rcmTax));
   const rcmTaxable = rcmDocs.reduce((n, p) => n + p.rcmTaxable, 0);
 
-  const a3 = pos0(rcmTax);
+  // 4(A)(3): RCM tax paid is credit, except on a bill whose ledger the model abstained on (held back).
+  const a3 = pos0(subTax(rcmTax, sumTax(rcmDocs.map((p) => p.heldBack))));
+  const heldBack = sumTax(purchases.map((p) => p.heldBack));
   const claimedAll = sumTax(recon.map((r) => r.claimed));
   const a5 = pos0(claimedAll);
   const blockedClaimed = sumTax(recon.filter((r) => r.books?.blocked).map((r) => r.claimed));
@@ -425,19 +486,20 @@ export function analyse(x: GstExtract): Analysis {
     clientState,
     periodInfo: pi,
     sales,
+    timeBarredNotes: sales.filter((s) => s.timeBarred),
     purchases,
     gstr1: {
-      b2b: sales.filter((s) => s.table === "B2B"),
-      b2cl: sales.filter((s) => s.table === "B2CL"),
-      b2cs: b2csRows(sales),
-      cdnr: sales.filter((s) => s.table === "CDNR"),
-      hsn: hsnRows(sales),
+      b2b: reported.filter((s) => s.table === "B2B"),
+      b2cl: reported.filter((s) => s.table === "B2CL"),
+      b2cs: b2csRows(reported),
+      cdnr: reported.filter((s) => s.table === "CDNR"),
+      hsn: hsnRows(reported),
       docs: docsRows(x.sales),
     },
     outward: { taxable, tax: outTax, nilExempt },
     rcm: { taxable: rcmTaxable, tax: rcmTax },
     recon,
-    itc: { a3, a5, available, b1, b2, rule37, net, deferred, unavailable2b, notBooked, rule37Rows: r37 },
+    itc: { a3, a5, available, b1, b2, rule37, net, heldBack, deferred, unavailable2b, notBooked, rule37Rows: r37 },
     liability,
     openingCredit,
     setoff: so,
@@ -449,6 +511,12 @@ export function analyse(x: GstExtract): Analysis {
   };
   cache.set(x, a);
   return a;
+}
+
+/** ITC held back on the bills booked to one ledger key, and their numbers (abstained ledgers). */
+export function heldBackFor(a: Analysis, ledger: string): { paise: number; numbers: string[] } {
+  const docs = a.purchases.filter((p) => p.key === ledger && taxTotal(p.heldBack) > 0);
+  return { paise: docs.reduce((n, p) => n + taxTotal(p.heldBack), 0), numbers: docs.map((p) => p.number.trim()) };
 }
 
 const count = (rows: ReconRow[], s: ReconStatus) => rows.filter((r) => r.status === s).length;
@@ -475,6 +543,7 @@ export function computeFigures(x: GstExtract): Record<string, number> {
     itcOtherReversalPaise: taxTotal(a.itc.b2),
     itcRule37Paise: taxTotal(a.itc.rule37),
     itcNetPaise: taxTotal(a.itc.net),
+    itcHeldBackPaise: taxTotal(a.itc.heldBack),
     itcDeferredPaise: taxTotal(a.itc.deferred),
     itcUnavailable2bPaise: taxTotal(a.itc.unavailable2b),
     itcNotBookedPaise: taxTotal(a.itc.notBooked),

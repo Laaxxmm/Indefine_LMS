@@ -1,5 +1,5 @@
 {
-  "description": "Typical gap: cheque 448 issued 15 Sep 2026 still not presented (46 days at 31 Oct); Repairs ₹90,000 vs ₹30,000 in September; insurance prepaid and audit-fee accrual to book for October.",
+  "description": "Typical gap: cheque 448 issued 15 Sep 2026 still not presented (46 days at 31 Oct); Repairs ₹90,000 vs ₹30,000 in September; insurance prepaid and audit-fee accrual to book for October. The September TB supplied for the comparison does not balance: debits Rent 60,000 + Salaries 1,35,000 + Bank Charges 1,100 + Electricity 11,000 + Repairs and Maintenance 30,000 = 2,37,100 vs credits (Sales) 2,07,100 -> difference ₹30,000 -> warn books.prior-tb-balanced (owner-approved 2026-11-05 check; the October TB balances, 14,86,600 = 14,86,600).",
   "category": "typical-gap",
   "flags": [
     {
@@ -8,6 +8,10 @@
     },
     {
       "ruleId": "books.expense-spike",
+      "severity": "warn"
+    },
+    {
+      "ruleId": "books.prior-tb-balanced",
       "severity": "warn"
     },
     {
@@ -20,6 +24,9 @@
     "tbCreditPaise": 148660000,
     "tbDifferencePaise": 0,
     "tbLedgerCount": 18,
+    "priorTbDebitPaise": 23710000,
+    "priorTbCreditPaise": 20710000,
+    "priorTbDifferencePaise": 3000000,
     "bankMatchedCount": 7,
     "bankUnmatchedStatementCount": 0,
     "bankUnmatchedLedgerCount": 2,

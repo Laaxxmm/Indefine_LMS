@@ -1,5 +1,5 @@
 {
-  "description": "Clean October close: TB balances, bank reconciles (one cheque in transit), TDS paid on time, GST ties, no reminders.",
+  "description": "Clean October close: TB balances, bank reconciles (one cheque in transit), TDS paid on time, GST ties, no reminders. Prior-month TB balances: debits Rent 60,000 + Salaries 1,35,000 + Bank Charges 1,100 + Electricity 11,000 = 2,07,100 = Sales credit 2,07,100 -> books.prior-tb-balanced passes.",
   "category": "clean",
   "flags": [],
   "figures": {
@@ -7,6 +7,9 @@
     "tbCreditPaise": 139660000,
     "tbDifferencePaise": 0,
     "tbLedgerCount": 17,
+    "priorTbDebitPaise": 20710000,
+    "priorTbCreditPaise": 20710000,
+    "priorTbDifferencePaise": 0,
     "bankMatchedCount": 7,
     "bankUnmatchedStatementCount": 0,
     "bankUnmatchedLedgerCount": 1,

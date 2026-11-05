@@ -1,5 +1,5 @@
 {
-  "description": "Trap (promoted mistake gst.mistake-itc-time-limit): 01-clean-tally-csv with Sunrise Steel bill SS/1001 dated 15-03-2025 (FY 2024-25) in the purchase register and the GSTR-2B. The s.16(4) deadline for that bill was 30-11-2025, so claiming it in October 2026 is time-barred (block). Figures are the clean case.",
+  "description": "Trap (promoted mistake gst.mistake-itc-time-limit): 01-clean-tally-csv with Sunrise Steel bill SS/1001 dated 15-03-2025 (FY 2024-25) in the purchase register and the GSTR-2B. The s.16(4) deadline for that bill was 30-11-2025, so claiming it in October 2026 is time-barred (block). Figures are the clean case. ITC held back 0: no purchase ledger the model answered insufficient_evidence on.",
   "category": "trap",
   "job": {
     "fy": "2026-27",
@@ -19,6 +19,7 @@
     "outwardSgstPaise": 1080000,
     "itcAvailablePaise": 1710000,
     "itcNetPaise": 1710000,
+    "itcHeldBackPaise": 0,
     "cashIgstPaise": 720000,
     "cashCgstPaise": 315000,
     "cashSgstPaise": 315000,

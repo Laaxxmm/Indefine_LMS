@@ -2,13 +2,14 @@
 // partner. Two homes:
 //
 //   1. GST_CONFIG (this file): values the deterministic computation needs (B2CL threshold, s.50
-//      interest, late fee, due days, RCM rates, reconciliation tolerance, rule 37 days). The
+//      interest, late fee, due days, RCM rates, reconciliation tolerance, rule 37 days, the s.34(2)
+//      credit-note time limit). The
 //      framework's compute(extracted, input) receives no SopPack, so these are module data.
 //      The default SopPack mirrors them in the params of rule `gst.pack-config`, and that rule
 //      BLOCKS approval when the active pack and this module disagree (a partner changed a rate
 //      in the pack without a code release, or the reverse), so the two can never drift silently.
 //   2. Rule params in the SopPack (rules.ts → GST_CHECKLIST): thresholds only checks use (HSN
-//      digits by AATO, e-invoice AATO, credit-note time limit, period-lock tolerance). A partner
+//      digits by AATO, e-invoice AATO, period-lock tolerance). A partner
 //      changes those by publishing a new pack version; no code release is needed.
 //
 // Amounts are integer paise; rates are basis points (1800 = 18%). Dates are "MM-DD" or day numbers.
@@ -82,6 +83,12 @@ export const GST_CONFIG = {
   /** Rule 37: ITC on an invoice unpaid for more than this many days from the invoice date is reversed. */
   rule37Days: 180,
   rcmRatesBps: Object.fromEntries(Object.entries(RCM_SERVICES).map(([k, v]) => [k, v.rateBps])) as Record<RcmService, number>,
+  /**
+   * s.34(2) as amended by Finance Act 2022: a credit note must be declared by 30 November after the
+   * end of the FY of the original supply. A later note does not reduce outward liability in the
+   * draft (owner-approved 2026-11-05; compute.ts). Also the default of rule gst.credit-note-time-limit.
+   */
+  creditNoteDeadlineMonthDay: "11-30",
 } as const;
 
 /**
@@ -100,8 +107,6 @@ export const GST_RULE_DEFAULTS = {
   ] as AatoSlab<{ minDigits: number; b2cOptional: boolean }>[],
   /** Notification 10/2023-CT: e-invoicing for AATO above ₹5 crore in any FY from 2017-18 (from 1 Aug 2023). */
   einvoiceAatoPaise: 5_00_00_000_00,
-  /** s.34(2) as amended by Finance Act 2022: credit note declared by 30 November after the end of the FY of the supply. */
-  creditNoteDeadlineMonthDay: "11-30",
   /** Previous period GSTR-1 vs GSTR-3B Table 3.1 liability: shortfall above this (per head) blocks. */
   periodLockTolerancePaise: 100,
   /** s.16(4) as amended: ITC of an FY can be taken up to 30 November of the next FY (mistake-promoted rule). */

@@ -1,5 +1,5 @@
 {
-  "description": "Trap: Diwali gift hampers given free to dealers booked under Sales Promotion with ITC (s.17(5)(h)); LLM rule cites the narration. Core 3B figures (hand): outward 1,00,000; CGST 9,000, SGST 9,000. ITC 5,400 + 5,400 + 1,800 + 1,800 (gift hampers) = 14,400; 4(B)(1) blocked s.17(5)(h) 3,600; net 10,800. Cash CGST 3,600, SGST 3,600 = 7,200; no expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee.",
+  "description": "Trap: Diwali gift hampers given free to dealers booked under Sales Promotion with ITC (s.17(5)(h)); LLM rule cites the narration. Core 3B figures (hand): outward 1,00,000; CGST 9,000, SGST 9,000. ITC 5,400 + 5,400 + 1,800 + 1,800 (gift hampers) = 14,400; 4(B)(1) blocked s.17(5)(h) 3,600; net 10,800. Cash CGST 3,600, SGST 3,600 = 7,200; no expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee. ITC held back 0: no purchase ledger the model answered insufficient_evidence on.",
   "category": "trap",
   "job": {
     "fy": "2026-27",
@@ -20,6 +20,7 @@
     "itcAvailablePaise": 1440000,
     "itcBlockedPaise": 360000,
     "itcNetPaise": 1080000,
+    "itcHeldBackPaise": 0,
     "cashCgstPaise": 360000,
     "cashSgstPaise": 360000,
     "cashTaxPaise": 720000,
