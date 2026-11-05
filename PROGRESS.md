@@ -1,6 +1,6 @@
 # PROGRESS — Indefine Firm OS
-Current phase: 9 · 10 · 11 · 12-prep (parallel) | Branch: firm-os/phase-0-inventory | Last green: 2026-11-06 00:20 IST
-Tests: unit+integration 2537/2537 (123 files; Firm OS coverage 99.7% lines / 97.4% branches) · e2e 4/4 (smoke, local, no DB) · accuracy (recorded mode, hardened harness): echo pass | GST pass (26) | ROC pass (24) | TAX pass (22) | BOOKS pass (22) | AUDIT pass (22) · ADR-008 guardrails enforced — audit round 2 data fixes merged; harness items with guardrails work
+Current phase: 9 · 10 · 11 · 12-prep (parallel) | Branch: firm-os/phase-0-inventory | Last green: 2026-11-06 01:30 IST
+Tests: unit+integration 2922/2922 (161 files; Firm OS coverage 99.7% lines / 97.4% branches) · e2e 4/4 (smoke, local, no DB) · accuracy (recorded mode, hardened harness): echo pass | GST pass (26) | ROC pass (24) | TAX pass (22) | BOOKS pass (22) | AUDIT pass (22) · ADR-008 guardrails enforced — audit round 2 data fixes merged; harness items with guardrails work
 Model mode: CLAUDE_ONLY + LOCAL_STUB(fail-closed) | Turia bridge: MANUAL (ADR-003)
 
 ## Phase checklist (✅ only when QA gate green)
@@ -14,14 +14,14 @@ Model mode: CLAUDE_ONLY + LOCAL_STUB(fail-closed) | Turia bridge: MANUAL (ADR-00
 - [ ] 7 Books Close + Audit Assist — both gates green in recorded mode (15 + 15 fixtures); independent audit pending; DB e2e Blocked
 - [ ] 8 Close loop — code complete, close-loop tests green; QA gate pending golden-path e2e (needs GST agent + staging DB); review-screen buttons in progress
 - [ ] 9 Daily Coach — merged; tests green; in-app delivery only (Teams/email Blocked: needs a bot/app permission); QA gate with Phase 12
-- [ ] 10 Client Comms drafts
+- [ ] 10 Client Comms drafts — merged; templates + tone lint + PII rules, scoped polish/translate tasks (14 in prompt lock), Outlook draft only (no send path anywhere — repo-scan test), engagement letters now create Outlook drafts, sendMailAsUser removed; Outlook drafts Blocked on Mail.ReadWrite consent
 - [ ] 11 Hardening
 - [ ] 12 Foolproof QA (STOP for human go-live)
-- [ ] 13 Plain-language errors (owner request) — wave B, after current merges. Include: GST messages print amounts ungrouped (₹10800.00) → formatInr; register roc/tax abstention rules in views.ts ABSTENTION_RULES so their insufficient_evidence questions show on the review screen
+- [ ] 13 Plain-language errors (owner request) — wave B, after current merges. Wave B also: wire requireModule/isModuleEnabled into layouts + dashboard nav (exact call sites in the workspace report), mount CommandPalette in app/layout, nav links to /focus /search /comms /coach /companion, companion provider → NextTaskView, coach rank → getNextTask, search draftLink → /comms, LMS DPDP gaps: /clients search must not match partial PAN or put PAN in the URL, /clients/[id] shows full PAN/phone/email to every active user (mask for non-management). Include: GST messages print amounts ungrouped (₹10800.00) → formatInr; register roc/tax abstention rules in views.ts ABSTENTION_RULES so their insufficient_evidence questions show on the review screen
 - [ ] 14 AI guardrails to industry standards — OWASP LLM Top 10 (2025) + NIST AI RMF (ADR-009)
-- [ ] 15 Search & retrieval · corrections with history · DPDP data-principal rights + breach register
-- [ ] 16 Admin workspace settings (modules per user/role) · focus mode · guided workspace
-- [ ] 17 Companion side-panel extension (read-only task steps beside any site)
+- [ ] 15 Search & retrieval (merged: RBAC-scoped providers, identifier lookup exact-only/masked/audited, POST-only for identifiers, /search + command palette) · corrections with history · DPDP rights + breach register (agent running)
+- [ ] 16 Admin workspace settings · focus mode · guided workspace — merged (module registry + role defaults, /admin/firm-os/workspace with change summary + audit, getNextTask + NextTaskView contract, /focus one-task page, /workspace/[jobId] split view); gating wiring in wave B
+- [ ] 17 Companion side-panel extension — merged (pairing tokens hashed, 90-day expiry, revoke by update; read-only GET next-task with CORS for the extension origin only; MV3 side panel with permissions sidePanel+storage, host LMS only, no content scripts; safety scan test); not yet tried in real Chrome
 - [ ] 2b Local open-weight wiring (WEEK 2)
 
 ## Current phase tasks
@@ -190,6 +190,7 @@ UI audit (owner request: every button, navigation, flow, breadcrumb) — merged 
 - Staging DATABASE_URL · map-legacy-folders report, /admin/firm-os/models view, DB e2e · provide Railway staging branch DB · 2026-11-05
 - **Partner verification of calendar defaults** · CA judgement · confirm: QRMP 3B 22nd/24th state groups vs current CBIC notification; AGM day-counting convention; ITR non-audit due date under Income-tax Act 2025 / Finance Act 2026 (kept 31 Jul); DIR-3 KYC frequency (kept annual 30 Sep); 2025-Act form names for TDS/advance tax · 2026-11-05
 - **Partner sign-off on onboarding catalog** · CA judgement · review JOB_CATALOG per entity type (src/lib/agents/onboarding/planner.ts) and PAN 4th-char rule per entity (validators.ts); calendar rules missing for Books close, Audit, Engagement letter, LLP Form 11/8; AGM date not captured at onboarding so AOC-4/MGT-7/ADT-1 stay pending · 2026-11-05
+- **Mail.ReadWrite consent** · comms "Open in Outlook draft" and engagement-letter drafts return a plain "connect your mailbox" message until then · Entra admin adds delegated Mail.ReadWrite to the sign-in app and grants consent; staff reconnect at /connect?mail=1 · 2026-11-06
 - **Teams/email delivery for the Daily Coach** · no general staff channel exists (the work-tracker lead token is a two-person chat) and mail-as-user would be a send path · register a Teams bot/app with activity-feed (TeamsActivity.Send) or chat-send permission + admin consent · 2026-11-06
 - **Saturday working?** · coach + planner treat Sat/Sun as non-working (DEFAULT_CALENDAR.weekendDays) · if the firm works Saturdays, set weekendDays to Sunday only · 2026-11-06
 - **Partner verification — GST** (src/lib/agents/gst/config.ts GST_VERIFY_NOTES): B2CL > ₹1,00,000 (N 12/2024); s.50(1) 18% on cash portion; 3B late fee ₹50/day (nil ₹20) + AATO caps (N 19/2021); QRMP 22nd/24th groups (N 82/2020); 2B tolerance ₹1 (firm SOP); rule 37 180 days proportional; RCM list + rates (legal, GTA 5%, security, director, sponsorship, unregistered commercial rent N 09/2024-R); HSN 4/6 digits (N 78/2020); e-invoice > ₹5 cr (N 10/2023); s.34(2) and s.16(4) 30 Nov; 17(5) categories; set-off order per s.49/49A/rule 88A/Circular 98 · 2026-11-05
@@ -264,3 +265,5 @@ UI audit (owner request: every button, navigation, flow, breadcrumb) — merged 
 - 23:45 · decisions · Merged owner-decision fixes: GST time-barred credit notes excluded from draft figures, ITC on abstained bills held back (itcHeldBackPaise), books.prior-tb-balanced (warn), Open questions card on the review screen · 2411/2411 · gst 26, books 22 pass
 - 00:10 · 9 · Merged Daily Coach (ranking, morning board, T−2h/T−30m reminders, escalation once/day, break nudge behind FIRM_OS_BREAK_NUDGE with no stored data when off/opted out, weekly summary private to person + manager, /coach + dashboard card, cron workflow); reconciler same-day dedupe edge + break-event retention sent to the hardening agent · green
 - 00:20 · all · Full-suite timeouts under heavy parallel load (8 agents on a 6-core PC) — 4 tests, all timeouts, none assertion failures; global testTimeout 20 s (repo scans, harness runs) · 2537/2537 · all six accuracy gates pass
+- 01:10 · 10 · Merged Client Comms drafts + engagement-letter Outlook draft change; cleared stale .next/types for the removed send route · 2645/2645
+- 01:25 · 16/15/17 · Merged workspace settings + focus + guided workspace, search & retrieval, companion side panel; guard + coverage scope extended · 2922/2922 · all guards OK
