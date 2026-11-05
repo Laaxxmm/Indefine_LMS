@@ -6,9 +6,10 @@
 // Every step writes an AuditEvent on entity "PrivacyRequest" (actions: create, locate,
 // verify-identity, complete, reject, nominate, export, ...). Identifiers typed by staff are never
 // stored raw: the register keeps a keyed hash and a masked label, and free text is scrubbed.
-// AuditEvent rows are written directly; switch to logAudit() (src/lib/audit) when it merges.
+// AuditEvent rows are written through logAudit() (src/lib/audit/log.ts).
 import type { Prisma } from "@prisma/client";
 import { isActive, type SessionUser } from "@/lib/access";
+import { logAudit } from "@/lib/audit/log";
 import { formatDate, formatDateTimeIst } from "@/lib/agents/core/format";
 import { maskName, scrubFreeText } from "@/lib/corrections/mask";
 import { Refusal, fail, ok, type ServiceResult } from "@/lib/corrections/result";
@@ -45,7 +46,7 @@ export type Tx = Parameters<Parameters<PrivacyDb["$transaction"]>[0]>[0];
 type AuditDb = Pick<PrivacyDb, "auditEvent">;
 
 export async function writeAudit(db: AuditDb | Tx, e: { actorId: string; action: string; entity: string; entityId: string; meta?: Prisma.InputJsonObject }): Promise<void> {
-  await db.auditEvent.create({ data: { actorId: e.actorId, action: e.action, entity: e.entity, entityId: e.entityId, meta: e.meta ?? {} }, select: { id: true } });
+  await logAudit(db, { actorId: e.actorId, action: e.action, entity: e.entity, entityId: e.entityId, meta: e.meta ?? {} });
 }
 
 /** Signed in, active, admin or partner — else the refusal to return. */

@@ -9,6 +9,7 @@
 //
 // Every function returns the same RunView so the panel renders one shape. All I/O is injected.
 import type { TuriaMode } from "@/lib/integrations/turia/adapter";
+import { auditDbFromSink, logAudit } from "@/lib/audit/log";
 import type { TuriaChecklist } from "@/lib/integrations/turia/adapter";
 import type { ManualBridge, TuriaSyncRecord } from "@/lib/integrations/turia/manual-bridge";
 import { applyAnswers, clarify, type Answers, type Question } from "./clarify";
@@ -183,7 +184,7 @@ export function createOnboardingService(deps: OnboardingDeps) {
     if (!run.plan) throw new OnboardingError("invalid", "Build the plan first");
     if (run.status === "DRAFT") {
       await deps.runs.update(runId, { status: "CONFIRMED", steps: initialSteps() });
-      await deps.audit({ actorId, action: "onboarding.confirm", entity: "OnboardingRun", entityId: runId, meta: { clientCode: run.plan.clientCode } });
+      await logAudit(auditDbFromSink(deps), { actorId, action: "onboarding.confirm", entity: "OnboardingRun", entityId: runId, meta: { clientCode: run.plan.clientCode } });
     }
     return view(await deps.saga.execute(runId, actorId));
   }
@@ -200,7 +201,7 @@ export function createOnboardingService(deps: OnboardingDeps) {
     if (!sync || !run.firmClientId || sync.firmClientId !== run.firmClientId) throw new OnboardingError("not-found", "That Turia checklist is not part of this onboarding");
     const rec = await deps.manual.confirm(input.syncId, { turiaRef: input.turiaRef, minutes: input.minutes ?? null, confirmedBy: actorId });
     if (rec.operation === "createClient") await deps.setTuriaClientRef(run.firmClientId, rec.turiaRef as string);
-    await deps.audit({ actorId, action: "turia.confirm", entity: "TuriaSync", entityId: rec.id, meta: { operation: rec.operation, runId } });
+    await logAudit(auditDbFromSink(deps), { actorId, action: "turia.confirm", entity: "TuriaSync", entityId: rec.id, meta: { operation: rec.operation, runId } });
     const settled = await deps.saga.settleWaiting(runId, async (id) => {
       const s = await deps.getTuriaSync(id);
       return s?.status === "CONFIRMED" || s?.status === "CLOSED";

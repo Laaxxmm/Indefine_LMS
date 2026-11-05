@@ -8,11 +8,12 @@
 //   verify    look up by hash, then a constant-time compare of the stored and computed hashes;
 //             revoked or expired → refused; every accepted use updates lastUsedAt
 //
-// Every create and revoke writes an AuditEvent directly (entity CompanionToken). The audit meta
+// Every create and revoke writes an AuditEvent through logAudit (entity CompanionToken). The audit meta
 // carries the label and expiry only — never the token or its hash.
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 import { formatDate, formatDateTimeIst } from "@/lib/agents/core/format";
+import { logAudit } from "@/lib/audit/log";
 import { DAY_MS } from "@/lib/ist";
 import { hasCompanionAccess, mayRevokePairing, type CompanionAccessDb, type CompanionUser } from "./access";
 import { COMPANION_LABEL_MAX, COMPANION_MAX_ACTIVE_TOKENS, COMPANION_TOKEN_BYTES, COMPANION_TOKEN_PREFIX, COMPANION_TOKEN_TTL_DAYS } from "./config";
@@ -132,14 +133,12 @@ export async function createPairing(
     const mine: PairingRow[] = await tx.companionToken.findMany({ where: { userId: user.id, revokedAt: null }, select: ROW_SELECT });
     if (mine.filter((r) => tokenStatus(r, now) === "active").length >= COMPANION_MAX_ACTIVE_TOKENS) throw new CompanionError("limit", MSG.tooManyActive);
     const created: PairingRow = await tx.companionToken.create({ data: { userId: user.id, tokenHash, label: clean, createdAt: now }, select: ROW_SELECT });
-    await tx.auditEvent.create({
-      data: {
-        actorId: user.id,
-        action: "create",
-        entity: "CompanionToken",
-        entityId: created.id,
-        meta: { label: clean, expiresAt: tokenExpiresAt(created.createdAt).toISOString(), scope: "read:next-task" },
-      },
+    await logAudit(tx, {
+      actorId: user.id,
+      action: "create",
+      entity: "CompanionToken",
+      entityId: created.id,
+      meta: { label: clean, expiresAt: tokenExpiresAt(created.createdAt).toISOString(), scope: "read:next-task" },
     });
     return created;
   });
@@ -158,7 +157,7 @@ export async function revokePairing(db: CompanionTokenDb, user: CompanionUser, p
     if (!row || !mayRevokePairing(user, row)) throw new CompanionError("not-found", MSG.pairingNotFound);
     if (row.revokedAt) return { revoked: false };
     await tx.companionToken.update({ where: { id: row.id }, data: { revokedAt: now } });
-    await tx.auditEvent.create({ data: { actorId: user.id, action: "revoke", entity: "CompanionToken", entityId: row.id, meta: { label: row.label } } });
+    await logAudit(tx, { actorId: user.id, action: "revoke", entity: "CompanionToken", entityId: row.id, meta: { label: row.label } });
     return { revoked: true };
   });
 }

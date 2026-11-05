@@ -24,6 +24,7 @@
 import { createHash } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import type { SessionUser } from "@/lib/access";
+import { logAudit } from "@/lib/audit/log";
 import { INACTIVE_MESSAGE, SIGNED_OUT_MESSAGE, canFindClients, canFindOnboarding, canSearch } from "./access";
 import type { SearchDb, SearchDeps } from "./db";
 import { maskGstin, maskIdentifier } from "./mask";
@@ -144,14 +145,13 @@ export function identifierTypes(user: SessionUser, finders: readonly IdentifierF
 }
 
 async function audit(db: SearchDb, user: SearchUser, id: NormalisedIdentifier, meta: { entityTypes: SearchType[]; resultCount: number; outcome: "ok" | "rate-limited"; purpose: string }) {
-  const data: Prisma.AuditEventUncheckedCreateInput = {
+  await logAudit(db, {
     actorId: user.id,
     action: AUDIT_ACTION,
     entity: AUDIT_ENTITY,
     entityId: null,
     meta: { identifierKind: id.kind, queryHash: identifierHash(id), ...meta },
-  };
-  await db.auditEvent.create({ data, select: { id: true } });
+  });
 }
 
 /**

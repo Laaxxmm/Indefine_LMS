@@ -10,6 +10,7 @@ import { z } from "zod";
 import type { SessionUser } from "@/lib/access";
 import { canSeeAllRuns, canUseAgents, canViewJob, jobScopeWhere } from "@/lib/agents/access";
 import { canViewCommsDraft, commsDraftScopeWhere } from "@/lib/rbac/policy";
+import { logAudit } from "@/lib/audit/log";
 import { formatDateTimeIst } from "@/lib/agents/core/format";
 import { addDays, istDayKey, istDayStart, parseDayKey } from "@/lib/ist";
 import type { OutlookDraft, OutlookDraftInput } from "@/lib/integrations/outlook/drafts";
@@ -283,7 +284,7 @@ export async function createDraft(db: CommsDb, user: SessionUser, raw: unknown, 
     data: { firmClientId: client.id, jobTaskId: job?.id ?? null, kind: body.kind, language: result.language, subject: result.stored.subject, body: result.stored.body, createdById: user.id },
     select: { id: true },
   });
-  const meta: Prisma.InputJsonValue = {
+  const meta: Record<string, unknown> = {
     kind: body.kind,
     language: result.language,
     requestedLanguage: result.requestedLanguage,
@@ -299,7 +300,7 @@ export async function createDraft(db: CommsDb, user: SessionUser, raw: unknown, 
     modelRunId,
     modelCalls: result.stats.modelCalls,
   };
-  await db.auditEvent.create({ data: { actorId: user.id, action: COMMS_AUDIT.create, entity: "CommsDraft", entityId: draft.id, meta } });
+  await logAudit(db, { actorId: user.id, action: COMMS_AUDIT.create, entity: "CommsDraft", entityId: draft.id, meta });
   return ok({ id: draft.id, href: `/comms/${draft.id}` });
 }
 
@@ -440,7 +441,7 @@ export async function openInOutlook(
     const to = client && isEmail(client.client.contactEmail) ? [client.client.contactEmail.trim()] : [];
     const created = await deps.outlook.create(token, { to, subject: d.subject, body: d.body, bodyType: "Text" });
     await db.commsDraft.update({ where: { id: d.id }, data: { outlookDraftId: created.id } });
-    await db.auditEvent.create({ data: { actorId: user!.id, action: COMMS_AUDIT.outlook, entity: "CommsDraft", entityId: d.id, meta: { created: true, recipients: to.length } } });
+    await logAudit(db, { actorId: user!.id, action: COMMS_AUDIT.outlook, entity: "CommsDraft", entityId: d.id, meta: { created: true, recipients: to.length } });
     return ok({ webLink: created.webLink, created: true });
   } catch (e) {
     const status = (e as { status?: number }).status;

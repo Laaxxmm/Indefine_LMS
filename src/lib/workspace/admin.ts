@@ -6,6 +6,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import type { SessionUser } from "@/lib/access";
 import { canManageWorkspace, firmRole, type FirmRole } from "@/lib/rbac/policy";
 import { formatDateTimeIst } from "@/lib/agents/core/format";
+import { logAudit } from "@/lib/audit/log";
 import { canAccessModule } from "./access";
 import { followsRole, roleDefaultChanges, userSettingChanges, type RoleDefaultInput, type UserSettingInput } from "./changes";
 import { ALWAYS_ON, FIRM_ROLES, MODULE_KEYS, ROLE_LABELS, isFirmRole, type ModuleKey } from "./registry";
@@ -190,9 +191,7 @@ export async function saveRoleDefault(actor: SessionUser, role: string, input: R
       create: { role, modules: json(after.modules), focusMode: after.focusMode, updatedById: actor.id },
       update: { modules: json(after.modules), focusMode: after.focusMode, updatedById: actor.id },
     });
-    await tx.auditEvent.create({
-      data: { actorId: actor.id, action: "workspace-role-default", entity: "RoleWorkspaceDefault", entityId: role, meta: json({ before, after, changes, savedBefore: !!row }) },
-    });
+    await logAudit(tx, { actorId: actor.id, action: "workspace-role-default", entity: "RoleWorkspaceDefault", entityId: role, meta: { before, after, changes, savedBefore: !!row } });
   });
   return { ok: true, data: { changes } };
 }
@@ -219,9 +218,7 @@ export async function saveUserSetting(actor: SessionUser, userId: string, input:
   };
   await db.$transaction(async (tx) => {
     await tx.workspaceSetting.upsert({ where: { userId }, create: { userId, ...data }, update: data });
-    await tx.auditEvent.create({
-      data: { actorId: actor.id, action: "workspace-user-setting", entity: "WorkspaceSetting", entityId: userId, meta: json({ before, after, changes, role }) },
-    });
+    await logAudit(tx, { actorId: actor.id, action: "workspace-user-setting", entity: "WorkspaceSetting", entityId: userId, meta: { before, after, changes, role } });
   });
   return { ok: true, data: { changes } };
 }

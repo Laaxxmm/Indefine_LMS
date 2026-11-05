@@ -1,6 +1,7 @@
 // Prisma side of onboarding: the run store, the saga store, the validation lookups and the
 // calendar loader. Every write is create-if-missing or an update; nothing here removes a row.
 import { Prisma } from "@prisma/client";
+import { logAudit } from "@/lib/audit/log";
 import type { prisma } from "@/lib/prisma";
 import { CalendarPackSchema, DEFAULT_CALENDAR, parseCalendarPack, type CalendarPack } from "@/lib/agents/core";
 import { clientBodyZ } from "@/lib/clients/core";
@@ -211,7 +212,7 @@ export function prismaSagaStore(db: Db, now: () => Date = () => new Date()): Sag
       return u ? { id: u.id, name: u.name ?? u.email } : null;
     },
     async audit(event) {
-      await db.auditEvent.create({ data: { ...event, meta: event.meta ? json(event.meta) : undefined } });
+      await logAudit(db, event);
     },
   };
 }
