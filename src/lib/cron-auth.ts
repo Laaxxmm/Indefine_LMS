@@ -13,7 +13,7 @@ export function cronUnauthorized(req: NextRequest): NextResponse | null {
 /** Same check against any shared secret (e.g. a browser-extension relay token). */
 export function bearerUnauthorized(req: NextRequest, secret: string | undefined): NextResponse | null {
   const provided = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
-  if (!secret || !safeEqual(provided, secret)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!secret || !safeEqual(provided, secret)) return NextResponse.json({ error: "This address is for the firm's scheduler only, so nothing was run." }, { status: 401 });
   return null;
 }
 

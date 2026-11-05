@@ -24,7 +24,7 @@ describe("rate limiter with an unavailable store (PoC #8)", () => {
     expect(res).not.toBeNull();
     expect(res!.status).toBe(503);
     expect(res!.headers.get("Retry-After")).toBe("60");
-    expect((await res!.json()).error).toBe("The system is busy — try again in a minute.");
+    expect((await res!.json()).error).toBe("The system is busy. Wait a minute, then try again.");
     expect(err).toHaveBeenCalledWith(expect.stringContaining("P2024"));
     expect(err).not.toHaveBeenCalledWith(expect.stringContaining("request allowed"));
   });

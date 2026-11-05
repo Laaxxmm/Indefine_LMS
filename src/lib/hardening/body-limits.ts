@@ -86,12 +86,12 @@ export function checkBody(r: BodyRequest): BodyVerdict {
   const raw = r.contentLength?.trim() ?? "";
   if (raw === "") {
     const streamed = !!r.transferEncoding && r.transferEncoding.trim().toLowerCase() !== "identity";
-    if (streamed && !r.hasSession && !r.hasBearer) return { ok: false, status: 411, limit, message: "Send this request with a Content-Length header." };
+    if (streamed && !r.hasSession && !r.hasBearer) return { ok: false, status: 411, limit, message: "This request could not be read. Send it again from the Firm OS page." };
     return { ok: true, limit };
   }
-  if (!/^\d{1,15}$/.test(raw)) return { ok: false, status: 400, limit, message: "The Content-Length header is not a number." };
+  if (!/^\d{1,15}$/.test(raw)) return { ok: false, status: 400, limit, message: "This request could not be read. Send it again from the Firm OS page." };
   const size = Number(raw);
-  if (size > limit) return { ok: false, status: 413, limit, message: `This request is too large (${mb(size)}). The limit here is ${mb(limit)}.` };
+  if (size > limit) return { ok: false, status: 413, limit, message: `This is too large to send (${mb(size)}). The limit here is ${mb(limit)} — send a smaller file or fewer files at a time.` };
   return { ok: true, limit };
 }
 

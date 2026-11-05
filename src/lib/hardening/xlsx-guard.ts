@@ -108,7 +108,7 @@ function centralDirectory(buf: Buffer, limits: XlsxLimits): Entry[] {
   const total = buf.readUInt16LE(eocd + 10);
   const cdSize = buf.readUInt32LE(eocd + 12);
   const cdOffset = buf.readUInt32LE(eocd + 16);
-  if (total === 0xffff || cdSize === 0xffffffff || cdOffset === 0xffffffff) throw new XlsxLimitError("zip", "This spreadsheet uses a ZIP64 package, which is not accepted. Save it again from Excel and re-upload.");
+  if (total === 0xffff || cdSize === 0xffffffff || cdOffset === 0xffffffff) throw new XlsxLimitError("zip", "This spreadsheet is saved in an extra-large file format that is not accepted. Save it again from Excel and re-upload.");
   if (total > limits.maxEntries) throw new XlsxLimitError("entries", `This spreadsheet has ${fmtInt(total)} parts inside it; the limit is ${fmtInt(limits.maxEntries)}. ${SPLIT}`);
   if (cdOffset + cdSize > buf.length) throw damaged();
   const out: Entry[] = [];
