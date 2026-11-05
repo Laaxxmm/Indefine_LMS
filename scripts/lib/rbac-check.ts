@@ -52,6 +52,7 @@ export const EXPECTED_POLICIES: ExpectedPolicy[] = [
   { route: "/api/firm-os/onboard/start", method: "POST", policies: ["canOnboard"], why: "partners, managers, admins" },
   { route: "/api/firm-os/onboard/turia-confirm", method: "POST", policies: ["canOnboard"], why: "partners, managers, admins" },
   { route: "/api/cron/firm-os/close-loop", method: "GET", policies: ["cronUnauthorized"], why: "system cron: CRON_SECRET" },
+  { route: "/api/cron/firm-os/retention", method: "GET", policies: ["cronUnauthorized"], why: "system cron: CRON_SECRET" },
 ];
 
 export type RbacResult = {
