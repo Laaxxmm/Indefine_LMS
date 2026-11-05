@@ -45,7 +45,7 @@ describe("/dashboard", () => {
   });
 
   it("renders for an active employee with no training yet", async () => {
-    const html = await renderHtml(await Dashboard());
+    const html = await renderHtml(await Dashboard({}));
     expect(html).toContain("Smoke"); // greets the user by name
     expect(html).toContain('id="courses"');
     // Visiting the dashboard records today's activity before computing the streak.
@@ -54,13 +54,13 @@ describe("/dashboard", () => {
 
   it("renders for an admin", async () => {
     signedIn(activeSession({ role: "ADMIN" }));
-    const html = await renderHtml(await Dashboard());
+    const html = await renderHtml(await Dashboard({}));
     expect(html.length).toBeGreaterThan(1000);
   });
 
   it("redirects a signed-out visitor to sign-in", async () => {
     signedIn(null);
-    expect(await redirectTarget(() => Dashboard())).toBe("/");
+    expect(await redirectTarget(() => Dashboard({}))).toBe("/");
   });
 
   describe("Firm OS switched off (the default)", () => {
@@ -167,7 +167,8 @@ describe("/dashboard", () => {
       expect(html).toContain(">Your next task</p>");
       expect(html).toContain("Everything is up to date"); // nothing is assigned in the empty database
       expect(html).toContain("Nothing is waiting for you right now.");
-      expect(html).toMatch(/<a [^>]*href="\/focus"[^>]*>Open focus/);
+      expect(html).toMatch(/<a [^>]*href="\/focus"[^>]*>Open Next task/);
+      expect(html.match(/<h1\b/g)).toHaveLength(1); // the card carries the page's one h1; the greeting steps down
       const card = html.indexOf('aria-labelledby="next-task-heading"');
       const details = html.indexOf("<details");
       expect(card).toBeGreaterThan(-1);

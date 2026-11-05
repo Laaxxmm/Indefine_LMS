@@ -16,7 +16,7 @@ export default async function SearchLayout({ children }: { children: React.React
 
   return (
     <div className="min-h-screen">
-      <FirmOsHeader user={session.user} home="/search" />
+      <FirmOsHeader user={session.user} home="/search" width="max-w-[1180px]" />
       <main className="max-w-[1180px] mx-auto px-5 sm:px-8 py-8">{children}</main>
     </div>
   );

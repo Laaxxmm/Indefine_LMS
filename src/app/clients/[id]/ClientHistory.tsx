@@ -9,11 +9,12 @@ import { firmOsEnabled } from "@/lib/workspace/flag";
 
 export async function ClientHistory({ clientId }: { clientId: string }) {
   if (!firmOsEnabled()) return null;
-  const firm = isClPathsEnabled() ? await prisma.firmClient.findUnique({ where: { lmsClientId: clientId }, select: { id: true } }) : null;
+  const firm = isClPathsEnabled() ? await prisma.firmClient.findUnique({ where: { lmsClientId: clientId }, select: { id: true, clientCode: true } }) : null;
+  // Two records side by side are named as on the privacy request page; one alone is just "History".
   return (
     <div className="flex flex-col gap-2 mb-5">
-      <HistoryLink entity="Client" id={clientId} />
-      {firm && <HistoryLink entity="FirmClient" id={firm.id} label="Firm OS record history" />}
+      <HistoryLink entity="Client" id={clientId} label={firm ? "Client master: history and corrections" : undefined} />
+      {firm && <HistoryLink entity="FirmClient" id={firm.id} label={`Firm OS client ${firm.clientCode}: history and corrections`} />}
     </div>
   );
 }

@@ -1,7 +1,8 @@
 "use client";
 
-// Header nav link that marks the section the person is in: aria-current="page" plus the active
-// style the dashboard and admin sidebar use (brand-50 fill, brand-600 text). `exact` for a section
+// Header nav link that marks the section the person is in, with the active style the dashboard and
+// admin sidebar use (brand-50 fill, brand-600 text): aria-current="page" on the link's own page,
+// aria-current="true" on a page below it (so a second row can mark the page itself). `exact` for a section
 // root whose children have nav links of their own (e.g. /agents vs /agents/echo); `also` for other
 // paths that belong to the section (the guided workspace under Next task); `except` for paths under
 // it that are another link's section (Spot checks under Agents).
@@ -36,9 +37,11 @@ export function NavLink({
   except?: readonly string[];
   children: React.ReactNode;
 }) {
-  const active = isCurrentSection(usePathname(), href, exact, { also, except });
+  const pathname = usePathname();
+  const active = isCurrentSection(pathname, href, exact, { also, except });
+  const page = active && ((pathname ?? "").replace(/\/+$/, "") || "/") === href;
   return (
-    <Link href={href} aria-current={active ? "page" : undefined} className={active ? `${className} ${navActive}` : className}>
+    <Link href={href} aria-current={active ? (page ? "page" : "true") : undefined} className={active ? `${className} ${navActive}` : className}>
       {children}
     </Link>
   );

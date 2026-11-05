@@ -44,7 +44,7 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
       </h1>
       <p className="text-ink-mute text-[13.5px] mt-1.5">{d.job ? d.job.label : "General message (no job)"}</p>
       {/* The draft's correction history, and a fix for a wrong entry. */}
-      <div className="mt-3">
+      <div className="mt-5">
         <HistoryLink entity="CommsDraft" id={d.id} />
       </div>
 

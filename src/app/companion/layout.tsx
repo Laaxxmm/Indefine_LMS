@@ -15,7 +15,7 @@ export default async function CompanionLayout({ children }: { children: React.Re
 
   return (
     <div className="min-h-screen">
-      <FirmOsHeader user={session.user} home="/companion" />
+      <FirmOsHeader user={session.user} home="/companion" width="max-w-[1180px]" />
       <main className="max-w-[1180px] mx-auto px-5 sm:px-8 py-8">{children}</main>
     </div>
   );

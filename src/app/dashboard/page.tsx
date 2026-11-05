@@ -45,6 +45,7 @@ import {
   Radio,
 } from "lucide-react";
 import { isAdmin } from "@/lib/access";
+import { focusRing } from "@/app/agents/parts";
 
 export const dynamic = "force-dynamic";
 
@@ -102,7 +103,6 @@ const TRACK_COLOR: Record<string, string> = {
 
 const COURSE_ACCENTS = ["#5B4BE6", "#17B978", "#FF6B4A", "#0EA5E9", "#8B5CF6"];
 
-const focusRing = "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2";
 const navLink = `shrink-0 whitespace-nowrap px-4 py-2 rounded-full text-ink-mute font-semibold text-[13.5px] hover:text-ink transition ${focusRing}`;
 
 // Everyone's landing page, never gated itself. What it shows follows the person's workspace
@@ -110,7 +110,7 @@ const navLink = `shrink-0 whitespace-nowrap px-4 py-2 rounded-full text-ink-mute
 // a link or section appears only when its module is on, so nothing invites a dead end. In focus
 // mode (an admin's choice per role or person) the next task is the one card on the page and the
 // rest waits behind "Show everything". ?module-off=<key> says why a module sent the person here.
-export default async function Dashboard({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> } = {}) {
+export default async function Dashboard({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const session = await auth();
   if (!session?.user) redirect("/");
   const userId = session.user.id;
@@ -122,6 +122,8 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
   const growth = on("leaderboard");
   // Focus landing needs the next-task page, which belongs to the Agents module.
   const nextTask = focusMode && on("agents") ? await getNextTaskView(session.user, { db: prisma as unknown as FirmDb }) : null;
+  // One h1 per page: in focus mode the next task's card carries it and the greeting steps down.
+  const Greeting = nextTask ? "p" : "h1";
 
   await ensureDefaultCycle();
 
@@ -372,9 +374,9 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
         <NeoTrackChip />
         {/* Without Learning and Trajectory there is no streak or level to show: just the greeting. */}
         {!learning && !growth && (
-          <h1 className="font-display font-extrabold text-3xl tracking-[-0.03em]">
+          <Greeting className="font-display font-extrabold text-3xl tracking-[-0.03em]">
             {greeting()}, {firstNameStr}
-          </h1>
+          </Greeting>
         )}
         {/* Hero + stat chips */}
         {(learning || growth) && (
@@ -389,9 +391,9 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
             <div className="absolute right-[-30px] top-[-30px] text-[150px] opacity-[0.14] animate-pulse-soft select-none">🚀</div>
             <div className="relative">
               <p className="text-sm font-semibold opacity-85">{greeting()},</p>
-              <h1 className="font-display font-extrabold text-4xl sm:text-[44px] tracking-[-0.03em] leading-none my-1.5">
+              <Greeting className="font-display font-extrabold text-4xl sm:text-[44px] tracking-[-0.03em] leading-none my-1.5">
                 {firstNameStr} 👋
-              </h1>
+              </Greeting>
               <p className="text-[15px] opacity-90 max-w-[400px]">
                 {streak.activeToday
                   ? <>You&apos;re on a <b>{streak.current}-day streak</b> — keep the fire alive.</>
@@ -894,7 +896,7 @@ function NextTaskLanding({ view }: { view: NextTaskView }) {
         href="/focus"
         className={`mt-5 inline-flex items-center gap-2 font-bold text-[15px] text-white bg-brand-500 hover:bg-brand-600 transition px-6 py-3.5 rounded-[14px] shadow-pop ${focusRing}`}
       >
-        {task ? "Open your next task" : "Open focus"} <ArrowRight className="w-4 h-4" aria-hidden="true" />
+        {task ? "Open your next task" : "Open Next task"} <ArrowRight className="w-4 h-4" aria-hidden="true" />
       </Link>
       {task && view.remaining > 0 && <p className="text-[12.5px] text-ink-mute mt-3">{view.remaining} more waiting after this one.</p>}
     </section>

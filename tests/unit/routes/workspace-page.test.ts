@@ -63,12 +63,12 @@ afterEach(() => {
 });
 
 describe("layout", () => {
-  it("the Firm OS header (Next task, Agents, a way back); same access as /agents; Agents module required", async () => {
+  it("the Firm OS header (Next task, the runs list, a way back); same access as /agents; Agents module required", async () => {
     as(user("priya"));
     const html = await renderHtml(await Layout({ children: null }));
     expect(html).toContain('aria-label="Firm OS"');
     expect(html).toContain(">Next task</a>");
-    expect(html).toContain(">Agents</a>");
+    expect(html).toContain(">My agent runs</a>");
     expect(html).toContain('href="/dashboard"');
     as(null);
     expect(await redirectTarget(() => Layout({ children: null }))).toBe("/");

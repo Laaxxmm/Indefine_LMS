@@ -7,6 +7,8 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import type { SessionUser } from "@/lib/access";
+import { canSeeAllRuns } from "@/lib/agents/access";
+import { runsListLabel } from "@/app/agents/parts";
 import { LogoMark } from "@/components/Logo";
 import { NavLink } from "@/components/NavLink";
 import { SearchButton } from "@/components/SearchButton";
@@ -18,13 +20,16 @@ import { effectiveModules } from "@/lib/workspace/settings";
 const focusRing = "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2";
 export const firmOsLink = `shrink-0 whitespace-nowrap px-3.5 py-2 rounded-full text-sm font-semibold text-ink-mute hover:text-ink hover:bg-muted transition ${focusRing}`;
 
-/** `home`: where the logo goes (the section's own start page). */
-export async function FirmOsHeader({ user, home }: { user: SessionUser; home: string }) {
+/**
+ * `home`: where the logo goes (the section's own start page). `width`: the page's content width, so
+ * the logo and the nav line up with the content edges.
+ */
+export async function FirmOsHeader({ user, home, width = "max-w-[1280px]" }: { user: SessionUser; home: string; width?: string }) {
   const [modules, companion] = await Promise.all([effectiveModules(user), companionVisibleFor(user)]);
-  const nav = firmOsNav(user, modules, companion);
+  const nav = firmOsNav(user, modules, { companion, agentsLabel: runsListLabel(canSeeAllRuns(user)) });
   return (
     <header className="border-b border-border bg-card/80 backdrop-blur sticky top-0 z-30">
-      <div className="max-w-[1280px] mx-auto px-5 sm:px-8 py-3 min-h-16 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+      <div className={`${width} mx-auto px-5 sm:px-8 py-3 min-h-16 flex flex-wrap items-center justify-between gap-x-4 gap-y-2`}>
         <Link href={home} className={`flex items-center gap-2.5 rounded-lg shrink-0 ${focusRing}`}>
           <LogoMark size={34} />
           <div className="leading-tight">

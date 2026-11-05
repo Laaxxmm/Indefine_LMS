@@ -7,8 +7,9 @@ import { requireModule } from "@/lib/workspace/guard";
 export const dynamic = "force-dynamic";
 
 // Focus mode: one task at a time. The same calm Firm OS header as every Firm OS page (Next task is
-// the current section), then one narrow column with generous whitespace so nothing competes with
-// the task. Same access as /agents, and only while the Agents module is on.
+// the current section), as narrow as the one column below it so the edges line up; generous
+// whitespace so nothing competes with the task. Same access as /agents, and only while the Agents
+// module is on.
 export default async function FocusLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
   if (!session?.user) redirect("/");
@@ -17,7 +18,7 @@ export default async function FocusLayout({ children }: { children: React.ReactN
 
   return (
     <div className="min-h-screen">
-      <FirmOsHeader user={session.user} home="/focus" />
+      <FirmOsHeader user={session.user} home="/focus" width="max-w-3xl" />
       <main className="max-w-3xl mx-auto px-5 sm:px-8 py-8">{children}</main>
     </div>
   );

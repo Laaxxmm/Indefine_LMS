@@ -135,9 +135,9 @@ export function workspaceFor(user: SessionUser, db?: WorkspaceDb): Promise<Resol
   const key = readKey(user);
   let read = reads.get(key);
   if (!read) {
+    // A failed read fails every caller in this request alike; the next request reads again.
     read = loadWorkspace(user);
     reads.set(key, read);
-    read.catch(() => reads.delete(key)); // a failed read is not remembered
   }
   return read;
 }

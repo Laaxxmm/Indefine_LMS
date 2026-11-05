@@ -212,7 +212,8 @@ export default async function WorkspaceSettingsPage({ searchParams }: { searchPa
       {!firmOsEnabled() && (
         <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-[13px] mb-6 max-w-3xl">
           Firm OS is switched off for the whole firm, so nobody sees a Firm OS module yet and these settings are not used. Set the role defaults first
-          (leave the Firm OS modules off for a pilot), then ask IT to set FIRM_OS_ENABLED to 1. From then on these settings decide who sees what.
+          (leave the Firm OS modules off for a pilot), then ask IT to switch Firm OS on in the server settings. From then on these settings decide who
+          sees what.
         </p>
       )}
 

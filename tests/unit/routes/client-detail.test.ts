@@ -139,20 +139,21 @@ describe("/clients/[id] correction history (a Firm OS service)", () => {
     vi.stubEnv("FIRM_OS_CL_PATHS", "1");
     const html = await render();
     expect(html).not.toMatch(HISTORY);
-    expect(html).not.toContain("Firm OS record history");
+    expect(html).not.toContain("history and corrections");
     expect(prismaCalls.filter((c) => c.model === "firmClient")).toHaveLength(1); // the page's own lookup only
   });
 
-  it("Firm OS on: the client's History link near the header; with a linked FirmClient also its Firm OS record history", async () => {
+  it("Firm OS on: the client's History link near the header; with a linked FirmClient both, named as on the privacy page", async () => {
     vi.stubEnv("FIRM_OS_ENABLED", "1");
     const plain = await render();
     expect(plain).toMatch(HISTORY);
-    expect(plain).not.toContain("Firm OS record history"); // FIRM_OS_CL_PATHS off: no FirmClient to show or read
+    expect(plain).not.toContain("Firm OS client"); // FIRM_OS_CL_PATHS off: no FirmClient to show or read
     expect(plain.indexOf("History</button>")).toBeLessThan(plain.indexOf("<dl"));
     expect(prismaCalls.some((c) => c.model === "firmClient")).toBe(false);
     vi.stubEnv("FIRM_OS_CL_PATHS", "1");
     const linked = await render();
-    expect(linked).toContain("Firm OS record history</button>");
+    expect(linked).toContain("Client master: history and corrections</button>");
+    expect(linked).toContain("Firm OS client ACME01: history and corrections</button>");
   });
 });
 

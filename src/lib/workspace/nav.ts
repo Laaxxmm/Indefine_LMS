@@ -49,18 +49,20 @@ export type FirmOsNav = { links: NavItem[]; search: boolean };
  * The one Firm OS header (every Firm OS page): a short, fixed set of places, each only when its
  * module is on and the role may use it, then Search (the command palette) and the way back to the
  * dashboard. `companion`: may the person pair the companion (guard.ts companionVisibleFor).
+ * `agentsLabel`: the /agents page's own title ("My agent runs" or "Agent runs", runsListLabel), which
+ * its back links use too.
  */
-export function firmOsNav(user: SessionUser, modules: readonly ModuleKey[], companion: boolean): FirmOsNav {
+export function firmOsNav(user: SessionUser, modules: readonly ModuleKey[], opts: { companion: boolean; agentsLabel: string }): FirmOsNav {
   const on = has(modules);
   const links: NavItem[] = [];
   if (on("agents")) {
     links.push({ href: "/focus", label: "Next task", also: ["/workspace"] });
-    links.push({ href: "/agents", label: "Agents", except: ["/agents/spot-checks"] });
+    links.push({ href: "/agents", label: opts.agentsLabel, except: ["/agents/spot-checks"] });
   }
   if (on("coach")) links.push({ href: "/coach", label: "My day" });
   if (on("comms")) links.push({ href: "/comms", label: "Client messages" });
   if (on("onboard")) links.push({ href: "/onboard", label: "Firm OS onboarding" });
   if (on("agents") && canSpotCheck(user)) links.push({ href: "/agents/spot-checks", label: "Spot checks" });
-  if (companion) links.push({ href: "/companion", label: "Companion" });
+  if (opts.companion) links.push({ href: "/companion", label: "Companion" });
   return { links, search: on("search") };
 }

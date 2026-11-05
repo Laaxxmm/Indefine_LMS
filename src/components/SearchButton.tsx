@@ -7,7 +7,7 @@ import { openCommandPalette } from "@/components/CommandPalette";
 
 export function SearchButton({ className }: { className: string }) {
   return (
-    <button type="button" onClick={() => openCommandPalette()} aria-keyshortcuts="Control+K Meta+K" title="Search (Ctrl+K)" className={`${className} inline-flex items-center gap-2`}>
+    <button type="button" onClick={() => openCommandPalette()} aria-keyshortcuts="Control+K Meta+K" title="Search (Ctrl+K, or Cmd+K on a Mac)" className={`${className} inline-flex items-center gap-2`}>
       <Search className="w-4 h-4" aria-hidden="true" />
       Search
     </button>

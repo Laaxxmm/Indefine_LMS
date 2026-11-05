@@ -13,6 +13,8 @@ import { activeSession, renderHtml as renderRaw, workspaceRow } from "./harness"
 const state = vi.hoisted(() => ({ pathname: "/", setting: null as unknown }));
 
 vi.mock("@/lib/auth", () => ({ auth: vi.fn(), signIn: vi.fn(), signOut: vi.fn(), handlers: {} }));
+// next/font is compiled by Next; here it only has to hand back the class names.
+vi.mock("next/font/google", () => ({ Plus_Jakarta_Sans: () => ({ variable: "font-sans-var" }), Schibsted_Grotesk: () => ({ variable: "font-display-var" }) }));
 vi.mock("next/navigation", async () => ({ ...(await import("./harness")).navigationMock, usePathname: () => state.pathname }));
 vi.mock("@/lib/prisma", async () => {
   const { prismaMock, withWorkspace } = await import("./harness");
@@ -41,7 +43,9 @@ function navEntries(html: string): string[] {
     m[3] ? `${m[3].trim()} [button]` : `${m[2].trim()} ${m[1]}`,
   );
 }
-const current = (html: string) => [...html.matchAll(/<a [^>]*aria-current="page"[^>]*>([^<]+)<\/a>/g)].map((m) => m[1]);
+/** Marked places as "label=page" (its own page) or "label=true" (a page below it). */
+const current = (html: string) => [...html.matchAll(/<a [^>]*aria-current="(page|true)"[^>]*>([^<]+)<\/a>/g)].map((m) => `${m[2]}=${m[1]}`);
+const O = (companion: boolean) => ({ companion, agentsLabel: "Agent runs" });
 const header = async (who: Session, modules: ModuleKey[] | null = null) => {
   state.setting = modules ? workspaceRow(modules) : null;
   return renderHtml(await FirmOsHeader({ user: who.user, home: "/agents" }));
@@ -55,11 +59,11 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe("firmOsNav: the places, by module and role", () => {
-  it("everything on, partner: Next task, Agents, My day, Client messages, Firm OS onboarding, Spot checks, Companion, then Search", () => {
-    const nav = firmOsNav(PARTNER.user, ALL, true);
+  it("everything on, partner: Next task, the runs list, My day, Client messages, Firm OS onboarding, Spot checks, Companion, then Search", () => {
+    const nav = firmOsNav(PARTNER.user, ALL, O(true));
     expect(nav.links.map((l) => `${l.label} ${l.href}`)).toEqual([
       "Next task /focus",
-      "Agents /agents",
+      "Agent runs /agents",
       "My day /coach",
       "Client messages /comms",
       "Firm OS onboarding /onboard",
@@ -70,12 +74,12 @@ describe("firmOsNav: the places, by module and role", () => {
   });
 
   it("spot checks only for partners; the companion only when allowed; each place only with its module", () => {
-    expect(firmOsNav(MANAGER.user, ALL, false).links.map((l) => l.label)).not.toContain("Spot checks");
-    expect(firmOsNav(ADMIN.user, ALL, false).links.map((l) => l.label)).not.toContain("Spot checks"); // an IT admin is not a partner
-    expect(firmOsNav(PARTNER.user, ALL, false).links.map((l) => l.label)).not.toContain("Companion");
-    expect(firmOsNav(PARTNER.user, ["coach"], false)).toEqual({ links: [{ href: "/coach", label: "My day" }], search: false });
-    expect(firmOsNav(PARTNER.user, ["comms", "search"], false).links.map((l) => l.label)).toEqual(["Client messages"]);
-    expect(firmOsNav(PARTNER.user, [], false)).toEqual({ links: [], search: false });
+    expect(firmOsNav(MANAGER.user, ALL, O(false)).links.map((l) => l.label)).not.toContain("Spot checks");
+    expect(firmOsNav(ADMIN.user, ALL, O(false)).links.map((l) => l.label)).not.toContain("Spot checks"); // an IT admin is not a partner
+    expect(firmOsNav(PARTNER.user, ALL, O(false)).links.map((l) => l.label)).not.toContain("Companion");
+    expect(firmOsNav(PARTNER.user, ["coach"], O(false))).toEqual({ links: [{ href: "/coach", label: "My day" }], search: false });
+    expect(firmOsNav(PARTNER.user, ["comms", "search"], O(false)).links.map((l) => l.label)).toEqual(["Client messages"]);
+    expect(firmOsNav(PARTNER.user, [], O(false))).toEqual({ links: [], search: false });
   });
 });
 
@@ -90,16 +94,16 @@ describe("current section", () => {
     expect(isCurrentSection("/agents/spot-checksx", "/agents", false, agents)).toBe(true);
   });
 
-  it("the header marks exactly one place with aria-current, wherever the person is", async () => {
+  it("the header marks exactly one place: aria-current=page on its own page, =true below it", async () => {
     for (const [path, label] of [
-      ["/focus", "Next task"],
-      ["/workspace/job-1", "Next task"],
-      ["/agents", "Agents"],
-      ["/agents/echo/runs/r1", "Agents"],
-      ["/agents/spot-checks", "Spot checks"],
-      ["/coach", "My day"],
-      ["/comms/d-1", "Client messages"],
-      ["/onboard", "Firm OS onboarding"],
+      ["/focus", "Next task=page"],
+      ["/workspace/job-1", "Next task=true"],
+      ["/agents", "Agent runs=page"],
+      ["/agents/echo/runs/r1", "Agent runs=true"],
+      ["/agents/spot-checks", "Spot checks=page"],
+      ["/coach", "My day=page"],
+      ["/comms/d-1", "Client messages=true"],
+      ["/onboard", "Firm OS onboarding=page"],
     ]) {
       state.pathname = path;
       expect(current(await header(PARTNER)), path).toEqual([label]);
@@ -111,13 +115,13 @@ describe("current section", () => {
 
 describe("the header", () => {
   it("built-in staff modules: Next task, Agents, My day, the Search button and the way back", async () => {
-    expect(navEntries(await header(STAFF))).toEqual(["Next task /focus", "Agents /agents", "My day /coach", "Search [button]", "Dashboard /dashboard"]);
+    expect(navEntries(await header(STAFF))).toEqual(["Next task /focus", "My agent runs /agents", "My day /coach", "Search [button]", "Dashboard /dashboard"]);
   });
 
   it("built-in partner modules: every place, Spot checks and the Companion (partners may pair)", async () => {
     expect(navEntries(await header(PARTNER))).toEqual([
       "Next task /focus",
-      "Agents /agents",
+      "Agent runs /agents",
       "My day /coach",
       "Client messages /comms",
       "Firm OS onboarding /onboard",
@@ -132,7 +136,7 @@ describe("the header", () => {
     expect(navEntries(await header(MANAGER, ["coach", "comms"]))).toEqual(["My day /coach", "Client messages /comms", "Dashboard /dashboard"]);
     state.setting = workspaceRow(["agents"], { companionEnabled: true });
     const html = await renderHtml(await FirmOsHeader({ user: STAFF.user, home: "/focus" }));
-    expect(navEntries(html)).toEqual(["Next task /focus", "Agents /agents", "Companion /companion", "Dashboard /dashboard"]);
+    expect(navEntries(html)).toEqual(["Next task /focus", "My agent runs /agents", "Companion /companion", "Dashboard /dashboard"]);
   });
 
   it("calm and accessible: labelled landmark, focus rings, AA text, no emoji, the Search button names its shortcut", async () => {
