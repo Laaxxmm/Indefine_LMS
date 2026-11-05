@@ -1,8 +1,11 @@
 // Checklist engine (Phase 4 task 2). Rules are data: a SopPack's `checklist` JSON holds rule
 // definitions; deterministic rule bodies live in code and are looked up by id in a registry
 // (functions cannot be JSON). The engine runs every deterministic rule first, then LLM rules one
-// at a time through an injected `llmCheck`. An LLM verdict without a verbatim quote AND a location
-// is not trusted: it becomes status "na" with the "llm-evidence-missing" flag for the reviewer.
+// at a time through an injected `llmCheck`. Each LLM rule is given a documents text (`llmContext`;
+// default: the check input as JSON) and the verdict is re-validated against it: it must carry a
+// non-empty location AND a quote that occurs verbatim in that text (whitespace and letter case
+// normalised, nothing else). Otherwise the verdict is not trusted: it becomes status "na" with the
+// "llm-evidence-missing" flag for the reviewer — a fabricated quote cannot raise or clear a flag.
 // Approved MistakeLog proposals become rules with source "mistake" (nothing auto-promotes).
 // Pure apart from the injected llmCheck: no Prisma, no fetch, no clock.
 import { z } from "zod";
@@ -23,7 +26,7 @@ export type ResultFlag =
   | "missing-implementation" // no registry entry for a deterministic rule: recorded as fail
   | "llm-unavailable" // no llmCheck supplied
   | "llm-error" // llmCheck threw
-  | "llm-evidence-missing"; // verdict lacked quote + location: recorded as na
+  | "llm-evidence-missing"; // verdict lacked a location or a quote found in the documents given: recorded as na
 
 const SEMVER = /^\d+\.\d+\.\d+$/;
 const RULE_ID = /^[a-z0-9][a-z0-9._-]{1,79}$/;
@@ -79,8 +82,14 @@ export type DeterministicCheck<I> = (input: I, rule: RuleDefinition) => CheckOut
 export type RuleRegistry<I> = ReadonlyMap<string, DeterministicCheck<I>>;
 
 export type LlmVerdict = { status: CheckStatus; message?: string; evidence: { quote: string; location: string } };
-/** Injected; the agent wires it to the ModelRouter. Its output is validated, never trusted. */
-export type LlmCheck<I> = (rule: RuleDefinition, input: I) => Promise<unknown>;
+/**
+ * Injected; the agent wires it to the ModelRouter. `context` is the documents text for this rule
+ * (show exactly this to the model): the verdict's quote is checked against it. Its output is
+ * validated, never trusted.
+ */
+export type LlmCheck<I> = (rule: RuleDefinition, input: I, context: string) => Promise<unknown>;
+/** Documents text an LLM rule is given. Default: the check input as JSON. */
+export type LlmContextFn<I> = (rule: RuleDefinition, input: I) => string;
 
 export type ChecklistResultItem = {
   ruleId: string;
@@ -177,6 +186,17 @@ const LlmVerdictSchema = z.object({
   evidence: z.object({ quote: z.string().trim().min(1), location: z.string().trim().min(1), link: z.string().optional() }),
 });
 
+/** Whitespace runs → one space, trimmed, lower case. The only normalisation applied to quotes. */
+export const normalizeEvidenceText = (text: string) => text.replace(/\s+/g, " ").trim().toLowerCase();
+
+/** Does the quote occur in the documents text (after normalizeEvidenceText on both)? */
+export function quoteInContext(quote: string, context: string): boolean {
+  const q = normalizeEvidenceText(quote);
+  return q.length > 0 && normalizeEvidenceText(context).includes(q);
+}
+
+export const defaultLlmContext = (input: unknown): string => (typeof input === "string" ? input : (JSON.stringify(input, null, 2) ?? ""));
+
 const sourceOf = (rule: RuleDefinition): ResultSource => (rule.origin?.type === "mistake" ? "mistake" : rule.kind);
 
 function defaultMessage(rule: RuleDefinition, status: CheckStatus): string {
@@ -211,11 +231,13 @@ function runDeterministic<I>(rule: RuleDefinition, input: I, registry: RuleRegis
   }
 }
 
-async function runLlm<I>(rule: RuleDefinition, input: I, llmCheck: LlmCheck<I> | undefined): Promise<ChecklistResultItem> {
+async function runLlm<I>(rule: RuleDefinition, input: I, llmCheck: LlmCheck<I> | undefined, llmContext: LlmContextFn<I> | undefined): Promise<ChecklistResultItem> {
   if (!llmCheck) return item(rule, "na", `${rule.title}: needs a model check; none available, review manually`, null, ["llm-unavailable"]);
   let raw: unknown;
+  let context: string;
   try {
-    raw = await llmCheck(rule, input);
+    context = llmContext ? llmContext(rule, input) : defaultLlmContext(input);
+    raw = await llmCheck(rule, input, context);
   } catch (e) {
     return item(rule, "na", `${rule.title}: model check failed (${errText(e)}); review manually`, null, ["llm-error"]);
   }
@@ -223,18 +245,25 @@ async function runLlm<I>(rule: RuleDefinition, input: I, llmCheck: LlmCheck<I> |
   if (!v.success) {
     return item(rule, "na", `${rule.title}: model answer rejected (no verbatim quote and location); review manually`, null, ["llm-evidence-missing"]);
   }
+  if (!quoteInContext(v.data.evidence.quote, context)) {
+    return item(rule, "na", `${rule.title}: model answer rejected (its quote does not occur in the documents it was given); review manually`, null, ["llm-evidence-missing"]);
+  }
   return item(rule, v.data.status, v.data.message, v.data.evidence);
 }
 
-/** Runs deterministic rules (pack order), then LLM rules (pack order, one at a time). */
+/**
+ * Runs deterministic rules (pack order), then LLM rules (pack order, one at a time). Each LLM rule
+ * gets `llmContext(rule, input)` (default: the input as JSON) and its verdict's quote must occur
+ * in that text.
+ */
 export async function runChecklist<I>(
   ruleSet: RuleSet,
   input: I,
-  deps: { registry: RuleRegistry<I>; llmCheck?: LlmCheck<I> },
+  deps: { registry: RuleRegistry<I>; llmCheck?: LlmCheck<I>; llmContext?: LlmContextFn<I> },
 ): Promise<ChecklistResultItem[]> {
   const out: ChecklistResultItem[] = [];
   for (const rule of ruleSet.rules.filter((r) => r.kind === "deterministic")) out.push(runDeterministic(rule, input, deps.registry));
-  for (const rule of ruleSet.rules.filter((r) => r.kind === "llm")) out.push(await runLlm(rule, input, deps.llmCheck));
+  for (const rule of ruleSet.rules.filter((r) => r.kind === "llm")) out.push(await runLlm(rule, input, deps.llmCheck, deps.llmContext));
   return out;
 }
 

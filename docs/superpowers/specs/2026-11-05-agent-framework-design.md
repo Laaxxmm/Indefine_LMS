@@ -38,7 +38,7 @@ interface AgentDefinition<I, E> {
 1. Preconditions return an error and create **no** AgentRun: job not found, service mismatch, state not ASSIGNED/IN_PREP, no active SopPack.
 2. AgentRun RUNNING (attempt = previous runs + 1, `reviewNotes` = the request-changes note). ASSIGNED → IN_PREP by the agent actor.
 3. Rules = latest active pack (highest major.minor.patch) + APPROVED MistakeLog rules the pack does not already carry.
-4. LLM rules go through the router with `privacy: anonymize-then-cloud`, `difficulty: judgement`, task `<modelAgent>.check:<ruleId>`; the engine re-validates quote + location.
+4. LLM rules go through the router with `privacy: anonymize-then-cloud`, `difficulty: judgement`, task `<modelAgent>.check:<ruleId>`. The engine re-validates every verdict: the location must be non-empty and the quote must occur in the documents text the model was shown for that rule (`agent.llmContext`, default the extraction as JSON; whitespace and letter case normalised, nothing else). A verdict that fails either check — e.g. a fabricated quote or row — is recorded `na` with flag `llm-evidence-missing`, so it can neither raise nor clear a flag. Mistake replay checks recorded verdicts the same way.
 5. Deliverables are built with header `version = attempt` and uploaded create-only to `Working/`; a taken name takes the next `_v{n}`.
 6. Results persist in one transaction; then IN_PREP → AGENT_DONE; then the run is AGENT_DONE. Any failure → run FAILED with the error, job stays IN_PREP; files already in Working stay (never deleted).
 7. `inputsPurgeAt = finishedAt + 30 days` (ADR-006). The purge job itself is a later phase.

@@ -234,6 +234,8 @@ export async function replayMistake(def: AnyAgent, rule: RuleDefinition, example
   const job = { ...REPLAY_JOB, ...(ex.data.job as Partial<JobContext> | undefined) };
   const [result] = await runChecklist(loaded.ruleSet, { input: ex.data.input, extracted: ex.data.extracted, figures, job }, {
     registry: def.checklistRegistry,
+    // The recorded verdict's quote is checked against the same documents text a live run shows.
+    llmContext: (_rule, ci) => (def.llmContext ? def.llmContext(ci) : JSON.stringify(ci.extracted, null, 2)),
     llmCheck: async () => {
       if (!ex.data.llmVerdict) throw new Error("no recorded verdict in the example");
       return ex.data.llmVerdict;

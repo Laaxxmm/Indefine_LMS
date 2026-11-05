@@ -200,6 +200,22 @@ describe("runAgent — failure path (run FAILED, job stays IN_PREP)", () => {
   });
 });
 
+describe("runAgent — LLM evidence is checked against the documents the model was shown", () => {
+  it("a verdict quoting text that is not in the register is rejected: na + llm-evidence-missing", async () => {
+    const fabricated = { status: "fail", message: "Acme is the director's firm", evidence: { quote: "Acme Traders (director's firm)", location: "register.csv row 2" } };
+    const w = echoWorld({ responses: { [RELATED_TASK]: fabricated } });
+    const out = await runAgent(echoAgent, "job-1", w.deps);
+    expect(out.ok).toBe(true);
+    const llm = rows(w.db, "checklistResult").find((r) => r.ruleId === "echo.related-party")!;
+    expect(llm).toMatchObject({ status: "na", evidence: { flags: ["llm-evidence-missing"] } });
+  });
+  it("a verdict quoting the register (any case / spacing) is accepted", async () => {
+    const w = echoWorld({ responses: { [RELATED_TASK]: { status: "fail", evidence: { quote: "acme   TRADERS", location: "register.csv row 2" } } } });
+    await runAgent(echoAgent, "job-1", w.deps);
+    expect(rows(w.db, "checklistResult").find((r) => r.ruleId === "echo.related-party")).toMatchObject({ status: "fail" });
+  });
+});
+
 describe("runAgent — model trouble on the LLM rule is not a run failure", () => {
   it.each([
     ["queued for a human (local-only)", { status: "queued", reason: "local model down", needsPartnerReview: true, runId: "run-1", attempts: 0 }, /queued for a human: local model down/],

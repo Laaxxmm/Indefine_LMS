@@ -181,5 +181,8 @@ describe("diffPacks / replayMistake", () => {
     const verdict = { status: "fail", evidence: { quote: "Shadow Holdings", location: "row 3" } };
     expect((await replayMistake(echoAgent, llm, { extracted: SHADOW, llmVerdict: verdict })).caught).toBe(true);
     expect((await replayMistake(echoAgent, llm, { extracted: SHADOW })).caught).toBe(false);
+    // A recorded verdict whose quote is not in the example's documents is rejected, not caught.
+    const fabricated = { status: "fail", evidence: { quote: "Shadow Holdings (director's brother)", location: "row 3" } };
+    expect(await replayMistake(echoAgent, llm, { extracted: SHADOW, llmVerdict: fabricated })).toMatchObject({ caught: false, result: { status: "na", flags: ["llm-evidence-missing"] } });
   });
 });
