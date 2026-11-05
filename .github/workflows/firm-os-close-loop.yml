@@ -1,0 +1,30 @@
+# Firm OS close-loop reconciler (ADR-005): every 30 minutes inside IST working hours,
+# Mon-Sat 09:00-19:00 IST. GitHub cron is UTC; IST = UTC + 5:30, so
+#   "30 3-12 * * 1-6"  -> 09:00, 10:00 ... 18:00 IST
+#   "0 4-13 * * 1-6"   -> 09:30, 10:30 ... 18:30 IST
+# The endpoint also checks the IST window itself and no-ops outside it.
+# Base URL: repository variable LMS_BASE_URL (staging), default https://lms.indefine.in (inventory G-11).
+# Uses the same CRON_SECRET repo secret as the other cron workflows.
+name: Firm OS close loop
+
+on:
+  schedule:
+    - cron: "30 3-12 * * 1-6"
+    - cron: "0 4-13 * * 1-6"
+  workflow_dispatch: {}
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call close-loop cron endpoint
+        env:
+          BASE_URL: ${{ vars.LMS_BASE_URL || 'https://lms.indefine.in' }}
+        run: |
+          if [ -z "${{ secrets.CRON_SECRET }}" ]; then
+            echo "CRON_SECRET repo secret not set - skipping."
+            exit 0
+          fi
+          curl -fsS --max-time 150 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${BASE_URL%/}/api/cron/firm-os/close-loop"

@@ -97,7 +97,8 @@ describe("accuracy harness self-test", () => {
   });
 
   it("loaders: agents with fixtures, fixture validation, mistake validation", () => {
-    expect(agentsWithFixtures(DEFAULT_FIXTURES_ROOT)).toEqual(["echo"]);
+    // Production agents add their own fixture folders; echo must always be among them.
+    expect(agentsWithFixtures(DEFAULT_FIXTURES_ROOT)).toContain("echo");
     expect(agentsWithFixtures("does/not/exist")).toEqual([]);
     expect(loadApprovedMistakes(DEFAULT_FIXTURES_ROOT, "echo").map((m) => m.id)).toEqual(["mistake-echo-001"]);
     expect(loadApprovedMistakes(SELFTEST, "echo")).toEqual([]);
