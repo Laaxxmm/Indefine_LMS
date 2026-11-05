@@ -215,7 +215,7 @@ Shared foundation (commit c61d885): additive Prisma section "Firm OS: shared spi
 - 21:10 · all · ADR-008 agent guardrails written; GST/ROC/Tax/Books/Audit agents briefed · –
 - 21:17 · 4 · Merged hardened accuracy harness (audit C1, H1, H2, M1–M3 fixed; probes as self-tests) · 68 files green · echo pass
 - 21:19 · guardrails · ADR-008 implementation agent started · –
+- 21:27 · 8 · Merged review-screen close actions + approve hook + golden-path e2e spec; resolved agents.test.ts import conflict with the harness fix · 1561/1561 · build green
 - 21:33 · 5 · Merged GST Prep (23 fixtures; ADR-008 tasks gst.classify-ledgers, gst.read-hsn) · 1706/1706 · gst pass
 - 21:40 · 7 · Merged Books Close + Audit Assist; registry conflict resolved (all agents kept); *.snap eol=lf · 1974/1974 · books, audit pass
 - 21:41 · 5/7 · Fable auditor re-run requested for gst, books, audit (+ hardened harness) · –
-- 21:27 · 8 · Merged review-screen close actions + approve hook + golden-path e2e spec; resolved agents.test.ts import conflict with the harness fix · 1561/1561 · build green
