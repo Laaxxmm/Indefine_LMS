@@ -1,0 +1,17 @@
+{
+  "description": "Trap: the two independent reads of the high-stakes related-party rule disagree (fail vs pass, recorded as <task> and <task>#2), so the rule is na + model-disagreement for a human. No flag is raised on one read alone.",
+  "category": "trap",
+  "job": { "fy": "2026-27", "period": "2026-10" },
+  "flags": [],
+  "figures": { "rowCount": 2, "totalPaise": 8500000, "largestPaise": 6400000 },
+  "deliverables": [
+    {
+      "name": "Echo register",
+      "sheets": [
+        { "name": "Register", "columns": ["Ref", "Party", "Date", "Amount"] },
+        { "name": "Summary", "columns": ["Figure", "Amount", "Count"] }
+      ]
+    }
+  ],
+  "guardrails": { "disagreements": ["echo.related-party"] }
+}

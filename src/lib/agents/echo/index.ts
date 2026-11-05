@@ -7,16 +7,24 @@
 // default pack: approved MistakeLog rules use them (supervised loop tests). `probeMutation` adds
 // ₹1 to the first amount so the accuracy harness can prove the figures follow the input.
 // Hidden from the UI unless FIRM_OS_ECHO_AGENT is on (src/lib/agents/flags.ts).
+//
+// ADR-008 reference adoption: echo declares a full AgentScope — department Books, its one model
+// task (`echo.check:echo.related-party@1`: abstainable verdict, high-stakes so it is read twice,
+// a validator that the cited row exists), every rule id, and an input sniff that rejects a
+// register.csv without the register header (naming the right agent when it is a GST register or a
+// trial balance) before any model call.
 import { z } from "zod";
 import { createRuleRegistry, type ChecklistPack, type CheckOutcome } from "@/lib/agents/core/checklist";
 import { formatInr } from "@/lib/agents/core/format";
+import { CHECK_TASK_INSTRUCTIONS, type AgentScope, type InputSniffResult, type ModelTaskSpec, type SniffFile } from "@/lib/agents/core/guardrails/scope";
+import { INSUFFICIENT_EVIDENCE, ScopedVerdictSchema, type ScopedVerdict } from "@/lib/agents/core/guardrails/schema";
 import type { AgentDefinition, CheckInput, InputFile } from "@/lib/agents/core/runner";
 
 export const ECHO_KEY = "echo";
 export const ECHO_REGISTER_FILE = "register.csv";
 export const ECHO_COLUMNS = ["ref", "party", "date", "amount"] as const;
-/** Router task of the one LLM rule (the only model call echo makes). */
-export const ECHO_RELATED_PARTY_TASK = "system.check:echo.related-party" as const;
+/** Model task of the one LLM rule (the only model call echo makes): `<key>.check:<ruleId>`. */
+export const ECHO_RELATED_PARTY_TASK = "echo.check:echo.related-party" as const;
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -227,6 +235,56 @@ export const ECHO_CHECKLIST: ChecklistPack = {
   ],
 };
 
+// ------------------------------------------------------------------ scope (ADR-008)
+
+/**
+ * Wrong-department sniff: register.csv must start with the register header. A missing or empty
+ * register is left to the input schema (it names what is missing).
+ */
+export function echoInputSniff(files: SniffFile[]): InputSniffResult {
+  const f = findRegister(files);
+  const text = f?.bytes.toString("utf8").replace(/^﻿/, "").trim() ?? "";
+  if (!f || !text) return { ok: true };
+  const first = text.split(/\r?\n/)[0];
+  const header = splitCsvLine(first).map((h) => h.toLowerCase());
+  if (header.join(",") === ECHO_COLUMNS.join(",")) return { ok: true };
+  const gst = header.some((h) => /gstin|taxable|\bhsn\b|igst|cgst|sgst/.test(h));
+  const tb = header.includes("debit") && header.includes("credit");
+  return {
+    ok: false,
+    reason: `${ECHO_REGISTER_FILE} header must be ${ECHO_COLUMNS.join(",")} (found "${first.slice(0, 120)}")${gst ? "; it looks like a GST register" : tb ? "; it looks like a trial balance" : ""}`,
+    suggestAgent: gst ? "gst" : tb ? "books" : undefined,
+  };
+}
+
+/** The cited row must be a row the model was shown ("register.csv row N: …" in the documents). */
+export function validateEchoVerdict(v: ScopedVerdict, documents: string): string[] {
+  if (v.status === INSUFFICIENT_EVIDENCE || !v.evidence) return [];
+  const loc = v.evidence.location.trim().toLowerCase();
+  return documents.split(/\r?\n/).some((l) => l.toLowerCase().startsWith(`${loc}:`)) ? [] : [`location "${v.evidence.location}" is not a register row shown`];
+}
+
+export const ECHO_RELATED_PARTY_SPEC: ModelTaskSpec<ScopedVerdict, string> = {
+  name: ECHO_RELATED_PARTY_TASK,
+  version: 1,
+  schema: ScopedVerdictSchema,
+  systemPrompt: [
+    CHECK_TASK_INSTRUCTIONS,
+    "A related party is a director, partner or relative of the client, or a group company, as described in the register itself. A party name alone does not show a relationship.",
+  ].join("\n"),
+  validate: validateEchoVerdict,
+  highStakes: true,
+  difficulty: "judgement",
+  ruleIds: ["echo.related-party"],
+};
+
+export const ECHO_SCOPE: AgentScope = {
+  department: "Books",
+  tasks: [ECHO_RELATED_PARTY_SPEC],
+  ruleIds: ECHO_CHECKLIST.rules.map((r) => r.id),
+  inputSniff: echoInputSniff,
+};
+
 // ------------------------------------------------------------------ agent
 
 export const echoAgent: AgentDefinition<EchoInput, EchoExtract> = {
@@ -240,6 +298,9 @@ export const echoAgent: AgentDefinition<EchoInput, EchoExtract> = {
   defaultChecklist: ECHO_CHECKLIST,
   checklistRegistry: echoRegistry,
   probeMutation: echoProbeMutation,
+  inputProbes: [{ input: ECHO_REGISTER_FILE, mutate: echoProbeMutation }],
+  requiredInputs: [ECHO_REGISTER_FILE],
+  scope: ECHO_SCOPE,
 
   // No model call: the rows are the code parse of register.csv (inputSchema). The model only
   // answers the related-party LLM rule.
