@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import { notFound, redirect } from "next/navigation";
+import Link from "next/link";
 import { AlertTriangle, CheckCircle2, CircleHelp, Info, XCircle } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import type { FirmDb } from "@/lib/agents/core/runner";
@@ -78,6 +79,7 @@ export default async function RunReviewPage({ params }: { params: Promise<{ agen
           <StateChip state={job.state} />
           <RunStatusChip status={run.status} />
           {run.needsPartnerReview && <PartnerChip />}
+          <Link href={`/comms/new?run=${run.id}`} className={`text-[13px] font-semibold text-brand-600 hover:underline rounded ${focusRing}`}>Draft client message</Link>
         </div>
       </div>
 

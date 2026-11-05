@@ -22,6 +22,7 @@ import {
   type PromptLock,
 } from "@/lib/agents/core/guardrails/prompt-lock";
 import { AGENTS } from "@/lib/agents/registry";
+import { COMMS_PROMPT_OWNERS } from "@/lib/agents/comms/tasks";
 
 function main(argv: string[]): number {
   let update = false;
@@ -41,7 +42,8 @@ function main(argv: string[]): number {
     console.error(`verify-prompts: ${(e as Error).message}`);
     return 2;
   }
-  const current = currentPrompts(AGENTS);
+  // Task agents, plus the client-comms drafting tasks (one scope per department; not a task agent).
+  const current = currentPrompts({ ...AGENTS, ...COMMS_PROMPT_OWNERS });
 
   if (update) {
     const r = updatePromptLock(lock, current);
