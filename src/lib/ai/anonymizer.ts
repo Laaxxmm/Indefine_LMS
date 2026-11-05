@@ -5,7 +5,28 @@
 //
 // Policy: when unsure, mask. A false positive costs a little model accuracy; a false negative
 // is a DPDP breach. Pure module: no I/O.
+//
+// How mask() works (security audit findings #3 / #26):
+//   1. A normalised VIEW of the text is matched, never the text itself: NFKC (fullwidth → ASCII),
+//      Unicode format characters removed (zero-width space / joiner, BOM, soft hyphen, bidi marks),
+//      Cyrillic / Greek look-alikes folded to Latin, Indic digits to ASCII, dashes to "-". Every view
+//      character remembers the original characters it came from, so a match replaces exactly the
+//      original text (which also restores exactly on unmask).
+//   2. Maskers run in priority order over the view; a claimed span is blanked in the view so later
+//      maskers cannot match across or inside it. Shapes are tolerant: PAN / GSTIN / Aadhaar /
+//      phone with space, dot or hyphen separators (and the letter-spaced PAN-card / Form 16
+//      layout), UPI handles (name@okhdfcbank), passport and voter-ID numbers, bank accounts with
+//      or without an "account" label, dates of birth with the label before or after, addresses
+//      with a door number, payee names in bank narrations, and dictionary names with their usual
+//      variants ("Kumar, Rajesh", "R. Kumar", the first name alone).
+//   3. Text that already looks like a token ("⟨PAN_1⟩" typed into a document) is itself masked as
+//      ⟨LITERAL_n⟩, so it can never collide with a real token of the run.
+//
+// detectPii() is an INDEPENDENT, stricter detector (its own patterns and its own dictionary
+// check, run over the masked text): the router uses it as a post-mask leak gate and refuses to
+// send a payload in which it finds anything.
 import type { DictionaryEntry } from "./types";
+import { narrationNameSpans, ORG_GENERIC_WORDS, HONORIFICS, NAME_STOPWORDS } from "./names";
 
 export type PiiKind =
   | "PAN"
@@ -19,25 +40,47 @@ export type PiiKind =
   | "BANK_AC"
   | "PHONE"
   | "EMAIL"
+  | "UPI"
   | "DOB"
+  | "PASSPORT"
+  | "VOTER_ID"
   | "NAME"
   | "ORG"
   | "ADDRESS"
-  | "PIN";
+  | "PIN"
+  | "LITERAL";
 
 export interface TokenMap {
-  /** ⟨KIND_n⟩ → original text, exactly as it appeared. */
+  /** ⟨KIND_n⟩ → original text, exactly as it appeared (first occurrence). */
   byToken: Map<string, string>;
-  /** KIND + original → token, so repeats reuse the token. */
+  /** KIND + original (names: case- and spacing-insensitive) → token, so repeats reuse the token. */
   byValue: Map<string, string>;
   counters: Partial<Record<PiiKind, number>>;
 }
 
+/** Token-looking text already in the input: mask the ones this map did not issue (default), all of them, or none (fixed firm text). */
+export type LiteralMode = "unknown" | "all" | "none";
+
 export interface MaskContext {
-  /** Client-master names, companies and addresses (matched case-insensitively, longest first). */
+  /** Client-master names, companies and addresses (matched case-insensitively, longest first, with name variants). */
   dictionary?: DictionaryEntry[];
   /** Continue an existing map (several messages of one request share one map). */
   map?: TokenMap;
+  /** Token-looking text in the input ("⟨PAN_1⟩"): see LiteralMode. Default "unknown". */
+  literals?: LiteralMode;
+  /**
+   * "full" (default) or "structured": identifiers and dictionary names only — no name heuristics
+   * (narration payees, JSON name fields) and, by default, no literal escaping. For fixed firm text
+   * such as a system prompt, where a capitalised phrase is not a person.
+   */
+  scope?: "full" | "structured";
+  /** Clock for the date-of-birth heuristic (a full date this old is masked without a label). Default: now. */
+  now?: Date;
+}
+
+export interface MaskResult {
+  masked: string;
+  map: TokenMap;
 }
 
 export function createTokenMap(): TokenMap {
@@ -122,8 +165,64 @@ export function verhoeffCheckDigit(digits: string): string {
 
 /** 12 digits, first 2–9, Verhoeff-valid (separators allowed). */
 export function isValidAadhaar(v: string): boolean {
-  const d = v.replace(/[\s-]/g, "");
+  const d = v.replace(/[\s.-]/g, "");
   return /^[2-9]\d{11}$/.test(d) && verhoeffValid(d);
+}
+
+// ---------------------------------------------------------------- normalised view
+
+const ASCII_ONLY = /^[\x00-\x7F]*$/;
+const FORMAT_CHAR = /^\p{Cf}$/u;
+const DASH_CHAR = /^[‐-―−﹘﹣]$/;
+/** Indic and Arabic-Indic digit blocks (zero code points); NFKC leaves these alone. */
+const DIGIT_ZEROS = [0x0660, 0x06f0, 0x0966, 0x09e6, 0x0a66, 0x0ae6, 0x0b66, 0x0be6, 0x0c66, 0x0ce6, 0x0d66, 0x0de6, 0x0e50, 0x0ed0, 0x1040];
+/** Cyrillic and Greek letters that look like Latin ones. */
+const CONFUSABLE: Readonly<Record<string, string>> = {
+  А: "A", В: "B", С: "C", Е: "E", Н: "H", І: "I", Ј: "J", К: "K", М: "M", О: "O", Р: "P", Ѕ: "S", Т: "T", Х: "X", У: "Y", Ԛ: "Q", Ԝ: "W",
+  а: "a", с: "c", е: "e", һ: "h", і: "i", ј: "j", ӏ: "l", о: "o", р: "p", ԛ: "q", ѕ: "s", ԝ: "w", х: "x", у: "y",
+  Α: "A", Β: "B", Ε: "E", Ζ: "Z", Η: "H", Ι: "I", Κ: "K", Μ: "M", Ν: "N", Ο: "O", Ρ: "P", Τ: "T", Υ: "Y", Χ: "X",
+  ο: "o", ν: "v", ι: "i", κ: "k", ρ: "p", υ: "u",
+};
+
+function foldCodePoint(ch: string, cp: number): string {
+  if (FORMAT_CHAR.test(ch)) return "";
+  for (const z of DIGIT_ZEROS) if (cp >= z && cp <= z + 9) return String(cp - z);
+  let out = "";
+  for (const c of ch.normalize("NFKC")) out += CONFUSABLE[c] ?? (DASH_CHAR.test(c) ? "-" : FORMAT_CHAR.test(c) ? "" : c);
+  return out;
+}
+
+/** The text as maskers match it, and where each view character came from in the original. */
+interface View {
+  norm: string;
+  /** Original start / end index of each view character; null when the view is the text (ASCII). */
+  starts: Int32Array | null;
+  ends: Int32Array | null;
+}
+
+function normalizeView(text: string): View {
+  if (ASCII_ONLY.test(text)) return { norm: text, starts: null, ends: null };
+  const parts: string[] = [];
+  const starts: number[] = [];
+  const ends: number[] = [];
+  for (let i = 0; i < text.length; ) {
+    const cp = text.codePointAt(i) as number;
+    const len = cp > 0xffff ? 2 : 1;
+    const ch = len === 1 ? text[i] : text.slice(i, i + 2);
+    const f = cp < 0x80 ? ch : foldCodePoint(ch, cp);
+    for (let k = 0; k < f.length; k++) {
+      starts.push(i);
+      ends.push(i + len);
+    }
+    parts.push(f);
+    i += len;
+  }
+  return { norm: parts.join(""), starts: Int32Array.from(starts), ends: Int32Array.from(ends) };
+}
+
+/** The normalised form maskers compare against (exported for the leak gate and tests). */
+export function normalizeForMatching(text: string): string {
+  return normalizeView(text).norm;
 }
 
 // ---------------------------------------------------------------- patterns
@@ -131,18 +230,21 @@ export function isValidAadhaar(v: string): boolean {
 const MONTH = "(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)";
 const NUM_END = "(?![\\d]|[.,]\\d)"; // not followed by more digits / decimal part
 const NUM_START = "(?<![\\d.,])"; // not inside an amount like 1,23,456.00
+const DATE_SOURCE = [
+  "\\b\\d{1,2}[\\/.\\-]\\d{1,2}[\\/.\\-]\\d{2,4}\\b",
+  "\\b\\d{4}-\\d{2}-\\d{2}\\b",
+  `\\b\\d{1,2}(?:st|nd|rd|th)?[\\s-]{1,3}${MONTH}\\.?,?[\\s-]{1,3}\\d{4}\\b`,
+  `\\b${MONTH}\\.?\\s{1,3}\\d{1,2}(?:st|nd|rd|th)?,?\\s{1,3}\\d{4}\\b`,
+].join("|");
 
+/**
+ * Pattern shapes (exported for callers that look for one kind, e.g. comms/pii.ts, and for the
+ * timing tests). Every quantifier is bounded or anchored so a long run without delimiters stays
+ * linear. mask() uses the tolerant variants in M below.
+ */
 export const PATTERNS = {
   EMAIL: /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g,
-  DATE: new RegExp(
-    [
-      "\\b\\d{1,2}[\\/.\\-]\\d{1,2}[\\/.\\-]\\d{2,4}\\b",
-      "\\b\\d{4}-\\d{2}-\\d{2}\\b",
-      `\\b\\d{1,2}(?:st|nd|rd|th)?[\\s-]+${MONTH}\\.?,?[\\s-]+\\d{4}\\b`,
-      `\\b${MONTH}\\.?\\s+\\d{1,2}(?:st|nd|rd|th)?,?\\s+\\d{4}\\b`,
-    ].join("|"),
-    "gi",
-  ),
+  DATE: new RegExp(DATE_SOURCE, "gi"),
   GSTIN: /(?<![A-Za-z0-9])\d{2}[A-Za-z]{5}\d{4}[A-Za-z][0-9A-Za-z][Zz][0-9A-Za-z](?![A-Za-z0-9])/g,
   CIN: /(?<![A-Za-z0-9])[LUlu]\d{5}[A-Za-z]{2}\d{4}[A-Za-z]{3}\d{6}(?![A-Za-z0-9])/g,
   LLPIN: /(?<![A-Za-z0-9-])[A-Za-z]{3}-\d{4}(?![\d-])/g,
@@ -157,20 +259,149 @@ export const PATTERNS = {
   PIN: new RegExp(`${NUM_START}[1-9]\\d{2}\\s?\\d{3}${NUM_END}`, "g"),
 } as const;
 
+/** Five-letter words that start an ordinary "MARCH 2026 A" phrase, not a spaced PAN (shared by mask() and the leak gate so they agree). */
+const NOT_PAN_WORD = "(?!(?:MARCH|APRIL|TOTAL|SALES|BATCH|CLASS|PHASE|BLOCK|LEVEL|FLOOR|SHEET|STAGE|GRADE|TABLE|FORMS|ITEMS|UNITS|NOTES|ROUND)[\\s.-])";
+
+/** The tolerant shapes mask() matches on the normalised view. */
+const M = {
+  LITERAL: /⟨[^⟨⟩\n]{0,64}⟩/g,
+  EMAIL_SPOKEN: new RegExp(
+    "(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]{1,64}\\s{0,2}(?:\\(at\\)|\\[at\\]|\\sat\\s)\\s{0,2}[A-Za-z0-9-]{1,63}" +
+      "(?:\\s{0,2}(?:\\(dot\\)|\\[dot\\]|\\sdot\\s|\\.)\\s{0,2}[A-Za-z0-9-]{1,63}){0,3}\\s{0,2}(?:\\(dot\\)|\\[dot\\]|\\sdot\\s)\\s{0,2}" +
+      "(?:com|in|org|net|co|gov|edu|io|biz|info|me)(?![A-Za-z0-9])",
+    "gi",
+  ),
+  DATE: new RegExp(DATE_SOURCE, "gi"),
+  GSTIN: /(?<![A-Za-z0-9])\d{2}[\s.-]?[A-Za-z]{5}[\s.-]?\d{4}[\s.-]?[A-Za-z][\s.-]?[0-9A-Za-z][Zz][0-9A-Za-z](?![A-Za-z0-9])/g,
+  CIN: PATTERNS.CIN,
+  LLPIN: PATTERNS.LLPIN,
+  TAN: PATTERNS.TAN,
+  IFSC: PATTERNS.IFSC,
+  /** PAN-card / Form 16 layout: one character per box ("A B C D E 1 2 3 4 F"). */
+  PAN_BOXED: /(?<![A-Za-z0-9])[A-Z](?:[ .-][A-Z]){4}[ .-]{1,3}\d(?:[ .-]?\d){3}[ .-]{1,3}[A-Z](?![A-Za-z0-9])/g,
+  /** "ABCDE 1234 F", "ABCDE.1234.F", "ABCDE-1234-F". */
+  PAN_SPACED: new RegExp(`(?<![A-Za-z0-9])${NOT_PAN_WORD}[A-Z]{5}[\\s.-]{1,2}\\d{4}[\\s.-]{0,2}[A-Z](?![A-Za-z0-9])|(?<![A-Za-z0-9])[A-Z]{5}\\d{4}[\\s.-]{1,2}[A-Z](?![A-Za-z0-9])`, "g"),
+  /** Any case; may be glued to digits (a malformed GSTIN) or to a following word ("…1234Fbank.pdf"). */
+  PAN: /(?<![A-Za-z])[A-Za-z]{5}\d{4}[A-Za-z]/g,
+  PASSPORT: /(?<![A-Za-z0-9])[A-Za-z][\s-]?\d{7}(?![A-Za-z0-9])/g,
+  VOTER_ID: /(?<![A-Za-z0-9])[A-Za-z]{3}[\s-]?\d{7}(?![A-Za-z0-9])/g,
+  AADHAAR: new RegExp(`${NUM_START}[2-9]\\d{3}([\\s.-]?)\\d{4}\\1\\d{4}${NUM_END}`, "g"),
+  BANK_AC: PATTERNS.BANK_AC,
+  PHONE: new RegExp(`(?<![\\d+.,])(?:(?:\\+|00)\\s?91[\\s.-]?|\\(\\+?91\\)\\s?|0[\\s-]?)?(?:[6-9](?:[\\s-]?\\d){9}|[6-9]\\d{4}\\.\\d{5})${NUM_END}`, "g"),
+  /** 11–18 digits, no label: a bank account unless the context says invoice / e-way bill / amount. */
+  BANK_AC_FREE: new RegExp(`(?<![\\dA-Za-z.,])\\d{11,18}(?![\\dA-Za-z]|[.,]\\d)`, "g"),
+  DIN: PATTERNS.DIN,
+  PIN: PATTERNS.PIN,
+  /** JSON string values of name-like keys ("employee": "…"). */
+  NAME_KEY: /"([A-Za-z][A-Za-z_-]{1,39})"\s{0,3}:\s{0,3}"([^"\\\n]{2,160})"/g,
+} as const;
+
 const CONTEXT = {
   DOB: /\b(?:dob|d\.o\.b|date\s+of\s+birth|birth\s*date|born(?:\s+on)?|birthday)\b/i,
+  DOB_AFTER: /^\s{0,3}[([]?\s{0,2}(?:dob|d\.o\.b\.?|date\s+of\s+birth|birth\s*date|born)\b/i,
   LLP: /\bLLP(?:IN)?\b/i,
   AADHAAR: /\b(?:aadh?aa?r|uid|uidai|uin)\b/i,
-  ACCOUNT: /(?:\ba\/c\b|\bacct\b|\baccount\b|\bac\s*no\b|\bbank\b)/i,
-  DIN: /\bDIN\b|director\s+identification/i,
+  ACCOUNT: /(?:\ba\/c|\bacct|\baccount|\bac\s*no\b|\bbank\b|\bsb\s*a\/?c)/i,
+  DIN: /\bDIN\b|director\s+identification|\bdirector\b/i,
+  PASSPORT: /\bpass\s?port\b|\bppt\s*no\b/i,
+  VOTER: /\bvoter\b|\bepic\b|\belection\s+(?:id|card|commission)\b/i,
+  CURRENCY_END: /(?:₹|\brs\.?|\binr)\s{0,2}$/i,
+  /** A labelled document number, not an account: invoice, bill, e-way bill, IRN, ARN, order… */
+  NOT_ACCOUNT: /(?:\binv(?:oice)?|\bbill\b|\bvoucher|\bvch\b|\bchallan|\be-?\s?way|\bewb|\back(?:nowledgement)?\b|\birn\b|\barn\b|\breceipt|\border\b|\bpo\b|\bgrn\b|\bhsn\b|\bsac\b|\bcin\b|\bsrn\b|\bdoc(?:ument)?\b)[^\n]{0,24}$/i,
   ADDRESS:
     /\b(?:address|addr|pin\s*code|pincode|pin|postal|road|rd|street|st|lane|nagar|layout|cross|main|floor|block|sector|colony|district|taluk|village|post|bengaluru|bangalore|mysuru|mysore|mumbai|delhi|chennai|hyderabad|kolkata|pune|ahmedabad|karnataka|maharashtra|tamil\s+nadu|kerala|telangana|gujarat)\b/i,
+  /** A door / house / flat number: where a postal address starts. */
+  DOOR: /(?:\b(?:no|door|flat|plot|house|h|d|site|shop|unit|apt|apartment)\.?\s?(?:no\.?)?\s?[:#-]?\s?\d{1,5}[a-z]?\b|#\s?\d{1,5}\b)/gi,
 };
+
+/** JSON keys whose string value is a person or organisation name. */
+const NAME_KEYS: ReadonlySet<string> = new Set(
+  [
+    "fullname", "personname", "partyname", "party", "payee", "payer", "employee", "employeename", "employer", "employername", "deductor",
+    "deductorname", "deductee", "deducteename", "director", "directorname", "proprietor", "proprietorname", "partner", "partnername",
+    "contact", "contactname", "contactperson", "customer", "customername", "supplier", "suppliername", "vendor", "vendorname", "buyer",
+    "seller", "tenant", "landlord", "signatory", "beneficiary", "nominee", "holder", "accountholder", "relatedparty", "counterparty",
+    "tradename", "legalname", "father", "fathername", "mother", "mothername", "spouse", "spousename", "guardian", "taxpayer", "assessee",
+  ],
+);
 
 // ---------------------------------------------------------------- engine
 
+const FILL = "";
+const FILL_ADDR = "";
+
+type Claim = { start: number; end: number; kind: PiiKind | null; addr?: boolean };
+
+/** The view being masked: claimed spans are blanked with FILL (same length, so offsets never move). */
+class Work {
+  w: string;
+  readonly claims: Claim[] = [];
+  constructor(norm: string) {
+    this.w = norm;
+  }
+  apply(found: Claim[]) {
+    if (!found.length) return;
+    found.sort((a, b) => a.start - b.start || b.end - a.end);
+    const kept: Claim[] = [];
+    let lastEnd = -1;
+    for (const c of found) {
+      if (c.end <= c.start || c.start < lastEnd) continue;
+      kept.push(c);
+      lastEnd = c.end;
+    }
+    const out: string[] = [];
+    let pos = 0;
+    for (const c of kept) {
+      out.push(this.w.slice(pos, c.start), (c.kind === "ADDRESS" || c.addr ? FILL_ADDR : FILL).repeat(c.end - c.start));
+      pos = c.end;
+    }
+    out.push(this.w.slice(pos));
+    this.w = out.join("");
+    this.claims.push(...kept);
+  }
+}
+
+/** Context text with claimed spans blanked (an ADDRESS span still reads as "address"). */
+const readable = (s: string) => s.replace(/+/g, " address ").replace(/+/g, " ");
+const before = (w: string, index: number, width: number) => readable(w.slice(Math.max(0, index - width), index));
+const after = (w: string, index: number, width: number) => readable(w.slice(index, index + width));
+
+type Hit = PiiKind | { kind: PiiKind; start: number; end: number } | null;
+type Decide = (m: RegExpExecArray, w: string) => Hit;
+
+function regexPass(work: Work, re: RegExp, decide: Decide) {
+  const r = new RegExp(re.source, re.flags.includes("g") ? re.flags : `${re.flags}g`);
+  const w = work.w;
+  const found: Claim[] = [];
+  for (let m = r.exec(w); m; m = r.exec(w)) {
+    if (m[0].length === 0) {
+      r.lastIndex++;
+      continue;
+    }
+    const h = decide(m, w);
+    if (!h) continue;
+    if (typeof h === "string") found.push({ start: m.index, end: m.index + m[0].length, kind: h });
+    else found.push({ start: h.start, end: h.end, kind: h.kind });
+  }
+  work.apply(found);
+}
+
+const always =
+  (kind: PiiKind): Decide =>
+  () =>
+    kind;
+const inContext =
+  (kind: PiiKind, ctx: RegExp, width: number): Decide =>
+  (m, w) =>
+    ctx.test(before(w, m.index, width)) ? kind : null;
+
+/** Names are matched and keyed case- and spacing-insensitively, so "RAJESH KUMAR" and "Rajesh Kumar" share a token. */
+const NAME_KINDS: ReadonlySet<PiiKind> = new Set(["NAME", "ORG", "ADDRESS"]);
+const valueKey = (kind: PiiKind, value: string) =>
+  NAME_KINDS.has(kind) ? `${kind}\u0000${normalizeForMatching(value).toLowerCase().replace(/[\s,.]+/g, " ").trim()}` : `${kind}\u0000${value}`;
+
 function tokenFor(map: TokenMap, kind: PiiKind, value: string): string {
-  const key = `${kind}\u0000${value}`;
+  const key = valueKey(kind, value);
   const existing = map.byValue.get(key);
   if (existing) return existing;
   const n = (map.counters[kind] ?? 0) + 1;
@@ -181,108 +412,267 @@ function tokenFor(map: TokenMap, kind: PiiKind, value: string): string {
   return token;
 }
 
-/** Text in the window before `index`, with tokens blanked (an ADDRESS token still reads as address). */
-function contextBefore(text: string, index: number, width: number): string {
-  return text
-    .slice(Math.max(0, index - width), index)
-    .replace(tokenRe(), (t) => (t.startsWith("⟨ADDRESS_") ? " address " : " "));
+// ---------------------------------------------------------------- '@': e-mail and UPI handles
+
+const isLocalCode = (c: number) => (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 46 || c === 95 || c === 37 || c === 43 || c === 45;
+const isDomainCode = (c: number) => (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 46 || c === 45;
+const isLetterCode = (c: number) => (c >= 65 && c <= 90) || (c >= 97 && c <= 122);
+const EMAIL_DOMAIN = /^[A-Za-z0-9-]{1,63}(?:\.[A-Za-z0-9-]{1,63}){0,8}\.[A-Za-z]{2,24}$/;
+
+/** Every "local@host" whose host starts with a letter: an e-mail when the host has a TLD, else a UPI handle. Linear: each '@' expands at most 64 / 255 characters. */
+function atPass(work: Work) {
+  const w = work.w;
+  const found: Claim[] = [];
+  let floor = 0;
+  for (let at = w.indexOf("@"); at >= 0; at = w.indexOf("@", at + 1)) {
+    let s = at;
+    while (s > floor && at - s < 64 && isLocalCode(w.charCodeAt(s - 1))) s--;
+    if (s === at) continue;
+    let e = at + 1;
+    while (e < w.length && e - at - 1 < 255 && isDomainCode(w.charCodeAt(e))) e++;
+    while (e > at + 1 && (w[e - 1] === "." || w[e - 1] === "-")) e--;
+    if (e === at + 1 || !isLetterCode(w.charCodeAt(at + 1))) continue;
+    found.push({ start: s, end: e, kind: EMAIL_DOMAIN.test(w.slice(at + 1, e)) ? "EMAIL" : "UPI" });
+    floor = e;
+    at = e - 1;
+  }
+  work.apply(found);
 }
 
-type Decide = (match: RegExpExecArray, index: number, text: string) => PiiKind | null;
+// ---------------------------------------------------------------- dictionary (word trie)
 
-/** Apply `re` to every stretch of text that is not already a token. */
-function maskWith(text: string, re: RegExp, decide: Decide, map: TokenMap): string {
-  const out: string[] = [];
-  const tre = tokenRe();
-  let last = 0;
-  const segments: [number, number][] = [];
-  for (let t = tre.exec(text); t; t = tre.exec(text)) {
-    segments.push([last, t.index]);
-    last = t.index + t[0].length;
-  }
-  segments.push([last, text.length]);
-  let cursor = 0;
-  for (const [start, end] of segments) {
-    out.push(text.slice(cursor, start)); // the token between segments, unchanged
-    const seg = text.slice(start, end);
-    const r = new RegExp(re.source, re.flags.includes("g") ? re.flags : `${re.flags}g`);
-    let segOut = "";
-    let segLast = 0;
-    for (let m = r.exec(seg); m; m = r.exec(seg)) {
-      if (m[0].length === 0) {
-        r.lastIndex++;
-        continue;
-      }
-      const kind = decide(m, start + m.index, text);
-      if (!kind) continue;
-      segOut += seg.slice(segLast, m.index) + tokenFor(map, kind, m[0]);
-      segLast = m.index + m[0].length;
+type TrieNode = { next: Map<string, TrieNode>; kind?: PiiKind };
+type CompiledDictionary = { root: TrieNode; phrases: Map<string, PiiKind> };
+
+const WORD_RE = /[\p{L}\p{M}\p{N}]+/gu;
+const wordsOf = (s: string) => normalizeForMatching(s).toLowerCase().match(WORD_RE) ?? [];
+/** Separators allowed between the words of one dictionary name in the text. */
+const NAME_SEPARATOR = /^[\s,.'’&\-/]{1,12}$/;
+const COMMON_FIRST_WORDS: ReadonlySet<string> = new Set(["state", "national", "central", "union", "indian", "india", "new", "general", "united", "first", "global", "royal", "city", "the", "sri", "shree", "om", "sai"]);
+
+/** The word sequences one entry masks: the name itself plus, for a person, "Last, First", initials and the first name alone; for an organisation, its distinctive core. */
+function variantsOf(e: DictionaryEntry): string[][] {
+  const words: string[] = [...wordsOf(e.value)];
+  if (!words.length) return [];
+  const out: string[][] = [words];
+  if (e.kind === "NAME") {
+    let core: string[] = words;
+    while (core.length > 1 && HONORIFICS.has((core[0] ?? "").toUpperCase())) core = core.slice(1);
+    if (core !== words) out.push(core);
+    if (core.length >= 2 && core.every((w) => /^\p{L}+$/u.test(w))) {
+      const first = core[0] ?? "";
+      const last = core[core.length - 1] ?? "";
+      const rest = core.slice(0, -1);
+      out.push([last, ...rest]); // "Kumar, Rajesh"
+      if (rest.some((w) => w.length > 1)) out.push([...rest.map((w) => w.charAt(0)), last]); // "R. Kumar", "R K Sharma"
+      if (last.length > 1) out.push([...rest, last.charAt(0)]); // "Rajesh K"
+      if (first.length >= 3 && !NAME_STOPWORDS.has(first.toUpperCase()) && !COMMON_FIRST_WORDS.has(first)) out.push([first]); // first name alone
     }
-    out.push(segOut + seg.slice(segLast));
-    cursor = end;
+  } else if (e.kind === "ORG") {
+    // The distinctive core ("HDFC Bank Ltd" → "HDFC"): several words, or one all-capitals acronym.
+    const raw = (normalizeForMatching(e.value).match(WORD_RE) ?? []).filter((w) => !ORG_GENERIC_WORDS.has(w.toUpperCase()));
+    const core = raw.map((w) => w.toLowerCase());
+    const acronym = raw.length === 1 && /^[A-Z]{3,}$/.test(raw[0]);
+    if (core.length && core.length < words.length && (core.length >= 2 || acronym) && !COMMON_FIRST_WORDS.has(core[0])) out.push(core);
   }
-  return out.join("");
+  return out;
 }
 
-const always =
-  (kind: PiiKind): Decide =>
-  () =>
-    kind;
-const inContext =
-  (kind: PiiKind, ctx: RegExp, width: number): Decide =>
-  (_m, index, text) =>
-    ctx.test(contextBefore(text, index, width)) ? kind : null;
+const compiledCache = new WeakMap<readonly DictionaryEntry[], CompiledDictionary>();
 
-function escapeRe(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function compileDictionary(entries: readonly DictionaryEntry[]): CompiledDictionary {
+  const cached = compiledCache.get(entries);
+  if (cached) return cached;
+  const root: TrieNode = { next: new Map() };
+  const phrases = new Map<string, PiiKind>();
+  const sorted = entries
+    .map((e) => ({ ...e, value: e.value.trim() }))
+    .filter((e) => e.value.length >= 2)
+    .sort((a, b) => b.value.length - a.value.length);
+  // Full names first, so a variant never overrides another entry's own name.
+  const all = [...sorted.map((e) => ({ e, words: wordsOf(e.value), full: true })), ...sorted.flatMap((e) => variantsOf(e).slice(1).map((words) => ({ e, words, full: false })))];
+  for (const { e, words, full } of all) {
+    if (!words.length || (!full && words.join("").length < 3)) continue;
+    let node = root;
+    for (const w of words) {
+      let next = node.next.get(w);
+      if (!next) node.next.set(w, (next = { next: new Map() }));
+      node = next;
+    }
+    node.kind ??= e.kind;
+    if (full || words.length > 1) {
+      const key = words.join(" ");
+      if (!phrases.has(key)) phrases.set(key, e.kind);
+    }
+  }
+  const compiled = { root, phrases };
+  compiledCache.set(entries, compiled);
+  return compiled;
 }
 
-function dictionaryPattern(value: string): RegExp {
-  const words = value.trim().split(/\s+/).map(escapeRe);
-  return new RegExp(`(?<![\\p{L}\\p{N}])${words.join("\\s+")}(?![\\p{L}\\p{N}])`, "giu");
+function dictionaryPass(work: Work, dict: CompiledDictionary) {
+  const w = work.w;
+  const words: { s: number; e: number; lw: string }[] = [];
+  WORD_RE.lastIndex = 0;
+  for (let m = WORD_RE.exec(w); m; m = WORD_RE.exec(w)) words.push({ s: m.index, e: m.index + m[0].length, lw: m[0].toLowerCase() });
+  const found: Claim[] = [];
+  for (let i = 0; i < words.length; i++) {
+    let node = dict.root.next.get(words[i].lw);
+    let best = -1;
+    let kind: PiiKind | undefined;
+    let j = i;
+    while (node) {
+      if (node.kind) {
+        best = j;
+        kind = node.kind;
+      }
+      if (j + 1 >= words.length || !NAME_SEPARATOR.test(w.slice(words[j].e, words[j + 1].s))) break;
+      j++;
+      node = node.next.get(words[j].lw);
+    }
+    if (best >= 0 && kind) {
+      found.push({ start: words[i].s, end: words[best].e, kind });
+      i = best;
+    }
+  }
+  work.apply(found);
+}
+
+// ---------------------------------------------------------------- context-aware deciders
+
+function dobDecider(cutoffYear: number): Decide {
+  return (m, w) => {
+    if (CONTEXT.DOB.test(before(w, m.index, 40))) return "DOB";
+    if (CONTEXT.DOB_AFTER.test(after(w, m.index + m[0].length, 24))) return "DOB";
+    // A full date old enough to be a date of birth is masked without a label.
+    const years = m[0].match(/(?:19|20)\d{2}/g);
+    const y = years ? Number(years[years.length - 1]) : NaN;
+    return y >= 1900 && y <= cutoffYear ? "DOB" : null;
+  };
+}
+
+const aadhaarDecider: Decide = (m, w) => {
+  if (verhoeffValid(m[0].replace(/[\s.-]/g, ""))) return "AADHAAR";
+  if (m[1]) return "AADHAAR"; // grouped 4-4-4: looks like Aadhaar, mask defensively
+  return CONTEXT.AADHAAR.test(before(w, m.index, 40)) ? "AADHAAR" : null;
+};
+
+const freeAccountDecider: Decide = (m, w) => {
+  const b = before(w, m.index, 40);
+  if (CONTEXT.NOT_ACCOUNT.test(b) || CONTEXT.CURRENCY_END.test(b)) return null;
+  // An unquoted JSON number ("amountPaise": 12345678901) is an amount; account numbers are strings.
+  if (/"\s{0,2}:\s{0,2}$/.test(b) && /^\s{0,2}(?:[,}\]]|$)/.test(w.slice(m.index + m[0].length, m.index + m[0].length + 3))) return null;
+  return "BANK_AC";
+};
+
+const dinDecider: Decide = (m, w) => {
+  const b = before(w, m.index, 30);
+  return CONTEXT.DIN.test(b) && !CONTEXT.CURRENCY_END.test(b) ? "DIN" : null;
+};
+
+/** A PIN code in an address; with a door number earlier on the line, the whole address is one ADDRESS. */
+const pinDecider: Decide = (m, w) => {
+  if (!CONTEXT.ADDRESS.test(before(w, m.index, 80))) return null;
+  const lineStart = Math.max(w.lastIndexOf("\n", m.index - 1) + 1, m.index - 160);
+  let seg = w.slice(lineStart, m.index);
+  let segStart = lineStart;
+  const cut = Math.max(seg.lastIndexOf(FILL), seg.lastIndexOf(FILL_ADDR), seg.lastIndexOf("|"), seg.lastIndexOf("\t"), seg.lastIndexOf(";"));
+  if (cut >= 0) {
+    segStart += cut + 1;
+    seg = seg.slice(cut + 1);
+  }
+  CONTEXT.DOOR.lastIndex = 0;
+  const door = CONTEXT.DOOR.exec(seg);
+  if (door) return { kind: "ADDRESS", start: segStart + door.index, end: m.index + m[0].length };
+  return "PIN";
+};
+
+/** String values of name-like JSON keys. */
+const nameKeyDecider: Decide = (m) => {
+  const key = m[1].toLowerCase().replace(/[_-]/g, "");
+  const value = m[2];
+  if (!NAME_KEYS.has(key) || !/\p{L}/u.test(value) || value.trim().length < 2) return null;
+  const start = m.index + m[0].length - 1 - value.length;
+  return { kind: /\b(?:pvt|private|ltd|limited|llp|co|company|corp|corporation|inc|traders|enterprises|industries|bank|trust)\b/i.test(value) ? "ORG" : "NAME", start, end: start + value.length };
+};
+
+function narrationPass(work: Work) {
+  work.apply(narrationNameSpans(work.w).map((s) => ({ start: s.start, end: s.end, kind: s.kind })));
+}
+
+// ---------------------------------------------------------------- mask / unmask
+
+/** Original-text slice of a view span. */
+function original(text: string, view: View, start: number, end: number): [number, number] {
+  return view.starts && view.ends ? [view.starts[start], view.ends[end - 1]] : [start, end];
 }
 
 /**
  * Replace PII in `text` with reversible tokens. Returns the masked text and the map needed to
- * reverse it. Order matters: e-mails and dictionary entries first (they contain digits and
- * words other maskers would split), then dates of birth, then structured identifiers from the
- * longest/most specific to the least, then context-dependent digit runs.
+ * reverse it. Order matters: token-looking text, e-mail / UPI handles and dictionary names first
+ * (they contain digits and words other maskers would split), then dates of birth, then structured
+ * identifiers from the longest / most specific to the least, then context-dependent digit runs,
+ * addresses and narration names.
  */
-export function mask(text: string, ctx: MaskContext = {}): { masked: string; map: TokenMap } {
+export function mask(text: string, ctx: MaskContext = {}): MaskResult {
   const map = ctx.map ?? createTokenMap();
-  let s = text;
+  const full = ctx.scope !== "structured";
+  const literals: LiteralMode = ctx.literals ?? (full ? "unknown" : "none");
+  const view = normalizeView(text);
+  const work = new Work(view.norm);
 
-  s = maskWith(s, PATTERNS.EMAIL, always("EMAIL"), map);
+  if (literals !== "none") {
+    // Decided on the ORIGINAL text: a token this map issued is kept; anything else token-shaped is escaped.
+    const found: Claim[] = [];
+    const r = new RegExp(M.LITERAL.source, "g");
+    for (let m = r.exec(view.norm); m; m = r.exec(view.norm)) {
+      const [os, oe] = original(text, view, m.index, m.index + m[0].length);
+      const raw = text.slice(os, oe);
+      const known = literals === "unknown" && map.byToken.has(raw);
+      found.push({ start: m.index, end: m.index + m[0].length, kind: known ? null : "LITERAL", addr: known && raw.startsWith("⟨ADDRESS_") });
+    }
+    work.apply(found);
+  }
 
-  const entries = (ctx.dictionary ?? [])
-    .map((e) => ({ ...e, value: e.value.trim() }))
-    .filter((e) => e.value.length >= 2)
-    .sort((a, b) => b.value.length - a.value.length);
-  for (const e of entries) s = maskWith(s, dictionaryPattern(e.value), always(e.kind), map);
+  atPass(work);
+  if (ctx.dictionary?.length) dictionaryPass(work, compileDictionary(ctx.dictionary));
+  if (full) regexPass(work, M.NAME_KEY, nameKeyDecider);
+  regexPass(work, M.EMAIL_SPOKEN, always("EMAIL"));
 
-  s = maskWith(s, PATTERNS.DATE, inContext("DOB", CONTEXT.DOB, 40), map);
-  s = maskWith(s, PATTERNS.GSTIN, always("GSTIN"), map); // incl. bad checksum / unknown state: defensive
-  s = maskWith(s, PATTERNS.CIN, always("CIN"), map);
-  s = maskWith(s, PATTERNS.LLPIN, inContext("LLPIN", CONTEXT.LLP, 40), map);
-  s = maskWith(s, PATTERNS.TAN, always("TAN"), map);
-  s = maskWith(s, PATTERNS.IFSC, always("IFSC"), map);
-  s = maskWith(s, PATTERNS.PAN, always("PAN"), map);
-  s = maskWith(
-    s,
-    PATTERNS.AADHAAR,
-    (m, index, full) => {
-      if (verhoeffValid(m[0].replace(/[\s-]/g, ""))) return "AADHAAR";
-      if (m[1]) return "AADHAAR"; // grouped 4-4-4: looks like Aadhaar, mask defensively
-      return CONTEXT.AADHAAR.test(contextBefore(full, index, 40)) ? "AADHAAR" : null;
-    },
-    map,
-  );
-  s = maskWith(s, PATTERNS.BANK_AC, inContext("BANK_AC", CONTEXT.ACCOUNT, 50), map);
-  s = maskWith(s, PATTERNS.PHONE, always("PHONE"), map);
-  s = maskWith(s, PATTERNS.DIN, inContext("DIN", CONTEXT.DIN, 30), map);
-  s = maskWith(s, PATTERNS.PIN, inContext("PIN", CONTEXT.ADDRESS, 80), map);
+  const now = ctx.now ?? new Date();
+  regexPass(work, M.DATE, dobDecider(now.getUTCFullYear() - 16));
+  regexPass(work, M.GSTIN, always("GSTIN")); // incl. bad checksum / unknown state: defensive
+  regexPass(work, M.CIN, always("CIN"));
+  regexPass(work, M.LLPIN, inContext("LLPIN", CONTEXT.LLP, 40));
+  regexPass(work, M.TAN, always("TAN"));
+  regexPass(work, M.IFSC, always("IFSC"));
+  regexPass(work, M.PAN_BOXED, always("PAN"));
+  regexPass(work, M.PAN_SPACED, always("PAN"));
+  regexPass(work, M.PAN, always("PAN"));
+  regexPass(work, M.VOTER_ID, inContext("VOTER_ID", CONTEXT.VOTER, 40));
+  regexPass(work, M.PASSPORT, inContext("PASSPORT", CONTEXT.PASSPORT, 40));
+  regexPass(work, M.AADHAAR, aadhaarDecider);
+  regexPass(work, M.BANK_AC, inContext("BANK_AC", CONTEXT.ACCOUNT, 50));
+  regexPass(work, M.PHONE, always("PHONE"));
+  regexPass(work, M.BANK_AC_FREE, freeAccountDecider);
+  regexPass(work, M.DIN, dinDecider);
+  regexPass(work, M.PIN, pinDecider);
+  if (full) narrationPass(work);
 
-  return { masked: s, map };
+  // Render: the original text with every claimed span replaced by its token.
+  const claims = [...work.claims].sort((a, b) => a.start - b.start);
+  const parts: string[] = [];
+  let pos = 0;
+  for (const c of claims) {
+    const [os, oe] = original(text, view, c.start, c.end);
+    if (os < pos) continue;
+    parts.push(text.slice(pos, os));
+    const raw = text.slice(os, oe);
+    parts.push(c.kind === null ? raw : tokenFor(map, c.kind, raw));
+    pos = oe;
+  }
+  parts.push(text.slice(pos));
+  return { masked: parts.join(""), map };
 }
 
 /** Put the original values back. Unknown tokens (not in this map) are left as they are. */
@@ -290,7 +680,7 @@ export function unmask(text: string, map: TokenMap): string {
   return text.replace(tokenRe(), (t) => map.byToken.get(t) ?? t);
 }
 
-/** unmask() every string inside a JSON-like value (model output objects). */
+/** unmask() every string inside a JSON-like value, keys included (legacy helper; the router unmasks only grounded fields, see unmask-policy.ts). */
 export function unmaskDeep<T>(value: T, map: TokenMap): T {
   if (typeof value === "string") return unmask(value, map) as T;
   if (Array.isArray(value)) return value.map((v) => unmaskDeep(v, map)) as T;
@@ -300,25 +690,88 @@ export function unmaskDeep<T>(value: T, map: TokenMap): T {
   return value;
 }
 
+/** Does the text contain a token of the PLACEHOLDER shape? */
+export function hasToken(text: string): boolean {
+  return new RegExp(PLACEHOLDER_SOURCE).test(text);
+}
+
+// ---------------------------------------------------------------- independent leak detector
+
+// The leak gate's own patterns (deliberately not M or PATTERNS): broad shapes that mask() always
+// replaces, so finding one in a masked payload means masking failed and the payload must not go.
+const G = {
+  AT: /[A-Za-z0-9._%+-]@(?=[A-Za-z])/g,
+  EMAIL_AT: /[A-Za-z0-9-]{1,253}\.[A-Za-z]{2,24}/y,
+  PAN: /(?<![A-Za-z])[A-Za-z]{5}\d{4}[A-Za-z]/,
+  PAN_SPACED: new RegExp(`(?<![A-Za-z0-9])${NOT_PAN_WORD}[A-Z]{5}[\\s.-]{0,2}\\d{4}[\\s.-]{0,2}[A-Z](?![A-Za-z0-9])`),
+  PAN_BOXED: /(?<![A-Za-z0-9])[A-Z](?:[ .-][A-Z]){4}[ .-]{1,3}\d(?:[ .-]?\d){3}[ .-]{1,3}[A-Z](?![A-Za-z0-9])/,
+  GSTIN: /(?<![A-Za-z0-9])\d{2}[\s.-]?[A-Za-z]{5}[\s.-]?\d{4}[\s.-]?[A-Za-z][\s.-]?[0-9A-Za-z][Zz][0-9A-Za-z](?![A-Za-z0-9])/,
+  CIN: /(?<![A-Za-z0-9])[LUlu]\d{5}[A-Za-z]{2}\d{4}[A-Za-z]{3}\d{6}(?![A-Za-z0-9])/,
+  TAN: /(?<![A-Za-z0-9])[A-Za-z]{4}\d{5}[A-Za-z](?![A-Za-z0-9])/,
+  IFSC: /(?<![A-Za-z0-9])[A-Za-z]{4}0[A-Za-z0-9]{6}(?![A-Za-z0-9])/,
+  AADHAAR: /(?<![\d.,])[2-9]\d{3}([\s.-]?)\d{4}\1\d{4}(?![\d]|[.,]\d)/g,
+  PHONE: /(?<![\d+.,])(?:(?:\+|00)\s?91[\s.-]?|0[\s-]?)?(?:[6-9](?:[\s-]?\d){9}|[6-9]\d{4}\.\d{5})(?![\d]|[.,]\d)/,
+  DOB_LABEL: /\b(?:dob|d\.o\.b|date\s+of\s+birth|birth\s*date|born)\b/gi,
+  DATE: new RegExp(DATE_SOURCE, "i"),
+  PASSPORT_LABEL: /\bpass\s?port\b[^\n]{0,20}?(?<![A-Za-z0-9])[A-Za-z][\s-]?\d{7}(?![A-Za-z0-9])/i,
+  VOTER_LABEL: /\b(?:voter|epic)\b[^\n]{0,20}?(?<![A-Za-z0-9])[A-Za-z]{3}[\s-]?\d{7}(?![A-Za-z0-9])/i,
+  DIN_LABEL: /\bDIN\b[^\n\d]{0,12}(?<![\d.,])\d{8}(?![\d]|[.,]\d)/,
+};
+
+export interface DetectOptions {
+  /** Client-master names: a full name still present (whitespace-separated words) is a leak. */
+  dictionary?: DictionaryEntry[];
+}
+
 /**
- * Detect structured PII still present in `text` (outside tokens). Used by the leak tests and
- * available to callers as a final check before anything leaves the building.
+ * The leak gate: PII still present in `text` outside tokens. Independent of mask() — its own
+ * broader patterns, run over the normalised text — so a masker regression or bypass is caught
+ * here. Returns the kinds found (never the values). Used by the router before every cloud call.
  */
-export function detectPii(text: string): PiiKind[] {
-  const plain = text.replace(tokenRe(), " ");
+export function detectPii(text: string, opts: DetectOptions = {}): PiiKind[] {
+  // A token becomes a blank that is neither a word nor a space, so it never joins its neighbours.
+  const plain = normalizeForMatching(text.replace(tokenRe(), FILL));
   const found = new Set<PiiKind>();
-  const has = (re: RegExp, test?: (m: RegExpExecArray) => boolean) => {
-    const r = new RegExp(re.source, re.flags);
-    for (let m = r.exec(plain); m; m = r.exec(plain)) if (!test || test(m)) return true;
-    return false;
-  };
-  if (has(PATTERNS.EMAIL)) found.add("EMAIL");
-  if (has(PATTERNS.GSTIN)) found.add("GSTIN");
-  if (has(PATTERNS.CIN)) found.add("CIN");
-  if (has(PATTERNS.TAN)) found.add("TAN");
-  if (has(PATTERNS.IFSC)) found.add("IFSC");
-  if (has(PATTERNS.PAN)) found.add("PAN");
-  if (has(PATTERNS.AADHAAR, (m) => Boolean(m[1]) || verhoeffValid(m[0].replace(/[\s-]/g, "")))) found.add("AADHAAR");
-  if (has(PATTERNS.PHONE)) found.add("PHONE");
+  for (const m of plain.matchAll(G.AT)) {
+    G.EMAIL_AT.lastIndex = (m.index ?? 0) + m[0].length;
+    found.add(G.EMAIL_AT.test(plain) ? "EMAIL" : "UPI");
+  }
+  if (G.GSTIN.test(plain)) found.add("GSTIN");
+  if (G.CIN.test(plain)) found.add("CIN");
+  if (G.TAN.test(plain)) found.add("TAN");
+  if (G.IFSC.test(plain)) found.add("IFSC");
+  if (G.PAN.test(plain) || G.PAN_SPACED.test(plain) || G.PAN_BOXED.test(plain)) found.add("PAN");
+  for (const m of plain.matchAll(G.AADHAAR)) if (m[1] || verhoeffValid(m[0].replace(/[\s.-]/g, ""))) found.add("AADHAAR");
+  if (G.PHONE.test(plain)) found.add("PHONE");
+  for (const m of plain.matchAll(G.DOB_LABEL)) {
+    const end = (m.index ?? 0) + m[0].length;
+    if (G.DATE.test(plain.slice(end, end + 20))) found.add("DOB");
+  }
+  if (G.PASSPORT_LABEL.test(plain)) found.add("PASSPORT");
+  if (G.VOTER_LABEL.test(plain)) found.add("VOTER_ID");
+  if (G.DIN_LABEL.test(plain)) found.add("DIN");
+  if (opts.dictionary?.length) for (const k of dictionaryLeaks(plain, opts.dictionary)) found.add(k);
   return [...found];
+}
+
+/** Dictionary names still present as whitespace-separated word sequences (n-gram lookup, not the masker's trie). */
+function dictionaryLeaks(plain: string, dictionary: readonly DictionaryEntry[]): PiiKind[] {
+  const { phrases } = compileDictionary(dictionary);
+  if (!phrases.size) return [];
+  let maxWords = 1;
+  for (const k of phrases.keys()) maxWords = Math.max(maxWords, k.split(" ").length);
+  const words: { s: number; e: number; lw: string }[] = [];
+  const re = new RegExp(WORD_RE.source, "gu");
+  for (let m = re.exec(plain); m; m = re.exec(plain)) words.push({ s: m.index, e: m.index + m[0].length, lw: m[0].toLowerCase() });
+  const out = new Set<PiiKind>();
+  for (let i = 0; i < words.length; i++) {
+    let key = "";
+    for (let n = 0; n < maxWords && i + n < words.length; n++) {
+      if (n > 0 && !/^\s+$/.test(plain.slice(words[i + n - 1].e, words[i + n].s))) break;
+      key = n === 0 ? words[i].lw : `${key} ${words[i + n].lw}`;
+      const kind = phrases.get(key);
+      if (kind && (n > 0 || key.length >= 3)) out.add(kind);
+    }
+  }
+  return [...out];
 }

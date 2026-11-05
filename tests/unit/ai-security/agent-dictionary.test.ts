@@ -114,7 +114,8 @@ describe("finding #1: the run dictionary reaches every task-agent model call", (
     const fixtures = loadFixtures(DEFAULT_FIXTURES_ROOT, def.key).filter((f) => !f.expected.error);
     let checkedNames = 0;
     let checkedCalls = 0;
-    for (const fx of fixtures.slice(0, 4)) {
+    const refused: string[] = [];
+    for (const fx of fixtures) {
       const payloads: ProviderRequest[] = [];
       const router = {
         async run<T>(req: ModelRequest<T>) {
@@ -126,7 +127,9 @@ describe("finding #1: the run dictionary reaches every task-agent model call", (
           const claude = spy("claude", true, answer);
           const r = createRouter({ providers: { claude: claude.provider, grok: spy("grok", false).provider, local: spy("local", false).provider }, repo: repo(), config: cfg });
           try {
-            return await r.run(req);
+            const res = await r.run(req);
+            if (res.status === "queued") refused.push(`${def.key}/${fx.id} ${String(req.task)}`);
+            return res;
           } finally {
             payloads.push(...claude.calls);
           }
@@ -146,5 +149,7 @@ describe("finding #1: the run dictionary reaches every task-agent model call", (
       }
     }
     expect(checkedNames + checkedCalls).toBeGreaterThan(0);
+    // The post-mask leak gate (finding #3) never refuses a real fixture prompt: no false positives.
+    expect(refused).toEqual([]);
   }, 120_000);
 });

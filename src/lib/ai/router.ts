@@ -1,7 +1,12 @@
 // ModelRouter — the single entry point for every model call in Firm OS (orchestrator "MODEL USE").
 //
 //   decideRoute()  pure routing policy (table-tested): which provider, tier, and whether to mask.
-//   run()          mask → budget check → call → unmask → validate → escalate / fail over → log.
+//   run()          mask → leak gate → budget check → call → unmask → validate → escalate / fail over → log.
+//
+// Leak gate (security audit #3): before any anonymized call, an independent detector
+// (anonymizer.detectPii — its own broader patterns plus the dictionary) reads exactly what would
+// be sent. If it finds anything, nothing is sent: the call is QUEUED_FOR_HUMAN, the ModelCall row
+// names the kinds found (never the values) and the caller gets a plain reason.
 //
 // Contract with the model: every provider is asked for { output, confidence } (the caller's Zod
 // schema wrapped by routerOutputJsonSchema). `confidence` is the model's self-assessment in
@@ -10,7 +15,7 @@
 // prompt text. The anonymizer token map lives only inside one run() call.
 import { createHash } from "node:crypto";
 import type { ZodTypeAny } from "zod";
-import { createTokenMap, mask, unmaskDeep, type TokenMap } from "./anonymizer";
+import { createTokenMap, detectPii, mask, unmaskDeep, type PiiKind, type TokenMap } from "./anonymizer";
 import { loadRouterConfig, type RouterConfig } from "./config";
 import {
   BudgetExceededError,
@@ -24,6 +29,7 @@ import { costInr, estimateTokens } from "./pricing";
 import { createProviders, type ProviderSet } from "./providers";
 import { istDayStart } from "@/lib/ist";
 import type {
+  DictionaryEntry,
   Difficulty,
   ModelProvider,
   ModelRequest,
@@ -200,6 +206,37 @@ function zodIssues(err: { issues: { path: (string | number)[]; message: string }
   return err.issues.map((i) => `${i.path.length ? i.path.join(".") : "output"}: ${i.message}`);
 }
 
+// ---------------------------------------------------------------- masking + leak gate (security audit #3, #26)
+
+/**
+ * The masked copy of a request's messages, all on one token map. System messages are fixed firm
+ * text (task registry, preambles): identifiers and dictionary names, but no name heuristics, and
+ * their own placeholder examples are kept. User / assistant messages carry client documents: full
+ * masking with the request's dictionary, and every token-looking text escaped as ⟨LITERAL_n⟩.
+ */
+export function maskMessages(messages: readonly Msg[], dictionary: DictionaryEntry[] | undefined, map: TokenMap): Msg[] {
+  return messages.map((m) => ({ role: m.role, content: m.role === "system" ? mask(m.content, { map, dictionary, scope: "structured" }).masked : maskContent(m.content, dictionary, map) }));
+}
+
+/** Full masking of client text (a document, a feedback message) on the request's map. */
+export function maskContent(text: string, dictionary: DictionaryEntry[] | undefined, map: TokenMap): string {
+  return mask(text, { dictionary, map, literals: "all" }).masked;
+}
+
+/** What a person reads when the leak gate stops a call (the ModelCall row names the kinds, never the values). */
+export const LEAK_GATE_REASON =
+  "The request to the AI was stopped before sending because some client details could not be hidden from it. Nothing was sent; a person should prepare this item by hand.";
+
+/**
+ * Post-mask leak gate: the INDEPENDENT detector (detectPii, its own broader patterns) over exactly
+ * what would be sent. Any kind found means masking failed, and the call must not go out.
+ */
+export function leakGateKinds(preq: Pick<ProviderRequest, "system" | "messages">, dictionary?: DictionaryEntry[]): PiiKind[] {
+  const kinds = new Set<PiiKind>(detectPii(preq.system ?? "", { dictionary }));
+  for (const m of preq.messages) for (const k of detectPii(m.content, { dictionary })) kinds.add(k);
+  return [...kinds].sort();
+}
+
 // ---------------------------------------------------------------- run()
 
 export interface Router {
@@ -230,9 +267,9 @@ export function createRouter(deps: RouterDeps): Router {
       grok: await providers.grok.isAvailable(),
     };
     const map: TokenMap = createTokenMap();
-    const maskText = (s: string) => mask(s, { dictionary: req.dictionary, map }).masked;
+    const maskText = (s: string) => maskContent(s, req.dictionary, map);
     // The masked copy is always built: it is what cloud providers get and what we hash.
-    const maskedMessages: Msg[] = req.messages.map((m) => ({ role: m.role, content: maskText(m.content) }));
+    const maskedMessages: Msg[] = maskMessages(req.messages, req.dictionary, map);
     const jsonSchema = routerOutputJsonSchema(req.schema as ZodTypeAny | undefined);
     const maxTokens = req.maxTokens ?? config.defaultMaxTokens;
     const priceCtx = { usdInr: config.usdInr, grokPriceUsdPerMTok: config.grokPriceUsdPerMTok };
@@ -283,6 +320,15 @@ export function createRouter(deps: RouterDeps): Router {
       const sent = splitSystem(fbText === null ? source : [...source, { role: "user", content: fbText }]);
       const preq: ProviderRequest = { model, ...sent, jsonSchema, maxTokens };
       const callRow = { provider: d.provider, model, tier: d.tier, anonymized: d.anonymize };
+
+      // Leak gate (fail closed): nothing leaves if the independent detector still finds PII.
+      if (d.anonymize) {
+        const leaked = leakGateKinds(preq, req.dictionary);
+        if (leaked.length) {
+          await record({ ...callRow, status: "QUEUED_FOR_HUMAN", error: `leak-gate: ${leaked.join(", ")} found after masking; nothing was sent` });
+          return { status: "queued", reason: LEAK_GATE_REASON, needsPartnerReview: true, runId: req.runId, attempts: 0 };
+        }
+      }
 
       const estimate = costInr(d.provider, model, estimateTokens(JSON.stringify(preq.messages) + (preq.system ?? "")), 0, priceCtx);
       const refusal = await checkBudget(req, estimate);
