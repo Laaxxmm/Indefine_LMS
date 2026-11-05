@@ -103,3 +103,37 @@ export {
 export type { CalendarPack, CalendarRule, DueContext, DueDates, DueErrorCode, DueOptions, DueResult, DueSpec, ParsedPeriod, PeriodKind, WorkingDayOptions } from "./calendar";
 
 export { DEFAULT_CALENDAR, defaultCalendarJson } from "./calendar-defaults";
+
+export { AgentRunError, INPUTS_RETENTION_DAYS, LLM_CHECK_SYSTEM, LlmVerdictOutputSchema, jobFolder, latestPackQuery, runAgent } from "./runner";
+export type {
+  AgentDefinition,
+  AnyAgent,
+  CheckInput,
+  DeliverableContext,
+  DeliverableDraft,
+  ExtractContext,
+  Figures,
+  FirmDb,
+  InputFile,
+  InputRequest,
+  InputSource,
+  InputSourceKind,
+  JobContext,
+  ModelCaller,
+  ModelRouterLike,
+  PreconditionCode,
+  RunOptions,
+  RunOutcome,
+  RunnerDeps,
+} from "./runner";
+
+export { MistakeExampleSchema, decideMistake, diffPacks, proposeMistake, replayMistake } from "./mistakes";
+export type { Decision, HumanActor, MistakeDeps, MistakeExample, MistakeResult, PackDiff, RuleChange } from "./mistakes";
+
+export { InputTooLargeError, MAX_INPUT_BYTES, clientDocsInputSource, combineInputSources, defaultInputSource, emptyInputSource, staticInputSource } from "./inputs";
+export { PREVIEW_MAX_COLS, PREVIEW_MAX_ROWS, checkWorkbookShape, previewWorkbook } from "./preview";
+export type { PreviewSheet, SheetShape, WorkbookPreview } from "./preview";
+export { MissingRecordingError, createRecordedRouter } from "./recorded-router";
+export type { RecordedResponses, RecordedRouter } from "./recorded-router";
+export { UniqueConstraintError, createMemoryDb } from "./memory-db";
+export type { MemoryDb } from "./memory-db";
