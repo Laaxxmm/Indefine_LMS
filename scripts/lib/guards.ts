@@ -42,6 +42,15 @@ export const FIRM_OS_DIRS = [
   "src/app/api/cron/firm-os",
   "src/lib/rbac",
   "src/lib/audit",
+  "src/lib/search",
+  "src/lib/corrections",
+  "src/lib/privacy",
+  "src/lib/workspace",
+  "src/lib/errors",
+  "src/app/search",
+  "src/app/workspace",
+  "src/app/focus",
+  "firm-os-companion-extension",
 ];
 export const isFirmOs = (p: string) => FIRM_OS_DIRS.some((d) => under(norm(p), d));
 
@@ -136,7 +145,7 @@ const PORTAL_NAMES = ["gst", "mca", "incometax", "tdscpc"];
 /** Exact host or any subdomain of it (www.x, services.x). `cbic-gst...` is a different host. */
 export const PORTAL_HOST_RE = new RegExp("(?<![A-Za-z0-9-])(?:" + PORTAL_NAMES.join("|") + ")\\.gov\\.in(?![A-Za-z0-9-])", "i");
 export const PORTAL_HOSTS = PORTAL_NAMES.map((n) => n + ".gov" + ".in");
-const NO_PORTAL_ROOTS = ["src", "scripts", "statutory-extension", "neo-centra-extension"];
+const NO_PORTAL_ROOTS = ["src", "scripts", "statutory-extension", "neo-centra-extension", "firm-os-companion-extension"];
 
 export type PortalAllow = {
   path: string;

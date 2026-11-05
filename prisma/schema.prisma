@@ -1835,3 +1835,76 @@ model RateLimitBucket {
   count       Int      @default(0)
   updatedAt   DateTime @updatedAt
 }
+
+// -------------------- Firm OS: privacy rights, workspace, companion --------------------
+// PrivacyRequest / BreachIncident: DPDP Act 2023 data-principal rights and breach handling
+// (docs/dpdp/). Erasure is anonymisation or a recorded legal hold — never a hard delete.
+// WorkspaceSetting / RoleWorkspaceDefault: admin-controlled modules and focus mode per user/role.
+// CompanionToken: pairing for the read-only side-panel companion extension (hash only stored).
+
+model PrivacyRequest {
+  id             String   @id @default(cuid())
+  kind           String // access | correction | erasure | grievance | nomination | consent-withdrawal
+  principalType  String // client-person | client-contact | staff
+  principalRef   String? // FirmClient.id / Client.id / User.id
+  principalLabel String // masked display label only
+  identifierHash String? // sha256 of normalised identifiers, for lookup without storing them again
+  receivedAt     DateTime @default(now())
+  dueAt          DateTime
+  status         String // RECEIVED | VERIFYING | IN_PROGRESS | ON_HOLD | COMPLETED | REJECTED
+  outcome        String?
+  legalHold      String? // statutory basis when data must be retained
+  handledById    String?
+  createdById    String
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([status, dueAt])
+  @@index([principalRef])
+}
+
+model BreachIncident {
+  id                   String    @id @default(cuid())
+  detectedAt           DateTime
+  summary              String
+  severity             String // low | medium | high
+  affectedCount        Int?
+  boardNotifiedAt      DateTime?
+  principalsNotifiedAt DateTime?
+  status               String // OPEN | CONTAINED | NOTIFIED | CLOSED
+  createdById          String
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([status, detectedAt])
+}
+
+model WorkspaceSetting {
+  userId           String   @id
+  modules          Json? // null = role default; else array of module keys
+  focusMode        Boolean?
+  companionEnabled Boolean  @default(false)
+  updatedById      String?
+  updatedAt        DateTime @updatedAt
+}
+
+model RoleWorkspaceDefault {
+  role        String   @id // admin | partner | manager | staff
+  modules     Json
+  focusMode   Boolean  @default(false)
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+}
+
+model CompanionToken {
+  id         String    @id @default(cuid())
+  userId     String
+  tokenHash  String    @unique
+  label      String?
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+
+  @@index([userId])
+}
