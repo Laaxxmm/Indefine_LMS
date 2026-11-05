@@ -282,6 +282,12 @@ export class CloseLoopWorld {
         return c ? { id: c.id } : null;
       },
       create: async ({ data }) => {
+        // Like Postgres' unique index on CoachEvent.dedupeKey: the second insert fails with P2002.
+        // The await first lets concurrent callers interleave, as two cron runs would.
+        await Promise.resolve();
+        if (data.dedupeKey && this.coach.some((x) => x.dedupeKey === data.dedupeKey)) {
+          throw Object.assign(new Error("Unique constraint failed on the fields: (`dedupeKey`)"), { code: "P2002", meta: { target: ["dedupeKey"] } });
+        }
         const c = { id: this.id("coach"), ...data, createdAt: this.clock() };
         this.coach.push(c);
         return { id: c.id };

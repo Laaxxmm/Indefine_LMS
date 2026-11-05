@@ -116,6 +116,8 @@ export type CoachEventData = {
   kind: "reminder" | "escalation";
   jobTaskId: string;
   payload: Prisma.InputJsonValue;
+  /** Unique (CoachEvent.dedupeKey): a second create with the same key fails, so a nudge is sent once. */
+  dedupeKey?: string;
 };
 
 export type AuditEventData = {
