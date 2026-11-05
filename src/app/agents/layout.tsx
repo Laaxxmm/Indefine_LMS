@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import { LogoMark } from "@/components/Logo";
 import { NavLink } from "@/components/NavLink";
 import { canSeeMistakeLog, canSeeAllRuns, canUseAgents } from "@/lib/agents/access";
+import { canSpotCheck } from "@/lib/rbac/policy";
 import { visibleAgents } from "@/lib/agents/registry";
 import { focusRing, runsListLabel } from "./parts";
 
@@ -44,6 +45,11 @@ export default async function AgentsLayout({ children }: { children: React.React
             {canSeeMistakeLog(session.user) && (
               <NavLink href="/agents/mistakes" className={link}>
                 Mistake log
+              </NavLink>
+            )}
+            {canSpotCheck(session.user) && (
+              <NavLink href="/agents/spot-checks" className={link}>
+                Spot checks
               </NavLink>
             )}
             <Link href="/dashboard" className={`${link} flex items-center gap-2`}>
