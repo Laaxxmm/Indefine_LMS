@@ -30,7 +30,9 @@
     "verify:no-portal": "tsx scripts/verify-no-portal.ts",
     "verify:no-delete": "tsx scripts/verify-no-delete.ts",
     "verify:ai-boundary": "tsx scripts/verify-ai-boundary.ts",
-    "verify:firm-os": "npm run verify:no-skip && npm run verify:secrets && npm run verify:no-portal && npm run verify:no-delete && npm run verify:ai-boundary"
+    "verify:firm-os": "npm run verify:no-skip && npm run verify:secrets && npm run verify:no-portal && npm run verify:no-delete && npm run verify:ai-boundary",
+    "verify:patha": "tsx --env-file-if-exists=.env.local scripts/verify-patha.ts",
+    "map:legacy-folders": "tsx --env-file-if-exists=.env.local scripts/map-legacy-folders.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.5.0",
