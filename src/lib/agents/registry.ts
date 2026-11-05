@@ -3,9 +3,13 @@
 // FIRM_OS_ECHO_AGENT is on.
 import type { AnyAgent } from "@/lib/agents/core/runner";
 import { echoAgent } from "@/lib/agents/echo";
+import { gstAgent } from "@/lib/agents/gst";
 import { isEchoAgentEnabled } from "./flags";
 
-export const AGENTS: Readonly<Record<string, AnyAgent>> = Object.freeze({ [echoAgent.key]: echoAgent });
+export const AGENTS: Readonly<Record<string, AnyAgent>> = Object.freeze({
+  [echoAgent.key]: echoAgent,
+  [gstAgent.key]: gstAgent,
+});
 
 export function getAgent(key: string, agents: Readonly<Record<string, AnyAgent>> = AGENTS): AnyAgent | undefined {
   return Object.prototype.hasOwnProperty.call(agents, key) ? agents[key] : undefined;

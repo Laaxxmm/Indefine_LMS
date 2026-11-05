@@ -103,7 +103,7 @@ describe("/agents", () => {
     expect(html).toContain("ASSIGNED");
     as(user("ravi"));
     expect(await renderHtml(await AgentPage({ params: Promise.resolve({ agent: "echo" }) }))).toContain("Nothing to run");
-    await expect(AgentPage({ params: Promise.resolve({ agent: "gst" }) })).rejects.toBeInstanceOf(NotFoundSignal);
+    await expect(AgentPage({ params: Promise.resolve({ agent: "no-such-agent" }) })).rejects.toBeInstanceOf(NotFoundSignal);
     vi.stubEnv("FIRM_OS_ECHO_AGENT", "");
     await expect(AgentPage({ params: Promise.resolve({ agent: "echo" }) })).rejects.toBeInstanceOf(NotFoundSignal);
   });
