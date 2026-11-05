@@ -19,6 +19,7 @@ import { transitionJobTask, type TransitionResult } from "@/lib/agents/core/stat
 import { DOCX_MIME, XLSX_MIME } from "@/lib/agents/core/templates";
 import { AGENTS, getAgent } from "@/lib/agents/registry";
 import { logAudit } from "@/lib/audit/log";
+import { clientDictionary, scrubFreeText } from "@/lib/corrections/mask";
 import { AI_RESTRICTED_MESSAGE, isAiProcessingRestricted } from "@/lib/privacy/consent";
 import { auditRead } from "@/lib/audit/reads";
 import { agentRunBusyMessage, agentRunSlots, type ConcurrencyLimiter } from "@/lib/hardening/concurrency";
@@ -87,7 +88,16 @@ const RUN_SELECT = {
   attempt: true,
   jobTaskId: true,
   jobTask: {
-    select: { id: true, state: true, service: true, assigneeId: true, reviewerId: true, fy: true, period: true, firmClient: { select: { clientCode: true, lmsClientId: true } } },
+    select: {
+      id: true,
+      state: true,
+      service: true,
+      assigneeId: true,
+      reviewerId: true,
+      fy: true,
+      period: true,
+      firmClient: { select: { clientCode: true, lmsClientId: true, client: { select: { name: true, contactName: true, entityType: true } } } },
+    },
   },
 } as const;
 
@@ -95,6 +105,11 @@ async function loadRun(db: FirmDb, runId: string) {
   return db.agentRun.findUnique({ where: { id: runId }, select: RUN_SELECT });
 }
 type LoadedRun = NonNullable<Awaited<ReturnType<typeof loadRun>>>;
+
+/** A note or comment as stored: the client's names and identifiers masked (ADR-006; DPDP erasure). */
+function storedNote(run: LoadedRun, text: string): string {
+  return scrubFreeText(text, clientDictionary(run.jobTask.firmClient?.client));
+}
 
 async function latestRunId(db: FirmDb, jobTaskId: string): Promise<string | null> {
   return (await db.agentRun.findFirst({ where: { jobTaskId }, orderBy: { startedAt: "desc" }, select: { id: true } }))?.id ?? null;
@@ -189,11 +204,13 @@ async function backToPrepAndRun(
   // restricted client's job stays exactly where it was (src/lib/privacy/consent.ts).
   if (await isAiProcessingRestricted(deps.db, { lmsClientId: v.data.jobTask.firmClient.lmsClientId })) return fail(409, AI_RESTRICTED_MESSAGE);
   // The slot is taken before the transition, so a refused (busy) request leaves the job as it was.
+  // The stored copies (event note, review note, audit) are masked; the new run gets the note as typed.
+  const stored = storedNote(v.data, note);
   return withRunSlot(deps, async () => {
-    const t = await transitionJobTask(deps.db, v.data.jobTaskId, "IN_PREP", actorOf(user)!, { expectedState: from, note, now: deps.now() });
+    const t = await transitionJobTask(deps.db, v.data.jobTaskId, "IN_PREP", actorOf(user)!, { expectedState: from, note: stored, now: deps.now() });
     if (!t.ok) return fail(t.code === "FORBIDDEN" ? 403 : t.code === "NOTE_REQUIRED" ? 400 : 409, t.reason);
-    if (from === "IN_REVIEW") await deps.db.agentRun.update({ where: { id: runId }, data: { status: "CHANGES_REQUESTED", reviewNotes: note.trim() } });
-    await auditTransition(user, deps, t, runId, { note: note.trim() });
+    if (from === "IN_REVIEW") await deps.db.agentRun.update({ where: { id: runId }, data: { status: "CHANGES_REQUESTED", reviewNotes: stored } });
+    await auditTransition(user, deps, t, runId, { note: stored });
     await fireHook(deps, t, user);
     return runAndAudit(user, def, v.data.jobTaskId, deps, "agent-run", note);
   });
@@ -223,13 +240,14 @@ export async function approvePack(user: SessionUser, runId: string, note: string
   const v = await visibleRun(user, deps.db, runId);
   if (!v.ok) return v;
   if ((await latestRunId(deps.db, v.data.jobTaskId)) !== runId) return fail(409, "A newer run exists for this job; approve the latest run");
-  const t = await transitionJobTask(deps.db, v.data.jobTaskId, "APPROVED", actorOf(user)!, { expectedState: "IN_REVIEW", note, now: deps.now() });
+  const stored = note ? storedNote(v.data, note) : note;
+  const t = await transitionJobTask(deps.db, v.data.jobTaskId, "APPROVED", actorOf(user)!, { expectedState: "IN_REVIEW", note: stored, now: deps.now() });
   if (!t.ok) {
     const status = t.code === "FORBIDDEN" || t.code === "SELF_APPROVAL" || t.code === "BLOCKING_FAILURES" ? 403 : t.code === "NOTE_REQUIRED" ? 400 : 409;
     return fail(status, t.reason);
   }
   await deps.db.agentRun.update({ where: { id: runId }, data: { status: "APPROVED" } });
-  await auditTransition(user, deps, t, runId, note ? { note } : {});
+  await auditTransition(user, deps, t, runId, stored ? { note: stored } : {});
   await fireHook(deps, t, user);
   return finalizeRun(user, runId, deps);
 }
@@ -291,7 +309,7 @@ export async function addComment(user: SessionUser, runId: string, text: string,
   if (!v.ok) return v;
   const body = text.trim();
   if (!body) return fail(400, "Write a comment first");
-  const ev = await logAudit(deps.db, { actorId: user!.id, action: "comment", entity: "AgentRun", entityId: runId, meta: { text: body } });
+  const ev = await logAudit(deps.db, { actorId: user!.id, action: "comment", entity: "AgentRun", entityId: runId, meta: { text: storedNote(v.data, body) } });
   return { ok: true, data: { id: ev.id } };
 }
 

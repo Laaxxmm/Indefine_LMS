@@ -48,6 +48,14 @@ async function logRequest(kind: string, identifiers: Record<string, string>) {
   return String((await json(r)).id);
 }
 
+/** Identity is checked by someone other than the admin who logged the request (src/lib/privacy/duties.ts). */
+async function verifyAsPartner(id: string) {
+  as(USERS.partner);
+  const v = await verify.POST(post({ method: "Photo ID seen in person" }), params(id));
+  as(admin);
+  return v;
+}
+
 describe("privacy request routes", () => {
   it("401 signed out, 403 for staff, 400 with a sentence for a bad body, 201 for an admin", async () => {
     as(null);
@@ -71,7 +79,8 @@ describe("privacy request routes", () => {
   it("verify → export downloads an attachment; before verification it is refused", async () => {
     const id = await logRequest("access", { pan: PAN_PROP });
     expect((await exportRoute.GET(get(), params(id))).status).toBe(409);
-    const v = await verify.POST(post({ method: "Photo ID seen in person" }), params(id));
+    expect((await verify.POST(post({ method: "Photo ID seen in person" }), params(id))).status).toBe(403); // the admin logged it
+    const v = await verifyAsPartner(id);
     expect(v.status).toBe(200);
     const res = await exportRoute.GET(get(), params(id));
     expect(res.status).toBe(200);
@@ -85,7 +94,11 @@ describe("privacy request routes", () => {
 
   it("erasure plan and confirm; staff are refused", async () => {
     const id = await logRequest("erasure", { email: "lalitha@consult.test" });
+    // Separation of duties (src/lib/privacy/duties.ts): the partner verifies, the admin confirms.
+    as(USERS.partner);
     await verify.POST(post({ method: "Photo ID seen in person" }), params(id));
+    expect((await erasure.POST(post({ fingerprint: "x" }), params(id))).status).toBe(403);
+    as(admin);
     const plan = await json(await erasure.GET(get(), params(id)));
     expect((plan.items as Record<string, unknown>[]).every((i) => !("set" in i))).toBe(true);
     as(USERS.staff);
@@ -104,13 +117,13 @@ describe("privacy request routes", () => {
     expect((await close.POST(post({ outcome: "completed", note: "We have fixed the reminder emails." }), params(g))).status).toBe(200);
     const c = await logRequest("consent-withdrawal", { pan: PAN_PROP });
     expect((await consent.POST(post({}), params(c))).status).toBe(409);
-    await verify.POST(post({ method: "Photo ID seen in person" }), params(c));
+    await verifyAsPartner(c);
     expect((await consent.POST(post({}), params(c))).status).toBe(200);
     const n = await logRequest("nomination", { pan: PAN_PROP });
-    await verify.POST(post({ method: "Photo ID seen in person" }), params(n));
+    await verifyAsPartner(n);
     expect((await nomination.POST(post({ nomineeName: "Meena Kumar", relationship: "spouse", nomineeContact: "9000011111" }), params(n))).status).toBe(200);
     const k = await logRequest("correction", { pan: PAN_PROP });
-    await verify.POST(post({ method: "Photo ID seen in person" }), params(k));
+    await verifyAsPartner(k);
     const fixed = await pcorrection.POST(post({ entity: "Client", id: "c-prop", field: "city", newValue: "Hubballi", reason: "Client moved office" }), params(k));
     expect(fixed.status).toBe(200);
     const notMine = await pcorrection.POST(post({ entity: "JobTask", id: "j-assigned", field: "title", newValue: "X", reason: "Client moved office" }), params(k));
@@ -135,7 +148,7 @@ describe("privacy request routes", () => {
 
   it("lift restriction: partner only, with a reason; admins and staff get a sentence, not a lift", async () => {
     const c = await logRequest("consent-withdrawal", { pan: PAN_PROP });
-    await verify.POST(post({ method: "Photo ID seen in person" }), params(c));
+    await verifyAsPartner(c);
     expect((await consent.POST(post({}), params(c))).status).toBe(200);
     const reason = { reason: "Client gave written consent again on 05 Nov 2026" };
     const byAdmin = await lift.POST(post(reason), params(c));
@@ -181,7 +194,7 @@ describe("correction routes", () => {
     as(admin);
     const ok = await corrections.POST(post({ entity: "Client", id: "c-prop", field: "city", newValue: "Hubballi", reason: "Typed the wrong city" }));
     expect(ok.status).toBe(200);
-    expect(await json(ok)).toMatchObject({ field: "city", before: "Bengaluru", after: "Hubballi" });
+    expect(await json(ok)).toMatchObject({ field: "city", before: "B…", after: "H…" }); // class A: masked in the audit
     const notAllowed = await corrections.POST(post({ entity: "Client", id: "c-prop", field: "name", newValue: "X", reason: "Typed the wrong name" }));
     expect(notAllowed.status).toBe(400);
 

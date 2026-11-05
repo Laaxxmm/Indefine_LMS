@@ -5,7 +5,7 @@
 import type { SessionUser } from "@/lib/access";
 import { correctField, type CorrectionDeps, type CorrectionDone } from "@/lib/corrections/service";
 import { fail, type ServiceResult } from "@/lib/corrections/result";
-import { guardRegister, loadOpen, requireResolved, requireVerified, step, writeAudit, type PrivacyDeps } from "./register";
+import { guardRegister, loadOpen, requirePrincipal, requireVerified, step, writeAudit, type PrivacyDeps } from "./register";
 
 export const PRIVACY_CORRECTABLE_ENTITIES = ["Client", "FirmClient"] as const;
 
@@ -28,7 +28,7 @@ export async function correctForRequest(
   const checked = await step(deps, async (tx) => {
     await loadOpen(tx, requestId, ["correction"]);
     await requireVerified(tx, requestId);
-    return requireResolved(tx, requestId);
+    return requirePrincipal(tx, requestId, deps.hashKey); // a record to correct, not identifiers alone
   });
   if (!checked.ok) return checked;
 

@@ -43,6 +43,7 @@ import {
 import { transitionJobTask } from "./state-db";
 import { logAudit } from "@/lib/audit/log";
 import { AI_RESTRICTED_MESSAGE, isAiProcessingRestricted } from "@/lib/privacy/consent";
+import { clientDictionary, scrubFreeText } from "@/lib/corrections/mask";
 import { buildDocx, buildWorkbook, type BuiltDeliverable, type DocBlock, type SheetSpec } from "./templates";
 
 // ------------------------------------------------------------------ dependencies
@@ -314,7 +315,7 @@ export async function runAgent<I, E>(def: AgentDefinition<I, E>, jobTaskId: stri
       sopPackVersion: pack.version,
       status: "RUNNING",
       attempt,
-      reviewNotes: notes,
+      reviewNotes: notes && scrubFreeText(notes, clientDictionary({ name: job.clientName })), // stored masked (DPDP); the agent gets `notes` as typed
       startedById: opts.startedById ?? null,
       startedAt: deps.now(),
     },

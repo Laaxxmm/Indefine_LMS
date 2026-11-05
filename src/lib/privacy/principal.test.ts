@@ -36,7 +36,7 @@ const leaksB = (x: unknown) => {
 async function logged(db: MemoryDb, kind: string, identifiers: Record<string, string>) {
   const r = await createRequest(USERS.admin, { kind, identifiers }, deps(db));
   if (!r.ok) throw new Error(r.error);
-  await verifyIdentity(USERS.admin, r.data.id, { method: "Call back to the phone number on record" }, deps(db));
+  await verifyIdentity(USERS.partner, r.data.id, { method: "Call back to the phone number on record" }, deps(db)); // logged by the admin, checked by the partner (duties.ts)
   return r.data;
 }
 const req = (db: MemoryDb, id: string) => db.tables.privacyRequest.find((r) => r.id === id)!;
@@ -98,7 +98,7 @@ describe("a request whose identifiers match several people is parked, never bund
     expect(plan!.items.some((i) => i.recordId === "c-prop")).toBe(true);
     expect(plan!.items.some((i) => i.recordId === "c-sister")).toBe(false);
     expect(leaksB(publicPlan(plan!))).toEqual([]);
-    const done = await confirmErasure(USERS.partner, erasure.id, { fingerprint: plan!.fingerprint }, deps(db));
+    const done = await confirmErasure(USERS.admin, erasure.id, { fingerprint: plan!.fingerprint }, deps(db)); // not the verifier
     expect(done.ok).toBe(true);
     const sister = db.tables.client.find((x) => x.id === "c-sister")!;
     expect(sister).toMatchObject({ pan: PAN_B, gstin: GSTIN_B, growthNote: NOTE_B }); // client B untouched

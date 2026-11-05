@@ -92,6 +92,23 @@ sent to a cloud model is masked by design; confirm `ModelCall.anonymized = true`
 question. A virus-scan engine is not configured (uploads are "not scanned — allowed with warning",
 logged as `[upload]` lines): if malware is suspected, collect those log lines.
 
+### What we can reconstruct (and what is no longer there)
+
+Retention and erasure remove copies on purpose ([retention](../dpdp/retention.md),
+[rights](../dpdp/rights.md)), so the live database cannot answer every question about the past.
+Say so in the report rather than guess; the step-0 snapshot and Railway's own backups hold the state
+as it was when they were taken.
+
+| Question | Where the answer is | Limits |
+|---|---|---|
+| Who did what, when | `AuditEvent` (actor, action, record, time) — kept | Typed notes and comments are stored masked (identifiers as `⟨PAN_1⟩`, the client's names as `⟨NAME_1⟩` where the writer knew the client) and older rows are swept nightly; correction values are masked (last four, initials, first letter). The audit shows *that* a note was written and on which record, not the identifiers in it |
+| What a model provider received | `ModelCall` (time, agent, task, provider, `anonymized`, `promptHash`) | Prompts are never stored and token maps live only in memory for the call: we can show a call was masked, not replay what was sent. `ModelCall.error` has identifiers masked by the nightly sweep |
+| Which cached agent inputs existed | `AgentRun.inputs` | Held at most 30 days after the run; older runs show `null`. For an older window, list the job's ClientDocs and deliverables in SharePoint instead |
+| What was typed at onboarding | `OnboardingRun.prompt` / `spec` / `plan` | Cleared 30 days after the run last changed (`[cleared by retention]`); the client master holds the details that were kept |
+| Break-nudge activity | `ActivityHeartbeat` | Only the last 7 days exist |
+| Whether an erased person was affected | `PrivacyRequest` (masked label, `identifierHash`, outcome) and the `anonymise` / `legal-hold` AuditEvents | Their rows read `[erased]`. To check a specific person, hash their identifiers the same way (`identifierHash()` in `src/lib/privacy/locator.ts`, keyed with `AUTH_SECRET`) and compare with `PrivacyRequest.identifierHash`. Their data still exists in backups taken before the erasure until those expire: if a backup is restored ([backup restore](backup-restore.md)), run the erasure plan again on the restored rows before anyone uses them |
+| Files that were read or shared | Microsoft Purview audit for the `CL-{Code}` site; `AuditEvent` `export` rows for downloads through Firm OS | Files are never in Postgres: Purview is the record of who opened them in SharePoint |
+
 ## 3. Notify
 
 | Who | When | How | Owner |

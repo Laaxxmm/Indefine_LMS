@@ -21,7 +21,7 @@ import { scrubFreeText } from "@/lib/corrections/mask";
 import { LIFT_NOT_ALLOWED, canLiftRestriction } from "./access";
 import type { PrivacyReadDb } from "./inventory";
 import { RESTRICTIONS, WITHDRAWAL_LIMITS, type RestrictionKey } from "./policy";
-import { NOT_RESOLVED, guardRegister, loadMatches, loadOpen, principalOf, requireVerified, writeAudit, type PrivacyDeps, type Tx } from "./register";
+import { IDENTIFIER_ONLY_NO_RECORD, NOT_RESOLVED, guardRegister, loadOpen, requireVerified, resolutionOf, writeAudit, type PrivacyDeps, type Tx } from "./register";
 
 /** What a person sees when work would send a restricted client's data to a model. */
 export const AI_RESTRICTED_MESSAGE = "This client has restricted AI processing. Prepare this by hand or ask a partner to lift the restriction.";
@@ -50,12 +50,13 @@ export async function withdrawConsent(user: SessionUser, id: string, deps: Priva
     const out = await deps.db.$transaction(async (tx: Tx) => {
       await loadOpen(tx, id, ["consent-withdrawal"]);
       await requireVerified(tx, id);
-      // Only the one person the request is linked to; several matching records must be resolved first.
-      const matches = await principalOf(tx, id);
-      if (!matches.length) {
-        if ((await loadMatches(tx, id)).length > 1) throw new Refusal(409, NOT_RESOLVED);
-        throw new Refusal(409, "No records were found for this person, so there is nothing to restrict. Refuse the request with that reply instead.");
-      }
+      // Only the one person the request is linked to; several matching records must be resolved first
+      // (register.ts resolutionOf). A person known only by identifiers has no record to restrict.
+      const resolution = await resolutionOf(tx, id, deps.hashKey);
+      if (resolution.kind === "parked") throw new Refusal(409, NOT_RESOLVED);
+      if (resolution.kind === "identifier-only") throw new Refusal(409, IDENTIFIER_ONLY_NO_RECORD);
+      if (resolution.kind === "nothing") throw new Refusal(409, "No records were found for this person, so there is nothing to restrict. Refuse the request with that reply instead.");
+      const matches = [resolution.principal];
       const applied = new Set<RestrictionKey>();
       for (const m of matches) {
         if (m.principalType === "staff") {

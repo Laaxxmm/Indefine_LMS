@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { closeRequest, createRequest, getRequest, listRequests, recordNomination, verifyIdentity, type PrivacyDeps } from "./register";
 import { dueDateFor, outerLimitFor, RESPONSE_TIMELINES } from "./policy";
+import { OTHER_NOTE_MESSAGE, SELF_VERIFY_MESSAGE } from "./duties";
 import { identifierHash, identifierPrincipalLocator, normaliseIdentifier, prismaPrincipalLocator, type Identifier } from "./locator";
 import { memoryRateLimiter } from "@/lib/search/rate-limit";
 import type { PrivacyDb } from "./inventory";
@@ -114,12 +115,15 @@ describe("workflow steps", () => {
   it("verifies identity once, with a known method, and moves the request in progress", async () => {
     const db = privacyWorld();
     const { id } = await logged(db, "access", { pan: PAN_PROP });
-    expect(await verifyIdentity(USERS.admin, id, { method: "Telepathy" }, deps(db))).toMatchObject({ ok: false, status: 400 });
-    expect(await verifyIdentity(USERS.admin, id, { method: "Other (explain in the note)" }, deps(db))).toMatchObject({ ok: false, status: 400 });
-    expect(await verifyIdentity(USERS.admin, id, { method: "Call back to the phone number on record", note: "Called 9876543210" }, deps(db))).toMatchObject({ ok: true });
-    expect(req(db, id)).toMatchObject({ status: "IN_PROGRESS", handledById: USERS.admin.id });
+    expect(await verifyIdentity(USERS.partner, id, { method: "Telepathy" }, deps(db))).toMatchObject({ ok: false, status: 400 });
+    expect(await verifyIdentity(USERS.partner, id, { method: "Other (explain in the note)" }, deps(db))).toMatchObject({ ok: false, status: 400 });
+    // Separation of duties (duties.ts): a real note for "Other", and never the person who logged it.
+    expect(await verifyIdentity(USERS.partner, id, { method: "Other (explain in the note)", note: "trust me" }, deps(db))).toEqual({ ok: false, status: 400, error: OTHER_NOTE_MESSAGE });
+    expect(await verifyIdentity(USERS.admin, id, { method: "Photo ID seen in person" }, deps(db))).toEqual({ ok: false, status: 403, error: SELF_VERIFY_MESSAGE });
+    expect(await verifyIdentity(USERS.partner, id, { method: "Call back to the phone number on record", note: "Called 9876543210" }, deps(db))).toMatchObject({ ok: true });
+    expect(req(db, id)).toMatchObject({ status: "IN_PROGRESS", handledById: USERS.partner.id });
     expect(JSON.stringify(db.tables.auditEvent)).not.toContain("9876543210");
-    expect(await verifyIdentity(USERS.admin, id, { method: "Photo ID seen in person" }, deps(db))).toMatchObject({ ok: false, status: 409 });
+    expect(await verifyIdentity(USERS.partner, id, { method: "Photo ID seen in person" }, deps(db))).toMatchObject({ ok: false, status: 409 });
   });
 
   it("closes an access request only after identity is verified; grievances can be answered straight away", async () => {
@@ -137,7 +141,7 @@ describe("workflow steps", () => {
   it("an erasure request is completed from its plan, but can be refused here with a reason", async () => {
     const db = privacyWorld();
     const { id } = await logged(db, "erasure", { pan: PAN_PROP });
-    await verifyIdentity(USERS.admin, id, { method: "Photo ID seen in person" }, deps(db));
+    await verifyIdentity(USERS.partner, id, { method: "Photo ID seen in person" }, deps(db));
     const r = await closeRequest(USERS.admin, id, { outcome: "completed", note: "All erased as asked by the client." }, deps(db));
     expect(r).toMatchObject({ ok: false, status: 409 });
     if (!r.ok) expect(r.error).toMatch(/from its erasure plan/);
@@ -149,7 +153,7 @@ describe("workflow steps", () => {
     const db = privacyWorld();
     const { id } = await logged(db, "nomination", { pan: PAN_PROP });
     expect(await recordNomination(USERS.admin, id, { nomineeName: "Meena Kumar", relationship: "spouse", nomineeContact: "9000011111" }, deps(db))).toMatchObject({ ok: false, status: 409 });
-    await verifyIdentity(USERS.admin, id, { method: "Signed letter matching the records" }, deps(db));
+    await verifyIdentity(USERS.partner, id, { method: "Signed letter matching the records" }, deps(db));
     expect(await recordNomination(USERS.admin, id, { nomineeName: "M", relationship: "spouse", nomineeContact: "9000011111" }, deps(db))).toMatchObject({ ok: false, status: 400 });
     expect(await recordNomination(USERS.admin, id, { nomineeName: "Meena Kumar", relationship: "spouse", nomineeContact: "9000011111" }, deps(db))).toMatchObject({ ok: true });
     expect(req(db, id)).toMatchObject({ status: "COMPLETED", outcome: "Nominee recorded: M. K. (spouse)." });
@@ -160,12 +164,12 @@ describe("workflow steps", () => {
   it("shows the request with its matches and a readable timeline", async () => {
     const db = privacyWorld();
     const { id } = await logged(db, "access", { pan: PAN_PROP });
-    await verifyIdentity(USERS.admin, id, { method: "Photo ID seen in person" }, deps(db));
+    await verifyIdentity(USERS.partner, id, { method: "Photo ID seen in person" }, deps(db));
     const d = await getRequest(db as unknown as PrivacyDb, id, T0);
     expect(d).toMatchObject({ verified: true, matches: [{ principalType: "client-person", ref: "c-prop" }], outerLimitLabel: "03 Feb 2027", dueLabel: "05 Dec 2026" });
     expect(d?.timeline.map((e) => e.label)).toEqual(["Request logged", "Records searched", "Identity verified"]);
     expect(d?.timeline[1].detail).toBe("1 matching record found.");
-    expect(d?.timeline[2]).toMatchObject({ actorName: "Asha Admin", detail: "Photo ID seen in person", atLabel: "05 Nov 2026 11:00" });
+    expect(d?.timeline[2]).toMatchObject({ actorName: "Lakshmi Partner", detail: "Photo ID seen in person", atLabel: "05 Nov 2026 11:00" });
     expect(await getRequest(db as unknown as PrivacyDb, "nope", T0)).toBeNull();
   });
 });

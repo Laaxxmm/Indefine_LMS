@@ -37,7 +37,7 @@ const clean = (html: string) => html.replace(/<!-- -->/g, "");
 async function request(db: MemoryDb, kind: string, identifiers: Record<string, string>, opts: { receivedOn?: string; verify?: boolean } = {}) {
   const r = await createRequest(USERS.admin, { kind, identifiers, receivedOn: opts.receivedOn }, deps(db));
   if (!r.ok) throw new Error(r.error);
-  if (opts.verify) await verifyIdentity(USERS.admin, r.data.id, { method: "Photo ID seen in person" }, deps(db));
+  if (opts.verify) await verifyIdentity(USERS.partner, r.data.id, { method: "Photo ID seen in person" }, deps(db)); // logged by the admin, checked by the partner (duties.ts)
   return r.data.id;
 }
 
@@ -105,7 +105,7 @@ describe("/admin/firm-os/privacy", () => {
     const before = clean(await renderHtml(await PrivacyRequestPage(idp(id))));
     expect(before).toContain("Mark identity verified");
     expect(before).not.toContain("Download export");
-    await verifyIdentity(USERS.admin, id, { method: "Photo ID seen in person" }, deps(db));
+    await verifyIdentity(USERS.partner, id, { method: "Photo ID seen in person" }, deps(db)); // not the admin who logged it
     const after = clean(await renderHtml(await PrivacyRequestPage(idp(id))));
     expect(after).toContain(`href="/api/firm-os/privacy/requests/${id}/export"`);
     expect(after).toContain("Download export (JSON)");

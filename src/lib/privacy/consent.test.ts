@@ -13,7 +13,7 @@ const deps = (db: MemoryDb): PrivacyDeps => ({ db: db as unknown as PrivacyDb, n
 async function verified(db: MemoryDb, kind: string, identifiers: Record<string, string>) {
   const r = await createRequest(USERS.admin, { kind, identifiers }, deps(db));
   if (!r.ok) throw new Error(r.error);
-  await verifyIdentity(USERS.admin, r.data.id, { method: "Reply from the email address on record" }, deps(db));
+  await verifyIdentity(USERS.partner, r.data.id, { method: "Reply from the email address on record" }, deps(db)); // logged by the admin, checked by the partner (duties.ts)
   return r.data.id;
 }
 

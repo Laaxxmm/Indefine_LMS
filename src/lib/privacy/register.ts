@@ -7,6 +7,10 @@
 // verify-identity, complete, reject, nominate, export, ...). Identifiers typed by staff are never
 // stored raw: the register keeps a keyed hash and a masked label, and free text is scrubbed.
 // AuditEvent rows are written through logAudit() (src/lib/audit/log.ts).
+//
+// One request, one person: resolutionOf() decides what a request is linked to — one record, or
+// (no record matched) the rows of a person known only by identifiers — for export, erasure and
+// close alike. Separation of duties (duties.ts): the person who logs a request does not verify it.
 import type { Prisma } from "@prisma/client";
 import { isActive, type SessionUser } from "@/lib/access";
 import { logAudit } from "@/lib/audit/log";
@@ -15,7 +19,9 @@ import { maskName, scrubFreeText } from "@/lib/corrections/mask";
 import { Refusal, fail, ok, type ServiceResult } from "@/lib/corrections/result";
 import { istDayKey, parseDayKey, DAY_MS } from "@/lib/ist";
 import { PRIVACY_NOT_ALLOWED, SIGN_IN, canUsePrivacyRegister } from "./access";
-import type { PrivacyDb } from "./inventory";
+import { assertNotCreator, verificationNoteProblem } from "./duties";
+import { identifierOnlyRows } from "./identifier-only";
+import type { PrivacyDb, Row } from "./inventory";
 import { IDENTIFIER_HINTS, IDENTIFIER_KINDS, identifierHash, identifierPrincipalLocator, normaliseIdentifier, type Identifier, type PrincipalLocator } from "./locator";
 import { memoryRateLimiter, type SearchRateLimiter } from "@/lib/search/rate-limit";
 import {
@@ -308,11 +314,54 @@ export async function principalOf(db: Pick<PrivacyDb, "privacyRequest">, request
   return [{ principalType: r.principalType as PrincipalType, ref: r.principalRef }];
 }
 
-/** Refuse a data step until one record is linked: NOT_RESOLVED when several matched, NOTHING_MATCHED when none did. */
-export async function requireResolved(tx: Tx, id: string): Promise<MatchRef> {
-  const [principal] = await principalOf(tx, id);
-  if (principal) return principal;
-  throw new Refusal(409, (await loadMatches(tx, id)).length > 1 ? NOT_RESOLVED : NOTHING_MATCHED);
+/**
+ * What a request is linked to (the single-principal rule, shared by export, erasure and close):
+ *
+ *   principal        exactly one client or staff record is linked (principalRef)
+ *   identifier-only  no record matched, but rows that never reached a client record (an abandoned
+ *                    onboarding) hold exactly the identifiers the request was logged with
+ *                    (identifier-only.ts): the person is known only by those identifiers
+ *   parked           several records matched: a person chooses the one it is about first
+ *   nothing          nothing matched anywhere
+ *
+ * Only the first two are resolved. Names never resolve a request.
+ */
+export type Resolution =
+  | { kind: "principal"; principal: MatchRef }
+  | { kind: "identifier-only"; rows: Row[] }
+  | { kind: "parked"; candidates: number }
+  | { kind: "nothing" };
+export type Resolved = Extract<Resolution, { kind: "principal" | "identifier-only" }>;
+
+type ResolutionDb = Pick<PrivacyDb, "privacyRequest" | "auditEvent" | "onboardingRun">;
+
+export async function resolutionOf(db: ResolutionDb, requestId: string, hashKey?: string): Promise<Resolution> {
+  const [principal] = await principalOf(db, requestId);
+  if (principal) return { kind: "principal", principal };
+  const candidates = (await loadMatches(db, requestId)).length;
+  if (candidates > 1) return { kind: "parked", candidates };
+  const r = await db.privacyRequest.findUnique({ where: { id: requestId }, select: { identifierHash: true } });
+  const rows = await identifierOnlyRows(db, r?.identifierHash, hashKey);
+  return rows.length ? { kind: "identifier-only", rows } : { kind: "nothing" };
+}
+
+/** Refuse a data step unless the request is resolved: NOT_RESOLVED when several matched, NOTHING_MATCHED when nothing did. */
+export async function requireResolved(tx: Tx, id: string, hashKey?: string): Promise<Resolved> {
+  const r = await resolutionOf(tx, id, hashKey);
+  if (r.kind === "parked") throw new Refusal(409, NOT_RESOLVED);
+  if (r.kind === "nothing") throw new Refusal(409, NOTHING_MATCHED);
+  return r;
+}
+
+/** Refusal for a step that needs a client or staff record when the person is known only by identifiers. */
+export const IDENTIFIER_ONLY_NO_RECORD =
+  "This person has no client or staff record in Firm OS, only an onboarding that never became a client record, so there is nothing here to correct or restrict. Erase that onboarding if they ask, or close the request with that reply.";
+
+/** Like requireResolved(), for steps that act on the person's own record (correction, restriction). */
+export async function requirePrincipal(tx: Tx, id: string, hashKey?: string): Promise<MatchRef> {
+  const r = await requireResolved(tx, id, hashKey);
+  if (r.kind !== "principal") throw new Refusal(409, IDENTIFIER_ONLY_NO_RECORD);
+  return r.principal;
 }
 
 /**
@@ -411,9 +460,11 @@ export async function verifyIdentity(user: SessionUser, id: string, input: { met
   if (denied) return denied;
   if (!(VERIFY_METHODS as readonly string[]).includes(input.method)) return fail(400, "Pick how the person's identity was checked.");
   const note = input.note?.trim() ?? "";
-  if (input.method.startsWith("Other") && note.length < 5) return fail(400, "Say how the identity was checked, in the note.");
+  const noteProblem = verificationNoteProblem(input.method, input.note); // "Other" needs a real note (duties.ts)
+  if (noteProblem) return fail(400, noteProblem);
   return step(deps, async (tx) => {
     await loadOpen(tx, id);
+    await assertNotCreator(tx, id, user); // separation of duties: not the person who logged it
     if ((await tx.auditEvent.count({ where: { entity: "PrivacyRequest", entityId: id, action: "verify-identity" } })) > 0) {
       throw new Refusal(409, "This person's identity is already verified for this request. Go on to the next step.");
     }
@@ -448,7 +499,7 @@ export async function closeRequest(
       if (elsewhere) throw new Refusal(409, elsewhere);
       if (r.kind !== "grievance") {
         await requireVerified(tx, id);
-        await requireResolved(tx, id); // never "done" for nobody, or for several people at once
+        await requireResolved(tx, id, deps.hashKey); // never "done" for nobody, or for several people at once
       }
     }
     const status: RequestStatus = input.outcome === "completed" ? "COMPLETED" : "REJECTED";

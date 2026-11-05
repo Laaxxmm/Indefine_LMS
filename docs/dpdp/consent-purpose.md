@@ -47,7 +47,7 @@ engagement letter renewal.
 
 1. **Access / summary:** export the client's `Client`, `FirmClient`, `JobTask`, `OnboardingRun` and `CommsDraft` rows plus a SharePoint folder listing; log an `export` AuditEvent.
 2. **Correction:** edit the LMS client record; Firm OS re-reads it on the next run.
-3. **Erasure / withdrawal:** Firm OS never hard-deletes client records (non-negotiable 2). Mark the client inactive, stop new jobs, and clear cached copies (`AgentRun.inputs`, `OnboardingRun.prompt`) by the retention job; statutory records are kept for the period the law requires and the client is told so.
+3. **Erasure / withdrawal:** Firm OS never hard-deletes client records (non-negotiable 2). The retention job clears cached copies on a schedule (`AgentRun.inputs` after at most 30 days; `OnboardingRun` prompt, details and plan 30 days after the run last changed — [retention](retention.md)). An erasure request anonymises the person's data in place, including copies of their names and identifiers in notes, findings and logs, or places a recorded legal hold where the law makes the firm keep the records; the client is told which, and until when ([rights](rights.md)).
 4. **Grievance:** acknowledged within 7 days by the named partner; record each request as an AuditEvent (`action: "dpdp-request"`).
 
 ## Security integration (how a withdrawal is enforced)
