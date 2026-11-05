@@ -227,15 +227,28 @@ describe("closeJob — SharePoint condition (a) unmet: job stays CLOSING", () =>
     await expectStaysClosing(w, job.id, deps, /ECONNRESET/);
   });
 
-  it("the production Graph verifier is blocked on hashing until the Phase 4 merge: job stays CLOSING", async () => {
+  it("the Graph verifier: hashes the download when Graph reports no sha256, refuses a deleted file", async () => {
     const { w, deps } = setup();
     const { job, deliverable } = w.readyJob();
+    const files = new Map<string, { id: string; bytes: Buffer }>([
+      [`FY2026-27/GST/2026-10/Final/${deliverable.name}`, { id: deliverable.driveItemId!, bytes: Buffer.from("final pack bytes") }],
+    ]);
     const graph = {
       getSiteByUrl: async () => ({ id: "site-1", webUrl: "x" }),
       getDriveByName: async () => ({ id: "drive-acme", name: "Compliance" }),
-      getItemByPath: async () => ({ id: deliverable.driveItemId!, name: deliverable.name, size: deliverable.sizeBytes }),
+      getItemByPath: async (_d: string, p: string) => {
+        const f = files.get(p);
+        return f ? { id: f.id, name: deliverable.name, size: f.bytes.byteLength, file: { hashes: { quickXorHash: "q" } } } : null;
+      },
+      downloadFile: async (_d: string, p: string) => files.get(p)?.bytes ?? null,
     };
-    await expectStaysClosing(w, job.id, { ...deps, verifier: graphDeliverableVerifier(() => graph) }, /downloadFile/);
+    const verifier = graphDeliverableVerifier(() => graph);
+    const j2 = w.addJob();
+    w.addFiledHistory(j2.id);
+    w.addFinal(j2, { name: "gone_v1.xlsx" });
+    w.addCloseSync(j2.id);
+    expect((await closeJob(job.id, staff, { ...deps, verifier })).ok).toBe(true);
+    await expectStaysClosing(w, j2.id, { ...deps, verifier }, /not found in SharePoint/);
   });
 });
 
@@ -327,7 +340,7 @@ describe("closeJob — filing condition (c) and state", () => {
   it("unknown job", async () => {
     const { deps, w } = setup();
     const r = await closeJob("nope", { kind: "system", name: "close-loop-reconciler" }, deps);
-    expect(r).toEqual({ ok: false, state: null, reasons: ["Job nope not found"] });
+    expect(r).toEqual({ ok: false, state: null, reasons: ["Job nope not found"], missing: { finalFile: false, turiaClose: false, filing: false } });
     expect(w.audits[0]).toMatchObject({ action: "close-refused", actorId: "system:close-loop-reconciler" });
   });
 });

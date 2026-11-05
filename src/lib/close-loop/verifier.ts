@@ -2,7 +2,7 @@
 // there, at the Path A folder, non-empty, with the bytes we hashed? The gate takes a
 // DeliverableVerifier by injection so it can be tested without Graph. Reads only (GET).
 import { createHash } from "node:crypto";
-import { BlockedError, NotProvisionedError } from "@/lib/integrations/sharepoint/errors";
+import { NotProvisionedError } from "@/lib/integrations/sharepoint/errors";
 import type { SharePointClient } from "@/lib/integrations/sharepoint/graph-client";
 import { COMPLIANCE_LIBRARY, DEFAULT_TENANT_HOST, clSiteUrl } from "@/lib/integrations/sharepoint/paths";
 
@@ -37,18 +37,15 @@ export const sha256Hex = (bytes: Uint8Array) => createHash("sha256").update(byte
 
 export const MISSING: LiveItem = { exists: false, driveItemId: null, sizeBytes: 0, path: null, sha256: null };
 
-/** Action reported until the Phase 4 graph-client content download is merged and wired here. */
-export const VERIFIER_DOWNLOAD_BLOCKED =
-  "Wire the close-loop DeliverableVerifier.download to graph-client.downloadFile (and read file.hashes.sha256Hash from getItemByPath) after the Phase 4 SharePoint merge; until then the gate cannot hash Final files and jobs stay CLOSING.";
-
-/** The SharePointClient methods this verifier uses: GETs only. */
-export type VerifierGraph = Pick<SharePointClient, "getSiteByUrl" | "getDriveByName" | "getItemByPath">;
+/** The SharePointClient methods this verifier uses: GETs only (metadata and file content). */
+export type VerifierGraph = Pick<SharePointClient, "getSiteByUrl" | "getDriveByName" | "getItemByPath" | "downloadFile">;
 
 /**
- * Graph-backed verifier. Finds the item by its Path A path (the gate passes the exact expected
- * path) and reports its id and size, so a different file at that path or a moved file fails.
- * The content hash needs a download, which the graph-client does not offer before the Phase 4
- * merge: download() throws BlockedError, the gate records it as a reason and the job stays CLOSING.
+ * Graph-backed verifier over the Path A graph-client. Finds the item by its exact expected path and
+ * reports its id and size, so a different file at that path, or a moved or deleted file, fails.
+ * The SHA-256 comes from Graph's file.hashes.sha256Hash when the drive reports it; SharePoint
+ * libraries usually report only quickXorHash, so the gate then downloads the bytes and hashes them.
+ * `graph` is called lazily so a missing Graph credential surfaces as a gate reason, not a crash.
  */
 export function graphDeliverableVerifier(graph: () => VerifierGraph, opts: { host?: string } = {}): DeliverableVerifier {
   const host = opts.host ?? DEFAULT_TENANT_HOST;
@@ -71,10 +68,10 @@ export function graphDeliverableVerifier(graph: () => VerifierGraph, opts: { hos
     async getItem(ref) {
       const item = await graph().getItemByPath(await driveFor(ref), ref.path);
       if (!item || item.folder) return MISSING;
-      return { exists: true, driveItemId: item.id, sizeBytes: item.size ?? 0, path: ref.path, sha256: null };
+      return { exists: true, driveItemId: item.id, sizeBytes: item.size ?? 0, path: ref.path, sha256: item.file?.hashes?.sha256Hash ?? null };
     },
-    async download() {
-      throw new BlockedError(VERIFIER_DOWNLOAD_BLOCKED);
+    async download(ref) {
+      return graph().downloadFile(await driveFor(ref), ref.path);
     },
   };
 }

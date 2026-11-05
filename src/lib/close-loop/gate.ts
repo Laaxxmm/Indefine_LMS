@@ -320,7 +320,9 @@ export function parseGateEvidence(note: string | null | undefined): GateEvidence
 
 export type CloseJobResult =
   | { ok: true; state: "DONE"; eventId: string; evidence: GateEvidence; spotCheck: boolean }
-  | { ok: false; state: JobTaskState | null; reasons: string[] };
+  | { ok: false; state: JobTaskState | null; reasons: string[]; missing: CanCloseResult["missing"] };
+
+const NONE_MISSING: CanCloseResult["missing"] = { finalFile: false, turiaClose: false, filing: false };
 
 /** Re-reads the facts the evidence rests on; a non-null string means something moved. */
 async function recheck(tx: CloseLoopTx, jobTaskId: string, ev: GateEvidence): Promise<string | null> {
@@ -345,19 +347,19 @@ async function recheck(tx: CloseLoopTx, jobTaskId: string, ev: GateEvidence): Pr
 export async function closeJob(jobTaskId: string, triggeredBy: Actor, deps: GateDeps): Promise<CloseJobResult> {
   const now = deps.now?.() ?? new Date();
   const actorId = actorRef(triggeredBy);
-  const refuse = async (state: JobTaskState | null, reasons: string[]): Promise<CloseJobResult> => {
+  const refuse = async (state: JobTaskState | null, reasons: string[], missing: CanCloseResult["missing"]): Promise<CloseJobResult> => {
     await audit(deps.db, { actorId, action: "close-refused", entity: "JobTask", entityId: jobTaskId, meta: { reasons, state } });
-    return { ok: false, state, reasons };
+    return { ok: false, state, reasons, missing };
   };
 
   const check = await canClose(jobTaskId, { ...deps, now: () => now });
-  if (!check.ok || !check.evidence) return refuse(check.state, check.reasons);
+  if (!check.ok || !check.evidence) return refuse(check.state, check.reasons, check.missing);
   const evidence = check.evidence;
 
   const token = mint({ jobTaskId, now, evidence: { ...evidence } });
   const outcome = await deps.db.$transaction(async (tx): Promise<CloseJobResult> => {
     const moved = await recheck(tx, jobTaskId, evidence);
-    if (moved) return { ok: false, state: (await loadJob(tx, jobTaskId))?.state ?? null, reasons: [moved] };
+    if (moved) return { ok: false, state: (await loadJob(tx, jobTaskId))?.state ?? null, reasons: [moved], missing: NONE_MISSING };
     await tx.deliverable.updateMany({ where: { id: { in: evidence.deliverables.map((d) => d.id) } }, data: { verifiedAt: now } });
     const r = await transitionJobTask(joinTransaction(tx), jobTaskId, "DONE", GATE_ACTOR, {
       expectedState: "CLOSING",
@@ -365,12 +367,12 @@ export async function closeJob(jobTaskId: string, triggeredBy: Actor, deps: Gate
       note: JSON.stringify(evidence),
       now,
     });
-    if (!r.ok) return { ok: false, state: "CLOSING", reasons: [r.reason] };
+    if (!r.ok) return { ok: false, state: "CLOSING", reasons: [r.reason], missing: NONE_MISSING };
     await audit(tx, { actorId, action: "close", entity: "JobTask", entityId: jobTaskId, meta: toJson({ eventId: r.eventId, evidence }) });
     if (evidence.turia.spotCheck) {
       await audit(tx, { actorId: GATE_ACTOR_REF, action: "spot-check-selected", entity: "TuriaSync", entityId: evidence.turia.syncId, meta: { jobTaskId } });
     }
     return { ok: true, state: "DONE", eventId: r.eventId, evidence, spotCheck: evidence.turia.spotCheck };
   });
-  return outcome.ok ? outcome : refuse(outcome.state, outcome.reasons);
+  return outcome.ok ? outcome : refuse(outcome.state, outcome.reasons, outcome.missing);
 }
