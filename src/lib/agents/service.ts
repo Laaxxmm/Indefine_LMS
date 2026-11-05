@@ -265,9 +265,9 @@ export async function logMistake(
   return fail(r.code === "NOT_FOUND" ? 404 : r.code === "CONFLICT" ? 409 : 400, r.reason);
 }
 
-/** Partner / manager approves or rejects a proposed rule. */
+/** A partner approves or rejects a proposed rule (an SOP rule change, Phase 11 RBAC). */
 export async function decideMistakeFor(user: SessionUser, id: string, decision: Decision, deps: AgentServiceDeps) {
-  if (!canDecideMistakes(user)) return fail(403, "Only a partner or manager may decide mistake rules");
+  if (!canDecideMistakes(user)) return fail(403, "Only a partner may decide mistake rules");
   const r = await decideMistake({ db: deps.db, now: deps.now, agent: (k) => getAgent(k, deps.agents) }, id, decision, actorOf(user)!);
   if (r.ok) return r;
   return fail(r.code === "NOT_FOUND" ? 404 : r.code === "FORBIDDEN" ? 403 : r.code === "CONFLICT" ? 409 : 400, r.reason);

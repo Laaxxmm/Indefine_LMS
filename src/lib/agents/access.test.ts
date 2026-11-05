@@ -37,7 +37,7 @@ describe("roles", () => {
     expect(canSeeAllRuns(user("admin"))).toBe(true);
     expect(canSeeAllRuns(user("meera"))).toBe(true);
     expect(canDecideMistakes(user("partner"))).toBe(true);
-    expect(canDecideMistakes(user("meera"))).toBe(true);
+    expect(canDecideMistakes(user("meera"))).toBe(false); // SOP rule changes: partners only (Phase 11)
     expect(canDecideMistakes(user("admin"))).toBe(false);
     expect(canDecideMistakes(user("ravi"))).toBe(false);
   });

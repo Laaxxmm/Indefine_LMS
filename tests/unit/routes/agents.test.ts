@@ -380,7 +380,7 @@ describe("mistake log pages", () => {
     const admin = await renderHtml(await AdminMistakesPage());
     expect(admin).toContain("Missed the big invoice");
     expect(admin).not.toContain("Approve rule");
-    expect(admin).toContain("Only a partner or manager can approve or reject.");
+    expect(admin).toContain("Only a partner can approve or reject.");
     // The admin copy uses the admin area's header, like /admin/firm-os/models and cycle-time.
     expect(admin).toContain("Admin · Firm OS");
     expect(admin).toContain('href="/admin"');

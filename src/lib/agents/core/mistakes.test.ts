@@ -54,17 +54,19 @@ describe("mistake promotion (integration)", () => {
     // Nothing auto-promotes: a run now still uses 1.0.0.
     expect(rows(w.db, "sopPack")).toHaveLength(1);
 
-    // 3. Staff cannot decide; the manager approves.
+    // 3. Staff and managers cannot decide (an SOP rule change is a partner decision); the partner approves.
     expect(await decideMistake(w.mdeps, id, "approve", reviewer)).toMatchObject({ ok: false, code: "FORBIDDEN" });
-    expect(await decideMistake(w.mdeps, id, "approve", manager)).toEqual({ ok: true, data: { status: "APPROVED", promotedToVersion: "1.1.0" } });
+    expect(await decideMistake(w.mdeps, id, "approve", manager)).toMatchObject({ ok: false, code: "FORBIDDEN" });
+    expect(await decideMistake(w.mdeps, id, "reject", manager)).toMatchObject({ ok: false, code: "FORBIDDEN" });
+    expect(await decideMistake(w.mdeps, id, "approve", partner)).toEqual({ ok: true, data: { status: "APPROVED", promotedToVersion: "1.1.0" } });
 
     const packs = rows(w.db, "sopPack");
     expect(packs.map((s) => s.version)).toEqual(["1.0.0", "1.1.0"]);
     expect(packs[0].checklist).toEqual(ECHO_CHECKLIST); // old version untouched
-    expect(packs[1]).toMatchObject({ key: "echo", major: 1, minor: 1, patch: 0, active: true, approvedById: "u-meera", title: "Echo" });
+    expect(packs[1]).toMatchObject({ key: "echo", major: 1, minor: 1, patch: 0, active: true, approvedById: "u-partner", title: "Echo" });
     const promoted = (packs[1].checklist as { rules: RuleDefinition[] }).rules.at(-1)!;
     expect(promoted).toMatchObject({ id: "echo.watch-shadow", origin: { type: "mistake", mistakeLogId: id, promotedInVersion: "1.1.0" } });
-    expect(rows(w.db, "mistakeLog")[0]).toMatchObject({ status: "APPROVED", promotedToVersion: "1.1.0", decidedById: "u-meera" });
+    expect(rows(w.db, "mistakeLog")[0]).toMatchObject({ status: "APPROVED", promotedToVersion: "1.1.0", decidedById: "u-partner" });
     expect(rows(w.db, "auditEvent").at(-1)).toMatchObject({ action: "approve", entity: "MistakeLog", entityId: id });
 
     // 4. Next run (re-run on the same job) loads 1.1.0 and catches it.

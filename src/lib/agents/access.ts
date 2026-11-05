@@ -9,7 +9,9 @@
 //   role ADMIN (isAdmin)            + admin   (sees everything; state.ts gives admin no job edges)
 //
 // Staff see only runs of JobTasks assigned to them or where they are the reviewer; managers,
-// partners and admins see all runs. Only partners and managers decide MistakeLog promotions.
+// partners and admins see all runs. Only partners decide MistakeLog proposals (an approval is an
+// SOP rule change: a new SopPack version; Phase 11, src/lib/rbac/policy.ts). Managers and admins
+// may read the mistake log.
 import type { FirmService, JobTaskState, Prisma } from "@prisma/client";
 import { isActive, isAdmin, isPartner, type SessionUser } from "@/lib/access";
 import { canTransition, type Actor, type FirmRole } from "@/lib/agents/core/state";
@@ -36,8 +38,9 @@ const has = (user: SessionUser, ...want: FirmRole[]) => firmRolesOf(user).some((
 
 export const canUseAgents = (user: SessionUser) => isActive(user);
 export const canSeeAllRuns = (user: SessionUser) => has(user, "manager", "partner", "admin");
-export const canDecideMistakes = (user: SessionUser) => has(user, "manager", "partner");
-/** /agents/mistakes: the deciders plus admins, who may look. The nav link and the page guard both use this. */
+/** Approve or reject a MistakeLog proposal (approval = SOP rule change). Partners only. */
+export const canDecideMistakes = (user: SessionUser) => has(user, "partner");
+/** /agents/mistakes: the deciders plus managers and admins, who may look. The nav link and the page guard both use this. */
 export const canSeeMistakeLog = (user: SessionUser) => canDecideMistakes(user) || canSeeAllRuns(user);
 
 export type JobAccessView = { id: string; state: JobTaskState; service: FirmService; assigneeId: string | null; reviewerId: string | null };

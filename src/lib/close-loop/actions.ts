@@ -5,15 +5,15 @@
 //                      confirm), then the close gate is tried.
 //   setJobState        any other human edge of the state machine. A target of DONE is refused
 //                      outright: DONE is set only by closeJob() in gate.ts.
-// Access: the job's assignee or reviewer, a manager or a partner (src/lib/rbac/policy.ts firmRole),
+// Access: the job's assignee or reviewer, a manager or a partner (src/lib/rbac/policy.ts canActOnJob),
 // and only while active. Admin (IT) takes no job edges.
 import type { JobTaskState } from "@prisma/client";
-import { isActive, isManager, isPartner, type SessionUser } from "@/lib/access";
+import type { SessionUser } from "@/lib/access";
 import { actorOf } from "@/lib/agents/access";
 import { transitionJobTask } from "@/lib/agents/core/state-db";
 import type { ManualBridge } from "@/lib/integrations/turia/manual-bridge";
-import { firmRole } from "@/lib/rbac/policy";
-import { audit, loadJob, type CloseJobRow } from "./db";
+import { canActOnJob } from "@/lib/rbac/policy";
+import { audit, loadJob } from "./db";
 import { CloseLoopError, transitionError } from "./errors";
 import { closeJob, type CloseJobResult, type GateDeps } from "./gate";
 import { HOOK_ACTOR, afterTransition, onFiledByHuman, type HookDeps, type HookOutcome, type TuriaStep } from "./hooks";
@@ -23,14 +23,8 @@ export interface CloseLoopDeps extends GateDeps, HookDeps {
   manual: Pick<ManualBridge, "closeTask" | "confirm">;
 }
 
-/** Assignee, reviewer, manager or partner of this job, and active. */
-export function canActOnJob(user: SessionUser, job: Pick<CloseJobRow, "assigneeId" | "reviewerId">): boolean {
-  if (!user || !isActive(user)) return false;
-  const role = firmRole(user);
-  // firmRole ranks admin first; a partner who is also an LMS admin keeps partner access.
-  const managerUp = role === "partner" || role === "manager" || isPartner(user) || isManager(user);
-  return managerUp || user.id === job.assigneeId || user.id === job.reviewerId;
-}
+/** Assignee, reviewer, manager or partner of this job, and active (the rule lives in src/lib/rbac/policy.ts). */
+export { canActOnJob };
 
 async function jobFor(user: SessionUser, jobTaskId: string, deps: CloseLoopDeps) {
   const job = await loadJob(deps.db, jobTaskId);

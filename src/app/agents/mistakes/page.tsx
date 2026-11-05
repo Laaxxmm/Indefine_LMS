@@ -7,7 +7,7 @@ import { MistakesView } from "./MistakesView";
 
 export const dynamic = "force-dynamic";
 
-// Mistake log for partners and managers (who decide) and admins (who may look). The admin
+// Mistake log for partners (who decide), managers and admins (who may look). The admin
 // area's /admin/firm-os/mistakes renders the same view; partners need not be LMS admins.
 export default async function AgentMistakesPage() {
   const session = await auth();
