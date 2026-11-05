@@ -6,16 +6,17 @@
 //                                     prepare or review; managers, partners, admins: all
 //   agent runs                        runScopeWhere — the /agents run review page
 //   onboarding runs                   canOnboard (src/lib/rbac/policy.ts) — /onboard?run=
-//   comms drafts                      the draft's creator, the assignee of its job, and managers,
-//                                     partners and admins (canSeeAllRuns)
+//   comms drafts                      the draft page's rule (commsDraftScopeWhere): its author; a job
+//                                     draft: the job's assignee or reviewer; a client-level draft:
+//                                     the client's primary handler; managers, partners and admins
 //
 // Inactive (deactivated) people find nothing. Who may search at all is src/lib/rbac/policy.ts
 // canSearch (re-exported here, so the module's public API is unchanged).
 import type { Prisma } from "@prisma/client";
 import type { SessionUser } from "@/lib/access";
-import { canSeeAllRuns, jobScopeWhere, runScopeWhere } from "@/lib/agents/access";
+import { jobScopeWhere, runScopeWhere } from "@/lib/agents/access";
 import { canViewClients } from "@/lib/clients/core";
-import { canOnboard, canSearch } from "@/lib/rbac/policy";
+import { canOnboard, canSearch, commsDraftScopeWhere } from "@/lib/rbac/policy";
 import type { SearchDb } from "./db";
 
 export { canSearch, jobScopeWhere, runScopeWhere };
@@ -32,18 +33,25 @@ export function deliverableScopeWhere(user: SessionUser): Prisma.DeliverableWher
   return { jobTask: jobScopeWhere(user) };
 }
 
-/** Upper bound on the jobs a staff member is assignee of, for the draft filter below. */
-const MAX_ASSIGNED_JOBS = 2000;
+/** Upper bounds on the jobs and handled clients loaded for the draft filter below (as the drafts list). */
+const MAX_VISIBLE_JOBS = 5000;
+const MAX_HANDLED_CLIENTS = 5000;
 
 /**
- * Prisma filter for the CommsDrafts a person may see. CommsDraft has no relation to JobTask in the
- * schema, so the assignee rule is resolved through the ids of the person's assigned jobs.
+ * Prisma filter for the CommsDrafts a person may see: exactly the draft page's rule
+ * (src/lib/rbac/policy.ts canViewCommsDraft / commsDraftScopeWhere, as /comms lists them) — the
+ * author; a draft about a job: the job's assignee or reviewer; a client-level draft (no job): the
+ * client's primary handler; managers, partners and admins: all. CommsDraft has no relation to
+ * JobTask or Client, so the ids of the jobs the person may see and of the clients they handle are
+ * loaded first (only for people who do not see every draft).
  */
 export async function draftScopeWhere(db: SearchDb, user: SessionUser): Promise<Prisma.CommsDraftWhereInput> {
   if (!user || !canFindDrafts(user)) return { id: "__none__" };
-  if (canSeeAllRuns(user)) return {};
-  const mine = await db.jobTask.findMany({ where: { assigneeId: user.id }, select: { id: true }, take: MAX_ASSIGNED_JOBS });
-  const or: Prisma.CommsDraftWhereInput[] = [{ createdById: user.id }];
-  if (mine.length) or.push({ jobTaskId: { in: mine.map((j) => j.id) } });
-  return { OR: or };
+  const base = commsDraftScopeWhere(user);
+  if (!("OR" in base)) return base; // everyone's drafts ({}), or nobody's
+  const [jobs, handled] = await Promise.all([
+    db.jobTask.findMany({ where: jobScopeWhere(user), select: { id: true }, take: MAX_VISIBLE_JOBS }),
+    db.firmClient.findMany({ where: { client: { primaryHandlerId: user.id } }, select: { id: true }, take: MAX_HANDLED_CLIENTS }),
+  ]);
+  return commsDraftScopeWhere(user, jobs.map((j) => j.id), handled.map((c) => c.id));
 }
