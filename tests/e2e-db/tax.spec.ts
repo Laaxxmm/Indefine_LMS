@@ -1,74 +1,47 @@
-﻿// Golden path (Phase 6, Tax Prep): the assignee runs the Tax agent on an ASSIGNED IncomeTax job â†’
-// computation workbook in Working â†’ submits for review â†’ the reviewer approves â†’ the file is
-// byte-copied to Final. Nothing is filed: the page offers no portal action. Needs a migrated
-// staging database, SharePoint Path A and two signed-in sessions, so it lives OUTSIDE
-// playwright.config.ts testDir (tests/e2e) and runs with `npm run e2e:db` (3 repeats).
+﻿// Golden path (c) — Phase 6, Tax Prep approve path: the assignee runs Tax Prep on a fresh IncomeTax
+// job (FY 2025-26, Annual) → the computation workbook is in Working → submit → the reviewer approves
+// (two-step confirm) → the file is byte-copied to Final. Nothing is filed: no e-filing action exists.
 //
-// Required environment:
-//   E2E_BASE_URL          the running app (staging, or `next start` against the staging DB)
-//   E2E_ASSIGNEE_STATE    Playwright storageState JSON of the job's ASSIGNEE (Entra SSO)
-//   E2E_REVIEWER_STATE    storageState JSON of the job's reviewer, a manager or a partner (not the assignee)
-//   DATABASE_URL          the same staging database, for the setup and the assertions
-//   E2E_TAX_JOB_ID        an ASSIGNED JobTask with service IncomeTax, period Annual, FY 2025-26, whose
-//                         CL-{Code}/Compliance/FY2025-26/IncomeTax/Annual/ClientDocs folder holds the files of
-//                         fixtures/accuracy/tax/clean-salaried-new/input (synthetic; uploaded by a person)
-// Setup done here: if no active SopPack "tax" exists, version 1.0.0 is created from TAX_CHECKLIST.
-// Model calls: tax.match-ais (AIS â†” books by name) and the foreign-asset LLM rule. Without a model
-// key the AIS match is queued for a person and the run FAILS with that reason â€” this spec then
-// needs ANTHROPIC_API_KEY on the app (Blocked / needs human in PROGRESS until it is set).
+// Same shape as gst / roc / books / audit (tests/e2e-db/support): fresh JobTask per run, SOP pack from
+// TAX_CHECKLIST only if none is active, synthetic inputs of fixtures/accuracy/tax/clean-salaried-new/input
+// uploaded create-only.
+//
+// Environment: E2E_BASE_URL, DATABASE_URL, E2E_ASSIGNEE_STATE + E2E_ASSIGNEE_EMAIL,
+// E2E_REVIEWER_STATE + E2E_REVIEWER_EMAIL, E2E_CLIENT_CODE, MS_* (+ SP_PNP_*) here and on the app.
+// ANTHROPIC_API_KEY on the app is REQUIRED for this spec: tax.match-ais (AIS ↔ books by name) is a
+// model task, and without a model the run fails with "queued for a human" (PROGRESS Blocked).
 import { expect, test } from "@playwright/test";
-import { PrismaClient } from "@prisma/client";
-import { TAX_CHECKLIST } from "@/lib/agents/tax/rules";
+import {
+  approvePack, blockFailures, closeDb, ensureSopPack, expectFinalMatchesWorking, expectJobState, fixtureFiles, freshJob, latestRun, openDb, runAgentFromList,
+  signedInAll, submitForReview, uploadToClientDocs,
+} from "./support";
 
-const jobId = process.env.E2E_TAX_JOB_ID ?? "";
+const SPEC = "tax.spec.ts";
+test.afterAll(closeDb);
 
-test("Tax Prep: run â†’ submit â†’ approve â†’ Final copy matches Working", async ({ browser }) => {
-  expect(jobId, "set E2E_TAX_JOB_ID to an ASSIGNED IncomeTax job (see the header)").not.toBe("");
-  const db = new PrismaClient();
+test("Tax Prep: run → submit → approve → Final copy matches Working; figures as the fixture", async ({ browser }) => {
+  const db = openDb();
+  await ensureSopPack(db, "tax");
+  const job = await freshJob(db, { service: "IncomeTax", fy: "2025-26", period: "Annual", title: "ITR computation", spec: SPEC });
+  await uploadToClientDocs(job, fixtureFiles("tax", "clean-salaried-new"));
+  const s = await signedInAll(browser, ["assignee", "reviewer"] as const, SPEC);
   try {
-    const job = await db.jobTask.findUniqueOrThrow({ where: { id: jobId }, include: { firmClient: true } });
-    expect(job.service).toBe("IncomeTax");
-    expect(job.state).toBe("ASSIGNED");
-    if (!(await db.sopPack.findFirst({ where: { key: "tax", active: true } }))) {
-      await db.sopPack.create({ data: { key: "tax", version: "1.0.0", major: 1, minor: 0, patch: 0, title: "Tax Prep", checklist: JSON.parse(JSON.stringify(TAX_CHECKLIST)), active: true } });
-    }
+    const run = await runAgentFromList(s.assignee.page, "tax", job);
+    await expect(s.assignee.page.locator("section[aria-labelledby='checklist']")).toBeVisible();
+    await expect(s.assignee.page.locator("section[aria-labelledby='deliverables']")).toContainText("Tax-computation");
+    await submitForReview(s.assignee.page);
 
-    // Assignee: run the agent from /agents/tax.
-    const prep = await browser.newContext({ storageState: process.env.E2E_ASSIGNEE_STATE });
-    const page = await prep.newPage();
-    await page.goto("/agents/tax");
-    await expect(page.getByRole("heading", { name: "Tax Prep" })).toBeVisible();
-    await page.getByRole("button", { name: `Run agent on ${job.title} for ${job.firmClient.clientCode}` }).click();
-    await page.waitForURL(/\/agents\/tax\/runs\/[^/]+$/, { timeout: 180_000 });
-    const runUrl = page.url();
-    await expect(page.locator("section[aria-labelledby='checklist']")).toBeVisible();
-    await expect(page.locator("section[aria-labelledby='deliverables']")).toContainText("Tax-computation");
-    await expect(page.getByRole("button", { name: /portal|e-file|file return/i })).toHaveCount(0);
-    await page.getByRole("button", { name: "Submit for review" }).click();
-    await expect(page.getByRole("region", { name: "Review actions" })).toContainText(/No action for you|Approve pack/);
-    await prep.close();
+    await s.reviewer.page.goto(run);
+    await approvePack(s.reviewer.page);
 
-    // Reviewer: approve (the clean fixture has no block findings).
-    const rev = await browser.newContext({ storageState: process.env.E2E_REVIEWER_STATE });
-    const rp = await rev.newPage();
-    await rp.goto(runUrl);
-    await rp.getByRole("button", { name: "Approve pack" }).click();
-    await expect(rp.getByRole("region", { name: "Review actions" })).toContainText("Pack approved and in Final", { timeout: 120_000 });
-    await rev.close();
-
-    // Data: job and run APPROVED; figures as the fixture (tax â‚¹1,05,300, TDS credit â‚¹1,05,300, nil payable);
-    // the Final file is byte-identical to the Working one.
-    const after = await db.jobTask.findUniqueOrThrow({ where: { id: jobId } });
-    expect(after.state).toBe("APPROVED");
-    const run = await db.agentRun.findFirstOrThrow({ where: { jobTaskId: jobId }, orderBy: { attempt: "desc" } });
-    expect(run.status).toBe("APPROVED");
-    expect(run.figures).toMatchObject({ taxLiabilityPaise: 10530000, tdsCreditPaise: 10530000, netPayablePaise: 0, itrForm: 1 });
-    const deliverables = await db.deliverable.findMany({ where: { jobTaskId: jobId } });
-    const working = deliverables.filter((d) => d.kind === "Working" && d.agentRunId === run.id);
-    const final = deliverables.filter((d) => d.kind === "Final");
-    expect(working).toHaveLength(1);
-    expect(final.map((d) => d.sha256)).toEqual(working.map((d) => d.sha256));
+    await expectJobState(db, job.id, "APPROVED");
+    const latest = await latestRun(db, job.id);
+    expect(latest).toMatchObject({ agent: "tax", status: "APPROVED" });
+    expect(blockFailures(latest)).toHaveLength(0);
+    // Fixture figures: tax ₹1,05,300 = TDS credit ₹1,05,300 → nil payable; ITR-1.
+    expect(latest.figures).toMatchObject({ taxLiabilityPaise: 10530000, tdsCreditPaise: 10530000, netPayablePaise: 0, itrForm: 1 });
+    await expectFinalMatchesWorking(db, job.id, latest.id, { count: 1, finalFolderSuffix: "/IncomeTax/Annual/Final" });
   } finally {
-    await db.$disconnect();
+    await s.closeAll();
   }
 });
