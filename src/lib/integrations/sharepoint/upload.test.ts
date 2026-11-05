@@ -157,8 +157,8 @@ describe("fake keeps its no-destructive contract", () => {
     expect(overwrite.status).toBe(405);
     const bogus = await fake.fetch(`https://${fake.host}/_upload/session-999`, { method: "PUT", body: Buffer.from("x") });
     expect(bogus.status).toBe(405);
-    const del = await fake.fetch(`https://graph.microsoft.com/v1.0/drives/${drive.id}/root:/w/a.txt`, { method: "DELETE" });
-    expect(del.status).toBe(405);
+    const patch = await fake.fetch(`https://graph.microsoft.com/v1.0/drives/${drive.id}/root:/w/a.txt`, { method: "PATCH" });
+    expect(patch.status).toBe(405);
     expect(fake.violations).toHaveLength(3);
   });
 });
