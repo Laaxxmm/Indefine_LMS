@@ -1,7 +1,25 @@
 // The side panel's pure logic (firm-os-companion-extension/core.js): which state to show for each
 // API answer, plain messages, links that cannot leave the Firm OS origin, local ticks per job.
 import { describe, expect, it } from "vitest";
-import { TEXT, cleanMessage, companionPageUrl, interpret, isTaskResponse, isTokenShape, istTime, jobLink, nextTaskUrl, ticksFor, tidyToken, whereLabel, withTick } from "../../firm-os-companion-extension/core.js";
+import {
+  MAX_POLL_MS,
+  POLL_MS,
+  TEXT,
+  cleanMessage,
+  companionPageUrl,
+  interpret,
+  isTaskResponse,
+  isTokenShape,
+  istTime,
+  jobLink,
+  nextPollDelay,
+  nextTaskUrl,
+  taskKey,
+  ticksFor,
+  tidyToken,
+  whereLabel,
+  withTick,
+} from "../../firm-os-companion-extension/core.js";
 import { LMS_ORIGIN } from "../../firm-os-companion-extension/config.js";
 import { checkOrigin } from "../../firm-os-companion-extension/build.mjs";
 import { MSG } from "@/lib/companion/messages";
@@ -115,5 +133,21 @@ describe("small helpers", () => {
   it("shows update times in IST", () => {
     expect(istTime(new Date("2026-11-05T06:34:00Z"))).toBe("12:04");
     expect(istTime(new Date("2026-11-05T18:45:00Z"))).toBe("00:15");
+  });
+});
+
+describe("polling rhythm", () => {
+  it("every minute; while the same task keeps coming back it backs off to at most five minutes", () => {
+    expect(POLL_MS).toBe(60_000);
+    expect(MAX_POLL_MS).toBe(300_000);
+    expect([0, 1, 2, 3, 9].map((n) => nextPollDelay("task", n))).toEqual([60_000, 120_000, 240_000, 300_000, 300_000]);
+    // Views whose text promises "a minute" keep it: nothing waiting, offline, busy, errors.
+    for (const v of ["none", "offline", "busy", "error", "pairing", "noaccess", ""]) expect(nextPollDelay(v, 5)).toBe(60_000);
+  });
+
+  it("an answer is 'the same task' when task, later and counts match (the server timestamp aside)", () => {
+    expect(taskKey(task)).toBe(taskKey({ ...task, generatedAt: "2026-11-05T06:31:00.000Z" }));
+    expect(taskKey(task)).not.toBe(taskKey({ ...task, counts: { open: 2, overdue: 0 } }));
+    expect(taskKey(null)).toBe("");
   });
 });

@@ -8,9 +8,15 @@
 // [0, 1]; below ROUTER_MIN_CONF (default 0.75) the router escalates exactly as for a schema
 // failure. Each attempt is one ModelCall row with the sha256 of the MASKED prompt — never raw
 // prompt text. The anonymizer token map lives only inside one run() call.
+//
+// Response cache (optional dependency, on in the default wiring; src/lib/ai/cache.ts): a request
+// identical to one already answered "ok" in the same scope — the run's JobTask (one client), else
+// the run — reuses that answer after re-validating it against the schema and validators. A reuse
+// makes no provider call, so it writes no ModelCall row, costs nothing and needs no budget check.
 import { createHash } from "node:crypto";
 import type { ZodTypeAny } from "zod";
 import { createTokenMap, mask, unmaskDeep, type TokenMap } from "./anonymizer";
+import { createResponseCache, createRouterCacheHook, type ResponseCache } from "./cache";
 import { loadRouterConfig, type RouterConfig } from "./config";
 import {
   BudgetExceededError,
@@ -145,6 +151,11 @@ export interface ModelCallRepo {
   /** Sum of costInr for calls created at or after `since`. */
   costInrSince(since: Date): Promise<number>;
   costInrForRun(runId: string): Promise<number>;
+  /**
+   * Response-cache scope of a run: "job:<JobTask id>" when the run is an AgentRun, else null (the
+   * run alone). Optional: without it the cache is per run.
+   */
+  cacheScopeOf?(runId: string): Promise<string | null>;
 }
 
 interface Totals {
@@ -170,6 +181,8 @@ export interface RouterDeps {
   repo: ModelCallRepo;
   config: RouterConfig;
   now?: () => Date;
+  /** Response cache (src/lib/ai/cache.ts). Absent = every request calls a provider. */
+  cache?: ResponseCache;
 }
 
 /** Appended to the system prompt of every call. */
@@ -209,6 +222,7 @@ export interface Router {
 export function createRouter(deps: RouterDeps): Router {
   const { providers, repo, config } = deps;
   const now = deps.now ?? (() => new Date());
+  const reuse = deps.cache ? createRouterCacheHook(deps.cache, async (runId) => repo.cacheScopeOf?.(runId)) : null;
 
   async function checkBudget(req: Pick<ModelRequest, "runId" | "maxCostInr">, estimateInr: number): Promise<BudgetExceededError | null> {
     if (req.maxCostInr !== undefined) {
@@ -236,6 +250,10 @@ export function createRouter(deps: RouterDeps): Router {
     const jsonSchema = routerOutputJsonSchema(req.schema as ZodTypeAny | undefined);
     const maxTokens = req.maxTokens ?? config.defaultMaxTokens;
     const priceCtx = { usdInr: config.usdInr, grokPriceUsdPerMTok: config.grokPriceUsdPerMTok };
+
+    // Response cache (cache.ts): the same request already answered "ok" in this client scope.
+    const cached = reuse ? await reuse.lookup(req, { task: modelCallTask(req), maskedMessages, jsonSchema, maxTokens }) : null;
+    if (cached?.hit) return cached.hit;
 
     const totals: Totals = { tokensIn: 0, tokensOut: 0, costInr: 0 };
     let level = 0;
@@ -377,6 +395,7 @@ export function createRouter(deps: RouterDeps): Router {
         attempts,
       };
       if (status === "OK" && output !== null) {
+        cached?.remember({ output, provider: d.provider, model: usage.model, confidence, escalated: level > 0, anonymized: d.anonymize, needsPartnerReview: d.needsPartnerReview });
         return { status: "ok", output, needsPartnerReview: d.needsPartnerReview, ...common };
       }
       if (!d.canEscalate || level >= MAX_ESCALATIONS) {
@@ -399,7 +418,8 @@ export async function run<T>(req: ModelRequest<T>): Promise<RouterResult<T>> {
   if (!defaultRouter) {
     const { prismaModelCallRepo } = await import("./db");
     const config = loadRouterConfig();
-    defaultRouter = createRouter({ providers: createProviders(config), repo: prismaModelCallRepo(), config });
+    const cache = config.responseCacheMax ? createResponseCache({ maxEntries: config.responseCacheMax, ttlMs: config.responseCacheTtlMs }) : undefined;
+    defaultRouter = createRouter({ providers: createProviders(config), repo: prismaModelCallRepo(), config, cache });
   }
   return defaultRouter.run(req);
 }

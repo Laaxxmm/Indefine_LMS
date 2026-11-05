@@ -1,0 +1,763 @@
+{
+  "generatedAt": "2026-11-05T20:44:28.370Z",
+  "label": "after",
+  "agents": {
+    "echo": {
+      "agent": "echo",
+      "fixtures": 9,
+      "perRun": {
+        "modelCalls": 1.78,
+        "tokensIn": 1300,
+        "tokensOut": 61,
+        "dbOps": 19,
+        "routerDbOps": 3.56,
+        "sql": 28.33,
+        "graphCalls": 6.78,
+        "graphKiB": 0.76,
+        "rerunModelCalls": 0
+      },
+      "byTask": {
+        "echo.check:echo.related-party@1": 0.89,
+        "echo.check:echo.related-party@1#2": 0.89
+      },
+      "byModel": {
+        "claude-opus-5-5": 0.89,
+        "claude-sonnet-5-5": 0.89
+      },
+      "db": {
+        "$transaction": 2.78,
+        "agentRun.count": 1,
+        "agentRun.create": 1,
+        "agentRun.findUnique": 0.89,
+        "agentRun.update": 1.89,
+        "auditEvent.create": 1,
+        "checklistResult.createMany": 0.89,
+        "deliverable.create": 0.89,
+        "jobTask.findUnique": 2.89,
+        "jobTask.updateMany": 1.89,
+        "jobTaskEvent.create": 1.89,
+        "mistakeLog.findMany": 1,
+        "sopPack.findFirst": 1
+      },
+      "routerDb": {
+        "modelCall.aggregate (day budget)": 1.78,
+        "modelCall.create": 1.78
+      },
+      "graph": {
+        "GET file content (download)": 1,
+        "GET folder children": 1.89,
+        "GET item by path": 1,
+        "GET site by path": 1,
+        "GET site drives": 1,
+        "PUT file content (upload)": 0.89
+      },
+      "graphBytes": {
+        "GET file content (download)": 126,
+        "GET folder children": 202.67,
+        "GET item by path": 48,
+        "GET site by path": 130,
+        "GET site drives": 84,
+        "PUT file content (upload)": 184
+      },
+      "mismatches": [],
+      "fingerprint": "6211d47cf39d074e3f1e9d0c76253c67d06bf0bfa14943d9e0a4dcd2c2c8bb6f",
+      "costInrPerRun": 0.42
+    },
+    "gst": {
+      "agent": "gst",
+      "fixtures": 26,
+      "perRun": {
+        "modelCalls": 2.08,
+        "tokensIn": 2276,
+        "tokensOut": 152,
+        "dbOps": 24,
+        "routerDbOps": 4.15,
+        "sql": 34.15,
+        "graphCalls": 14.15,
+        "graphKiB": 5.5,
+        "rerunModelCalls": 0
+      },
+      "byTask": {
+        "gst.check:gst.free-supplies@1": 1,
+        "gst.classify-ledgers@1": 1,
+        "gst.read-hsn@1": 0.08
+      },
+      "byModel": {
+        "claude-haiku-5-5": 0.08,
+        "claude-sonnet-5-5": 2
+      },
+      "db": {
+        "$transaction": 3,
+        "agentRun.count": 1,
+        "agentRun.create": 1,
+        "agentRun.findUnique": 1,
+        "agentRun.update": 2,
+        "auditEvent.create": 1,
+        "checklistResult.createMany": 1,
+        "deliverable.create": 5,
+        "jobTask.findUnique": 3,
+        "jobTask.updateMany": 2,
+        "jobTaskEvent.create": 2,
+        "mistakeLog.findMany": 1,
+        "sopPack.findFirst": 1
+      },
+      "routerDb": {
+        "modelCall.aggregate (day budget)": 2.08,
+        "modelCall.create": 2.08
+      },
+      "graph": {
+        "GET file content (download)": 4.15,
+        "GET folder children": 2,
+        "GET item by path": 1,
+        "GET site by path": 1,
+        "GET site drives": 1,
+        "PUT file content (upload)": 5
+      },
+      "graphBytes": {
+        "GET file content (download)": 3518.5,
+        "GET folder children": 790.42,
+        "GET item by path": 48,
+        "GET site by path": 130,
+        "GET site drives": 84,
+        "PUT file content (upload)": 1056
+      },
+      "mismatches": [],
+      "fingerprint": "e5ca54afc4bc1bb698ece423fbfb6adadf64e7353ff79aeb0113f3a3e8f9e0c1",
+      "costInrPerRun": 0.52
+    },
+    "roc": {
+      "agent": "roc",
+      "fixtures": 24,
+      "perRun": {
+        "modelCalls": 1.25,
+        "tokensIn": 1126,
+        "tokensOut": 184,
+        "dbOps": 21,
+        "routerDbOps": 2.5,
+        "sql": 29.5,
+        "graphCalls": 14,
+        "graphKiB": 4.71,
+        "rerunModelCalls": 0.13
+      },
+      "byTask": {
+        "roc.check:roc.aoc2-related-party@1": 1,
+        "roc.map-ledgers@1": 0.25
+      },
+      "byModel": {
+        "claude-haiku-5-5": 0.17,
+        "claude-opus-5-5": 0.04,
+        "claude-sonnet-5-5": 1.04
+      },
+      "db": {
+        "$transaction": 3,
+        "agentRun.count": 1,
+        "agentRun.create": 1,
+        "agentRun.findUnique": 1,
+        "agentRun.update": 2,
+        "auditEvent.create": 1,
+        "checklistResult.createMany": 1,
+        "deliverable.create": 2,
+        "jobTask.findUnique": 3,
+        "jobTask.updateMany": 2,
+        "jobTaskEvent.create": 2,
+        "mistakeLog.findMany": 1,
+        "sopPack.findFirst": 1
+      },
+      "routerDb": {
+        "modelCall.aggregate (day budget)": 1.25,
+        "modelCall.create": 1.25
+      },
+      "graph": {
+        "GET file content (download)": 7,
+        "GET folder children": 2,
+        "GET item by path": 1,
+        "GET site by path": 1,
+        "GET site drives": 1,
+        "PUT file content (upload)": 2
+      },
+      "graphBytes": {
+        "GET file content (download)": 2842.29,
+        "GET folder children": 1291,
+        "GET item by path": 48,
+        "GET site by path": 130,
+        "GET site drives": 84,
+        "PUT file content (upload)": 428
+      },
+      "mismatches": [],
+      "fingerprint": "464571af631a59681e346417859c2b0e385d60cd37ecacb122195b1b1982f9ee",
+      "costInrPerRun": 0.28
+    },
+    "tax": {
+      "agent": "tax",
+      "fixtures": 22,
+      "perRun": {
+        "modelCalls": 1.59,
+        "tokensIn": 1245,
+        "tokensOut": 89,
+        "dbOps": 20,
+        "routerDbOps": 3.18,
+        "sql": 29.18,
+        "graphCalls": 10.18,
+        "graphKiB": 2.64,
+        "rerunModelCalls": 0
+      },
+      "byTask": {
+        "tax.check:tax.foreign-asset@1": 1,
+        "tax.match-ais@1": 0.59
+      },
+      "byModel": {
+        "claude-haiku-5-5": 0.59,
+        "claude-sonnet-5-5": 1
+      },
+      "db": {
+        "$transaction": 3,
+        "agentRun.count": 1,
+        "agentRun.create": 1,
+        "agentRun.findUnique": 1,
+        "agentRun.update": 2,
+        "auditEvent.create": 1,
+        "checklistResult.createMany": 1,
+        "deliverable.create": 1,
+        "jobTask.findUnique": 3,
+        "jobTask.updateMany": 2,
+        "jobTaskEvent.create": 2,
+        "mistakeLog.findMany": 1,
+        "sopPack.findFirst": 1
+      },
+      "routerDb": {
+        "modelCall.aggregate (day budget)": 1.59,
+        "modelCall.create": 1.59
+      },
+      "graph": {
+        "GET file content (download)": 4.18,
+        "GET folder children": 2,
+        "GET item by path": 1,
+        "GET site by path": 1,
+        "GET site drives": 1,
+        "PUT file content (upload)": 1
+      },
+      "graphBytes": {
+        "GET file content (download)": 1455.45,
+        "GET folder children": 774.64,
+        "GET item by path": 48,
+        "GET site by path": 130,
+        "GET site drives": 84,
+        "PUT file content (upload)": 209
+      },
+      "mismatches": [],
+      "fingerprint": "2ff48d1caf1c13ec13a20e5511e7d2babdd908acaf40729a1aaf3e49d8f4144b",
+      "costInrPerRun": 0.18
+    },
+    "books": {
+      "agent": "books",
+      "fixtures": 22,
+      "perRun": {
+        "modelCalls": 0.09,
+        "tokensIn": 73,
+        "tokensOut": 7,
+        "dbOps": 19.09,
+        "routerDbOps": 0.18,
+        "sql": 25.27,
+        "graphCalls": 13.59,
+        "graphKiB": 4.4,
+        "rerunModelCalls": 0
+      },
+      "byTask": {
+        "books.classify-expenses@1": 0.09
+      },
+      "byModel": {
+        "claude-haiku-5-5": 0.09
+      },
+      "db": {
+        "$transaction": 3,
+        "agentRun.count": 1,
+        "agentRun.create": 1,
+        "agentRun.findUnique": 0.09,
+        "agentRun.update": 2,
+        "auditEvent.create": 1,
+        "checklistResult.createMany": 1,
+        "deliverable.create": 1,
+        "jobTask.findUnique": 3,
+        "jobTask.updateMany": 2,
+        "jobTaskEvent.create": 2,
+        "mistakeLog.findMany": 1,
+        "sopPack.findFirst": 1
+      },
+      "routerDb": {
+        "modelCall.aggregate (day budget)": 0.09,
+        "modelCall.create": 0.09
+      },
+      "graph": {
+        "GET file content (download)": 7.59,
+        "GET folder children": 2,
+        "GET item by path": 1,
+        "GET site by path": 1,
+        "GET site drives": 1,
+        "PUT file content (upload)": 1
+      },
+      "graphBytes": {
+        "GET file content (download)": 2608.23,
+        "GET folder children": 1429.36,
+        "GET item by path": 48,
+        "GET site by path": 130,
+        "GET site drives": 84,
+        "PUT file content (upload)": 209
+      },
+      "mismatches": [],
+      "fingerprint": "591954c536923ff2cb7a1d05975e8d512f3ac4b3fcdd7a979b6360cc9d3de277",
+      "costInrPerRun": 0
+    },
+    "audit": {
+      "agent": "audit",
+      "fixtures": 22,
+      "perRun": {
+        "modelCalls": 1,
+        "tokensIn": 1070,
+        "tokensOut": 63,
+        "dbOps": 20,
+        "routerDbOps": 2,
+        "sql": 28,
+        "graphCalls": 13.95,
+        "graphKiB": 8.47,
+        "rerunModelCalls": 0
+      },
+      "byTask": {
+        "audit.check:audit.related-party-disclosure@1": 1
+      },
+      "byModel": {
+        "claude-sonnet-5-5": 1
+      },
+      "db": {
+        "$transaction": 3,
+        "agentRun.count": 1,
+        "agentRun.create": 1,
+        "agentRun.findUnique": 1,
+        "agentRun.update": 2,
+        "auditEvent.create": 1,
+        "checklistResult.createMany": 1,
+        "deliverable.create": 1,
+        "jobTask.findUnique": 3,
+        "jobTask.updateMany": 2,
+        "jobTaskEvent.create": 2,
+        "mistakeLog.findMany": 1,
+        "sopPack.findFirst": 1
+      },
+      "routerDb": {
+        "modelCall.aggregate (day budget)": 1,
+        "modelCall.create": 1
+      },
+      "graph": {
+        "GET file content (download)": 7.95,
+        "GET folder children": 2,
+        "GET item by path": 1,
+        "GET site by path": 1,
+        "GET site drives": 1,
+        "PUT file content (upload)": 1
+      },
+      "graphBytes": {
+        "GET file content (download)": 6693.09,
+        "GET folder children": 1501.91,
+        "GET item by path": 48,
+        "GET site by path": 130,
+        "GET site drives": 84,
+        "PUT file content (upload)": 214
+      },
+      "mismatches": [],
+      "fingerprint": "c2874370690e10cb3945a1a8e194d00555e8499fa5b2c17d44419ddcf6344f6c",
+      "costInrPerRun": 0.24
+    }
+  },
+  "views": {
+    "/agents · agents list (listRuns, partner)": {
+      "ops": {
+        "agentRun.findMany": 1
+      },
+      "total": 1,
+      "sql": 4
+    },
+    "/agents · Waiting for you (listMyJobs, staff)": {
+      "ops": {
+        "jobTask.findMany": 1
+      },
+      "total": 1,
+      "sql": 5
+    },
+    "/agents/[agent]/runs/[id] · run review (loadRunReview)": {
+      "ops": {
+        "agentRun.findFirst": 1,
+        "agentRun.findUnique": 1,
+        "auditEvent.findMany": 1
+      },
+      "total": 3,
+      "sql": 8
+    },
+    "/focus · next task (getNextTaskView, staff)": {
+      "ops": {
+        "jobTask.findMany": 1,
+        "sopPack.findFirst": 1
+      },
+      "total": 2,
+      "sql": 7
+    },
+    "/admin/firm-os/mistakes · mistakes (listMistakes, 30 rows)": {
+      "ops": {
+        "mistakeLog.findMany": 1,
+        "sopPack.findFirst": 30
+      },
+      "total": 31,
+      "sql": 31
+    },
+    "/coach · coach board (loadCoachPage, manager)": {
+      "ops": {
+        "agentRun.findMany": 1,
+        "coachEvent.findFirst": 1,
+        "coachEvent.findMany": 2,
+        "coachPreference.findUnique": 1,
+        "jobTask.findMany": 1,
+        "user.findMany": 1
+      },
+      "total": 7,
+      "sql": 10
+    },
+    "/search · text query (manager)": {
+      "ops": {
+        "client.findMany": 2,
+        "jobTask.findMany": 2,
+        "agentRun.findMany": 2,
+        "deliverable.findMany": 2,
+        "onboardingRun.findMany": 2,
+        "job.findMany": 2,
+        "clientDocument.findMany": 2,
+        "firmClient.findMany": 2,
+        "commsDraft.findMany": 2
+      },
+      "total": 18,
+      "sql": 53
+    },
+    "/search · identifier query (PAN, manager)": {
+      "ops": {
+        "client.findMany": 1,
+        "onboardingRun.findMany": 1,
+        "auditEvent.create": 1
+      },
+      "total": 3,
+      "sql": 4
+    }
+  },
+  "closeGate": {
+    "agent run · find the Compliance library (complianceDrive)": {
+      "ops": {},
+      "total": 0,
+      "sql": 0,
+      "graph": {
+        "GET site by path": 1,
+        "GET site drives": 1
+      },
+      "graphTotal": 2,
+      "note": "0.2 KiB received from Graph"
+    },
+    "agent run · find the Compliance library again (second deliverable / next run)": {
+      "ops": {},
+      "total": 0,
+      "sql": 0,
+      "graph": {},
+      "graphTotal": 0,
+      "note": "0 KiB received from Graph"
+    },
+    "agent run · upload one Working deliverable (putNew)": {
+      "ops": {},
+      "total": 0,
+      "sql": 0,
+      "graph": {
+        "GET folder children": 1,
+        "PUT file content (upload)": 1
+      },
+      "graphTotal": 2,
+      "note": "0.2 KiB received from Graph"
+    },
+    "approve · copy Working → Final (copyVersioned)": {
+      "ops": {},
+      "total": 0,
+      "sql": 0,
+      "graph": {
+        "GET file content (download)": 1,
+        "GET folder children": 1,
+        "PUT file content (upload)": 1
+      },
+      "graphTotal": 3,
+      "note": "47.1 KiB received from Graph"
+    },
+    "close gate · verify the Final file (closeJob)": {
+      "ops": {},
+      "total": 0,
+      "sql": 0,
+      "graph": {
+        "GET item by path": 1
+      },
+      "graphTotal": 1,
+      "note": "0.2 KiB received from Graph"
+    },
+    "reconciler · re-check the DONE file (verify, a later cron run)": {
+      "ops": {},
+      "total": 0,
+      "sql": 0,
+      "graph": {
+        "GET item by path": 1
+      },
+      "graphTotal": 1,
+      "note": "0.2 KiB received from Graph"
+    }
+  },
+  "reconciler": {
+    "reconciler · run 1 · files already in SharePoint (first run after a restart)": {
+      "ops": {
+        "$transaction": 20,
+        "auditEvent.create": 32,
+        "coachEvent.create": 53,
+        "deliverable.findMany": 210,
+        "deliverable.updateMany": 10,
+        "jobTask.findFirst": 50,
+        "jobTask.findMany": 2,
+        "jobTask.findUnique": 20,
+        "jobTask.updateMany": 20,
+        "jobTaskEvent.create": 20,
+        "jobTaskEvent.findMany": 200,
+        "turiaSync.findMany": 50,
+        "user.findUnique": 20
+      },
+      "total": 707,
+      "sql": 831,
+      "graph": {
+        "GET item by path": 200,
+        "GET file content (download)": 190
+      },
+      "graphTotal": 390,
+      "note": "open 30, closed 10, DONE re-checked 170, alerts 0, reminders 20, escalations 33"
+    },
+    "reconciler · run 2 (30 min later) · files already in SharePoint (first run after a restart)": {
+      "ops": {
+        "auditEvent.create": 20,
+        "coachEvent.create": 53,
+        "deliverable.findMany": 190,
+        "jobTask.findFirst": 20,
+        "jobTask.findMany": 2,
+        "jobTaskEvent.findMany": 190,
+        "turiaSync.findMany": 20,
+        "user.findUnique": 20
+      },
+      "total": 515,
+      "sql": 559,
+      "graph": {
+        "GET item by path": 190
+      },
+      "graphTotal": 190,
+      "note": "open 20, closed 0, DONE re-checked 170, alerts 0, reminders 0, escalations 0"
+    },
+    "reconciler · run 1 · files written by this process (copyToFinal)": {
+      "ops": {
+        "$transaction": 20,
+        "auditEvent.create": 32,
+        "coachEvent.create": 53,
+        "deliverable.findMany": 210,
+        "deliverable.updateMany": 10,
+        "jobTask.findFirst": 50,
+        "jobTask.findMany": 2,
+        "jobTask.findUnique": 20,
+        "jobTask.updateMany": 20,
+        "jobTaskEvent.create": 20,
+        "jobTaskEvent.findMany": 200,
+        "turiaSync.findMany": 50,
+        "user.findUnique": 20
+      },
+      "total": 707,
+      "sql": 831,
+      "graph": {
+        "GET item by path": 200
+      },
+      "graphTotal": 200,
+      "note": "open 30, closed 10, DONE re-checked 170, alerts 0, reminders 20, escalations 33"
+    },
+    "reconciler · run 2 (30 min later) · files written by this process (copyToFinal)": {
+      "ops": {
+        "auditEvent.create": 20,
+        "coachEvent.create": 53,
+        "deliverable.findMany": 190,
+        "jobTask.findFirst": 20,
+        "jobTask.findMany": 2,
+        "jobTaskEvent.findMany": 190,
+        "turiaSync.findMany": 20,
+        "user.findUnique": 20
+      },
+      "total": 515,
+      "sql": 559,
+      "graph": {
+        "GET item by path": 190
+      },
+      "graphTotal": 190,
+      "note": "open 20, closed 0, DONE re-checked 170, alerts 0, reminders 0, escalations 0"
+    }
+  },
+  "coach": {
+    "coach · morning board (09:00, once a working day)": {
+      "ops": {
+        "auditEvent.create": 1,
+        "coachEvent.createMany": 15,
+        "coachPreference.findMany": 1,
+        "jobTask.findMany": 1,
+        "user.findMany": 1
+      },
+      "total": 19,
+      "sql": 22
+    },
+    "coach · reminders (every 30 min, first run of the day)": {
+      "ops": {
+        "auditEvent.create": 74,
+        "coachEvent.createMany": 90,
+        "jobTask.findMany": 1,
+        "user.findMany": 2
+      },
+      "total": 167,
+      "sql": 170
+    },
+    "coach · reminders (every 30 min, a later run: nothing new)": {
+      "ops": {
+        "coachEvent.createMany": 90,
+        "jobTask.findMany": 1,
+        "user.findMany": 2
+      },
+      "total": 93,
+      "sql": 96
+    },
+    "coach · weekly summary (Friday 16:00)": {
+      "ops": {
+        "auditEvent.create": 1,
+        "coachEvent.createMany": 11,
+        "jobTask.findMany": 2,
+        "user.findMany": 1
+      },
+      "total": 15,
+      "sql": 16
+    }
+  },
+  "retention": {
+    "ops": {
+      "activityHeartbeat.deleteMany": 1,
+      "agentRun.updateMany": 1,
+      "auditEvent.create": 301,
+      "auditEvent.findMany": 1,
+      "modelCall.findMany": 1
+    },
+    "total": 305,
+    "sql": 305,
+    "note": "2,700 runs, 57,600 heartbeats (8 days), 300 escalated model calls in the 7-day window, none audited yet"
+  },
+  "storage": [
+    {
+      "table": "AgentRun",
+      "sampleRows": 116,
+      "heapPerRow": 1058,
+      "indexPerRow": 112,
+      "perYearRows": 2751,
+      "perYearMiB": 3.1,
+      "steadyStateNote": "inputs Json adds ~6159 B/run but is nulled after 30 days: ~1.3 MiB live at any time",
+      "basis": "2751 runs (agent jobs × 1.5)"
+    },
+    {
+      "table": "ChecklistResult",
+      "sampleRows": 2264,
+      "heapPerRow": 187,
+      "indexPerRow": 68,
+      "perYearRows": 59018,
+      "perYearMiB": 14.4,
+      "steadyStateNote": "grows every year (kept)",
+      "basis": "measured rows per run × runs"
+    },
+    {
+      "table": "Deliverable",
+      "sampleRows": 244,
+      "heapPerRow": 292,
+      "indexPerRow": 56,
+      "perYearRows": 15003,
+      "perYearMiB": 5,
+      "steadyStateNote": "grows every year (kept)",
+      "basis": "Working rows per run × runs + one Final set per job"
+    },
+    {
+      "table": "ModelCall",
+      "sampleRows": 143,
+      "heapPerRow": 295,
+      "indexPerRow": 140,
+      "perYearRows": 4496,
+      "perYearMiB": 1.9,
+      "steadyStateNote": "grows every year (kept)",
+      "basis": "measured model calls per run × runs (first runs; re-runs on unchanged inputs add none with the response cache)"
+    },
+    {
+      "table": "AuditEvent",
+      "sampleRows": 116,
+      "heapPerRow": 400,
+      "indexPerRow": 160,
+      "perYearRows": 17502,
+      "perYearMiB": 9.3,
+      "steadyStateNote": "grows every year (kept)",
+      "basis": "2 per run (guardrail-run, agent-run) + 6 per job (transitions, close, comments)"
+    },
+    {
+      "table": "AuditEvent (automated close-refused)",
+      "sampleRows": 1,
+      "heapPerRow": 264,
+      "indexPerRow": 168,
+      "perYearRows": 120000,
+      "perYearMiB": 49.4,
+      "steadyStateNote": "grows every year (kept); proposal P4c",
+      "basis": "reconciler: 20 close-refused per run (held CLOSING jobs) × 20 runs × 300 days"
+    },
+    {
+      "table": "AuditEvent (coach crons)",
+      "sampleRows": 1,
+      "heapPerRow": 216,
+      "indexPerRow": 152,
+      "perYearRows": 22500,
+      "perYearMiB": 7.9,
+      "steadyStateNote": "grows every year (kept)",
+      "basis": "coach: 75 per day (overdue escalations, board, summary) × 300 days"
+    },
+    {
+      "table": "JobTaskEvent",
+      "sampleRows": 349,
+      "heapPerRow": 107,
+      "indexPerRow": 56,
+      "perYearRows": 20000,
+      "perYearMiB": 3.1,
+      "steadyStateNote": "grows every year (kept)",
+      "basis": "10 transitions per job; the DONE event carries the gate evidence JSON (~695 B)"
+    },
+    {
+      "table": "CoachEvent",
+      "sampleRows": 116,
+      "heapPerRow": 569,
+      "indexPerRow": 133,
+      "perYearRows": 32160,
+      "perYearMiB": 21.5,
+      "steadyStateNote": "grows every year (no retention yet)",
+      "basis": "107 per working day (simulated morning board + reminders/escalations + weekly summary) × 300"
+    },
+    {
+      "table": "ActivityHeartbeat",
+      "sampleRows": 1,
+      "heapPerRow": 72,
+      "indexPerRow": 92,
+      "perYearRows": 2160000,
+      "perYearMiB": 337.8,
+      "steadyStateNote": "deleted after 7 days: ~7.9 MiB live at any time",
+      "basis": "16 people × 450/day × 300 days written"
+    }
+  ],
+  "assumptions": [
+    "2,000 JobTasks a year for ~200 clients; agent jobs: gst 1000, tax 333, roc 167, books 167, audit 167 (TDS has no agent yet).",
+    "1.5 agent runs per agent job (one re-run in two).",
+    "16 staff, 300 working days, 450 heartbeats per person per day (7.5 active hours, ≤ 1 a minute) when break nudges are on.",
+    "Bytes per row: Postgres heap tuple (28 B header, 8-byte alignment) + one entry per index (8 B + keys + 4 B line pointer); text = length + 1–4 B, jsonb ≈ 1.15 × JSON text, cuid ids 25 B. TOAST compression of large Json is not counted (upper bound).",
+    "Rows are the ones the fixture runs actually wrote (agents) and the coach simulation wrote (CoachEvent)."
+  ]
+}

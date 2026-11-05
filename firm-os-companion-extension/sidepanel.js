@@ -1,10 +1,12 @@
 // Side panel: the current Firm OS task, its SOP steps, a short checklist and copy buttons.
 // Refreshes on open, on the Refresh button, when the token changes, when the panel becomes visible
-// again and every minute while it is visible. Everything is built with DOM methods and textContent;
-// no server text is ever parsed as HTML. Ticks are local only (storage.js) and never sent.
+// again and every minute while it is visible — spaced out up to 5 minutes while the same task keeps
+// coming back (nextPollDelay in core.js), and not at all while the panel is hidden. Everything is
+// built with DOM methods and textContent; no server text is ever parsed as HTML. Ticks are local
+// only (storage.js) and never sent.
 import { fetchNextTask } from "./api.js";
 import { LMS_ORIGIN } from "./config.js";
-import { FRESH_MS, POLL_MS, TEXT, companionPageUrl, interpret, istTime, jobLink, ticksFor, whereLabel, withTick } from "./core.js";
+import { FRESH_MS, TEXT, companionPageUrl, interpret, istTime, jobLink, nextPollDelay, taskKey, ticksFor, whereLabel, withTick } from "./core.js";
 import { onTokenChange, readTicks, readToken, saveTicks } from "./storage.js";
 
 const view = document.getElementById("view");
@@ -18,6 +20,10 @@ let lastUpdated = ""; // IST time of the last good answer
 let inFlight = false;
 let renderedKey = ""; // the task on screen; a poll that brings the same task leaves the page alone
 let laterOpen = false; // whether "Later" is unfolded, kept across refreshes
+let timer = null; // the next automatic refresh
+let lastView = ""; // the view the last answer gave
+let lastTaskKey = ""; // the task the last answer carried (taskKey)
+let unchanged = 0; // answers in a row that brought the same task
 
 // ---------------------------------------------------------------- tiny DOM helpers
 
@@ -209,6 +215,28 @@ async function renderTask(data, stale) {
 
 // ---------------------------------------------------------------- refresh loop
 
+/** One timer: the next automatic refresh, only while the panel is visible. */
+function schedule() {
+  clearTimeout(timer);
+  timer = null;
+  if (document.visibilityState !== "visible") return;
+  timer = setTimeout(() => refresh(), nextPollDelay(lastView, unchanged));
+}
+
+/** Count answers that bring back the same task; anything else starts the one-minute rhythm again. */
+function noteAnswer(next) {
+  const key = next.view === "task" ? taskKey(next.data) : "";
+  unchanged = next.view === "task" && lastView === "task" && key === lastTaskKey ? unchanged + 1 : 0;
+  lastView = next.view;
+  lastTaskKey = key;
+}
+
+/** A person asked for it (Refresh, a new token, back online): fresh rhythm. */
+function refreshNow() {
+  unchanged = 0;
+  return refresh();
+}
+
 async function refresh() {
   if (inFlight) return;
   inFlight = true; // guards against overlapping refreshes; Refresh stays enabled so keyboard focus never drops
@@ -217,6 +245,7 @@ async function refresh() {
     const token = await readToken();
     if (!token) {
       lastTask = null;
+      lastView = "";
       setStatus("");
       renderUnpaired();
       return;
@@ -224,6 +253,7 @@ async function refresh() {
     const result = navigator.onLine === false ? { kind: "network" } : await fetchNextTask(token);
     const next = interpret(result);
     lastRefresh = Date.now();
+    noteAnswer(next);
     switch (next.view) {
       case "task":
         lastTask = next.data;
@@ -261,20 +291,21 @@ async function refresh() {
   } finally {
     inFlight = false;
     view.setAttribute("aria-busy", "false");
+    schedule();
   }
 }
 
 refreshBtn.addEventListener("click", () => {
-  refresh().then(() => say("Refreshed."));
+  refreshNow().then(() => say("Refreshed."));
 });
 document.getElementById("open-options").addEventListener("click", openOptions);
-onTokenChange(() => refresh());
+onTokenChange(() => refreshNow());
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && Date.now() - lastRefresh > FRESH_MS) refresh();
+  if (document.visibilityState !== "visible") return schedule(); // hidden: no timer at all
+  unchanged = 0;
+  if (Date.now() - lastRefresh > FRESH_MS) refresh();
+  else schedule();
 });
-window.addEventListener("online", () => refresh());
-setInterval(() => {
-  if (document.visibilityState === "visible") refresh();
-}, POLL_MS);
+window.addEventListener("online", () => refreshNow());
 
 refresh();

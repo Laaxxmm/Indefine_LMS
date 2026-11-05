@@ -15,6 +15,10 @@ export interface RouterConfig {
   grokPriceUsdPerMTok: { input: number; output: number };
   defaultMaxTokens: number;
   timeoutMs: number;
+  /** Response-cache entries kept per process (AI_RESPONSE_CACHE_MAX, default 500; 0 = off). */
+  responseCacheMax?: number;
+  /** Response-cache entry lifetime in ms (AI_RESPONSE_CACHE_TTL_MS, default 12 h). */
+  responseCacheTtlMs?: number;
 }
 
 export const DEFAULT_MODELS = {
@@ -60,5 +64,7 @@ export function loadRouterConfig(env: Env = process.env): RouterConfig {
     },
     defaultMaxTokens: num(env, "AI_MAX_OUTPUT_TOKENS", 4096, 1),
     timeoutMs: num(env, "AI_TIMEOUT_MS", 60_000, 1000),
+    responseCacheMax: Math.floor(num(env, "AI_RESPONSE_CACHE_MAX", 500, 0)),
+    responseCacheTtlMs: num(env, "AI_RESPONSE_CACHE_TTL_MS", 12 * 60 * 60 * 1000, 1000),
   };
 }
