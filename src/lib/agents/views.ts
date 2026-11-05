@@ -165,6 +165,45 @@ export type ChecklistView = {
   flags: string[];
 };
 
+/**
+ * Deterministic rules through which an agent reports its own extraction abstentions (a model task
+ * answered insufficient_evidence, ADR-008 §3): their failing rows are abstention questions too, like
+ * the flagged LLM rows core/guardrails/review.ts picks up. `heldBack` names the run figure with the
+ * amount the draft keeps out until the question is answered (owner-approved 2026-11-05: GST holds
+ * back ITC on a bill the model abstained on).
+ */
+export const ABSTENTION_RULES: Readonly<Record<string, { heldBack?: { figure: string; label: string } }>> = {
+  "gst.model-questions": { heldBack: { figure: "itcHeldBackPaise", label: "ITC held back until answered" } },
+  "books.classification-questions": {},
+};
+
+/** An open question as the review screen shows it: its checklist row's id and evidence, and any amount held back (₹ Indian grouping). */
+export type OpenQuestionView = OpenQuestion & { id: string; quote: string | null; link: string | null; heldBack: { label: string; amount: string } | null };
+
+const isAbstentionRule = (ruleId: string) => Object.prototype.hasOwnProperty.call(ABSTENTION_RULES, ruleId);
+const KIND_ORDER: Record<OpenQuestion["kind"], number> = { "insufficient-evidence": 0, "model-disagreement": 1, "out-of-scope": 2 };
+
+/** Open questions for the review screen (abstentions first, then disagreements, then out-of-scope rules; by rule id, checklist order within one). */
+export function openQuestionViews(checklist: readonly ChecklistView[], figures: Readonly<Record<string, number>>): OpenQuestionView[] {
+  const out: OpenQuestionView[] = [];
+  for (const c of checklist) {
+    const row = c.status === "fail" && c.flags.length === 0 && isAbstentionRule(c.ruleId) ? { ...c, flags: ["insufficient-evidence"] } : c;
+    // One row at a time, so each question keeps its own row's id and evidence.
+    for (const q of openQuestions([row])) {
+      const held = isAbstentionRule(q.ruleId) ? ABSTENTION_RULES[q.ruleId].heldBack : undefined;
+      const paise = held ? figures[held.figure] : undefined;
+      out.push({
+        ...q,
+        id: c.id,
+        quote: c.quote,
+        link: c.link,
+        heldBack: held && typeof paise === "number" && paise > 0 ? { label: held.label, amount: `₹${formatInr(paise / 100)}` } : null,
+      });
+    }
+  }
+  return out.sort((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || a.ruleId.localeCompare(b.ruleId));
+}
+
 export type DeliverableView = { id: string; kind: string; name: string; version: number; size: string; sha256: string; isSheet: boolean };
 export type CommentView = { id: string; author: string; at: string; text: string };
 export type FigureView = { key: string; label: string; value: string };
@@ -181,8 +220,12 @@ export type RunReview = {
   actions: ReviewActions & { finalize: boolean };
   /** Registered deterministic checks (for the "log a missed finding" form). */
   checks: string[];
-  /** ADR-008: rules the model could not answer / two reads disagreed on / not owned — questions for the reviewer (abstentions are client document requests). */
-  openQuestions: OpenQuestion[];
+  /**
+   * ADR-008: rules the model could not answer / two reads disagreed on / not owned, plus the
+   * agent-reported abstentions (ABSTENTION_RULES) — questions for the reviewer (abstentions are
+   * client document requests), with any amount held back from the draft.
+   */
+  openQuestions: OpenQuestionView[];
 };
 
 const SEV_ORDER = { block: 0, warn: 1, info: 2 } as const;
@@ -281,7 +324,7 @@ export async function loadRunReview(db: FirmDb, user: SessionUser, runId: string
     comments: comments.map((c) => ({ id: c.id, author: c.actorId ?? "—", at: istTime(c.createdAt), text: String((c.meta as { text?: unknown } | null)?.text ?? "") })),
     actions: { ...base, finalize: isLatest && run.jobTask.state === "APPROVED" && run.status === "APPROVED" && !hasFinal && run.deliverables.length > 0 && canViewJob(user, run.jobTask) },
     checks: def ? [...def.checklistRegistry.keys()] : [],
-    openQuestions: openQuestions(checklist),
+    openQuestions: openQuestionViews(checklist, (run.figures ?? {}) as Record<string, number>),
   };
 }
 
