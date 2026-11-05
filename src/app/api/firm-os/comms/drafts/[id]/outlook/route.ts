@@ -11,7 +11,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const g = await requireAgentUser();
   if (g.res) return g.res;
   const { id } = await params;
-  if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) return NextResponse.json({ error: "That draft link is not complete. Open the draft again from the client's messages." }, { status: 400 });
   const deps = commsDeps();
   const r = await openInOutlook(deps.db, g.user, id, { token: () => deps.mailToken(g.user.id), outlook: deps.outlook });
   if (r.ok) return NextResponse.json(r.data);

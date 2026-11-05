@@ -1,6 +1,6 @@
 // Outlook drafts over a mocked Graph: POST /me/messages in the person's own mailbox, attachments
 // inline below 3 MB and through an upload session above; no send endpoint is ever called.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { GRAPH_BASE, INLINE_ATTACHMENT_MAX, OutlookDraftError, UPLOAD_CHUNK, createOutlookDraft, findOutlookDraft, isDraftOnlyPath, isMicrosoftUploadUrl } from "./drafts";
 
 type Call = { url: string; method: string; headers: Record<string, string>; body: unknown };
@@ -70,25 +70,28 @@ describe("createOutlookDraft", () => {
 
   it("refuses an upload URL that is not Microsoft's", async () => {
     const g = mockGraph({ uploadUrl: "https://evil.example/upload" });
-    await expect(createOutlookDraft("tok", { to: [], subject: "S", body: "B", attachments: [pdf(INLINE_ATTACHMENT_MAX)] }, { fetch: g.f })).rejects.toThrow(/no usable upload URL/);
+    await expect(createOutlookDraft("tok", { to: [], subject: "S", body: "B", attachments: [pdf(INLINE_ATTACHMENT_MAX)] }, { fetch: g.f })).rejects.toThrow(/did not accept the attachment/);
     expect(g.calls.some((c) => c.url.startsWith("https://evil.example"))).toBe(false);
   });
 
   it("surfaces Graph failures with the status, without the message id", async () => {
     const g = mockGraph({ fail: { match: /POST .*\/me\/messages$/, status: 403 } });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const e = await createOutlookDraft("tok", { to: [], subject: "S", body: "B" }, { fetch: g.f }).catch((x) => x);
     expect(e).toBeInstanceOf(OutlookDraftError);
-    expect(e).toMatchObject({ status: 403, message: "Graph POST /me/messages failed: 403 nope" });
+    expect(e).toMatchObject({ status: 403, message: "Outlook did not accept the draft. Nothing was sent — try again in a minute." });
+    expect(warn).toHaveBeenCalledWith("[outlook] POST /me/messages failed: 403 nope");
     const g2 = mockGraph({ fail: { match: /\/attachments$/, status: 413 } });
     const e2 = await createOutlookDraft("tok", { to: [], subject: "S", body: "B", attachments: [pdf(10)] }, { fetch: g2.f }).catch((x) => x);
-    expect(e2.message).toBe("Graph POST /me/messages/{id}/attachments failed: 413 nope");
+    expect(e2).toMatchObject({ status: 413, message: "Outlook did not accept the draft. Nothing was sent — try again in a minute." });
+    expect(warn).toHaveBeenCalledWith("[outlook] POST /me/messages/{id}/attachments failed: 413 nope"); // the log never names the message
     const g3 = mockGraph({ fail: { match: /^PUT /, status: 500 } });
-    await expect(createOutlookDraft("tok", { to: [], subject: "S", body: "B", attachments: [pdf(INLINE_ATTACHMENT_MAX)] }, { fetch: g3.f })).rejects.toThrow(/Attachment upload failed at bytes 0-/);
+    await expect(createOutlookDraft("tok", { to: [], subject: "S", body: "B", attachments: [pdf(INLINE_ATTACHMENT_MAX)] }, { fetch: g3.f })).rejects.toThrow(/The attachment upload to Outlook stopped part-way/);
   });
 
   it("checks recipients and the subject before calling Graph", async () => {
     const g = mockGraph();
-    await expect(createOutlookDraft("tok", { to: ["not-an-email"], subject: "S", body: "B" }, { fetch: g.f })).rejects.toThrow("Not an email address: not-an-email");
+    await expect(createOutlookDraft("tok", { to: ["not-an-email"], subject: "S", body: "B" }, { fetch: g.f })).rejects.toThrow("not-an-email is not an email address. Check it and try again.");
     await expect(createOutlookDraft("tok", { to: [], subject: "  ", body: "B" }, { fetch: g.f })).rejects.toThrow(/subject/);
     expect(g.calls).toEqual([]);
   });

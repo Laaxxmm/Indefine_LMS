@@ -22,6 +22,7 @@ import { docChaseSuggestions } from "./doc-chase";
 import type { CommsRouter } from "./drafting";
 import { CommsInputError, periodLabel, type JobFacts, type TemplateInput } from "./templates";
 import { COMMS_KINDS, COMMS_LANGUAGES, FIRM_NAME, FIRM_SERVICES, KIND_LABELS, LANGUAGE_LABELS, LIMITS, REMINDER_ASKS, isCommsLanguage, type CommsKind, type CommsLanguage } from "./types";
+import { validationMessage } from "@/lib/errors";
 
 export type CommsDb = Pick<PrismaClient, "firmClient" | "jobTask" | "agentRun" | "commsDraft" | "auditEvent" | "user">;
 
@@ -148,13 +149,13 @@ export async function listClientOptions(db: CommsDb, user: SessionUser): Promise
 
 /** Context for the draft panel from ?run=, ?job= or ?client= (null when none is given). */
 export async function loadDraftContext(db: CommsDb, user: SessionUser, q: { run?: string; job?: string; client?: string }, now: Date): Promise<CommsResult<DraftContext | null>> {
-  if (!user || !canUseAgents(user)) return fail(403, "No access");
+  if (!user || !canUseAgents(user)) return fail(403, "Your account can't draft client messages. Ask an admin if you need to.");
   let jobId = q.job;
   let run: DraftContext["run"] = null;
   let suggestions: string[] = [];
   if (q.run) {
     const r = await db.agentRun.findUnique({ where: { id: q.run }, select: { id: true, agent: true, jobTaskId: true, checklist: { select: { ruleId: true, status: true, message: true, evidence: true } } } });
-    if (!r) return fail(404, "Agent run not found");
+    if (!r) return fail(404, "That agent run wasn't found. Go back to the job and start the message from there.");
     jobId = r.jobTaskId;
     run = { id: r.id, agent: r.agent };
     suggestions = docChaseSuggestions(r.checklist);
@@ -163,13 +164,13 @@ export async function loadDraftContext(db: CommsDb, user: SessionUser, q: { run?
   let client: ClientRow | null = null;
   if (jobId) {
     job = (await db.jobTask.findUnique({ where: { id: jobId }, select: JOB_SELECT })) as JobRow | null;
-    if (!job) return fail(404, "Job not found");
-    if (!canViewJob(user, job)) return fail(403, "You can draft messages only for jobs you prepare or review");
+    if (!job) return fail(404, "That job wasn't found, or you can't see it. Go back to your list and open it again.");
+    if (!canViewJob(user, job)) return fail(403, "You can draft messages only for jobs you prepare or review. Ask the job's preparer or reviewer.");
     client = job.firmClient;
   } else if (q.client) {
     client = (await db.firmClient.findUnique({ where: { clientCode: q.client }, select: CLIENT_SELECT })) as ClientRow | null;
-    if (!client) return fail(404, "Client not found");
-    if (!(await canSeeClient(db, user, client.id))) return fail(403, "You can draft messages only for clients whose jobs you prepare or review");
+    if (!client) return fail(404, "That client wasn't found. Pick the client again from the list.");
+    if (!(await canSeeClient(db, user, client.id))) return fail(403, "You can draft messages only for clients whose jobs you prepare or review. Ask the client's handler.");
   } else return ok(null);
 
   const jobs = (await db.jobTask.findMany({
@@ -191,16 +192,16 @@ export async function loadDraftContext(db: CommsDb, user: SessionUser, q: { run?
 
 // ------------------------------------------------------------------ create
 
-const idZ = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/, "Invalid id");
+const idZ = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/, "That link is not complete. Open the job or client again and start the message from there.");
 
 export const CreateDraftBodyZ = z.object({
-  kind: z.enum(COMMS_KINDS, { errorMap: () => ({ message: "Pick what the message is for" }) }),
+  kind: z.enum(COMMS_KINDS, { errorMap: () => ({ message: "Pick what the message is for." }) }),
   clientCode: z.string().regex(/^[A-Z0-9]{3,10}$/, "Invalid client code").optional(),
   jobId: idZ.optional(),
   runId: idZ.optional(),
   department: z.enum(FIRM_SERVICES as [FirmService, ...FirmService[]]).optional(),
   language: z.enum(COMMS_LANGUAGES).optional(),
-  replyBy: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Reply-by date must be YYYY-MM-DD").optional(),
+  replyBy: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick the reply-by date from the calendar.").optional(),
   items: z.array(z.string().max(LIMITS.itemChars, `Each document at most ${LIMITS.itemChars} characters`)).max(LIMITS.maxItems, `At most ${LIMITS.maxItems} documents per message`).optional(),
   ask: z.enum(REMINDER_ASKS).optional(),
   amountInr: z.number().positive("The amount must be above ₹0").max(1e12).optional(),
@@ -214,24 +215,24 @@ export type CreateDeps = { router: CommsRouter; now: Date };
 
 function replyByOf(body: CreateDraftBody, now: Date, due: Date | null): Date | CommsResult<never> {
   const d = parseDayKey(body.replyBy);
-  if (!d) return fail(400, "Give the date you need the reply by");
-  if (d < istDayStart(now)) return fail(400, "The reply-by date is in the past");
-  if (due && d > due) return fail(400, "The reply-by date is after the due date");
+  if (!d) return fail(400, "Give the date you need the reply by.");
+  if (d < istDayStart(now)) return fail(400, "The reply-by date is in the past. Pick a later date.");
+  if (due && d > due) return fail(400, "The reply-by date is after the due date. Pick a date on or before the due date.");
   return d;
 }
 
 export async function createDraft(db: CommsDb, user: SessionUser, raw: unknown, deps: CreateDeps): Promise<CommsResult<{ id: string; href: string }>> {
-  if (!user || !canUseAgents(user)) return fail(403, "No access");
+  if (!user || !canUseAgents(user)) return fail(403, "Your account can't draft client messages. Ask an admin if you need to.");
   const parsed = CreateDraftBodyZ.safeParse(raw);
-  if (!parsed.success) return fail(400, parsed.error.issues[0]?.message ?? "Invalid request");
+  if (!parsed.success) return fail(400, validationMessage(parsed.error));
   const body = parsed.data;
 
   let jobId = body.jobId;
   let agentRunId: string | null = null;
   if (body.runId) {
     const r = await db.agentRun.findUnique({ where: { id: body.runId }, select: { id: true, jobTaskId: true } });
-    if (!r) return fail(404, "Agent run not found");
-    if (jobId && jobId !== r.jobTaskId) return fail(400, "The run belongs to another job");
+    if (!r) return fail(404, "That agent run wasn't found. Go back to the job and start the message from there.");
+    if (jobId && jobId !== r.jobTaskId) return fail(400, "That agent run belongs to another job. Start the message from the right job.");
     jobId = r.jobTaskId;
     agentRunId = r.id;
   }
@@ -239,19 +240,19 @@ export async function createDraft(db: CommsDb, user: SessionUser, raw: unknown, 
   let client: ClientRow | null = null;
   if (jobId) {
     job = (await db.jobTask.findUnique({ where: { id: jobId }, select: JOB_SELECT })) as JobRow | null;
-    if (!job) return fail(404, "Job not found");
-    if (!canViewJob(user, job)) return fail(403, "You can draft messages only for jobs you prepare or review");
+    if (!job) return fail(404, "That job wasn't found, or you can't see it. Go back to your list and open it again.");
+    if (!canViewJob(user, job)) return fail(403, "You can draft messages only for jobs you prepare or review. Ask the job's preparer or reviewer.");
     client = job.firmClient;
-    if (body.clientCode && body.clientCode !== client.clientCode) return fail(400, "The job belongs to another client");
+    if (body.clientCode && body.clientCode !== client.clientCode) return fail(400, "That job belongs to another client. Pick the right client.");
   } else {
-    if (body.kind !== "query-response") return fail(400, "Pick the job this message is about");
-    if (!body.clientCode) return fail(400, "Pick the client");
+    if (body.kind !== "query-response") return fail(400, "Pick the job this message is about.");
+    if (!body.clientCode) return fail(400, "Pick the client.");
     client = (await db.firmClient.findUnique({ where: { clientCode: body.clientCode }, select: CLIENT_SELECT })) as ClientRow | null;
-    if (!client) return fail(404, "Client not found");
-    if (!(await canSeeClient(db, user, client.id))) return fail(403, "You can draft messages only for clients whose jobs you prepare or review");
+    if (!client) return fail(404, "That client wasn't found. Pick the client again from the list.");
+    if (!(await canSeeClient(db, user, client.id))) return fail(403, "You can draft messages only for clients whose jobs you prepare or review. Ask the client's handler.");
   }
   const department = job?.service ?? body.department;
-  if (!department) return fail(400, "Pick the department this answer is about");
+  if (!department) return fail(400, "Pick the department this answer is about.");
   // DPDP (src/lib/privacy/consent.ts): no model call and no new draft for a client who withdrew
   // consent or is under an erasure hold. Refused before anything is drafted or stored.
   if (await isAiProcessingRestricted(db, client.id)) return fail(409, AI_RESTRICTED_MESSAGE);
@@ -270,7 +271,7 @@ export async function createDraft(db: CommsDb, user: SessionUser, raw: unknown, 
       if (!(by instanceof Date)) return by;
       if (body.kind === "doc-chase") input = { ...people, kind: "doc-chase", job: jf, items: body.items ?? [], replyBy: by };
       else {
-        if (!body.ask) return fail(400, "Pick what the reminder asks the client to do");
+        if (!body.ask) return fail(400, "Pick what the reminder asks the client to do.");
         input = { ...people, kind: "due-reminder", job: jf, ask: body.ask, replyBy: by, amountInr: body.amountInr ?? null };
       }
     }
@@ -376,9 +377,9 @@ export type DraftView = {
 };
 
 async function loadRow(db: CommsDb, user: SessionUser, id: string): Promise<CommsResult<{ d: DraftRow; job: JobRow | null; client: ClientRow | null }>> {
-  if (!user || !canUseAgents(user)) return fail(403, "No access");
+  if (!user || !canUseAgents(user)) return fail(403, "Your account can't draft client messages. Ask an admin if you need to.");
   const d = (await db.commsDraft.findUnique({ where: { id } })) as DraftRow | null;
-  if (!d) return fail(404, "Draft not found");
+  if (!d) return fail(404, "That draft wasn't found. Go back to the client's messages and open it again.");
   const job = d.jobTaskId ? ((await db.jobTask.findUnique({ where: { id: d.jobTaskId }, select: JOB_SELECT })) as JobRow | null) : null;
   const client = job?.firmClient ?? ((await db.firmClient.findUnique({ where: { id: d.firmClientId }, select: CLIENT_SELECT })) as ClientRow | null);
   if (!canSeeDraft(user, d, job, client)) {
@@ -440,7 +441,7 @@ export async function openInOutlook(
   const r = await loadRow(db, user, id);
   if (!r.ok) return r;
   const token = await deps.token();
-  if (!token) return fail(412, "Connect your Microsoft 365 mailbox first, then open the draft again", "/connect?mail=1");
+  if (!token) return fail(412, "Connect your Microsoft 365 mailbox first, then open the draft again.", "/connect?mail=1");
   const { d, client } = r.data;
   try {
     if (d.outlookDraftId) {
@@ -455,7 +456,7 @@ export async function openInOutlook(
   } catch (e) {
     const status = (e as { status?: number }).status;
     console.error("comms Outlook draft failed:", e instanceof Error ? e.message : e);
-    if (status === 401 || status === 403) return fail(412, "Outlook refused the draft: reconnect your Microsoft 365 mailbox, then try again", "/connect?mail=1");
+    if (status === 401 || status === 403) return fail(412, "Outlook refused the draft. Reconnect your Microsoft 365 mailbox, then try again.", "/connect?mail=1");
     return fail(502, "Outlook could not create the draft. Try again in a minute.");
   }
 }

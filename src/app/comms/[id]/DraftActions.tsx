@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { call, linkText, pageBleed, pageGutter } from "@/components/ui";
 import { Button } from "@/components/firm-os";
+import { DEFAULT_MESSAGE } from "@/lib/errors";
 
 // "Open in Outlook draft" (primary) puts the message in the Drafts folder of the person's own
 // mailbox and opens it; "Copy" puts subject + body on the clipboard. Neither sends anything.
@@ -20,7 +21,7 @@ export function DraftActions({ id, subject, body, inOutlook }: { id: string; sub
       if (link) window.open(link, "_blank", "noopener,noreferrer");
       setMsg({ text: "The draft is in the Drafts folder of your Outlook mailbox. Check it there and send it yourself.", link });
     } else {
-      setMsg({ text: r.error ?? "Something went wrong", connect: typeof r.data.connect === "string" ? r.data.connect : undefined });
+      setMsg({ text: r.error ?? DEFAULT_MESSAGE, connect: typeof r.data.connect === "string" ? r.data.connect : undefined });
     }
   }
 

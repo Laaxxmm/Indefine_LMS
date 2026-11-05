@@ -80,8 +80,8 @@ describe("createDraft", () => {
   });
 
   it("404 for an unknown job, run or client", async () => {
-    expect(await createDraft(w.db, priya, { kind: "status", jobId: "nope" }, offline())).toMatchObject({ ok: false, status: 404, error: "Job not found" });
-    expect(await createDraft(w.db, priya, { kind: "status", runId: "nope" }, offline())).toMatchObject({ ok: false, status: 404, error: "Agent run not found" });
+    expect(await createDraft(w.db, priya, { kind: "status", jobId: "nope" }, offline())).toMatchObject({ ok: false, status: 404, error: "That job wasn't found, or you can't see it. Go back to your list and open it again." });
+    expect(await createDraft(w.db, priya, { kind: "status", runId: "nope" }, offline())).toMatchObject({ ok: false, status: 404, error: "That agent run wasn't found. Go back to the job and start the message from there." });
     expect(await createDraft(w.db, priya, { kind: "query-response", clientCode: "NOPE01", department: "GST", topic: "x", answer: "y" }, offline())).toMatchObject({ ok: false, status: 404 });
   });
 

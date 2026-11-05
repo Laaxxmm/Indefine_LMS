@@ -7,6 +7,7 @@ import { btnGhost, call, card, errorText, field, formWidth, hintText, labelText 
 import { Button } from "@/components/firm-os";
 import type { DraftContext, JobOption } from "@/lib/agents/comms/service";
 import { COMMS_KINDS, COMMS_LANGUAGES, FIRM_SERVICES, KIND_LABELS, LANGUAGE_LABELS, LIMITS, type CommsKind, type CommsLanguage, type ReminderAsk } from "@/lib/agents/comms/types";
+import { DEFAULT_MESSAGE } from "@/lib/errors";
 
 const label = `flex flex-col gap-1 ${labelText}`;
 const legend = labelText;
@@ -85,7 +86,7 @@ export function DraftForm({ ctx }: { ctx: DraftContext }) {
     }).catch(() => ({ ok: false, error: "Could not reach the server", data: {} as Record<string, unknown> }));
     setBusy(false);
     if (r.ok && typeof r.data.href === "string") router.push(r.data.href);
-    else setError(r.error ?? "Something went wrong");
+    else setError(r.error ?? DEFAULT_MESSAGE);
   }
 
   return (
