@@ -18,6 +18,7 @@ import { audit, loadJob } from "./db";
 import { CloseLoopError, transitionError } from "./errors";
 import { closeJob, type CloseJobResult, type GateDeps } from "./gate";
 import { HOOK_ACTOR, afterTransition, onFiledByHuman, type HookDeps, type HookOutcome, type TuriaStep } from "./hooks";
+import { STATE_WORDS } from "@/lib/agents/core/state";
 
 export interface CloseLoopDeps extends GateDeps, HookDeps {
   /** Confirmations are always recorded through the manual bridge, whatever bridge is active. */
@@ -29,14 +30,14 @@ export { canActOnJob };
 
 async function jobFor(user: SessionUser, jobTaskId: string, deps: CloseLoopDeps) {
   const job = await loadJob(deps.db, jobTaskId);
-  if (!job) throw new CloseLoopError("not-found", "Job not found");
+  if (!job) throw new CloseLoopError("not-found", "That job wasn't found, or you can't see it. Go back to your list and open it again.");
   const actor = actorOf(user);
-  if (!canActOnJob(user, job) || !actor) throw new CloseLoopError("forbidden", "Only the job's assignee or reviewer, a manager or a partner can do this");
+  if (!canActOnJob(user, job) || !actor) throw new CloseLoopError("forbidden", "Only the job's assignee or reviewer, a manager or a partner can do this. Ask one of them.");
   return { job, actor };
 }
 
 const DONE_REFUSED =
-  "DONE is set only by the close gate. Mark the job filed, close the Turia task with the time logged, and keep the Final file in SharePoint; the job then closes itself.";
+  "A job is marked done only by the closing checks. Mark the job filed, close the Turia task with the time logged, and keep the Final file in SharePoint; the job then closes itself.";
 
 // ------------------------------------------------------------------ mark filed
 
@@ -80,7 +81,7 @@ export async function confirmTuriaClose(jobTaskId: string, input: TuriaCloseInpu
   const { job, actor } = await jobFor(user, jobTaskId, deps);
   const now = deps.now?.() ?? new Date();
   if (job.state !== "FILED_BY_HUMAN" && job.state !== "CLOSING") {
-    throw new CloseLoopError("state", `The Turia close is recorded after the job is marked filed (the job is ${job.state})`);
+    throw new CloseLoopError("state", `Record the Turia close after the job is marked filed; this job is ${STATE_WORDS[job.state].toLowerCase()}. Mark it filed first.`);
   }
   if (job.state === "FILED_BY_HUMAN") {
     const t = await transitionJobTask(deps.db, jobTaskId, "CLOSING", HOOK_ACTOR, { expectedState: "FILED_BY_HUMAN", now });
@@ -112,7 +113,7 @@ export async function setJobState(jobTaskId: string, input: SetStateInput, user:
     await audit(deps.db, { actorId: user?.id ?? null, action: "done-refused", entity: "JobTask", entityId: jobTaskId, meta: { via: "state", expectedState: input.expectedState } });
     throw new CloseLoopError("gate-required", DONE_REFUSED);
   }
-  if (input.to === "FILED_BY_HUMAN") throw new CloseLoopError("invalid", "Use Mark filed, with the acknowledgement reference");
+  if (input.to === "FILED_BY_HUMAN") throw new CloseLoopError("invalid", "Use Mark filed, with the acknowledgement number, to record a filing.");
   const { actor } = await jobFor(user, jobTaskId, deps);
   // The note is stored with identifiers (PAN, GSTIN, phone, email …) masked (ADR-006).
   const note = input.note?.trim() ? scrubFreeText(input.note) : (input.note ?? null);

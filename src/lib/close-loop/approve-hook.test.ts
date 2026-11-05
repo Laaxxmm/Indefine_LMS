@@ -77,7 +77,7 @@ describe("approvePack fires the close-loop hook", () => {
     const deps = withCloseLoopHook(w.deps, hook);
     await toReview(w, deps);
     expect(await approvePack(user("ravi"), "run-1", null, deps)).toMatchObject({ ok: false, status: 502, error: expect.stringMatching(/Copy to Final/) });
-    expect(outcomes.at(-1)).toMatchObject({ hook: "approved", result: { status: "failed", reason: expect.stringMatching(/Graph 503/) } });
+    expect(outcomes.at(-1)).toMatchObject({ hook: "approved", result: { status: "failed", reason: expect.stringMatching(/copying it to the Final folder failed/) } });
     expect(audits(w, "copy-to-final-failed")).toHaveLength(1);
     expect(rows(w.db, "jobTask")[0].state).toBe("APPROVED");
   });

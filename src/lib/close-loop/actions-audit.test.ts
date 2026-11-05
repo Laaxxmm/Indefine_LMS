@@ -35,8 +35,8 @@ describe("close-loop action audit trail", () => {
   it("a refused edge writes no transition event; a DONE request writes only done-refused", async () => {
     const { w, deps } = setup();
     const job = w.addJob({ state: "FILED_BY_HUMAN" });
-    await expect(setJobState(job.id, { to: "APPROVED", expectedState: "FILED_BY_HUMAN", note: "x" }, person("u-priya"), deps)).rejects.toThrow(/manager or partner/);
-    await expect(setJobState(job.id, { to: "DONE", expectedState: "FILED_BY_HUMAN" }, person("u-mgr", "MANAGER"), deps)).rejects.toThrow(/close gate/);
+    await expect(setJobState(job.id, { to: "APPROVED", expectedState: "FILED_BY_HUMAN", note: "x" }, person("u-priya"), deps)).rejects.toThrow(/manager or a partner/);
+    await expect(setJobState(job.id, { to: "DONE", expectedState: "FILED_BY_HUMAN" }, person("u-mgr", "MANAGER"), deps)).rejects.toThrow(/marked done only by the closing checks/);
     expect(w.audits.map((a) => a.action)).toEqual(["done-refused"]);
   });
 });

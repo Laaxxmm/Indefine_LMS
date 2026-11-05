@@ -113,7 +113,7 @@ describe("acknowledgement reference rules", () => {
     expect(parseMinutes("", true)).toMatchObject({ ok: false });
     for (const bad of ["0", "-3", "1.5", "abc", "6001"]) expect(parseMinutes(bad, false)).toMatchObject({ ok: false });
     expect(parseMinutes(" 90 ", true)).toEqual({ ok: true, minutes: 90 });
-    expect(turiaCloseBody({ turiaTaskRef: "", minutes: "10" })).toEqual({ ok: false, error: "Enter the Turia task ref" });
+    expect(turiaCloseBody({ turiaTaskRef: "", minutes: "10" })).toEqual({ ok: false, error: "Enter the Turia task reference." });
     expect(turiaCloseBody({ turiaTaskRef: "TT-1", minutes: "0" })).toMatchObject({ ok: false, error: expect.stringMatching(/more than 0/) });
     expect(turiaCloseBody({ turiaTaskRef: " TT-1 ", minutes: "30" })).toEqual({ ok: true, body: { turiaTaskRef: "TT-1", minutes: 30 } });
   });
@@ -278,7 +278,7 @@ describe("Retract filing (FILED_BY_HUMAN / CLOSING → APPROVED)", () => {
   it("a partner retracts from FILED_BY_HUMAN; staff on the job get the route's refusal; a stale state is a conflict", async () => {
     const job = w.addJob({ state: "FILED_BY_HUMAN", service: "Books", ackRef: null, filedAt: new Date(), filedById: "u-priya" });
     signedIn(priya());
-    expect(await retractFiling(job.id, "FILED_BY_HUMAN", "Filed in error", send)).toMatchObject({ ok: false, error: expect.stringMatching(/Only a manager or partner may retract/) });
+    expect(await retractFiling(job.id, "FILED_BY_HUMAN", "Filed in error", send)).toMatchObject({ ok: false, error: expect.stringMatching(/Only a manager or a partner can take back a filing confirmation/) });
     expect(w.job(job.id).state).toBe("FILED_BY_HUMAN");
     signedIn(partner());
     expect(await retractFiling(job.id, "CLOSING", "Filed in error", send)).toMatchObject({ ok: false }); // the job is not CLOSING
@@ -327,8 +327,8 @@ describe("panel calls through the routes (mocked call)", () => {
     const filed = w.addJob({ state: "FILED_BY_HUMAN", ackRef: "AA1", filedAt: new Date(), filedById: "u-priya" });
     for (const who of [meera(), partner()]) {
       signedIn(who);
-      expect(await send(`/api/firm-os/jobs/${closing.id}/state`, { to: "DONE", expectedState: "CLOSING" })).toMatchObject({ ok: false, error: expect.stringMatching(/only by the close gate/) });
-      expect(await send(`/api/firm-os/jobs/${filed.id}/state`, { to: "DONE", expectedState: "FILED_BY_HUMAN" })).toMatchObject({ ok: false, error: expect.stringMatching(/only by the close gate/) });
+      expect(await send(`/api/firm-os/jobs/${closing.id}/state`, { to: "DONE", expectedState: "CLOSING" })).toMatchObject({ ok: false, error: expect.stringMatching(/marked done only by the closing checks/) });
+      expect(await send(`/api/firm-os/jobs/${filed.id}/state`, { to: "DONE", expectedState: "FILED_BY_HUMAN" })).toMatchObject({ ok: false, error: expect.stringMatching(/marked done only by the closing checks/) });
     }
     expect(w.job(closing.id).state).toBe("CLOSING");
     expect(w.job(filed.id).state).toBe("FILED_BY_HUMAN");
@@ -338,7 +338,7 @@ describe("panel calls through the routes (mocked call)", () => {
     const job = approvedJob("GST");
     await recordFiling(job.id, ackRefFor("GST"), { ackRef: "AA2710260012345", turiaTaskRef: "", minutes: "" }, send);
     const done = await send(`/api/firm-os/jobs/${job.id}/state`, { to: "DONE", expectedState: "CLOSING" });
-    expect(done).toMatchObject({ ok: false, error: expect.stringMatching(/only by the close gate/) });
+    expect(done).toMatchObject({ ok: false, error: expect.stringMatching(/marked done only by the closing checks/) });
     expect(w.job(job.id).state).toBe("CLOSING");
     const v = (await view(job.id))!;
     expect(v).toMatchObject({ state: "CLOSING", action: "turia-close", turia: { status: "none" } });

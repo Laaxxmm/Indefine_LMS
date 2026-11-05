@@ -84,7 +84,7 @@ export async function onFiledByHuman(jobTaskId: string, deps: Pick<HookDeps, "db
   const now = deps.now?.() ?? new Date();
   const job = await loadJob(deps.db, jobTaskId);
   if (!job) {
-    return { turia: { status: "failed", reason: "Job not found" }, closing: { ok: false, code: "NOT_FOUND", reason: `JobTask ${jobTaskId} not found` }, prompt: CLOSE_PROMPT };
+    return { turia: { status: "failed", reason: "Job not found" }, closing: { ok: false, code: "NOT_FOUND", reason: "That job wasn't found." }, prompt: CLOSE_PROMPT };
   }
 
   let taskRef = input.turiaTaskRef?.trim() || null;
@@ -110,7 +110,7 @@ export async function onFiledByHuman(jobTaskId: string, deps: Pick<HookDeps, "db
   const closing: TransitionResult =
     job.state === "FILED_BY_HUMAN"
       ? await transitionJobTask(deps.db, jobTaskId, "CLOSING", HOOK_ACTOR, { expectedState: "FILED_BY_HUMAN", now })
-      : { ok: false, code: "ILLEGAL_EDGE", reason: `Job is ${job.state}, not FILED_BY_HUMAN` };
+      : { ok: false, code: "ILLEGAL_EDGE", reason: "The job is no longer marked filed, so closing was not started." };
   return { turia, closing, prompt: CLOSE_PROMPT };
 }
 
