@@ -7,6 +7,7 @@ import type { FirmDb } from "@/lib/agents/core/runner";
 import { loadRunReview, type ChecklistView, type OpenQuestionView } from "@/lib/agents/views";
 import { loadCloseLoopView, type CloseLoopViewDb } from "@/lib/close-loop/review";
 import { card } from "@/components/ui";
+import { HistoryLink } from "@/components/CorrectionHistory";
 import { BackLink, PartnerChip, RunStatusChip, StateChip, eyebrow, focusRing, pageTitle, sectionTitle } from "../../../parts";
 import { ActionBar, CloseLoopStatus, CommentsPanel, DeliverablesPanel, MistakeForm } from "./ReviewPanels";
 
@@ -81,6 +82,11 @@ export default async function RunReviewPage({ params }: { params: Promise<{ agen
           {run.needsPartnerReview && <PartnerChip />}
           <Link href={`/comms/new?run=${run.id}`} className={`text-[13px] font-semibold text-brand-600 hover:underline rounded ${focusRing}`}>Draft client message</Link>
         </div>
+      </div>
+
+      {/* The job's correction history (who changed which field, when and why), and a fix for a wrong entry. */}
+      <div className="mb-5">
+        <HistoryLink entity="JobTask" id={job.id} />
       </div>
 
       {!review.isLatest && (

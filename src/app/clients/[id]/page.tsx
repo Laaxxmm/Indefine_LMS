@@ -13,6 +13,7 @@ import { clientSiteLink, jobFolderLink } from "@/lib/integrations/sharepoint/cli
 import { canSeeAllRuns } from "@/lib/agents/access";
 import { listClientJobs, type ClientJobsDb } from "@/lib/agents/client-jobs";
 import { FirmOsJobs } from "./FirmOsJobs";
+import { ClientHistory } from "./ClientHistory";
 
 export const dynamic = "force-dynamic";
 
@@ -80,6 +81,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
         </div>
       </div>
 
+      <ClientHistory clientId={client.id} />
       <dl className="grid sm:grid-cols-3 gap-x-6 gap-y-3 rounded-2xl bg-card border border-border shadow-lift p-5 mb-6 text-[13.5px]">
         {facts.map(([k, v]) => <div key={k}><dt className="text-[11px] font-bold text-ink-faint uppercase tracking-wide">{k}</dt><dd className="mt-0.5">{v}</dd></div>)}
       </dl>

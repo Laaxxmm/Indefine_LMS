@@ -189,6 +189,7 @@ describe("/comms pages", () => {
     expect(html).toContain("Open in Outlook draft");
     expect(html).toContain(">Copy<");
     expect(html).toContain("To: ravi@acme.test");
+    expect(html).toMatch(/<button[^>]*aria-expanded="false"[^>]*>[\s\S]*?History<\/button>/); // the draft's correction history
     expect(html).not.toMatch(/\bSend\b/);
     await expect(DraftPage(ctx("missing"))).rejects.toBeInstanceOf(NotFoundSignal);
     signedIn(activeSession({ id: "u-other" }));

@@ -76,6 +76,16 @@ describe("signed out / no access", () => {
   });
 });
 
+describe("correction history on the review page", () => {
+  it("the job's History link sits under the header", async () => {
+    as(user("ravi"));
+    await startAgentRun(user("priya"), "echo", "job-1", state.world.deps);
+    const html = await review("run-1");
+    expect(html).toMatch(/<button[^>]*aria-expanded="false"[^>]*>[\s\S]*?History<\/button>/);
+    expect(html.indexOf("History</button>")).toBeGreaterThan(html.indexOf("</h1>"));
+  });
+});
+
 describe("/agents", () => {
   it("layout: nav with the visible agents; staff see 'My agent runs' and no mistake log", async () => {
     as(user("priya"));
