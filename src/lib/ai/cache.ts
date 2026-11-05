@@ -20,7 +20,7 @@
 // like any other value of the run, and only within one job's scope. A hit makes no provider call,
 // so it writes no ModelCall row and costs nothing; the budget guard applies to calls only.
 import { createHash } from "node:crypto";
-import type { Msg, ProviderId } from "./types";
+import type { ModelRequest, Msg, ProviderId } from "./types";
 
 export type CachedResponse = {
   output: unknown;
@@ -130,4 +130,82 @@ export function responseCacheKey(p: CacheKeyParts): string {
       sha(JSON.stringify(p.rawMessages)),
     ]),
   );
+}
+
+// ---------------------------------------------------------------- the router's hook
+
+/** Most recent runs whose scope the hook remembers (one lookup per run). */
+const SCOPE_MEMO_MAX = 1000;
+
+/** What the router already computed for the request (masking and the schema are the router's, unchanged). */
+export type CacheRequestParts = { task: string; maskedMessages: readonly Msg[]; jsonSchema: unknown; maxTokens: number };
+
+/** The "ok" RouterResult a hit returns (structurally the router's ok variant; no provider call, no cost). */
+export type CacheHitResult<T> = Omit<CachedResponse, "output"> & { status: "ok"; output: T; tokensIn: 0; tokensOut: 0; costInr: 0; attempts: 0 };
+
+export type CacheLookup<T> = {
+  /** The reusable answer, already re-validated for this request; null = call a provider. */
+  hit: CacheHitResult<T> | null;
+  /** Keep this request's final "ok" answer (call only for status "ok"). */
+  remember(value: CachedResponse): void;
+};
+
+/** A cached output still valid for this request's schema and validators, or null. */
+async function revalidate<T>(req: Pick<ModelRequest<T>, "schema" | "contradictions">, value: unknown): Promise<T | null> {
+  let output: T;
+  if (req.schema) {
+    const parsed = req.schema.safeParse(value);
+    if (!parsed.success) return null;
+    output = parsed.data;
+  } else if (typeof value === "string") output = value as T;
+  else return null;
+  if (req.contradictions && (await req.contradictions(output)).length > 0) return null;
+  return output;
+}
+
+/**
+ * The router's whole cache logic behind two call sites (lookup before the first attempt, remember
+ * before an "ok" return). `scopeOf(runId)` gives the run's client scope ("job:<JobTask id>") or null
+ * (the run alone); a failed lookup also falls back to the run.
+ */
+export function createRouterCacheHook(cache: ResponseCache, scopeOf: (runId: string) => Promise<string | null | undefined>) {
+  const scopes = new Map<string, string>();
+  async function scopeFor(runId: string): Promise<string> {
+    const known = scopes.get(runId);
+    if (known) return known;
+    let scope = `run:${runId}`;
+    try {
+      scope = (await scopeOf(runId)) ?? scope;
+    } catch {
+      // A failed lookup only narrows the scope to this run.
+    }
+    scopes.set(runId, scope);
+    if (scopes.size > SCOPE_MEMO_MAX) scopes.delete(scopes.keys().next().value as string);
+    return scope;
+  }
+  return {
+    async lookup<T>(req: ModelRequest<T>, parts: CacheRequestParts): Promise<CacheLookup<T>> {
+      const key = responseCacheKey({
+        scope: await scopeFor(req.runId),
+        task: parts.task,
+        forceTier: req.forceTier ?? null,
+        privacy: req.privacy,
+        difficulty: req.difficulty,
+        maxTokens: parts.maxTokens,
+        jsonSchema: parts.jsonSchema,
+        maskedMessages: parts.maskedMessages,
+        rawMessages: req.messages,
+      });
+      const remember = (value: CachedResponse) => cache.set(key, value);
+      const cached = cache.get(key);
+      if (!cached) return { hit: null, remember };
+      const output = await revalidate(req, cached.output);
+      if (output === null) {
+        cache.delete(key);
+        return { hit: null, remember };
+      }
+      const { provider, model, confidence, escalated, anonymized, needsPartnerReview } = cached;
+      return { hit: { status: "ok", output, provider, model, confidence, escalated, anonymized, needsPartnerReview, tokensIn: 0, tokensOut: 0, costInr: 0, attempts: 0 }, remember };
+    },
+  };
 }
