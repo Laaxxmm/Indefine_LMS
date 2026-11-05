@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest";
 import { confirmErasure, planErasure, publicPlan, type ErasurePlan } from "./erasure";
 import { isAiProcessingRestricted, processingRestrictions } from "./consent";
 import { createRequest, verifyIdentity, type PrivacyDeps } from "./register";
+import { SELF_ERASURE_MESSAGE } from "./duties";
 import type { PrivacyDb } from "./inventory";
-import { PAN_PROP, SUPPLIER_PAN, T0, USERS, privacyWorld } from "./__tests__/fixtures";
+import { PAN_PROP, SUPPLIER_PAN, T0, USERS, privacyWorld, sessionUser } from "./__tests__/fixtures";
 import { removalCalls, type MemoryDb } from "./__tests__/memory-db";
 
 type Row = Record<string, unknown>;
@@ -11,10 +12,11 @@ const deps = (db: MemoryDb): PrivacyDeps => ({ db: db as unknown as PrivacyDb, n
 const pdb = (db: MemoryDb) => db as unknown as PrivacyDb;
 const find = (db: MemoryDb, model: string, id: string) => db.tables[model].find((r) => r.id === id) as Row;
 
+/** Logged by the admin, identity checked by the partner (separation of duties: src/lib/privacy/duties.ts). */
 async function erasureRequest(db: MemoryDb, identifiers: Record<string, string>, verify = true) {
   const r = await createRequest(USERS.admin, { kind: "erasure", identifiers }, deps(db));
   if (!r.ok) throw new Error(r.error);
-  if (verify) await verifyIdentity(USERS.admin, r.data.id, { method: "Photo ID seen in person" }, deps(db));
+  if (verify) await verifyIdentity(USERS.partner, r.data.id, { method: "Photo ID seen in person" }, deps(db));
   return r.data.id;
 }
 
@@ -91,7 +93,7 @@ describe("confirming an erasure", () => {
     const sizes = Object.fromEntries(Object.entries(db.tables).map(([k, v]) => [k, v.length]));
     const before = db.calls.length;
 
-    const r = await confirmErasure(USERS.partner, id, { fingerprint: plan.fingerprint }, deps(db));
+    const r = await confirmErasure(USERS.admin, id, { fingerprint: plan.fingerprint }, deps(db));
     expect(r).toMatchObject({ ok: true, data: { status: "COMPLETED", legalHold: null } });
 
     const prospect = find(db, "client", "c-prospect");
@@ -168,5 +170,21 @@ describe("confirming an erasure", () => {
     if (!access.ok) throw new Error("setup");
     expect(await confirmErasure(USERS.admin, access.data.id, { fingerprint: plan.fingerprint }, deps(db))).toMatchObject({ ok: false, status: 409 });
     expect(await planErasure(pdb(db), "missing", T0)).toBeNull();
+  });
+
+  it("is confirmed by a partner or admin other than the person who verified the identity (audit finding #28)", async () => {
+    const db = privacyWorld();
+    const id = await erasureRequest(db, { email: "lalitha@consult.test" }); // verified by the partner
+    const plan = (await planErasure(pdb(db), id, T0))!;
+    expect(await confirmErasure(USERS.partner, id, { fingerprint: plan.fingerprint }, deps(db))).toMatchObject({ ok: false, status: 403, error: SELF_ERASURE_MESSAGE });
+    expect(find(db, "client", "c-prospect").name).toBe("Lalitha Consulting");
+    expect(db.tables.auditEvent.some((e) => e.action === "anonymise")).toBe(false);
+
+    // A second admin who did not verify may confirm.
+    const secondAdmin = sessionUser("u-admin2", { role: "ADMIN", name: "Arun Admin" });
+    expect(await confirmErasure(secondAdmin, id, { fingerprint: plan.fingerprint }, deps(db))).toMatchObject({ ok: true, data: { status: "COMPLETED" } });
+    const confirmed = db.tables.auditEvent.find((e) => e.action === "erasure-confirmed" && e.entityId === id);
+    const verified = db.tables.auditEvent.find((e) => e.action === "verify-identity" && e.entityId === id);
+    expect([verified?.actorId, confirmed?.actorId]).toEqual([USERS.partner.id, "u-admin2"]);
   });
 });

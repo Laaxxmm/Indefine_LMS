@@ -81,7 +81,11 @@ describe("privacy request routes", () => {
 
   it("erasure plan and confirm; staff are refused", async () => {
     const id = await logRequest("erasure", { email: "lalitha@consult.test" });
+    // Separation of duties (src/lib/privacy/duties.ts): the partner verifies, the admin confirms.
+    as(USERS.partner);
     await verify.POST(post({ method: "Photo ID seen in person" }), params(id));
+    expect((await erasure.POST(post({ fingerprint: "x" }), params(id))).status).toBe(403);
+    as(admin);
     const plan = await json(await erasure.GET(get(), params(id)));
     expect((plan.items as Record<string, unknown>[]).every((i) => !("set" in i))).toBe(true);
     as(USERS.staff);

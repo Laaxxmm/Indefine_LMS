@@ -30,6 +30,7 @@ import { IDENTIFIER_KINDS, identifierHash, normaliseIdentifier, type Identifier,
 import type { DutyId, RequestStatus } from "./policy";
 import { guardRegister, loadMatches, loadOpen, requireVerified, writeAudit, type PrivacyDeps, type Tx } from "./register";
 import { restrictInTx } from "./consent";
+import { assertErasureDecider } from "./duties";
 import { dutiesForScope, loadScopes, type DutyInForce } from "./scope";
 import { ERASED_TOKEN, scrubberFor } from "./scrub";
 
@@ -386,6 +387,7 @@ export async function confirmErasure(user: SessionUser, id: string, input: { fin
     const outcome = await deps.db.$transaction(async (tx: Tx) => {
       await loadOpen(tx, id, ["erasure"]);
       await requireVerified(tx, id);
+      await assertErasureDecider(tx, id, user); // separation of duties: not the person who verified
       const plan = await planErasure(tx, id, now, { hashKey: deps.hashKey });
       if (!plan) throw new Refusal(404, "That privacy request wasn't found. Go back to the register and open it again.");
       if (plan.fingerprint !== input.fingerprint) {
