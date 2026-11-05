@@ -12,6 +12,7 @@ The repository inventory these decisions rest on is in [`docs/inventory.md`](../
 | [ADR-004](ADR-004-sharepoint-path-a.md) | SharePoint Path A is the only document spine | Accepted | 2026-11-05 | Deliverables go to `CL-{Code}` sites under the Indefine-Compliance hub; legacy `GRAPH_CLIENTS_ROOT` stays readable; no moves or deletes. |
 | [ADR-005](ADR-005-close-loop-done.md) | DONE requires Turia close and SharePoint presence | Accepted | 2026-11-05 | `JobTask` state machine; `DONE` only via `closeLoop.gate()`, enforced below the UI. |
 | [ADR-006](ADR-006-dpdp-data-classes.md) | DPDP data classes and anonymization | Accepted | 2026-11-05 | Client PII reaches a cloud model only masked; token map never sent; inputs ≤ 30 days; break-nudge heartbeats 7 days, no manager report. |
+| [ADR-007](ADR-007-graph-upload-put.md) | Graph file upload via create-only PUT | Proposed | 2026-11-05 | One PUT path with conflictBehavior=fail so deliverables can be written; never overwrites; versions instead. Needs owner confirmation. |
 
 ## Open items raised by these ADRs
 

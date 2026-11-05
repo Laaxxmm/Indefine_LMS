@@ -33,7 +33,8 @@
     "verify:firm-os": "npm run verify:no-skip && npm run verify:secrets && npm run verify:no-portal && npm run verify:no-delete && npm run verify:ai-boundary",
     "verify:patha": "tsx --env-file-if-exists=.env.local scripts/verify-patha.ts",
     "map:legacy-folders": "tsx --env-file-if-exists=.env.local scripts/map-legacy-folders.ts",
-    "e2e:db": "playwright test --config playwright.db.config.ts --repeat-each=3"
+    "e2e:db": "playwright test --config playwright.db.config.ts --repeat-each=3",
+    "accuracy": "tsx scripts/accuracy.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.5.0",

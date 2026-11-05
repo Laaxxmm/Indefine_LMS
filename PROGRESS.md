@@ -1,14 +1,14 @@
 # PROGRESS — Indefine Firm OS
-Current phase: 3 + 4 (parallel) | Branch: firm-os/phase-0-inventory | Last green: 2026-11-05 21:35 IST
-Tests: unit+integration 1198/1198 (43 files; Firm OS coverage 99.7% lines / 97.4% branches) · e2e 4/4 (smoke, local, no DB) · accuracy: GST P=– R=– | ROC – | TAX – | BOOKS – | AUDIT –
+Current phase: 5–8 | Branch: firm-os/phase-0-inventory | Last green: 2026-11-05 20:35 IST
+Tests: unit+integration 1324/1324 (55 files; Firm OS coverage 99.7% lines / 97.4% branches) · e2e 4/4 (smoke, local, no DB) · accuracy: echo P=1.00 R=1.00 (harness self-test) | GST – | ROC – | TAX – | BOOKS – | AUDIT –
 Model mode: CLAUDE_ONLY + LOCAL_STUB(fail-closed) | Turia bridge: MANUAL (ADR-003)
 
 ## Phase checklist (✅ only when QA gate green)
-- [x] 0 Inventory & ADRs ✅ (QA gate green 19:40 IST)
-- [x] 1 Path A finish + /clients → CL-{Code} ✅ (20:25 IST; live verify-patha Blocked — creds)
-- [x] 2 ModelRouter + anonymizer + local stub ✅ (20:25 IST; live Claude smoke Blocked — key)
+- [x] 0 Inventory & ADRs ✅ (QA gate green 19:15 IST)
+- [x] 1 Path A finish + /clients → CL-{Code} ✅ (19:25 IST; live verify-patha Blocked — creds)
+- [x] 2 ModelRouter + anonymizer + local stub ✅ (19:25 IST; live Claude smoke Blocked — key)
 - [ ] 3 Onboarding Agent — code complete, unit/integration green; QA gate pending e2e 3/3 (Blocked: staging DB + partner session)
-- [ ] 4 Task-agent framework
+- [x] 4 Task-agent framework ✅ (20:35 IST)
 - [ ] 5 GST Prep
 - [ ] 6 ROC Prep + Tax Prep
 - [ ] 7 Books Close + Audit Assist
@@ -50,7 +50,11 @@ Phase 4 (in progress)
 - [x] 2 checklist.ts — rules as data, deterministic registry, LLM rules need quote+location, MistakeLog-promoted rules (source 'mistake')
 - [x] 3 templates.ts — XLSX/DOCX fixed header block, Indian grouping, draft label, sha256; deterministic output
 - [x] state.ts + state-db.ts — JobTask state machine (81-pair table test), single-transaction transition + JobTaskEvent, optimistic concurrency; DONE only with a single-use CloseGateToken minted by close-loop/gate.ts (Phase 8)
-- [ ] 1 runner.ts · 4 mistakes.ts · 5 review UI /agents · 6 scripts/accuracy.ts (agent running)
+- [x] 1 runner.ts — runAgent(def, jobTaskId, deps): SopPack + approved MistakeLog rules → inputs → router extract → deterministic compute (paise) → checklist → deliverables → Working/ (_v{attempt}) → AgentRun/ChecklistResult/Deliverable rows → AGENT_DONE; failure leaves IN_PREP
+- [x] 4 mistakes.ts — propose → partner/manager decide → new SopPack minor version; nothing auto-promotes
+- [x] 5 /agents, /agents/[agent], /agents/[agent]/runs/[id] review (checklist left, deliverable preview right, Request changes / Approve pack bar; no portal/send button — asserted); /agents/mistakes + /admin/firm-os/mistakes
+- [x] 6 scripts/accuracy.ts (`npm run accuracy -- --agent=echo`) — P/R per severity, exact figures in paise, schema, mistake replay, 3× determinism
+QA gate: echo framework tests green · harness self-test: perfect → P=R=1 pass; corrupted (missed block flag, ₹1 off) → fail exit 1; nondeterministic fake → fail · mistake-promotion integration test green · next build green.
 Phase 3 (in progress)
 - [x] 6 calendar.ts + calendar-defaults.ts — rules as data; GSTR-1/3B (QRMP state groups), GSTR-9/9C, TDS, advance tax, ITR, AOC-4, MGT-7, DIR-3 KYC, ADT-1, MSME-1; internal due = statutory − buffer, rolled back past weekends
 - [x] 1 /onboard chat page (partner/manager only; links on /tools and /clients nav)
@@ -91,9 +95,16 @@ Shared foundation (commit c61d885): additive Prisma section "Firm OS: shared spi
 | Client creation service (shared) | tests/unit/clients-service.test.ts | green |
 | /onboard page + API (403/400) | tests/unit/routes/onboard*.test.ts | green |
 | E2E onboarding golden path | tests/e2e-db/onboard.spec.ts | Blocked (staging DB) |
+| SharePoint upload/copy/deliverable store | src/lib/integrations/sharepoint/{upload,deliverable-store}.test.ts | green |
+| Agent runner + echo agent | src/lib/agents/core/runner.test.ts | green |
+| Mistake promotion loop | src/lib/agents/core/mistakes.test.ts | green |
+| Accuracy scoring + harness self-test | src/lib/agents/core/accuracy*.test.ts | green |
+| /agents pages + API (403/400, no portal button) | tests/unit/routes/agents*.test.ts | green |
 
 ## Accuracy scoreboard     (agent → fixture set → precision → recall → threshold → pass/fail → date)
-_None yet (from Phase 5)._
+| Agent | Fixture set | Block P/R | Warn P/R | Figures | Schema | Replay | 3× | Result | Date |
+|---|---|---|---|---|---|---|---|---|---|
+| echo (framework self-test) | accuracy/echo (6) | 1.000/1.000 | 1.000/1.000 | 6/6 | 6/6 | 1/1 | 6/6 | pass | 05 Nov 2026 20:31 IST |
 
 ## Decisions (ADR index)
 - Package manager is npm (repo convention): spec's `pnpm x` = `npm run x`.
@@ -101,6 +112,8 @@ _None yet (from Phase 5)._
 - ADR-001 Extend LMS · ADR-002 ModelRouter · ADR-003 Turia (ManualBridge default — no documented Turia API) · ADR-004 SharePoint Path A · ADR-005 Close loop for DONE · ADR-006 DPDP data classes (docs/adr/).
 - Guard allowlists (frozen, Firm OS dirs never allowlistable): LEGACY_PORTAL_READONLY = src/lib/statutory/cloud.ts, statutory-extension/{background.js,collectors.js,manifest.json} (public news reads), src/lib/certificates/templates/format-vi.ts (certificate wording only, no network allowed). LEGACY_GEMINI = src/lib/{gemini,quiz-gen,distill,transcribe}.ts.
 - Models (env-overridable): FAST claude-haiku-5-5 · SMART claude-sonnet-5-5 · HARD claude-opus-5-5 · Grok grok-4 (price unverified, configurable). USD_INR 88, ROUTER_MIN_CONF 0.75, AI_DAILY_BUDGET_INR 1000. `judgement` difficulty routes SMART→HARD (spec silent). Local-model calls are not masked (data stays on LAN); ModelCall hash always of masked prompt.
+- ADR-007 (proposed): Graph upload needs PUT — one create-only PUT path with conflictBehavior=fail; versions instead of overwrite; enforced by no-destructive.test.ts. Needs owner confirmation.
+- Review comments stored as AuditEvent (action comment) — no schema change. Mistake decisions also at /agents/mistakes because the /admin layout admits LMS admins only.
 - Onboarding: LMS Client.turnover is required, so turnover is a clarifier question (not defaulted). Existing client with same name/PAN is linked, not duplicated. Turia task issued only for the first period of each series. Firm OS UI keeps the LMS brand theme (violet) instead of the spec's teal fallback — spec says extend the existing theme. `isManager` added to src/lib/access.ts (MANAGER, SENIOR_MANAGER).
 - JobTask edges added beyond spec: IN_PREP→IN_REVIEW (manual prep, no agent); FILED_BY_HUMAN/CLOSING→APPROVED retract-filing (manager/partner, note). No CLOSING→FILED_BY_HUMAN, nothing out of DONE. Ack ref required for GST/ROC/IncomeTax/TDS.
 - Calendar: AGM-relative forms count AGM day as day 1 (configurable `countAgmDay`); statutory dates never moved, only flagged on non-working days.
@@ -117,6 +130,7 @@ _None yet (from Phase 5)._
 - Staging DATABASE_URL · map-legacy-folders report, /admin/firm-os/models view, DB e2e · provide Railway staging branch DB · 2026-11-05
 - **Partner verification of calendar defaults** · CA judgement · confirm: QRMP 3B 22nd/24th state groups vs current CBIC notification; AGM day-counting convention; ITR non-audit due date under Income-tax Act 2025 / Finance Act 2026 (kept 31 Jul); DIR-3 KYC frequency (kept annual 30 Sep); 2025-Act form names for TDS/advance tax · 2026-11-05
 - **Partner sign-off on onboarding catalog** · CA judgement · review JOB_CATALOG per entity type (src/lib/agents/onboarding/planner.ts) and PAN 4th-char rule per entity (validators.ts); calendar rules missing for Books close, Audit, Engagement letter, LLP Form 11/8; AGM date not captured at onboarding so AOC-4/MGT-7/ADT-1 stay pending · 2026-11-05
+- **Confirm ADR-007** (Graph upload via create-only PUT) · deviates from Phase 1 "GET/POST only" · approve or reject · 2026-11-05
 - Push branches / open PRs · no gh CLI on this machine · human approval to push firm-os/* branches · 2026-11-05
 
 ## Known gaps / tech debt
@@ -127,22 +141,27 @@ _None yet (from Phase 5)._
 - /work is a two-person tech tracker behind an email allow-list — JobTasks will surface on /dashboard + /agents instead (inventory G-7).
 - greytHR is a monthly CSV only — Phase 9 break nudge needs an LMS activity heartbeat (G-6).
 - Workflows hard-code https://lms.indefine.in (staging crons need a variable) (G-11).
+- AgentRun.inputs purge job (inputsPurgeAt, ≤ 30 days) not built yet — Phase 11.
+- Accuracy `--provider` reserved for Phase 2b (exits 2).
+- Log times before 20:31 were first written as estimates; corrected from commit timestamps.
 
 ## Log                      (IST time · phase · what · tests)
 - 18:48 · 0 · Cloned Indefine_LMS, branch firm-os/phase-0-inventory from main 33d113f · –
 - 18:52 · 0 · Baseline typecheck + lint green · –
-- 18:54 · 0 · Test tooling + Firm OS schema spine committed (c61d885) · unit 2/2
+- 18:54 · 0 · Test tooling + Firm OS schema spine (c61d885) · unit 2/2
 - 18:56 · 0/1/2 · Parallel agents started: P0 docs, P0 guards+CI, P1 SharePoint, P2 ModelRouter · –
-- 19:05 · 0 · Full Firm OS schema (JobTask state machine etc.) committed 08fe596, additive only · unit 2/2
-- 19:25 · 0 · Merged inventory + ADRs (072802e) · –
-- 19:32 · 0 · Merged guards, route smoke, Playwright, CI · unit 56/56, verify 5/5
-- 19:40 · 0 · next build green → Phase 0 QA gate ✅ · unit 56/56 · e2e 4/4
-- 19:45 · 3/4 · Agent started: Phase 4 core (state machine, checklist, templates) + Phase 3 calendar · –
-- 20:15 · 2 · Merged ModelRouter/anonymizer/providers/usage page · 423/423
-- 20:20 · 1 · Merged Path A (paths, graph client, clfolders, verify-patha, /clients flag); .env.example conflict resolved (both sections) · 648/648
-- 20:25 · 1/2 · Coverage 99.7% lines, next build green → Phase 1 ✅, Phase 2 ✅ · 648/648
-- 20:28 · 3 · Agent started: Phase 3 onboarding (rbac, Turia ManualBridge, extractor, saga, /onboard) · –
-- 20:38 · 3/4 · Merged agent core (state machine, checklist, templates, calendar) · 974/974
-- 20:40 · 4 · Agent started: Phase 4 runner, echo agent, mistakes, accuracy harness, /agents review UI · –
-- 21:30 · 3 · Merged onboarding (rbac, Turia ManualBridge, extractor/clarifier/validators, saga, /onboard); added playwright.db.config.ts + npm run e2e:db · 1198/1198
-- 21:35 · 3 · next build green; Phase 3 QA gate waits on e2e 3/3 (Blocked: staging DB) · 1198/1198
+- 19:00 · 0 · Full Firm OS schema (JobTask state machine etc.), additive only (08fe596) · unit 2/2
+- 19:11 · 0 · Merged inventory + ADRs (1c585b8) · –
+- 19:13 · 0 · Merged guards, route smoke, Playwright, CI (0088f5d) · unit 56/56, verify 5/5
+- 19:15 · 0 · next build green → Phase 0 ✅ (153ad9b) · 56/56 · e2e 4/4
+- 19:16 · 3/4 · Agent started: agent core (state machine, checklist, templates, calendar) · –
+- 19:22 · 2 · Merged ModelRouter/anonymizer/providers/usage page · 423/423
+- 19:23 · 1 · Merged Path A; .env.example conflict resolved · 648/648
+- 19:25 · 1/2 · Coverage 99.7%, build green → Phase 1 ✅, Phase 2 ✅ (ef02ccc) · 648/648
+- 19:28 · 3 · Agent started: onboarding · –
+- 19:38 · 3/4 · Merged agent core (76d1f0f) · 974/974
+- 19:41 · 4 · Agent started: runner, echo, mistakes, accuracy, /agents UI · –
+- 20:19 · 3 · Merged onboarding; playwright.db.config.ts + npm run e2e:db (38953de) · 1198/1198
+- 20:22 · 8 · Agent started: close loop (gate, hooks, reconciler cron, routes, cycle-time page) · –
+- 20:30 · 4 · Merged runner/mistakes/accuracy/review UI (0017eb1); npm run accuracy added · 1324/1324 · accuracy echo pass
+- 20:35 · 4 · next build green → Phase 4 ✅; ADR-007 proposed · 1324/1324
