@@ -4,11 +4,13 @@ import { onboardingService } from "@/lib/agents/onboarding/defaults";
 import { answerBodyZ, errorResponse, guard, parseBody } from "@/lib/agents/onboarding/http";
 import { recordAudit } from "@/lib/audit/record";
 import { enforceRateLimit } from "@/lib/hardening/rate-limit";
+import { firmOsEnabled, firmOsOffResponse } from "@/lib/workspace/flag";
 
 export const maxDuration = 60;
 
 // Merge the short form's answers (and/or a follow-up sentence) and re-validate.
 export async function POST(req: Request) {
+  if (!firmOsEnabled()) return firmOsOffResponse();
   const g = guard(await auth());
   if (!g.ok) return g.res;
   const body = await parseBody(req, answerBodyZ);

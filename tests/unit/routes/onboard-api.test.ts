@@ -1,5 +1,7 @@
 // /api/firm-os/onboard/* route handlers: auth → zod → one service call → JSON.
 import { beforeEach, describe, expect, it, vi } from "vitest";
+// These routes sit behind the Firm OS master switch (src/lib/workspace/flag.ts); it is on for these tests.
+beforeEach(() => vi.stubEnv("FIRM_OS_ENABLED", "1"));
 import { activeSession } from "./harness";
 
 const svc = {

@@ -1,6 +1,8 @@
 // Route handlers under /api/firm-os/privacy/** and /api/firm-os/corrections/**: auth → zod → one
 // lib call → JSON. Signed out is 401, people who may not act get 403, every error is a sentence.
 import { beforeEach, describe, expect, it, vi } from "vitest";
+// These routes sit behind the Firm OS master switch (src/lib/workspace/flag.ts); it is on for these tests.
+beforeEach(() => vi.stubEnv("FIRM_OS_ENABLED", "1"));
 import { activeSession } from "../../../../../tests/unit/routes/harness";
 import { PAN_PROP, USERS, privacyWorld } from "@/lib/privacy/__tests__/fixtures";
 import { removalCalls, type MemoryDb } from "@/lib/privacy/__tests__/memory-db";

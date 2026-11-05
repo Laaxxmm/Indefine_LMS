@@ -3,12 +3,14 @@ import { requireAgentUser } from "@/lib/agents/http";
 import { commsDeps } from "@/lib/agents/comms/defaults";
 import { createDraft } from "@/lib/agents/comms/service";
 import { enforceRateLimit } from "@/lib/hardening/rate-limit";
+import { firmOsEnabled, firmOsOffResponse } from "@/lib/workspace/flag";
 
 // "Prepare draft": builds a client message draft (template, optional model polish and translation)
 // and stores it as a CommsDraft. A draft only — nothing is sent; staff copy it or open it as an
 // Outlook draft in their own mailbox. Each draft can call the model, so it is rate limited per
 // person (scope "comms-draft", RATE_LIMIT_COMMS_DRAFT).
 export async function POST(req: Request) {
+  if (!firmOsEnabled()) return firmOsOffResponse();
   const g = await requireAgentUser();
   if (g.res) return g.res;
   const body = await req.json().catch(() => null);

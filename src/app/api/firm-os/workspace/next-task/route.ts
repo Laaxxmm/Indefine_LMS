@@ -6,12 +6,14 @@ import { moduleOffMessage } from "@/lib/workspace/guard";
 import { signedInUser } from "@/lib/workspace/http";
 import { getNextTaskView } from "@/lib/workspace/next-task";
 import { isModuleEnabled, type WorkspaceDb } from "@/lib/workspace/settings";
+import { firmOsEnabled, firmOsOffResponse } from "@/lib/workspace/flag";
 
 export const dynamic = "force-dynamic";
 
 // The signed-in person's next task as NextTaskView JSON (src/lib/workspace/contract.ts). Read-only:
 // it changes nothing. Same visibility as /agents, and only while the Agents module is on.
 export async function GET() {
+  if (!firmOsEnabled()) return firmOsOffResponse();
   const g = await signedInUser();
   if (g.res) return g.res;
   if (!canUseAgents(g.user)) return NextResponse.json({ error: "Your account cannot use agents. Ask an admin if you need them." }, { status: 403 });

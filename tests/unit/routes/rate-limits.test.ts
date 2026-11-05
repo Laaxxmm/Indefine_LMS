@@ -2,6 +2,8 @@
 // comms drafting is refused with 429 before any draft work; identifier lookups and the
 // Companion's next-task use the database limiter through their own seams (production wiring).
 import { beforeEach, describe, expect, it, vi } from "vitest";
+// These routes sit behind the Firm OS master switch (src/lib/workspace/flag.ts); it is on for these tests.
+beforeEach(() => vi.stubEnv("FIRM_OS_ENABLED", "1"));
 import { activeSession } from "./harness";
 
 // RateLimitBucket through the app's Prisma client: the upsert returns the count after this request.

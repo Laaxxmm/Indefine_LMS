@@ -1,6 +1,8 @@
 // /api/firm-os/agents/** route handlers: auth (401/403) → zod (400) → service → JSON, against the
 // in-memory echo world (real service, real runner, fake SharePoint).
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+// These routes sit behind the Firm OS master switch (src/lib/workspace/flag.ts); it is on for these tests.
+beforeEach(() => vi.stubEnv("FIRM_OS_ENABLED", "1"));
 import type { Session } from "next-auth";
 import { echoWorld, rows, user, type World } from "../../fakes/agent-world";
 import { recordingHook } from "../../fakes/agent-close-loop";
