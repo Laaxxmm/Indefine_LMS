@@ -77,7 +77,7 @@ Each returns the list of things it created; a second run returns an empty list a
 SharePoint unchanged (asserted by `clfolders.integration.test.ts`). The Path A client exposes no
 delete, move or rename operation at all.
 
-Gap check (read-only): `npx tsx scripts/verify-patha.ts [--codes ACME,FOO] [--fy 2026-27] [--out gaps.md]`.
+Gap check (read-only): `npx tsx --env-file=.env.local scripts/verify-patha.ts [--codes ACME,FOO] [--fy 2026-27] [--out gaps.md]`.
 Exit 0 = no gaps, 1 = gaps found, 2 = blocked (credentials or consent missing; never a pass).
 
 ## 4. Mapping from the legacy `/clients` layout
