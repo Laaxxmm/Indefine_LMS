@@ -1,5 +1,5 @@
 {
-  "description": "Trap (promoted mistake gst.mistake-cancelled-supplier): 01-clean-tally-csv with Sunrise Steel (SS/1001) billing under GSTIN 29AANCB6707A1ZQ, which is on the cancelled-registration watch list, in both the purchase register and the GSTR-2B. Block flag; figures are the clean case.",
+  "description": "Trap (promoted mistake gst.mistake-cancelled-supplier): 01-clean-tally-csv with Sunrise Steel (SS/1001) billing under GSTIN 29AANCB6707A1ZQ, which is on the cancelled-registration watch list, in both the purchase register and the GSTR-2B. Block flag; figures are the clean case. ITC held back 0: no purchase ledger the model answered insufficient_evidence on.",
   "category": "trap",
   "job": {
     "fy": "2026-27",
@@ -19,6 +19,7 @@
     "outwardSgstPaise": 1080000,
     "itcAvailablePaise": 1710000,
     "itcNetPaise": 1710000,
+    "itcHeldBackPaise": 0,
     "cashIgstPaise": 720000,
     "cashCgstPaise": 315000,
     "cashSgstPaise": 315000,

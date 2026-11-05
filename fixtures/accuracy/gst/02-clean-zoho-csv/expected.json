@@ -1,5 +1,5 @@
 {
-  "description": "Clean month, Zoho-style CSV registers (multi-rate invoice, linked credit note), GSTR-2B JSON with 2A-style keys; one HSN read by the model. Core 3B figures (hand): outward 40,000 + 10,000 + 30,000 - 5,000 (credit note) = 75,000; IGST 7,200 + 1,200 = 8,400, CGST 2,700 - 450 = 2,250, SGST 2,250 (tax 12,900). ITC IGST 4,000 + CGST 1,350 + SGST 1,350 = 6,700. Set-off: IGST 4,000, CGST 1,350, SGST 1,350 against own heads -> cash IGST 4,400, CGST 900, SGST 900 = 6,200; no expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee.",
+  "description": "Clean month, Zoho-style CSV registers (multi-rate invoice, linked credit note), GSTR-2B JSON with 2A-style keys; one HSN read by the model. Core 3B figures (hand): outward 40,000 + 10,000 + 30,000 - 5,000 (credit note) = 75,000; IGST 7,200 + 1,200 = 8,400, CGST 2,700 - 450 = 2,250, SGST 2,250 (tax 12,900). ITC IGST 4,000 + CGST 1,350 + SGST 1,350 = 6,700. Set-off: IGST 4,000, CGST 1,350, SGST 1,350 against own heads -> cash IGST 4,400, CGST 900, SGST 900 = 6,200; no expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee. ITC held back 0: no purchase ledger the model answered insufficient_evidence on.",
   "category": "clean",
   "job": {
     "fy": "2026-27",
@@ -30,6 +30,7 @@
     "itcBlockedPaise": 0,
     "itcOtherReversalPaise": 0,
     "itcNetPaise": 670000,
+    "itcHeldBackPaise": 0,
     "cashCessPaise": 0,
     "daysLate": 0,
     "interestPaise": 0,

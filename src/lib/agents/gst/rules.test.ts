@@ -220,6 +220,13 @@ describe("gst.blocked-credit (warn) and gst.model-questions (warn)", () => {
     expect(o).toMatchObject({ status: "fail", evidence: { quote: "Misc" } });
     expect(o.message).toMatch(/2 question/);
     expect(o.message).toMatch(/blocked u\/s 17\(5\) and whether reverse charge applies/);
+    // The matched bill's ITC (CGST + SGST 5,400 each) is held back, and the question says so.
+    expect(o.message).toContain("ITC of ₹10800.00 on SS/");
+    expect(o.message).toContain("held back (not claimed) until answered");
+    expect(o.message).toMatch(/^2 question\(s\) the documents cannot answer \(ITC of ₹10800\.00 held back from Table 4\(A\) until answered\); ask the client/);
+    expect(computeFigures(x)).toMatchObject({ itcHeldBackPaise: R(10800), itcAvailablePaise: 0 });
+    // Not in 2B: nothing to hold back (the ITC is deferred anyway).
+    expect(check("gst.model-questions", extract({ purchases: [purchase({ ledger: "Misc" })], ledgers: [cls("Misc", { blockedCategory: "insufficient_evidence" })] })).message).toContain("no ITC on it is claimed until answered");
     expect(status(check("gst.model-questions", extract({ ledgers: [cls("Raw")], hsnReads: [{ description: "x", location: "l", hsn: "7318", status: "read", evidence: null, note: "" }] })))).toBe("pass");
     expect(status(check("gst.model-questions", extract({ ledgers: [cls("Ghost", { rcmService: "insufficient_evidence" })] })))).toBe("fail");
   });

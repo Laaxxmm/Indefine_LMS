@@ -1,5 +1,5 @@
 {
-  "description": "Trap: payables ageing with one invoice unpaid 181 days (reverse), one at exactly 180 days (not yet) and one partly paid after 204 days (proportionate). Core 3B figures (hand): outward 2,00,000; CGST 18,000, SGST 18,000. ITC CGST 9,000 + SGST 9,000 = 18,000; rule 37 (period end 31 Oct 2026): CC/450 181 days unpaid -> IGST 18,000; PC-3001 180 days -> nil; WL/77 204 days, 40,000 of 1,00,000 unpaid -> 10,000 x 40% = 4,000; 4(B)(2) IGST 22,000. Net per head IGST 0 (excess 22,000 to liability), CGST 9,000, SGST 9,000 = 18,000. Cash IGST 22,000, CGST 9,000, SGST 9,000 = 40,000; no expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee.",
+  "description": "Trap: payables ageing with one invoice unpaid 181 days (reverse), one at exactly 180 days (not yet) and one partly paid after 204 days (proportionate). Core 3B figures (hand): outward 2,00,000; CGST 18,000, SGST 18,000. ITC CGST 9,000 + SGST 9,000 = 18,000; rule 37 (period end 31 Oct 2026): CC/450 181 days unpaid -> IGST 18,000; PC-3001 180 days -> nil; WL/77 204 days, 40,000 of 1,00,000 unpaid -> 10,000 x 40% = 4,000; 4(B)(2) IGST 22,000. Net per head IGST 0 (excess 22,000 to liability), CGST 9,000, SGST 9,000 = 18,000. Cash IGST 22,000, CGST 9,000, SGST 9,000 = 40,000; no expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee. ITC held back 0: no purchase ledger the model answered insufficient_evidence on.",
   "category": "trap",
   "job": {
     "fy": "2026-27",
@@ -17,6 +17,7 @@
     "itcOtherReversalPaise": 2200000,
     "itcAvailablePaise": 1800000,
     "itcNetPaise": 1800000,
+    "itcHeldBackPaise": 0,
     "cashIgstPaise": 2200000,
     "cashCgstPaise": 900000,
     "cashSgstPaise": 900000,

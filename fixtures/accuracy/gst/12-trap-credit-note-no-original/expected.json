@@ -1,5 +1,5 @@
 {
-  "description": "Trap: a credit note with no original invoice reference, and a credit note against a FY 2024-25 invoice issued after the s.34(2) time limit. Owner-approved convention (2026-11-05): a time-barred credit note does not reduce outward liability, so CN/26/012 (Kaveri Retail, 26 Oct 2026, against INV/24/990 of 15 Mar 2025; limit 30 Nov 2025; taxable 10,000, CGST 900, SGST 900, note value 11,800) is left out of 3.1 and GSTR-1 CDNR, stays a block flag and is listed as 'time-barred credit note excluded: CN/26/012, ₹11800.00'. Core 3B figures (hand): outward 2,00,000 - 20,000 (CN/26/011: no original invoice reference, so no time limit can be checked; warn flag) = 1,80,000; CGST 18,000 - 1,800 = 16,200, SGST 16,200; outward tax 32,400. ITC 5,400 + 5,400 = 10,800 (SS/1001 matched to 2B). Cash CGST 16,200 - 5,400 = 10,800, SGST 10,800 = 21,600. CDNR: 1 note (CN/26/011), net taxable -20,000. Table 13 still counts 3 documents (INV/26/601, CN/26/011-012: the time-barred note was issued). No expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee.",
+  "description": "Trap: a credit note with no original invoice reference, and a credit note against a FY 2024-25 invoice issued after the s.34(2) time limit. Owner-approved convention (2026-11-05): a time-barred credit note does not reduce outward liability, so CN/26/012 (Kaveri Retail, 26 Oct 2026, against INV/24/990 of 15 Mar 2025; limit 30 Nov 2025; taxable 10,000, CGST 900, SGST 900, note value 11,800) is left out of 3.1 and GSTR-1 CDNR, stays a block flag and is listed as 'time-barred credit note excluded: CN/26/012, ₹11800.00'. Core 3B figures (hand): outward 2,00,000 - 20,000 (CN/26/011: no original invoice reference, so no time limit can be checked; warn flag) = 1,80,000; CGST 18,000 - 1,800 = 16,200, SGST 16,200; outward tax 32,400. ITC 5,400 + 5,400 = 10,800 (SS/1001 matched to 2B). Cash CGST 16,200 - 5,400 = 10,800, SGST 10,800 = 21,600. CDNR: 1 note (CN/26/011), net taxable -20,000. Table 13 still counts 3 documents (INV/26/601, CN/26/011-012: the time-barred note was issued). No expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee. ITC held back 0: no purchase ledger the model answered insufficient_evidence on.",
   "category": "trap",
   "job": {
     "fy": "2026-27",
@@ -33,6 +33,7 @@
     "itcBlockedPaise": 0,
     "itcOtherReversalPaise": 0,
     "itcNetPaise": 1080000,
+    "itcHeldBackPaise": 0,
     "cashIgstPaise": 0,
     "cashCessPaise": 0,
     "daysLate": 0,

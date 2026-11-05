@@ -16,7 +16,7 @@ import { createRuleRegistry, type ChecklistPack, type CheckOutcome, type RuleDef
 import type { CheckInput } from "@/lib/agents/core/runner";
 import { validateGstin } from "@/lib/agents/onboarding/validators";
 import { BLOCKED_CATEGORIES, GST_CONFIG, GST_RULE_DEFAULTS, GST_VERIFY_NOTES, RCM_SERVICES, type AatoSlab } from "./config";
-import { analyse, creditNoteDeadline, differs, rule37Rows, sign, type Analysis, type SalesA } from "./compute";
+import { analyse, creditNoteDeadline, differs, heldBackFor, rule37Rows, sign, type Analysis, type SalesA } from "./compute";
 import { dayAfterFyEnd, fyOfDay, plainRupees, sumTax, taxTotal, type TaxSplit } from "./money";
 import { dupKey } from "./registers";
 import { INSUFFICIENT } from "./tasks";
@@ -109,7 +109,11 @@ function blockedCredit(ci: GstCheckInput): CheckOutcome {
   return listFail(hits, `ITC on blocked credits u/s 17(5): ${inr(taxTotal(a.itc.b1))} moved to Table 4(B)(1); confirm the classification`);
 }
 
-/** Every insufficient_evidence model answer is a question for the reviewer (ADR-008), never a silent default. */
+/**
+ * Every insufficient_evidence model answer is a question for the reviewer (ADR-008), never a silent
+ * default. The ITC on a bill whose ledger the model abstained on is held back from Table 4(A) until
+ * the question is answered (owner-approved 2026-11-05), and the question states the amount.
+ */
 function modelQuestions(ci: GstCheckInput): CheckOutcome {
   const x = ci.extracted;
   const a = A(ci);
@@ -118,12 +122,15 @@ function modelQuestions(ci: GstCheckInput): CheckOutcome {
     const what = [l.blockedCategory === INSUFFICIENT ? "whether ITC is blocked u/s 17(5)" : "", l.rcmService === INSUFFICIENT ? "whether reverse charge applies" : ""].filter(Boolean).join(" and ");
     if (!what) continue;
     const doc = a.purchases.find((p) => p.key === l.ledger);
-    hits.push({ quote: l.ledger, loc: doc?.loc ?? x.sources.purchases.file, text: `ledger "${l.ledger}": the books do not show ${what}${l.note ? ` (${l.note})` : ""}; the draft treats it as neither until answered` });
+    const held = heldBackFor(a, l.ledger);
+    const draft = held.paise > 0 ? `ITC of ${inr(held.paise)} on ${held.numbers.join(", ")} held back (not claimed) until answered` : "no ITC on it is claimed until answered";
+    hits.push({ quote: l.ledger, loc: doc?.loc ?? x.sources.purchases.file, text: `ledger "${l.ledger}": the books do not show ${what}${l.note ? ` (${l.note})` : ""}; the draft treats it as neither blocked nor reverse charge, ${draft}` });
   }
   for (const h of x.hsnReads) {
     if (h.status === INSUFFICIENT) hits.push({ quote: h.description, loc: h.location, text: `no HSN/SAC is written for "${h.description}"${h.note ? ` (${h.note})` : ""}` });
   }
-  return listFail(hits, `${hits.length} question(s) the documents cannot answer; ask the client or decide before approval`);
+  const held = taxTotal(a.itc.heldBack);
+  return listFail(hits, `${hits.length} question(s) the documents cannot answer${held > 0 ? ` (ITC of ${inr(held)} held back from Table 4(A) until answered)` : ""}; ask the client or decide before approval`);
 }
 
 function rcmLiability(ci: GstCheckInput): CheckOutcome {

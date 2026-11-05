@@ -5,8 +5,9 @@
 import type { ChecklistResultItem } from "@/lib/agents/core/checklist";
 import type { DeliverableContext, DeliverableDraft } from "@/lib/agents/core/runner";
 import type { ColumnSpec, RowSpec, SheetSpec } from "@/lib/agents/core/templates";
+import { formatInr } from "@/lib/agents/core/format";
 import { GST_VERIFY_NOTES } from "./config";
-import { analyse, byRate, sign, type Analysis, type SalesA } from "./compute";
+import { analyse, byRate, heldBackFor, sign, type Analysis, type SalesA } from "./compute";
 import { stateName } from "./config";
 import { HEADS, rupees, taxTotal, type TaxSplit } from "./money";
 import type { GstExtract, GstInput } from "./types";
@@ -176,6 +177,7 @@ function gstr3bSheets(a: Analysis, x: GstExtract): SheetSpec[] {
         { details: "(D)(2) Ineligible ITC (GSTR-2B: ITC not available)", ...taxCells(a.itc.unavailable2b) },
         { details: "Memo: opening balance in the electronic credit ledger", ...taxCells(a.openingCredit) },
         { details: "Memo: ITC deferred (in books, not in GSTR-2B)", ...taxCells(a.itc.deferred) },
+        { details: "Memo: ITC held back (the model could not classify the bill; reviewer question)", ...taxCells(a.itc.heldBack) },
         { details: "Memo: ITC in GSTR-2B not in books (not claimed)", ...taxCells(a.itc.notBooked) },
       ],
     },
@@ -197,7 +199,10 @@ function gstr3bSheets(a: Analysis, x: GstExtract): SheetSpec[] {
       columns: [...GSTR3B_COLUMNS.notes],
       rows: [
         { topic: "Set-off order", note: GST_VERIFY_NOTES.find((n) => n.key === "setoffOrder")!.value + ". Reverse-charge tax is paid in cash. IGST credit left after IGST is applied first to the part of CGST/SGST their own credit cannot cover, then CGST, then SGST." },
-        { topic: "ITC basis", note: "Table 4(A)(5) is ITC on documents present in both the purchase register and GSTR-2B (ITC available), at the lower of the two per tax head. Documents not in 2B are deferred, not claimed." },
+        {
+          topic: "ITC basis",
+          note: "Table 4(A)(5) is ITC on documents present in both the purchase register and GSTR-2B (ITC available), at the lower of the two per tax head. Documents not in 2B are deferred, not claimed. ITC on a bill whose ledger the model could not classify (insufficient evidence on blocked credit or reverse charge) is held back, not claimed, until the reviewer answers the question (memo row in Table 4).",
+        },
         { topic: "Interest and late fee", note: "Estimates only, computed from the expected filing date in profile.json. s.50(3) interest on ITC wrongly availed and utilised is not estimated." },
         ...(a.timeBarredNotes.length
           ? [
@@ -325,11 +330,16 @@ export function documentRequests(a: Analysis, x: GstExtract): DocRequest[] {
   }
   for (const r of a.itc.rule37Rows) out.push({ item: `Payment proof for ${r.doc.number} dated ${r.doc.date} (${r.doc.supplier})`, reason: "Unpaid beyond 180 days; ITC reversed until paid", ref: r.doc.loc });
   for (const d of x.sales) if (d.docType !== "INV" && !d.origNumber) out.push({ item: `Original invoice number and date for note ${d.number.trim()} (${d.party})`, reason: "Credit/debit note must reference the original invoice", ref: d.loc });
-  // insufficient_evidence answers become questions, never defaults (ADR-008).
+  // insufficient_evidence answers become questions, never defaults (ADR-008); the bill's ITC is held back until answered.
   for (const l of x.ledgers) {
     if (l.blockedCategory !== "insufficient_evidence" && l.rcmService !== "insufficient_evidence") continue;
     const doc = a.purchases.find((p) => p.key === l.ledger);
-    out.push({ item: `Nature and use of the expense booked as "${l.ledger}"${doc ? ` (${doc.number})` : ""}, with the bill`, reason: "The books do not show whether ITC is blocked or reverse charge applies", ref: doc?.loc ?? x.sources.purchases.file });
+    const held = heldBackFor(a, l.ledger);
+    out.push({
+      item: `Nature and use of the expense booked as "${l.ledger}"${doc ? ` (${doc.number})` : ""}, with the bill`,
+      reason: `The books do not show whether ITC is blocked or reverse charge applies${held.paise > 0 ? `; ITC of ₹${formatInr(held.paise / 100)} held back until answered` : ""}`,
+      ref: doc?.loc ?? x.sources.purchases.file,
+    });
   }
   for (const h of x.hsnReads) if (h.status === "insufficient_evidence") out.push({ item: `HSN/SAC code for "${h.description}"`, reason: "No HSN/SAC is written in the sales register", ref: h.location });
   return out;

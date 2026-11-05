@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { GSTIN, R, extract, line, lineTax, matched, payable, purchase, sale, twin } from "./__tests__/kit";
 import { analyse, computeFigures, docsRows, dueDateOf, interestOn, lateFeeFor, rule37Rows, seriesOf } from "./compute";
-import { GSTR1_COLUMNS, missingList } from "./deliverables";
+import { GSTR1_COLUMNS, documentRequests, missingList } from "./deliverables";
 import { periodInfo, zeroTax } from "./money";
 import { setOff } from "./setoff";
 
@@ -229,6 +229,37 @@ describe("analysis: GSTR-1 tables, 3.1, 4, set-off", () => {
     // No outward liability: RCM is paid in cash, and all ITC (RCM 1,000 + G1 1,200 IGST; RCM CGST/SGST 5,400) carries forward.
     expect(a.setoff.cash).toEqual(T(100000, 540000, 540000));
     expect(a.setoff.closingCredit).toEqual(T(220000, 540000, 540000));
+  });
+
+  it("ITC on a bill the model abstained on is held back, not claimed; credit notes still reduce; RCM liability stays", () => {
+    const misc = { ledger: "Misc", blockedCategory: "insufficient_evidence" as const, rcmService: "insufficient_evidence" as const, evidence: null, note: "" };
+    const rcmOnly = { ledger: "Labour", blockedCategory: "none" as const, rcmService: "insufficient_evidence" as const, evidence: null, note: "" };
+    const raw = purchase({ number: "SS/1" }); // CGST/SGST 5,400, claimed
+    const bill = purchase({ number: "PC-1201", gstin: GSTIN.sup2, ledger: "Misc", lines: [line(R(10000))] }); // CGST/SGST 900 → held back
+    const cn = purchase({ number: "PC-CN1", gstin: GSTIN.sup2, ledger: "Misc", docType: "CRN", lines: [line(R(1000))] }); // −90/−90 still reduces
+    const late = purchase({ number: "PC-1300", gstin: GSTIN.sup2, ledger: "Misc", lines: [line(R(2000))] }); // not in 2B: deferred, not held back
+    const labour = purchase({ number: "LB/1", gstin: null, reverseCharge: true, ledger: "Labour", lines: [lineTax(R(5000), { cgst: R(450), sgst: R(450) })] }); // RCM 450/450
+    const x = extract({ purchases: [raw, bill, cn, late, labour], gstr2b: [twin(raw), twin(bill), twin(cn)], ledgers: [misc, rcmOnly] });
+    const a = analyse(x);
+    expect(a.purchases.map((p) => [p.number, p.abstained, p.heldBack.cgst])).toEqual([
+      ["SS/1", false, 0],
+      ["PC-1201", true, R(900)],
+      ["PC-CN1", true, 0],
+      ["PC-1300", true, 0],
+      ["LB/1", true, R(450)],
+    ]);
+    // 4(A)(5) CGST = 5,400 − 90 = 5,310 (PC-1201 held back); 4(A)(3) = 0 (LB/1 held back); RCM tax 450 still payable in cash.
+    expect(a.itc.a5).toEqual(T(0, R(5310), R(5310)));
+    expect(a.itc.a3).toEqual(zeroTax());
+    expect(a.rcm.tax).toEqual(T(0, R(450), R(450)));
+    expect(a.itc.heldBack).toEqual(T(0, R(1350), R(1350)));
+    expect(a.itc.deferred).toEqual(T(0, R(180), R(180)));
+    expect(a.recon.find((r) => r.number === "PC-1201")).toMatchObject({ status: "matched", claimed: zeroTax(), heldBack: T(0, R(900), R(900)) });
+    expect(computeFigures(x)).toMatchObject({ itcAvailablePaise: R(10620), itcHeldBackPaise: R(2700), itcNetPaise: R(10620), rcmTaxPaise: R(900) });
+    // The client document request names the amount held back on the ledger (PC-1201: 900 + 900).
+    expect(documentRequests(a, x).find((r) => r.item.includes('"Misc"'))?.reason).toBe("The books do not show whether ITC is blocked or reverse charge applies; ITC of ₹1,800.00 held back until answered");
+    // Answered ledgers hold nothing back.
+    expect(computeFigures(extract({ ...matched(raw), ledgers: [{ ...misc, ledger: raw.ledger, blockedCategory: "none", rcmService: "none" }] })).itcHeldBackPaise).toBe(0);
   });
 
   it("blocked credit goes to 4(B)(1); reversal beyond ITC becomes liability", () => {

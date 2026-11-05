@@ -1,5 +1,5 @@
 {
-  "description": "Trap: previous period GSTR-1 liability exceeds GSTR-3B Table 3.1 (DRC-01B risk); opening IGST credit used against the CGST deficit first. Core 3B figures (hand): outward 1,00,000; CGST 9,000, SGST 9,000. Period ITC CGST 4,500 + SGST 4,500 = 9,000; opening IGST credit 3,000 (September closing) goes first to the CGST deficit (9,000 - 4,500): IGST 3,000 vs CGST, CGST 4,500 vs CGST, SGST 4,500 vs SGST -> cash CGST 1,500, SGST 4,500 = 6,000 (credit used 12,000); no expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee.",
+  "description": "Trap: previous period GSTR-1 liability exceeds GSTR-3B Table 3.1 (DRC-01B risk); opening IGST credit used against the CGST deficit first. Core 3B figures (hand): outward 1,00,000; CGST 9,000, SGST 9,000. Period ITC CGST 4,500 + SGST 4,500 = 9,000; opening IGST credit 3,000 (September closing) goes first to the CGST deficit (9,000 - 4,500): IGST 3,000 vs CGST, CGST 4,500 vs CGST, SGST 4,500 vs SGST -> cash CGST 1,500, SGST 4,500 = 6,000 (credit used 12,000); no expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee. ITC held back 0: no purchase ledger the model answered insufficient_evidence on.",
   "category": "trap",
   "job": {
     "fy": "2026-27",
@@ -30,6 +30,7 @@
     "itcBlockedPaise": 0,
     "itcOtherReversalPaise": 0,
     "itcNetPaise": 900000,
+    "itcHeldBackPaise": 0,
     "cashCessPaise": 0,
     "daysLate": 0,
     "interestPaise": 0,
