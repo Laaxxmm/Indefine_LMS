@@ -37,6 +37,10 @@ export const nominationZ = z.object({
   nomineeContact: z.string().max(120, "Keep the nominee's contact to 120 characters or fewer.").default(""),
 });
 
+export const liftRestrictionZ = z.object({
+  reason: z.string().max(500, "Keep the reason to 500 characters or fewer.").default(""),
+});
+
 export const erasureConfirmZ = z.object({
   fingerprint: z.string().max(128, "Open the erasure plan again and review it before confirming.").default(""),
 });

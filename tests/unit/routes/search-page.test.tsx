@@ -5,10 +5,20 @@ import { redirectTarget, renderHtml as renderRaw } from "./harness";
 import { IDS, PEOPLE, searchWorld, type SearchWorld } from "../../fakes/search-world";
 import { memoryRateLimiter } from "@/lib/search/rate-limit";
 
+// Firm OS switched on for these tests (FIRM_OS_ENABLED defaults off: src/lib/workspace/flag.ts).
+beforeEach(() => {
+  vi.stubEnv("FIRM_OS_ENABLED", "1");
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
 const state = vi.hoisted(() => ({ world: null as unknown as SearchWorld }));
 
 vi.mock("@/lib/auth", () => ({ auth: vi.fn(), signIn: vi.fn(), signOut: vi.fn(), handlers: {} }));
 vi.mock("next/navigation", async () => (await import("./harness")).navigationMock);
+// The layout reads the workspace settings: none saved, so the built-in role defaults apply.
+vi.mock("@/lib/prisma", async () => ({ prisma: (await import("./harness")).prismaMock }));
 vi.mock("@/lib/search/defaults", () => ({ defaultSearchDeps: () => ({ db: state.world.db, limiter: memoryRateLimiter(), clPaths: false, now: () => new Date() }) }));
 
 const { auth } = await import("@/lib/auth");
@@ -40,11 +50,11 @@ describe("access", () => {
 });
 
 describe("layout", () => {
-  it("Firm OS header: logo, section label, nav with Search current and a way back to the dashboard", async () => {
+  it("Firm OS header: logo, section label, nav with the Search button and a way back to the dashboard", async () => {
     as(PEOPLE.priya);
     const html = await renderHtml(await Layout({ children: "x" }));
     expect(html).toContain('aria-label="Firm OS"'); // not "Search": the search form is its own landmark
-    expect(html).toMatch(/href="\/clients"/);
+    expect(html).toMatch(/<button[^>]*aria-keyshortcuts="Control\+K Meta\+K"[^>]*>.*Search<\/button>/);
     expect(html).toMatch(/href="\/agents"/);
     expect(html).toMatch(/href="\/dashboard"[^>]*>.*Dashboard/);
     expect(html).toContain("focus-visible:ring-2");

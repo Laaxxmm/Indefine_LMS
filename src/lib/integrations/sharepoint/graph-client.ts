@@ -7,7 +7,8 @@
 // never overwritten (409 -> ConflictError). no-destructive.test.ts pins this down.
 // Transport and token providers are injected so tests run against an in-memory fake.
 // Throttling (429) and server errors (5xx) are retried a bounded number of times,
-// honouring Retry-After.
+// honouring Retry-After. Several independent reads go out as one Graph JSON batch (POST /$batch
+// whose sub-requests are GETs only; batchGet). Item reads ask for ITEM_SELECT fields only.
 import { createHash } from "node:crypto";
 import { BlockedError, ConflictError, GRAPH_BLOCKED_ACTION, GraphError } from "./errors";
 import type { FetchLike } from "./sp-auth";
@@ -28,7 +29,14 @@ export interface GraphItem {
   folder?: { childCount?: number };
   file?: { mimeType?: string; hashes?: GraphFileHashes };
   size?: number;
+  /** Content tag: changes whenever the file's content changes (not for metadata-only edits). Files only. */
+  cTag?: string;
 }
+
+/** The driveItem fields this client reads; every item GET asks for these only ($select). */
+export const ITEM_SELECT = "id,name,size,webUrl,cTag,file,folder";
+/** Graph JSON batching takes at most 20 requests per batch. */
+export const BATCH_MAX = 20;
 
 /** Uploads never overwrite: "fail" is the only conflict behaviour the client accepts. */
 export interface UploadOptions { conflict: "fail" }
@@ -76,6 +84,11 @@ export interface SharePointClient {
   getList(siteId: string, displayName: string): Promise<GraphList | null>;
   getItemByPath(driveId: string, path: string): Promise<GraphItem | null>;
   listChildren(driveId: string, path: string): Promise<GraphItem[]>;
+  /**
+   * Children of several folders in Graph JSON batches (≤ 20 GETs per request); null for a folder
+   * that does not exist. Throttled sub-requests are retried after their Retry-After.
+   */
+  listChildrenMany(driveId: string, paths: string[]): Promise<(GraphItem[] | null)[]>;
   /** File bytes, or null when there is no item at `path`. */
   downloadFile(driveId: string, path: string): Promise<Buffer | null>;
   // ---- Graph: file content (create-only, conflict "fail": never overwrites) ----
@@ -149,9 +162,13 @@ export function createSharePointClient(opts: ClientOptions = {}): SharePointClie
   const timeoutMs = opts.timeoutMs ?? 30_000;
   const graphBase = opts.graphBase ?? GRAPH_BASE;
 
+  // Concurrent requests share one token fetch (the providers cache tokens until near expiry).
+  let pendingGraphToken: Promise<string | null> | null = null;
+  const graphTokenOnce = () => (pendingGraphToken ??= graphToken().finally(() => (pendingGraphToken = null)));
+
   async function bearer(auth: Auth): Promise<string> {
     if (auth.kind === "graph") {
-      const t = await graphToken();
+      const t = await graphTokenOnce();
       if (!t) throw new BlockedError(GRAPH_BLOCKED_ACTION);
       return t;
     }
@@ -237,6 +254,41 @@ export function createSharePointClient(opts: ClientOptions = {}): SharePointClie
     return out;
   }
 
+  type BatchResponse = { id: string; status: number; headers?: Record<string, string>; body?: unknown };
+
+  /**
+   * GETs in Graph JSON batches (POST /$batch carrying only GET sub-requests, ≤ BATCH_MAX each).
+   * Returns each body, or null for a 404. A throttled (429) or failing (5xx) sub-request is retried
+   * in the next batch after the largest Retry-After (bounded like single requests); any other
+   * status throws GraphError. Note: Graph still counts every sub-request against throttling limits —
+   * batching saves round trips and latency, not quota.
+   */
+  async function batchGet(urls: string[]): Promise<(unknown | null)[]> {
+    const out: (unknown | null)[] = new Array(urls.length).fill(null);
+    for (let start = 0; start < urls.length; start += BATCH_MAX) {
+      let pending = urls.slice(start, start + BATCH_MAX).map((url, i) => ({ id: String(start + i), url }));
+      for (let attempt = 0; pending.length; attempt++) {
+        const requests = pending.map((p) => ({ id: p.id, method: "GET" as const, url: p.url.slice(graphBase.length) }));
+        const { responses = [] } = await json<{ responses?: BatchResponse[] }>("POST", `${graphBase}/$batch`, G, { requests });
+        const retry: typeof pending = [];
+        let wait = 0;
+        for (const p of pending) {
+          const r = responses.find((x) => x.id === p.id);
+          if (r && r.status >= 200 && r.status < 300) out[Number(p.id)] = r.body ?? {};
+          else if (r && r.status === 404) out[Number(p.id)] = null;
+          else if ((!r || isRetryable(r.status)) && attempt < maxRetries) {
+            retry.push(p);
+            const ra = r ? Object.entries(r.headers ?? {}).find(([k]) => k.toLowerCase() === "retry-after")?.[1] ?? null : null;
+            wait = Math.max(wait, parseRetryAfter(ra, now()) ?? baseDelay * 2 ** attempt);
+          } else throw new GraphError(r?.status ?? 502, "GET", p.url, r ? JSON.stringify(r.body ?? "") : "missing from the batch response");
+        }
+        pending = retry;
+        if (pending.length) await sleep(Math.min(wait, maxDelay));
+      }
+    }
+    return out;
+  }
+
   const G = { kind: "graph" } as const;
   const spHost = (url: string): Auth => ({ kind: "sp", host: new URL(url).host });
   const itemUrl = (driveId: string, path: string) => {
@@ -275,10 +327,24 @@ export function createSharePointClient(opts: ClientOptions = {}): SharePointClie
       return (await client.listLists(siteId)).find((l) => l.displayName.toLowerCase() === want || l.name?.toLowerCase() === want) ?? null;
     },
     getItemByPath(driveId, path) {
-      return getOrNull<GraphItem>(itemUrl(driveId, path), G);
+      return getOrNull<GraphItem>(`${itemUrl(driveId, path)}?$select=${ITEM_SELECT}`, G);
     },
     listChildren(driveId, path) {
-      return getAll<GraphItem>(`${childrenUrl(driveId, path)}?$select=id,name,webUrl,folder,file,size&$top=200`);
+      return getAll<GraphItem>(`${childrenUrl(driveId, path)}?$select=${ITEM_SELECT}&$top=200`);
+    },
+    async listChildrenMany(driveId, paths) {
+      const pages = await batchGet(paths.map((p) => `${childrenUrl(driveId, p)}?$select=${ITEM_SELECT}&$top=200`));
+      const out: (GraphItem[] | null)[] = [];
+      for (const page of pages as ({ value?: GraphItem[]; "@odata.nextLink"?: string } | null)[]) {
+        if (!page) {
+          out.push(null);
+          continue;
+        }
+        const items = [...(page.value ?? [])];
+        if (page["@odata.nextLink"]) items.push(...(await getAll<GraphItem>(page["@odata.nextLink"])));
+        out.push(items);
+      }
+      return out;
     },
     async downloadFile(driveId, path) {
       const url = `${itemUrl(driveId, path)}:/content`;

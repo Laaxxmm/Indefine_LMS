@@ -68,6 +68,20 @@ export const taxRegistry = createRuleRegistry<TaxCheckInput>({
     if (!p.eligible) return fail(`s.${p.claimed} not available: ${p.reasons.join("; ")}. Business income computed from the books.`, `presumptive: ${p.claimed}`, "organiser.json profile.presumptive / business");
     return pass(`s.${p.claimed} conditions met; presumptive income ${inr(p.incomePaise)}`);
   },
+  "tax.presumptive-declared-lower": ({ extracted: x }) => {
+    const a = analyseTax(x);
+    const p = a.presumptive;
+    if (!p.claimed || !p.eligible) return na("no presumptive scheme in use");
+    if (!p.declaredLower) return pass(`income offered at or above the s.${p.claimed} deemed income ${inr(p.incomePaise)}`);
+    const t = a.auditIncomeTest;
+    const clause = p.claimed === "44ADA" ? "s.44AB(d) read with s.44ADA(4)" : "s.44AB(e) read with s.44AD(4)-(5)";
+    const above = t.totalIncomePaise > t.basicExemptionPaise;
+    return fail(
+      `Business income declared ${inr(a.businessIncome)} is below the s.${p.claimed} deemed income ${inr(p.incomePaise)}; the declared income is used. Tax audit u/s ${clause} applies when total income exceeds the basic exemption (${inr(t.basicExemptionPaise)}): total income ${inr(t.totalIncomePaise)}, so the audit is ${above ? "required" : "not required on this ground"}. Books of account are needed (s.44AA), the return is ITR-3 and advance tax follows the regular instalments${p.claimed === "44AD" ? "; s.44AD(4) bars the scheme for the next five years where profit was declared under s.44AD in an earlier year (confirm from the prior returns)" : ""}`,
+      `declaredIncome ${formatInr(a.businessIncome / 100)}`,
+      "organiser.json business.declaredIncome",
+    );
+  },
   "tax.audit-44ab": ({ extracted: x }) => {
     const a = analyseTax(x);
     if (a.audit.required && !x.organiser.profile.auditPlanned)
@@ -176,6 +190,7 @@ export const TAX_CHECKLIST: ChecklistPack = {
     d("tax.audit-44ab", "Tax audit applicability (s.44AB)", "block", "turnover, cash share and audit plan"),
     d("tax.loss-carry-forward", "Loss carry-forward conditions (s.80 / s.72)", "block", "filing date, due date and loss years"),
     d("tax.msme-43bh", "s.43B(h) payments to micro / small enterprises", "warn", "vendor, acceptance and payment dates"),
+    d("tax.presumptive-declared-lower", "Presumptive income declared below the deemed income (s.44AD / 44ADA; audit u/s 44AB(d)/(e))", "warn", "declared income, deemed income and total income"),
     d("tax.deduction-caps", "Chapter VI-A claims within the caps", "warn", "section, claimed and allowed"),
     d("tax.advance-tax-interest", "Advance tax paid in time (234B / 234C)", "warn", "instalments and amounts paid"),
     d("tax.late-filing", "Return within the s.139(1) due date", "warn", "planned filing and due date"),

@@ -1,12 +1,20 @@
 // Finding the data principal a request is about: exact matches on a normalised PAN, GSTIN, email
 // or phone. The request register stores only a keyed hash of what was searched and a masked label.
 //
-// PrincipalLocator is deliberately narrow. The search branch is building
-// src/lib/search/identifiers.ts with findByIdentifier(user, identifier) — exact, masked and audited.
-// After that merges, replace prismaPrincipalLocator() with an adapter over findByIdentifier and
-// delete nothing else: the register only depends on this interface.
+// PrincipalLocator is deliberately narrow; the register depends only on it. The production
+// locator is identifierPrincipalLocator(): an adapter over src/lib/search/identifiers.ts
+// findByIdentifier(user, identifier, { purpose: "privacy-request" }) — the same exact, masked,
+// rate-limited and audited lookup Firm OS search uses (each lookup writes an "identifier-search"
+// AuditEvent with the identifier's hash and the purpose). Client records come from it; staff are
+// matched by their LMS email here, because findByIdentifier does not cover User records.
+// prismaPrincipalLocator() (direct Prisma lookups) is kept for comparison tests only.
 import { createHmac } from "node:crypto";
+import type { SessionUser } from "@/lib/access";
 import { maskLast4, maskName } from "@/lib/corrections/mask";
+import { Refusal } from "@/lib/corrections/result";
+import { findByIdentifier } from "@/lib/search/identifiers";
+import type { SearchDb } from "@/lib/search/db";
+import type { SearchRateLimiter } from "@/lib/search/rate-limit";
 import type { PrivacyDb, Row } from "./inventory";
 import type { PrincipalType } from "./policy";
 
@@ -70,7 +78,89 @@ function clientLabel(c: Row, code: string | null, kinds: IdentifierKind[], value
   return [maskName(String(c.name ?? "")), code, what].filter(Boolean).join(" · ");
 }
 
-/** Exact-match lookups with Prisma: Client (PAN, GSTIN, contact email / phone) and User (email). */
+export type IdentifierLocatorDeps = {
+  /** The app's client (the register's own database). */
+  db: Pick<PrivacyDb, "client" | "firmClient" | "user"> & Partial<PrivacyDb>;
+  /** Identifier-search limiter (production: the shared database limiter, search/rate-limit.ts). */
+  limiter: SearchRateLimiter;
+  now: () => Date;
+};
+
+/**
+ * The production locator: every identifier goes through findByIdentifier (purpose
+ * "privacy-request", clients only), so a privacy lookup is exact, rate-limited and audited exactly
+ * like a search. Hits are read back by Client.id to classify the person (an individual's own PAN,
+ * a company contact, a company PAN that is not a person) and to build the register's masked label.
+ * A refused lookup (rate limit) stops the request with a sentence instead of logging "no match".
+ */
+export function identifierPrincipalLocator(user: SessionUser, deps: IdentifierLocatorDeps): PrincipalLocator {
+  const searchDeps = { db: deps.db as unknown as SearchDb, limiter: deps.limiter, clPaths: false, now: deps.now };
+  return {
+    async locate(identifiers) {
+      const values = new Map<IdentifierKind, string>();
+      for (const i of identifiers) {
+        const n = normaliseIdentifier(i.kind, i.value);
+        if (n) values.set(i.kind, n);
+      }
+      const notes: string[] = [];
+      const hitKinds = new Map<string, Set<IdentifierKind>>();
+      for (const [kind, value] of values) {
+        const r = await findByIdentifier(user, value, { purpose: "privacy-request", types: ["client"], deps: searchDeps });
+        if (!r.ok) {
+          if (r.reason === "rate-limited") throw new Refusal(429, r.message);
+          notes.push(`The ${kind === "pan" || kind === "gstin" ? kind.toUpperCase() : kind} could not be searched: ${r.message}`);
+          continue;
+        }
+        for (const h of r.hits) {
+          const id = h.refs?.clientId ?? h.id;
+          hitKinds.set(id, (hitKinds.get(id) ?? new Set<IdentifierKind>()).add(kind));
+        }
+      }
+
+      const found = new Map<string, { type: PrincipalType; row: Row; kinds: IdentifierKind[]; staff: boolean }>();
+      const ids = [...hitKinds.keys()];
+      const rows = ids.length ? await deps.db.client.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, entityType: true } }) : [];
+      for (const c of rows) {
+        const individual = INDIVIDUAL_ENTITIES.has(String(c.entityType));
+        const kinds = IDENTIFIER_KINDS.filter((k) => hitKinds.get(String(c.id))?.has(k));
+        // A company's PAN or GSTIN is not a person's: say so, and match it only through a contact's email or phone.
+        for (const k of kinds.filter((x) => (x === "pan" || x === "gstin") && !individual)) {
+          notes.push(`The ${k.toUpperCase()} ${maskLast4(values.get(k) ?? "")} belongs to a company or firm (${maskName(String(c.name))}), which is not a person under the DPDP Act. Search by the person's own email or phone instead.`);
+        }
+        const personal = individual ? kinds : kinds.filter((k) => k === "email" || k === "phone");
+        if (personal.length) found.set(`c:${String(c.id)}`, { type: individual ? "client-person" : "client-contact", row: c, kinds: personal, staff: false });
+      }
+      const email = values.get("email");
+      if (email) {
+        const users = await deps.db.user.findMany({ where: { email: { equals: email, mode: "insensitive" } }, select: { id: true, name: true, email: true } });
+        for (const u of users) found.set(`u:${u.id}`, { type: "staff", row: u, kinds: ["email"], staff: true });
+      }
+      return { matches: await toMatches(deps.db, found, values), notes };
+    },
+  };
+}
+
+/** The register's masked matches: initials, client code and the last four characters of what matched. */
+async function toMatches(
+  db: Pick<PrivacyDb, "firmClient">,
+  found: Map<string, { type: PrincipalType; row: Row; kinds: Iterable<IdentifierKind>; staff: boolean }>,
+  values: Map<IdentifierKind, string>,
+): Promise<PrincipalMatch[]> {
+  const clientIds = [...found.values()].filter((h) => !h.staff).map((h) => String(h.row.id));
+  const codes = new Map<string, string>();
+  if (clientIds.length) {
+    for (const fc of await db.firmClient.findMany({ where: { lmsClientId: { in: clientIds } }, select: { lmsClientId: true, clientCode: true } })) codes.set(fc.lmsClientId, fc.clientCode);
+  }
+  return [...found.values()].map((h) => {
+    const kinds = IDENTIFIER_KINDS.filter((k) => [...h.kinds].includes(k));
+    const label = h.staff
+      ? `Staff ${maskName(String(h.row.name ?? h.row.email ?? ""))} · email ${maskLast4(String(h.row.email ?? ""))}`
+      : clientLabel(h.row, codes.get(String(h.row.id)) ?? null, kinds, values);
+    return { principalType: h.type, ref: String(h.row.id), label, matchedOn: kinds };
+  });
+}
+
+/** Exact-match lookups with Prisma: Client (PAN, GSTIN, contact email / phone) and User (email). Comparison tests only; production uses identifierPrincipalLocator. */
 export function prismaPrincipalLocator(db: Pick<PrivacyDb, "client" | "firmClient" | "user">): PrincipalLocator {
   return {
     async locate(identifiers) {

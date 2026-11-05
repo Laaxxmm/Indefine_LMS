@@ -72,3 +72,27 @@ export function auditRow(e: AuditInput): AuditEventRow {
 export async function logAudit(db: AuditDb, e: AuditInput): Promise<{ id: string }> {
   return db.auditEvent.create({ data: auditRow(e), select: { id: true } });
 }
+
+/** An injected store's audit method (onboarding's SagaStore and OnboardingDeps): persists one row. */
+export type AuditSink = {
+  audit(event: { actorId: string; action: string; entity: string; entityId: string | null; meta?: Record<string, unknown> }): Promise<void>;
+};
+
+/**
+ * An AuditDb over an injected store's audit method, for modules whose database is an injected
+ * store (so tests and chaos runs can swap it): they still write through logAudit — the same
+ * validated action and entity, the same JSON-copied, capped meta — and the store persists the row
+ * it is handed (production: prismaSagaStore.audit → logAudit on Prisma). The new row's id is not
+ * known through a sink, so the result's id is empty; callers that need it pass a real client.
+ */
+export function auditDbFromSink(sink: AuditSink): AuditDb {
+  return {
+    auditEvent: {
+      create: async ({ data }) => {
+        const meta = data.meta as Record<string, unknown> | undefined;
+        await sink.audit({ actorId: data.actorId ?? "system:unknown", action: data.action, entity: data.entity, entityId: data.entityId, ...(meta === undefined ? {} : { meta }) });
+        return { id: "" };
+      },
+    },
+  };
+}

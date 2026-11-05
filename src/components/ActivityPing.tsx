@@ -3,8 +3,9 @@
 // LMS activity heartbeat + the gentle break nudge (Firm OS Phase 9, ADR-006). Mounted in the Firm OS
 // layouts and on the dashboard; shows nothing until a nudge is due. While the tab is visible and
 // the person has used it in the last two minutes, it posts an empty heartbeat at most once a
-// minute; the server decides whether a nudge is due (src/lib/agents/coach/breaks.ts) and answers
-// with it. The nudge never takes focus (a polite live region announces it); "Dismiss", or Escape
+// minute (spaced out up to 5 minutes while the server answers "nothing recorded" — reminders off,
+// or another tab already recorded; see ping.ts); the server decides whether a nudge is due
+// (src/lib/agents/coach/breaks.ts) and answers with it. The nudge never takes focus (a polite live region announces it); "Dismiss", or Escape
 // while focus is in the notice, closes it, and it can be snoozed or turned off from here. It sits
 // above the dashboard's help button and the review screen's action bar. `enabled` is
 // FIRM_OS_BREAK_NUDGE, read on the server.
@@ -13,7 +14,7 @@ import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { btnGhost, btnPrimary, call, card, errorText } from "@/components/ui";
 import { focusRing, sectionTitle } from "@/app/agents/parts";
-import { PING_CHECK_MS, shouldPing } from "@/lib/agents/coach/ping";
+import { PING_CHECK_MS, isQuietAnswer, pingInterval, shouldPing } from "@/lib/agents/coach/ping";
 
 type Nudge = { id: string; message: string };
 type Action = "dismiss" | "snooze-30" | "snooze-60" | "off";
@@ -36,6 +37,7 @@ export function ActivityPing({ enabled }: { enabled: boolean }) {
   const [stopped, setStopped] = useState(false);
   const lastInput = useRef(0);
   const lastSent = useRef<number | null>(null);
+  const quiet = useRef(0);
 
   useEffect(() => {
     if (!enabled || stopped) return;
@@ -46,15 +48,26 @@ export function ActivityPing({ enabled }: { enabled: boolean }) {
     for (const e of INPUT_EVENTS) window.addEventListener(e, mark, { passive: true });
     const tick = async () => {
       const now = Date.now();
-      if (!shouldPing({ visible: document.visibilityState === "visible", lastInputAt: lastInput.current, lastSentAt: lastSent.current, now })) return;
+      const visible = document.visibilityState === "visible";
+      if (!shouldPing({ visible, lastInputAt: lastInput.current, lastSentAt: lastSent.current, now, intervalMs: pingInterval(quiet.current) })) return;
       lastSent.current = now;
       const r = await call("/api/firm-os/coach/heartbeat", {});
-      if (r.ok) setNudge((r.data.nudge as Nudge | null) ?? null);
+      if (!r.ok) return;
+      quiet.current = isQuietAnswer(r.data) ? quiet.current + 1 : 0;
+      setNudge((r.data.nudge as Nudge | null) ?? null);
     };
+    // Back in view: once a minute again, and check now.
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      quiet.current = 0;
+      void tick();
+    };
+    document.addEventListener("visibilitychange", onVisible);
     void tick();
     const timer = window.setInterval(() => void tick(), PING_CHECK_MS);
     return () => {
       window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
       for (const e of INPUT_EVENTS) window.removeEventListener(e, mark);
     };
   }, [enabled, stopped]);

@@ -1,20 +1,36 @@
-// Route plumbing for /api/firm-os/coach/**: auth → zod → one coach call → JSON
-// (docs/ARCHITECTURE.md §10). Every route acts on the signed-in person's own data only.
+// Route plumbing for /api/firm-os/coach/**: auth → policy → zod → one coach call → JSON
+// (docs/ARCHITECTURE.md §10). Every route acts on the signed-in person's own data only. Who may
+// use the coach is src/lib/rbac/policy.ts (canUseCoach, canManageOwnCoachPrefs).
 import { NextResponse } from "next/server";
 import type { Session } from "next-auth";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { isActive } from "@/lib/access";
+import { canManageOwnCoachPrefs, canUseCoach } from "@/lib/rbac/policy";
 import type { CoachResult } from "./activity";
 
 export type Guarded = { user: Session["user"]; res?: undefined } | { user?: undefined; res: NextResponse };
+export type OwnerGuarded = { user: Session["user"]; ownerId: string; res?: undefined } | { user?: undefined; ownerId?: undefined; res: NextResponse };
 
-/** Signed in and active, or a 401 / 403 response. */
+const INACTIVE = "Your account is inactive. Ask an admin if you think this is wrong.";
+
+/** Signed in and allowed to use the coach (canUseCoach: active), or a 401 / 403 response. */
 export async function requireCoachUser(): Promise<Guarded> {
   const session = await auth();
-  if (!session?.user) return { res: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
-  if (!isActive(session.user)) return { res: NextResponse.json({ error: "Your account is inactive" }, { status: 403 }) };
+  if (!session?.user) return { res: NextResponse.json({ error: "Sign in to continue." }, { status: 401 }) };
+  if (!canUseCoach(session.user)) return { res: NextResponse.json({ error: INACTIVE }, { status: 403 }) };
   return { user: session.user };
+}
+
+/**
+ * For routes that change the person's own coach settings: the owner of the row written is always
+ * the signed-in person (never an id from the request), and canManageOwnCoachPrefs must agree.
+ */
+export async function requireOwnCoachUser(): Promise<OwnerGuarded> {
+  const g = await requireCoachUser();
+  if (g.res) return g;
+  const ownerId = g.user.id;
+  if (!canManageOwnCoachPrefs(g.user, ownerId)) return { res: NextResponse.json({ error: INACTIVE }, { status: 403 }) };
+  return { user: g.user, ownerId };
 }
 
 export const eventIdZ = z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9_-]+$/, "Invalid notice id");

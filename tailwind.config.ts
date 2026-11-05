@@ -25,8 +25,9 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["Plus Jakarta Sans", "ui-sans-serif", "system-ui", "sans-serif"],
-        display: ["Schibsted Grotesk", "Plus Jakarta Sans", "sans-serif"],
+        // next/font variables set on <html> in src/app/layout.tsx (self-hosted Google fonts).
+        sans: ["var(--font-sans)", "Plus Jakarta Sans", "ui-sans-serif", "system-ui", "sans-serif"],
+        display: ["var(--font-display)", "Schibsted Grotesk", "var(--font-sans)", "sans-serif"],
       },
       colors: {
         // Surfaces — Indefine 2.0 brand

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PrismaClient, Prisma } from "@prisma/client";
-import { AuditInputError, META_MAX_BYTES, auditMeta, auditRow, logAudit, type AuditDb } from "./log";
+import { AuditInputError, META_MAX_BYTES, auditDbFromSink, auditMeta, auditRow, logAudit, type AuditDb } from "./log";
 
 // Compile-time: the Prisma client and an interactive-transaction client both satisfy AuditDb.
 export const _prismaFits = (p: PrismaClient): AuditDb => p;
@@ -66,5 +66,20 @@ describe("auditMeta", () => {
     const big = { text: "x".repeat(META_MAX_BYTES + 10), id: "r1" };
     expect(auditMeta(big)).toEqual({ truncated: true, bytes: expect.any(Number), keys: ["text", "id"] });
     expect(auditMeta({ text: "x".repeat(100) })).toEqual({ text: "x".repeat(100) });
+  });
+});
+
+describe("auditDbFromSink (injected stores still write through logAudit)", () => {
+  it("hands the store the validated row, unchanged, and refuses an invalid one before the store sees it", async () => {
+    const rows: unknown[] = [];
+    const db = auditDbFromSink({ audit: async (e) => void rows.push(e) });
+    expect(await logAudit(db, { actorId: "u1", action: "onboarding.done", entity: "OnboardingRun", entityId: "run-1", meta: { at: new Date("2026-11-05T06:30:00Z"), n: 1 } })).toEqual({ id: "" });
+    await logAudit(db, { actorId: "u1", action: "turia.confirm", entity: "TuriaSync", entityId: null });
+    expect(rows).toEqual([
+      { actorId: "u1", action: "onboarding.done", entity: "OnboardingRun", entityId: "run-1", meta: { at: "2026-11-05T06:30:00.000Z", n: 1 } },
+      { actorId: "u1", action: "turia.confirm", entity: "TuriaSync", entityId: null },
+    ]);
+    await expect(logAudit(db, { actorId: "u1", action: "Bad Action", entity: "OnboardingRun" })).rejects.toThrow(AuditInputError);
+    expect(rows).toHaveLength(2);
   });
 });

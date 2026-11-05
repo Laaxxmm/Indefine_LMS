@@ -1,4 +1,5 @@
-// Who may correct what. Composes the existing helpers; never compares role / level strings here.
+// Who may correct what. The rules live in src/lib/rbac/policy.ts (canCorrect,
+// canViewCorrectionHistory); this module keeps its public API and delegates.
 //
 //   management   canManageClients (src/lib/clients/core.ts): active admins and partners — the same
 //                people who may edit a client on /clients
@@ -9,9 +10,8 @@
 // Viewing a record's correction history follows who may see the record: any active person for
 // clients (canViewClients), the job's people plus managers / partners / admins for jobs and
 // engagements (canSeeAllRuns from src/lib/agents/access.ts), and the creator or management for drafts.
-import { isActive, isManagement, isPartner, type SessionUser } from "@/lib/access";
-import { canSeeAllRuns } from "@/lib/agents/access";
-import { canManageClients, canViewClients } from "@/lib/clients/core";
+import type { SessionUser } from "@/lib/access";
+import { canCorrect, canViewCorrectionHistory } from "@/lib/rbac/policy";
 import type { CorrectionEntity, Who } from "./allowlist";
 
 export interface PermissionContext {
@@ -22,10 +22,7 @@ export interface PermissionContext {
 }
 
 export function mayCorrect(user: SessionUser, who: Who, ctx: PermissionContext): boolean {
-  if (!user || !isActive(user)) return false;
-  if (who === "management") return canManageClients(user);
-  if (who === "job-manager") return isPartner(user) || (!!ctx.assigneeManagerId && ctx.assigneeManagerId === user.id);
-  return !!ctx.createdById && ctx.createdById === user.id;
+  return canCorrect(user, who, ctx);
 }
 
 export const NOT_ALLOWED_MESSAGE: Record<Who, string> = {
@@ -41,8 +38,5 @@ export interface ViewContext {
 }
 
 export function mayViewHistory(user: SessionUser, entity: CorrectionEntity, ctx: ViewContext): boolean {
-  if (!user || !isActive(user)) return false;
-  if (entity === "Client" || entity === "FirmClient") return canViewClients(user);
-  if (entity === "CommsDraft") return isManagement(user) || (!!ctx.createdById && ctx.createdById === user.id);
-  return canSeeAllRuns(user) || isPartner(user) || ctx.assigneeId === user.id || ctx.reviewerId === user.id;
+  return canViewCorrectionHistory(user, entity, ctx);
 }

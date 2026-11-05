@@ -47,6 +47,8 @@ describe("agent comments and review notes are stored masked", () => {
     const stored = "⟨ORG_1⟩: PAN ⟨PAN_1⟩ on page 2, call ⟨PHONE_1⟩";
     expect(rows(w.db, "jobTaskEvent").find((e) => e.toState === "IN_PREP" && e.fromState === "IN_REVIEW")?.note).toBe(stored);
     expect(rows(w.db, "agentRun").find((r) => r.id === "run-1")).toMatchObject({ status: "CHANGES_REQUESTED", reviewNotes: stored });
+    // The re-run the note started stores it masked too (runner.ts); the agent itself got it as typed.
+    expect(rows(w.db, "agentRun").find((r) => r.id === "run-2")).toMatchObject({ attempt: 2, reviewNotes: stored });
     expect(rows(w.db, "auditEvent").find((e) => e.action === "request-changes")?.meta).toMatchObject({ note: stored });
 
     await submitForReview(user("priya"), "run-2", w.deps);

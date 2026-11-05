@@ -10,11 +10,11 @@
 // audit keeps no raw client personal data). Nothing is ever removed: a correction is an UPDATE plus
 // an audit row, and the history view reads those audit rows back.
 //
-// The audit row is written directly with prisma.auditEvent.create. When the hardening branch's
-// logAudit() (src/lib/audit) is merged, switch the single write in writeCorrectionAudit() to it.
+// The audit row is written with logAudit() (src/lib/audit/log.ts), inside the same transaction.
 import type { Prisma } from "@prisma/client";
 import type { prisma as prismaClient } from "@/lib/prisma";
 import { isActive, type SessionUser } from "@/lib/access";
+import { logAudit } from "@/lib/audit/log";
 import { turnoverBand } from "@/lib/clients/core";
 import {
   ALLOW_LIST,
@@ -143,7 +143,7 @@ async function reasonDictionary(tx: Tx, entity: CorrectionEntity, record: Row, n
 }
 
 async function writeCorrectionAudit(tx: Tx, data: { actorId: string; entity: CorrectionEntity; entityId: string; meta: Prisma.InputJsonObject }): Promise<string> {
-  const ev = await tx.auditEvent.create({ data: { action: "correct", ...data }, select: { id: true } });
+  const ev = await logAudit(tx, { action: "correct", ...data });
   return ev.id;
 }
 

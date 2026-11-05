@@ -20,6 +20,7 @@ import { DOCX_MIME, XLSX_MIME } from "@/lib/agents/core/templates";
 import { AGENTS, getAgent } from "@/lib/agents/registry";
 import { logAudit } from "@/lib/audit/log";
 import { clientDictionary, scrubFreeText } from "@/lib/corrections/mask";
+import { AI_RESTRICTED_MESSAGE, isAiProcessingRestricted } from "@/lib/privacy/consent";
 
 /** A successful transition, as transitionJobTask reports it. */
 export type TransitionDone = Extract<TransitionResult, { ok: true }>;
@@ -76,7 +77,7 @@ const RUN_SELECT = {
       reviewerId: true,
       fy: true,
       period: true,
-      firmClient: { select: { clientCode: true, client: { select: { name: true, contactName: true, entityType: true } } } },
+      firmClient: { select: { clientCode: true, lmsClientId: true, client: { select: { name: true, contactName: true, entityType: true } } } },
     },
   },
 } as const;
@@ -180,6 +181,9 @@ async function backToPrepAndRun(
   const def = getAgent(v.data.agent, deps.agents);
   if (!def) return fail(404, `Unknown agent ${v.data.agent}`);
   if ((await latestRunId(deps.db, v.data.jobTaskId)) !== runId) return fail(409, "A newer run exists for this job; open the latest run");
+  // DPDP: the new run would send the client's data to a model. Refuse before the job moves, so a
+  // restricted client's job stays exactly where it was (src/lib/privacy/consent.ts).
+  if (await isAiProcessingRestricted(deps.db, { lmsClientId: v.data.jobTask.firmClient.lmsClientId })) return fail(409, AI_RESTRICTED_MESSAGE);
   // The stored copies (event note, review note, audit) are masked; the new run gets the note as typed.
   const stored = storedNote(v.data, note);
   const t = await transitionJobTask(deps.db, v.data.jobTaskId, "IN_PREP", actorOf(user)!, { expectedState: from, note: stored, now: deps.now() });

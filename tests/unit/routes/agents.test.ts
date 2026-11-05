@@ -7,15 +7,26 @@ import { RELATED_TASK, echoWorld, rows, user, type World } from "../../fakes/age
 import { approvePack, logMistake, requestChanges, rerunAgent, startAgentRun, submitForReview } from "@/lib/agents/service";
 import { ABSTENTION_RULES, openQuestionViews, type ChecklistView } from "@/lib/agents/views";
 
+// Firm OS switched on for these tests (FIRM_OS_ENABLED defaults off: src/lib/workspace/flag.ts).
+beforeEach(() => {
+  vi.stubEnv("FIRM_OS_ENABLED", "1");
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
 const state = vi.hoisted(() => ({ world: null as unknown as World, turia: [] as Record<string, unknown>[] }));
 
 vi.mock("@/lib/auth", () => ({ auth: vi.fn(), signIn: vi.fn(), signOut: vi.fn(), handlers: {} }));
 vi.mock("next/navigation", async () => (await import("./harness")).navigationMock);
 // The memory db has no TuriaSync table; the review page's close-loop view reads it, so add one.
+// The layout reads the workspace settings: none saved, so the built-in role defaults apply.
 vi.mock("@/lib/prisma", () => ({
   get prisma() {
     const turiaSync = { findMany: async ({ where }: { where: { jobTaskId: string } }) => state.turia.filter((r) => r.jobTaskId === where.jobTaskId) };
-    return Object.assign(Object.create(state.world.db), { turiaSync });
+    const workspaceSetting = { findUnique: async () => null };
+    const roleWorkspaceDefault = { findUnique: async () => null };
+    return Object.assign(Object.create(state.world.db), { turiaSync, workspaceSetting, roleWorkspaceDefault });
   },
 }));
 
@@ -62,6 +73,16 @@ describe("signed out / no access", () => {
     as(user("priya"));
     expect(await redirectTarget(() => MistakesPage())).toBe("/agents");
     expect(await redirectTarget(() => AdminMistakesPage())).toBe("/dashboard");
+  });
+});
+
+describe("correction history on the review page", () => {
+  it("the job's History link sits under the header", async () => {
+    as(user("ravi"));
+    await startAgentRun(user("priya"), "echo", "job-1", state.world.deps);
+    const html = await review("run-1");
+    expect(html).toMatch(/<button[^>]*aria-expanded="false"[^>]*>[\s\S]*?History<\/button>/);
+    expect(html.indexOf("History</button>")).toBeGreaterThan(html.indexOf("</h1>"));
   });
 });
 

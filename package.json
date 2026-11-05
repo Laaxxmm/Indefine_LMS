@@ -46,7 +46,8 @@
     "test:visual": "vitest run --config tests/regression/visual.vitest.config.ts",
     "e2e:db:list": "playwright test --config playwright.db.config.ts --list",
     "ai:guardrail-profiles": "tsx scripts/ai-guardrail-profiles.ts",
-    "verify:guardrail-profiles": "tsx scripts/ai-guardrail-profiles.ts --check"
+    "verify:guardrail-profiles": "tsx scripts/ai-guardrail-profiles.ts --check",
+    "efficiency": "tsx scripts/efficiency-report.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.5.0",

@@ -75,7 +75,7 @@ Columns not listed hold ids, enums, booleans, counts or timestamps only (class �
 | | `confirmedById`, `spotCheckedById` | B | |
 | | `spotCheckNote` | B | Partner's spot-check note |
 | `OnboardingRun` | `prompt` | **A** | The partner's plain-English sentence (may name people, carry PAN/GSTIN). **Retention: replaced by `[cleared by retention]` 30 days after the run last changed** (done, failed or abandoned) |
-| | `spec`, `plan` | **A** | Extracted client details (PAN, GSTIN, contact name, phone, email) and the plan. **Retention: cleared with the prompt** (`spec` → `{ cleared: true }`, `plan` → null). A run that never reached a client record (`firmClientId` null) is found for erasure by the person's PAN / GSTIN / email / phone, never by a name alone |
+| | `spec`, `plan` | **A** | Extracted client details (PAN, GSTIN, contact name, phone, email) and the plan. **Retention: cleared with the prompt** (`spec` → `{ cleared: true }`, `plan` → null). A run that never reached a client record (`firmClientId` null) is found for erasure by identifiers that pin the person alone (PAN / GSTIN / CIN, an email or phone no other client shares), never by a name; for a person no record matches, by the request's identifier hash (they are then "known only by identifiers", rights.md) |
 | | `steps`, `error` | C | Saga progress |
 | | `createdById` | B | |
 
@@ -160,4 +160,4 @@ records. The audit PoC that found 36 surviving copies after a confirmed erasure 
 1. `MistakeLog.example` keeps a run's extraction (class A) for as long as the rule is in force. Option: replace it by a synthetic example when the rule is approved. (Erasure now cleans the person's identifiers in it.)
 2. Resolved: `OnboardingRun.prompt` / `spec` / `plan` are cleared 30 days after the run last changed (retention.md). Partner to confirm the 30 days (a threshold: ADR-006 retention table to be amended). `TuriaSync.evidence` stays with the record as spot-check evidence.
 3. Resolved in code: reviewer comments and transition notes are masked when written and swept nightly. Staff guidance should still say "no PAN/Aadhaar in comments": a first name typed alone, a nickname or a misspelling is not recognised as the client's.
-4. The agent runner stores the note of a re-run on the new run (`AgentRun.reviewNotes`) as typed; erasure cleans it, but it is not masked when written (owner: AI data-flow, `src/lib/agents/core/runner.ts`).
+4. Resolved: the note of a re-run is stored on the new run (`AgentRun.reviewNotes`) masked, like the other notes (`src/lib/agents/core/runner.ts`); the agent itself still receives it as typed.

@@ -7,8 +7,8 @@
 //             with an inline script. Nonces would need middleware on every request and would make
 //             every page dynamic; that is the next step, not this one. 'unsafe-eval' only in dev
 //             (React Refresh). No third-party script origin is allowed.
-//   styles    'self' + 'unsafe-inline' (React style props, the editor page) + Google Fonts CSS.
-//   fonts     'self' + fonts.gstatic.com (globals.css imports Google Fonts) + data:.
+//   styles    'self' + 'unsafe-inline' (React style props, the editor page). No third-party style origin.
+//   fonts     'self' + data:. The brand fonts are self-hosted by next/font (src/app/layout.tsx): no Google host.
 //   images    'self' data: blob: (the letterhead is inlined as data:, the editor previews a chosen
 //             signature through a blob: URL) + SharePoint.
 //   media     'self' blob: + SharePoint (training videos stream from a Graph download URL).
@@ -26,8 +26,8 @@ export function contentSecurityPolicy(opts: { dev?: boolean } = {}): string {
   const directives: [string, string[]][] = [
     ["default-src", ["'self'"]],
     ["script-src", ["'self'", "'unsafe-inline'", ...(dev ? ["'unsafe-eval'"] : [])]],
-    ["style-src", ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"]],
-    ["font-src", ["'self'", "https://fonts.gstatic.com", "data:"]],
+    ["style-src", ["'self'", "'unsafe-inline'"]],
+    ["font-src", ["'self'", "data:"]],
     ["img-src", ["'self'", "data:", "blob:", SHAREPOINT]],
     ["media-src", ["'self'", "blob:", SHAREPOINT]],
     ["connect-src", ["'self'", ...(dev ? ["ws:", "wss:"] : [])]],

@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { loadDraft, type CommsDb } from "@/lib/agents/comms/service";
 import { card } from "@/components/ui";
+import { HistoryLink } from "@/components/CorrectionHistory";
 import { BackLink, eyebrow, pageTitle, sectionTitle } from "@/app/agents/parts";
 import { DraftActions } from "./DraftActions";
 
@@ -42,6 +43,10 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
         {d.client.name} ({d.client.code})
       </h1>
       <p className="text-ink-mute text-[13.5px] mt-1.5">{d.job ? d.job.label : "General message (no job)"}</p>
+      {/* The draft's correction history, and a fix for a wrong entry. */}
+      <div className="mt-5">
+        <HistoryLink entity="CommsDraft" id={d.id} />
+      </div>
 
       {(d.notes.length > 0 || d.tone.length > 0) && (
         <section aria-labelledby="draft-notes" className="mt-5 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 px-4 py-3 text-[13px]">

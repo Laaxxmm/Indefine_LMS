@@ -9,6 +9,9 @@ import type { FirmService, JobTaskState, Prisma, PrismaClient } from "@prisma/cl
 import { z } from "zod";
 import type { SessionUser } from "@/lib/access";
 import { canSeeAllRuns, canUseAgents, canViewJob, jobScopeWhere } from "@/lib/agents/access";
+import { canViewCommsDraft, commsDraftScopeWhere } from "@/lib/rbac/policy";
+import { logAudit } from "@/lib/audit/log";
+import { AI_RESTRICTED_MESSAGE, COMMS_RESTRICTED_MESSAGE, isAiProcessingRestricted, isCommsDraftingRestricted } from "@/lib/privacy/consent";
 import { formatDateTimeIst } from "@/lib/agents/core/format";
 import { addDays, istDayKey, istDayStart, parseDayKey } from "@/lib/ist";
 import type { OutlookDraft, OutlookDraftInput } from "@/lib/integrations/outlook/drafts";
@@ -29,7 +32,7 @@ export const COMMS_AUDIT = { create: "comms-draft-create", outlook: "comms-outlo
 /** Per-draft model budget (₹): a polish and a translation with escalations stay far below it. */
 export const DRAFT_MAX_COST_INR = 10;
 
-const CLIENT_SELECT = { id: true, clientCode: true, preferredLanguage: true, client: { select: { name: true, contactName: true, contactEmail: true } } } as const;
+const CLIENT_SELECT = { id: true, clientCode: true, preferredLanguage: true, client: { select: { name: true, contactName: true, contactEmail: true, primaryHandlerId: true } } } as const;
 const JOB_SELECT = {
   id: true,
   service: true,
@@ -46,7 +49,7 @@ const JOB_SELECT = {
   firmClient: { select: CLIENT_SELECT },
 } as const;
 
-type ClientRow = { id: string; clientCode: string; preferredLanguage: string; client: { name: string; contactName: string | null; contactEmail: string | null } };
+type ClientRow = { id: string; clientCode: string; preferredLanguage: string; client: { name: string; contactName: string | null; contactEmail: string | null; primaryHandlerId?: string | null } };
 type JobRow = {
   id: string;
   service: FirmService;
@@ -78,11 +81,23 @@ export async function canSeeClient(db: CommsDb, user: SessionUser, firmClientId:
 
 type DraftRow = { id: string; firmClientId: string; jobTaskId: string | null; kind: string; language: string; subject: string; body: string; createdById: string; outlookDraftId: string | null; createdAt: Date };
 
-async function canSeeDraft(db: CommsDb, user: SessionUser, d: DraftRow, job: JobRow | null): Promise<boolean> {
-  if (!user || !canUseAgents(user)) return false;
-  if (canSeeAllRuns(user) || d.createdById === user.id) return true;
-  if (d.jobTaskId) return job ? canViewJob(user, job) : false;
-  return canSeeClient(db, user, d.firmClientId);
+/**
+ * The central rule (src/lib/rbac/policy.ts canViewCommsDraft): the author; a draft about a job
+ * follows the job; a client-level draft (no job) only the client's primary handler; managers,
+ * partners and admins all. A draft whose job row is gone stays with the author and managers.
+ */
+function canSeeDraft(user: SessionUser, d: DraftRow, job: JobRow | null, client: ClientRow | null): boolean {
+  return canViewCommsDraft(user, {
+    createdById: d.createdById,
+    job: d.jobTaskId ? (job ?? { assigneeId: null, reviewerId: null }) : null,
+    client: d.jobTaskId ? null : { primaryHandlerId: client?.client.primaryHandlerId ?? null },
+  });
+}
+
+/** Firm OS clients whose LMS client the person is primary handler of (client-level drafts they may see). */
+async function handledFirmClientIds(db: CommsDb, user: NonNullable<SessionUser>): Promise<string[]> {
+  const rows = await db.firmClient.findMany({ where: { client: { primaryHandlerId: user.id } }, select: { id: true }, take: 5000 });
+  return rows.map((r) => r.id);
 }
 
 // ------------------------------------------------------------------ the draft panel (/comms/new)
@@ -235,6 +250,10 @@ export async function createDraft(db: CommsDb, user: SessionUser, raw: unknown, 
   }
   const department = job?.service ?? body.department;
   if (!department) return fail(400, "Pick the department this answer is about");
+  // DPDP (src/lib/privacy/consent.ts): no model call and no new draft for a client who withdrew
+  // consent or is under an erasure hold. Refused before anything is drafted or stored.
+  if (await isAiProcessingRestricted(db, client.id)) return fail(409, AI_RESTRICTED_MESSAGE);
+  if (await isCommsDraftingRestricted(db, client.id)) return fail(409, COMMS_RESTRICTED_MESSAGE);
 
   const people = { clientName: client.client.name, contactName: client.client.contactName, senderName: user.name ?? user.email ?? "", firmName: FIRM_NAME };
   let input: TemplateInput;
@@ -270,7 +289,7 @@ export async function createDraft(db: CommsDb, user: SessionUser, raw: unknown, 
     data: { firmClientId: client.id, jobTaskId: job?.id ?? null, kind: body.kind, language: result.language, subject: result.stored.subject, body: result.stored.body, createdById: user.id },
     select: { id: true },
   });
-  const meta: Prisma.InputJsonValue = {
+  const meta: Record<string, unknown> = {
     kind: body.kind,
     language: result.language,
     requestedLanguage: result.requestedLanguage,
@@ -286,7 +305,7 @@ export async function createDraft(db: CommsDb, user: SessionUser, raw: unknown, 
     modelRunId,
     modelCalls: result.stats.modelCalls,
   };
-  await db.auditEvent.create({ data: { actorId: user.id, action: COMMS_AUDIT.create, entity: "CommsDraft", entityId: draft.id, meta } });
+  await logAudit(db, { actorId: user.id, action: COMMS_AUDIT.create, entity: "CommsDraft", entityId: draft.id, meta });
   return ok({ id: draft.id, href: `/comms/${draft.id}` });
 }
 
@@ -299,7 +318,7 @@ export async function listDrafts(db: CommsDb, user: SessionUser, filter: { clien
   const and: Prisma.CommsDraftWhereInput[] = [];
   if (!canSeeAllRuns(user)) {
     const jobs = await db.jobTask.findMany({ where: jobScopeWhere(user), select: { id: true }, take: 5000 });
-    and.push({ OR: [{ createdById: user.id }, { jobTaskId: { in: jobs.map((j) => j.id) } }] });
+    and.push(commsDraftScopeWhere(user, jobs.map((j) => j.id), await handledFirmClientIds(db, user)));
   }
   if (filter.client) {
     const c = await db.firmClient.findUnique({ where: { clientCode: filter.client }, select: { id: true } });
@@ -359,8 +378,10 @@ async function loadRow(db: CommsDb, user: SessionUser, id: string): Promise<Comm
   const d = (await db.commsDraft.findUnique({ where: { id } })) as DraftRow | null;
   if (!d) return fail(404, "Draft not found");
   const job = d.jobTaskId ? ((await db.jobTask.findUnique({ where: { id: d.jobTaskId }, select: JOB_SELECT })) as JobRow | null) : null;
-  if (!(await canSeeDraft(db, user, d, job))) return fail(403, "You can open drafts only for clients whose jobs you prepare or review");
   const client = job?.firmClient ?? ((await db.firmClient.findUnique({ where: { id: d.firmClientId }, select: CLIENT_SELECT })) as ClientRow | null);
+  if (!canSeeDraft(user, d, job, client)) {
+    return fail(403, "You can open a draft only if you wrote it, work on its job, or handle the client. Ask the author or a manager to share it.");
+  }
   return ok({ d, job, client });
 }
 
@@ -425,7 +446,7 @@ export async function openInOutlook(
     const to = client && isEmail(client.client.contactEmail) ? [client.client.contactEmail.trim()] : [];
     const created = await deps.outlook.create(token, { to, subject: d.subject, body: d.body, bodyType: "Text" });
     await db.commsDraft.update({ where: { id: d.id }, data: { outlookDraftId: created.id } });
-    await db.auditEvent.create({ data: { actorId: user!.id, action: COMMS_AUDIT.outlook, entity: "CommsDraft", entityId: d.id, meta: { created: true, recipients: to.length } } });
+    await logAudit(db, { actorId: user!.id, action: COMMS_AUDIT.outlook, entity: "CommsDraft", entityId: d.id, meta: { created: true, recipients: to.length } });
     return ok({ webLink: created.webLink, created: true });
   } catch (e) {
     const status = (e as { status?: number }).status;

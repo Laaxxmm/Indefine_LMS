@@ -1,14 +1,25 @@
 // /agents/spot-checks (page + nav link) and POST /api/firm-os/spot-checks/[id]: partners only.
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Session } from "next-auth";
 import { redirectTarget, renderHtml as renderRaw } from "./harness";
 import { SpotCheckWorld } from "../../fakes/spot-check-world";
+
+// Firm OS switched on for these tests (FIRM_OS_ENABLED defaults off: src/lib/workspace/flag.ts).
+beforeEach(() => {
+  vi.stubEnv("FIRM_OS_ENABLED", "1");
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 const state = vi.hoisted(() => ({ world: null as unknown as SpotCheckWorld }));
 
 vi.mock("@/lib/auth", () => ({ auth: vi.fn(), signIn: vi.fn(), signOut: vi.fn(), handlers: {} }));
 vi.mock("next/navigation", async () => (await import("./harness")).navigationMock);
-vi.mock("@/lib/prisma", () => ({ get prisma() { return state.world.db; } }));
+vi.mock("@/lib/prisma", async () => {
+  const { withWorkspace } = await import("./harness");
+  return { get prisma() { return withWorkspace(state.world.db); } };
+});
 
 const { auth } = await import("@/lib/auth");
 const { default: Page } = await import("@/app/agents/spot-checks/page");

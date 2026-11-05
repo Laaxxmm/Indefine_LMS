@@ -15,11 +15,43 @@
 // a call to an injected `audit(...)` callback (no body to follow, e.g. the onboarding service's
 // deps.audit), and a call to a small wrapper whose own body makes one of these writes (e.g.
 // close-loop db.audit → logAudit).
+//
+// One documented exemption (AUDIT_EXEMPTIONS): a route whose data must NOT reach AuditEvent. It
+// covers only the listed models' writes on that one route, the route must then write no
+// AuditEvent at all, and every other route without an audit still fails.
 import type { CallGraph, CallSite, Fn, Handler } from "./route-graph";
 
 export const AUDIT_LOG_FILE = "src/lib/audit/log.ts";
 /** GET handlers that hand data out of the firm's systems (downloads): audited like a mutation. */
-export const EXPORT_ROUTES = ["GET /api/firm-os/agents/deliverables/[id]"];
+export const EXPORT_ROUTES = ["GET /api/firm-os/agents/deliverables/[id]", "GET /api/firm-os/privacy/requests/[id]/export"];
+
+export type AuditExemption = {
+  route: string;
+  method: string;
+  /** Prisma models (delegate names) whose writes on this route are exempt; any other write still needs an audit. */
+  models: string[];
+  why: string;
+};
+
+/**
+ * Routes that must not write an AuditEvent. AuditEvent is kept indefinitely (ADR-006 retention
+ * table), so a route whose data has a short, fixed life cannot be audited without turning it into
+ * a permanent record.
+ */
+export const AUDIT_EXEMPTIONS: AuditExemption[] = [
+  {
+    route: "/api/firm-os/coach/heartbeat",
+    method: "POST",
+    models: ["activityHeartbeat", "coachEvent"],
+    why:
+      "ADR-006 (break-nudge data): activity heartbeats and break nudges are kept 7 days, aggregate only, never reported to anyone but the person; an AuditEvent per heartbeat or nudge would keep that activity trail permanently. The heartbeat route therefore writes only ActivityHeartbeat and the break-nudge CoachEvent, and no AuditEvent.",
+  },
+];
+
+/** The Prisma model a write call targets (`db.activityHeartbeat.create` → "activityHeartbeat"), or null. */
+export function writeModel(c: CallSite): string | null {
+  return c.receiver ? (c.receiver.split(".").pop() ?? null) : null;
+}
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const WRITE_METHODS = new Set(["create", "createMany", "update", "updateMany", "upsert", "delete", "deleteMany"]);
 const WRITE_CALLS = new Set(["transitionJobTask", "$executeRaw", "$executeRawUnsafe"]);
@@ -58,11 +90,13 @@ export function isWrite(c: CallSite): boolean {
   return WRITE_METHODS.has(c.name) && !!c.receiver && /^[\w$]+(\.[\w$]+)+$/.test(c.receiver);
 }
 
-export function checkAuditCoverage(graph: CallGraph, routeFiles: string[]): AuditReport {
+export function checkAuditCoverage(graph: CallGraph, routeFiles: string[], exemptions: AuditExemption[] = AUDIT_EXEMPTIONS): AuditReport {
   const findings: AuditFinding[] = [];
   const violations: string[] = [];
   const notes = new Set<string>();
   let skipped = 0;
+  const exemptionOf = (h: Handler) => exemptions.find((e) => e.route === h.route && e.method === h.method) ?? null;
+  const usedExemptions = new Set<AuditExemption>();
 
   const sinkCache = new Map<string, { kind: SinkKind; where: string }[]>();
   /** Audit writes made by `fn` itself or by a wrapper it calls (one level). */
@@ -100,6 +134,9 @@ export function checkAuditCoverage(graph: CallGraph, routeFiles: string[]): Audi
       const problems: string[] = [];
       const reported = new Set<string>();
       const seen = new Set<string>();
+      const exempt = exemptionOf(h);
+      if (exempt) usedExemptions.add(exempt);
+      const exemptWrite = (c: CallSite) => !!exempt && exempt.models.includes(writeModel(c) ?? "");
       const visit = (fn: Fn, auditedAbove: boolean, path: string[], depth: number) => {
         const own = sinksOf(fn);
         sinks.push(...own);
@@ -108,7 +145,7 @@ export function checkAuditCoverage(graph: CallGraph, routeFiles: string[]): Audi
         if (seen.has(state)) return;
         seen.add(state);
         if (!audited) {
-          for (const c of graph.callsOf(fn).filter(isWrite)) {
+          for (const c of graph.callsOf(fn).filter((x) => isWrite(x) && !exemptWrite(x))) {
             const k = `${fn.id}:${c.line}`;
             if (reported.has(k)) continue;
             reported.add(k);
@@ -119,12 +156,16 @@ export function checkAuditCoverage(graph: CallGraph, routeFiles: string[]): Audi
         for (const c of graph.callsOf(fn)) for (const t of c.targets) visit(t, audited, [...path, fn.name], depth + 1);
       };
       visit(h.fn, false, [], 0);
-      if (!sinks.length) problems.unshift("no AuditEvent is written on any path (call logAudit from src/lib/audit/log.ts)");
+      if (exempt) {
+        // The exemption is a rule too: this route must keep its data out of AuditEvent.
+        if (sinks.length) problems.unshift(`is exempt from audit (${exempt.why.split(":")[0]}) and must not write an AuditEvent, but does: ${sinks.map((s) => s.where).join("; ")}`);
+      } else if (!sinks.length) problems.unshift("no AuditEvent is written on any path (call logAudit from src/lib/audit/log.ts)");
       for (const s of sinks) if (s.kind !== "logAudit" && s.kind !== "wrapper") notes.add(`legacy audit write (${s.kind}) at ${s.where}: migrate to logAudit when that module is next edited`);
       for (const p of problems) violations.push(`${h.method} ${h.route}  ${h.file}: ${p}`);
       findings.push({ handler: h, sinks: dedupe(sinks), problems });
     }
   }
+  for (const e of exemptions) if (!usedExemptions.has(e)) violations.push(`${e.method} ${e.route}: in AUDIT_EXEMPTIONS but no such mutating route handler exists (remove or fix the row)`);
   return { findings, checked: findings.length, skipped, violations, notes: [...notes].sort() };
 }
 

@@ -2,7 +2,6 @@
 // .audit-sec/dpdp/privacy-state-machine.test.ts: one admin logged, self-verified with "Other: trust
 // me", exported and closed a request alone).
 import { describe, expect, it } from "vitest";
-import type { SessionUser } from "@/lib/access";
 import {
   OTHER_NOTE_MESSAGE,
   OTHER_VERIFY_NOTE_MIN,
@@ -13,25 +12,15 @@ import {
   verificationNoteProblem,
   verifierOf,
 } from "./duties";
-import { createRequest, step, verifyIdentity, type PrivacyDeps } from "./register";
-import { fail } from "@/lib/corrections/result";
+import { createRequest, verifyIdentity, type PrivacyDeps } from "./register";
 import type { PrivacyDb } from "./inventory";
 import { PAN_PROP, T0, USERS, privacyWorld, sessionUser } from "./__tests__/fixtures";
 import type { MemoryDb } from "./__tests__/memory-db";
 
 const deps = (db: MemoryDb): PrivacyDeps => ({ db: db as unknown as PrivacyDb, now: () => T0, hashKey: "k" });
 
-/**
- * verifyIdentity() as it behaves once register.ts makes the two calls this module provides (the
- * note check before its step, assertNotCreator() inside it, right after loadOpen()).
- */
-async function verifyWithDuties(user: SessionUser, id: string, input: { method: string; note?: string | null }, d: PrivacyDeps) {
-  const problem = verificationNoteProblem(input.method, input.note);
-  if (problem) return fail(400, problem);
-  const gate = await step(d, (tx) => assertNotCreator(tx, id, user));
-  if (!gate.ok) return gate;
-  return verifyIdentity(user, id, input, d);
-}
+/** register.ts verifyIdentity() makes both checks (the note before its step, assertNotCreator() inside it). */
+const verifyWithDuties = verifyIdentity;
 
 describe("verifying identity", () => {
   it("the person who logged the request cannot verify it; someone else can", async () => {
@@ -42,6 +31,8 @@ describe("verifying identity", () => {
     expect(db.tables.auditEvent.some((e) => e.action === "verify-identity")).toBe(false);
     expect(await verifyWithDuties(USERS.partner, r.data.id, { method: "Photo ID seen in person" }, deps(db))).toMatchObject({ ok: true });
     expect(await verifierOf(db as unknown as PrivacyDb, r.data.id)).toBe(USERS.partner.id);
+    await expect(assertNotCreator(db as unknown as PrivacyDb, r.data.id, USERS.admin)).rejects.toMatchObject({ status: 403, message: SELF_VERIFY_MESSAGE });
+    await expect(assertNotCreator(db as unknown as PrivacyDb, r.data.id, USERS.partner)).resolves.toBeUndefined();
   });
 
   it(`an "Other" verification needs a note of at least ${OTHER_VERIFY_NOTE_MIN} characters`, async () => {

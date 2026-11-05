@@ -1,7 +1,7 @@
 "use client";
 
 // Client panels for the privacy register: log a request, verify identity, close / refuse, record a
-// nominee, restrict processing, confirm an erasure. Each calls one /api/firm-os/privacy route with
+// nominee, restrict processing, lift a restriction (partner), confirm an erasure. Each calls one /api/firm-os/privacy route with
 // call() (src/components/ui.ts), shows the route's sentence on failure and refreshes on success.
 // Irreversible steps use the confirm pattern from MistakeDecision: the first click says what will
 // happen, the second does it.
@@ -305,6 +305,54 @@ export function NominationForm({ id }: { id: string }) {
         </button>
       </div>
     </form>
+  );
+}
+
+// ------------------------------------------------------------------ lift a restriction (partner only)
+
+/** "Lift restriction": a written reason, then a confirm that says what resumes. Partner only (the route checks too). */
+export function LiftRestrictionForm({ id }: { id: string }) {
+  const uid = useId();
+  const { busy, error, run } = useAction();
+  const [reason, setReason] = useState("");
+  const [confirming, setConfirming] = useState(false);
+  return (
+    <div className="space-y-3">
+      <div>
+        <label htmlFor={`${uid}-r`} className={labelText}>
+          Why can the restriction be lifted? (recorded with your name)
+        </label>
+        <textarea id={`${uid}-r`} value={reason} onChange={(e) => setReason(e.target.value)} rows={2} maxLength={500} className={`${field} mt-1 ${focusRing}`} />
+      </div>
+      <ErrorLine error={error} />
+      {confirming ? (
+        <div className="flex items-center gap-2 flex-wrap justify-end" role="group" aria-label="Confirm lifting the restriction">
+          <span className="text-[12px] text-ink-soft max-w-md text-right">
+            AI processing and new drafts resume for this person&apos;s records. The restriction and this decision stay in the history.
+          </span>
+          <button type="button" disabled={busy} onClick={() => setConfirming(false)} className={`${btnGhost} ${focusRing}`}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={async () => {
+              if (await run(req(id, "lift-restriction"), { reason })) setConfirming(false);
+            }}
+            className={`${btnDanger} ${focusRing} inline-flex items-center gap-1.5`}
+          >
+            <Spinner on={busy} />
+            {busy ? "Saving…" : "Confirm: lift restriction"}
+          </button>
+        </div>
+      ) : (
+        <div className="flex justify-end">
+          <button type="button" onClick={() => setConfirming(true)} disabled={reason.trim().length < 10} className={`${btnDanger} ${focusRing}`}>
+            Lift restriction…
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

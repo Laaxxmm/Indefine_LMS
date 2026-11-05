@@ -80,6 +80,38 @@ describe("presumptive conditions (boundaries)", () => {
     expect(a("clean-44ada-doctor").businessIncome).toBe(rs(30_00_000));
     expect(a("clean-44ada-doctor", (o) => (o.business.declaredIncome = "32,00,000")).businessIncome).toBe(rs(32_00_000));
   });
+  describe("income declared below the deemed income (s.44AD / s.44ADA)", () => {
+    // Trader: turnover 90,00,000, cash 10,00,000; deemed 6% x 80,00,000 + 8% x 10,00,000 = 5,60,000.
+    const trader = (declared: string) => a("trap-44ad-declared-below-deemed", (o) => (o.business.declaredIncome = declared), { matches: [] });
+    it("the declared income is used; ITR-3; regular advance-tax instalments; audit u/s 44AB(e) when TI exceeds the basic exemption", () => {
+      const x = trader("4,50,000");
+      expect(x.presumptive).toMatchObject({ claimed: "44AD", eligible: true, incomePaise: rs(5_60_000), declaredLower: true });
+      expect(x.businessIncome).toBe(rs(4_50_000));
+      expect(x.chosen.totalIncome).toBe(rs(4_50_000));
+      expect(x.audit).toMatchObject({ required: true, reason: expect.stringMatching(/^s\.44AB\(e\) read with s\.44AD\(4\)-\(5\)/) });
+      expect(x.due139).toBe("2026-10-31");
+      expect(x.itrForm).toBe("ITR-3");
+      expect(x.advance.presumptiveOnly).toBe(false);
+      expect(x.auditIncomeTest).toEqual({ totalIncomePaise: rs(4_50_000), basicExemptionPaise: rs(4_00_000) });
+    });
+    it("boundary on the basic exemption: TI 4,00,000 → no s.44AB(e) audit (turnover tests: 90 lakh is within ₹1 crore); 4,00,010 → audit", () => {
+      expect(trader("4,00,000").audit.required).toBe(false);
+      expect(trader("4,00,000").audit.reason).toMatch(/turnover within/);
+      expect(trader("4,00,010").audit.required).toBe(true);
+    });
+    it("declared equal to (or above) the deemed income is not a lower declaration; 0 = nothing declared", () => {
+      expect(trader("5,60,000")).toMatchObject({ businessIncome: rs(5_60_000), itrForm: "ITR-4", audit: { required: false } });
+      expect(trader("5,59,999.99").presumptive.declaredLower).toBe(true);
+      expect(trader("6,00,000").businessIncome).toBe(rs(6_00_000));
+      expect(trader("0").presumptive.declaredLower).toBe(false);
+    });
+    it("s.44ADA: declared 25,00,000 against the deemed 30,00,000 → s.44AB(d) audit, ITR-3", () => {
+      const x = a("clean-44ada-doctor", (o) => (o.business.declaredIncome = "25,00,000"));
+      expect(x.businessIncome).toBe(rs(25_00_000));
+      expect(x.audit).toMatchObject({ required: true, reason: expect.stringMatching(/^s\.44AB\(d\) read with s\.44ADA\(4\)/) });
+      expect(x.itrForm).toBe("ITR-3");
+    });
+  });
   it("no scheme claimed", () => {
     expect(presumptiveCheck(extractOf("clean-salaried-new").organiser, R)).toMatchObject({ claimed: null, eligible: false });
   });
@@ -203,6 +235,32 @@ describe("missing documents, rule-set guard, 234A", () => {
     const x = a("clean-salaried-new", (o) => Object.assign(o, { tdsInBooks: [] }) && (o.profile.plannedFilingDate = "2026-09-10"), { files: { "26as.csv": "tan,deductor,section,amount_paid,tds_deposited\n" } });
     expect(x.i234A).toBe(rs(2_106));
     expect(x.fee234F).toBe(rs(5_000));
+  });
+  describe("s.234A base: tax paid on or before the due date reduces it (audit counterexample)", () => {
+    // Salary 20,00,000 − 75,000 = 19,25,000 (new regime); tax 20,000 + 40,000 + 60,000 + 3,25,000 × 20% = 1,85,000;
+    // cess 7,400 → 1,92,400; no TDS, so assessed tax = 1,92,400. Due date 31 Jul 2026.
+    const at = (payments: { date: string; amount: string }[], filed: string) =>
+      a("clean-salaried-new", (o) => Object.assign(o, { tdsInBooks: [], otherSources: [], advanceTax: payments }) && Object.assign(o.salary, { gross: "20,00,000" }) && (o.profile.plannedFilingDate = filed), {
+        files: { "26as.csv": "tan,deductor,section,amount_paid,tds_deposited\n" },
+      });
+    it("self-assessment tax 1,92,400 paid 1 May, filed 1 Aug: 234A nil (the old base gave 1,924)", () => {
+      const x = at([{ date: "2026-05-01", amount: "1,92,400" }], "2026-08-01");
+      expect(x.advance.assessedTaxPaise).toBe(rs(1_92_400));
+      expect(x.belated).toBe(true);
+      expect(x.i234A).toBe(0);
+      expect(x.fee234F).toBe(rs(5_000));
+    });
+    it("boundary: paid ON the due date reduces the base; paid the day after does not", () => {
+      expect(at([{ date: "2026-07-31", amount: "1,92,400" }], "2026-08-10").i234A).toBe(0);
+      // 1,92,400 x 1% x 1 month (1 Aug – 10 Aug)
+      expect(at([{ date: "2026-08-01", amount: "1,92,400" }], "2026-08-10").i234A).toBe(rs(1_924));
+      // Split: 1,00,000 on the due date, 92,400 the day after → base 92,400 → 924.
+      expect(at([{ date: "2026-07-31", amount: "1,00,000" }, { date: "2026-08-01", amount: "92,400" }], "2026-08-10").i234A).toBe(rs(924));
+    });
+    it("advance tax by 31 March still reduces it; a return filed by the due date has no 234A", () => {
+      expect(at([{ date: "2026-03-15", amount: "1,00,000" }], "2026-08-10").i234A).toBe(rs(924));
+      expect(at([], "2026-07-31").i234A).toBe(0);
+    });
   });
   it("caches per extracted object", () => {
     const x = extractOf("clean-salaried-new");

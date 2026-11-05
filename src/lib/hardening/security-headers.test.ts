@@ -19,10 +19,11 @@ describe("Content-Security-Policy", () => {
     expect(contentSecurityPolicy()).not.toMatch(/unsafe-eval|\*(?!\.sharepoint\.com)|http:/);
   });
 
-  it("allows exactly what the app loads: Google Fonts, SharePoint images and video, data:/blob: images", () => {
+  it("allows exactly what the app loads: self-hosted fonts (next/font, no Google host), SharePoint images and video, data:/blob: images", () => {
     const d = directives(contentSecurityPolicy());
-    expect(d.get("style-src")).toContain("https://fonts.googleapis.com");
-    expect(d.get("font-src")).toEqual(["'self'", "https://fonts.gstatic.com", "data:"]);
+    expect(d.get("style-src")).toEqual(["'self'", "'unsafe-inline'"]);
+    expect(d.get("font-src")).toEqual(["'self'", "data:"]);
+    expect(contentSecurityPolicy()).not.toMatch(/googleapis|gstatic/);
     expect(d.get("img-src")).toEqual(["'self'", "data:", "blob:", "https://*.sharepoint.com"]);
     expect(d.get("media-src")).toEqual(["'self'", "blob:", "https://*.sharepoint.com"]);
     expect(d.get("worker-src")).toEqual(["'self'", "blob:"]);

@@ -1,6 +1,8 @@
 // /api/firm-os/search: auth (401 / 403) → zod (400) → search() → JSON, against the in-memory world.
 // GET refuses identifiers (they stay out of URLs); POST takes them. Messages are plain sentences.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+// These routes sit behind the Firm OS master switch (src/lib/workspace/flag.ts); it is on for these tests.
+beforeEach(() => vi.stubEnv("FIRM_OS_ENABLED", "1"));
 import type { Session } from "next-auth";
 import { IDS, PEOPLE, searchWorld, type SearchWorld } from "../../fakes/search-world";
 import { memoryRateLimiter, type SearchRateLimiter } from "@/lib/search/rate-limit";

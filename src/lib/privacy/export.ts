@@ -1,13 +1,15 @@
 // Right of access (DPDP Act s.11): everything Firm OS and the LMS client master hold about the
 // person, as a JSON file plus a plain-English summary — the categories, purposes, and who the data
 // is shared with. Walks inventory.ts, so every inventoried field is in the file, and only rows
-// linked to the person the request matched are read (nothing of other people).
+// linked to the person the request matched are read (nothing of other people). A person known only
+// by identifiers (register.ts resolutionOf "identifier-only") gets the onboarding runs that hold
+// exactly those identifiers.
 import { formatDateTimeIst } from "@/lib/agents/core/format";
 import { fail, ok, type ServiceResult } from "@/lib/corrections/result";
 import type { SessionUser } from "@/lib/access";
-import { DATASETS, EXTERNAL_SYSTEMS, SHARED_WITH, type PrivacyDb, type Row } from "./inventory";
+import { DATASETS, EXTERNAL_SYSTEMS, RESIDUE_DATASETS, SHARED_WITH, type PrivacyDb, type Row } from "./inventory";
 import { PRINCIPAL_LABELS, type PrincipalType } from "./policy";
-import { guardRegister, loadMatches, requireVerified, step, writeAudit, type PrivacyDeps } from "./register";
+import { guardRegister, requireResolved, requireVerified, resolutionOf, step, writeAudit, type PrivacyDeps } from "./register";
 import { loadScopes } from "./scope";
 
 export interface ExportDataset {
@@ -33,7 +35,16 @@ const NOT_INCLUDED = [
   "Cached inputs of agent runs (sales and purchase registers and similar). They also name the client's customers and suppliers, so the file says only whether a copy is held and when it is purged (at most 30 days after the run).",
   "The names of firm staff who worked on the records.",
   "Files in SharePoint themselves: they are listed by name and link; a partner shares copies on request.",
+  "Copies of the person's name or identifiers inside the firm's work records (review comments and notes, checklist findings, computed figures, Turia checklists, reminders, logs). They sit in records about the engagement that also hold staff notes and other people's data; they are erased (replaced with \"[erased]\") when the person's erasure request is carried out.",
 ];
+
+/** Onboarding runs that never reached a client record: the only data of a person known by identifiers alone. */
+const ORPHAN_EXPORT_FIELDS = [
+  { name: "prompt", label: "Request as typed" },
+  { name: "spec", label: "Details extracted" },
+  { name: "status", label: "Status" },
+  { name: "createdAt", label: "Started at" },
+] as const;
 
 function pickValues(fields: readonly { name: string }[], row: Row, derived?: Row): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -41,12 +52,23 @@ function pickValues(fields: readonly { name: string }[], row: Row, derived?: Row
   return out;
 }
 
-export async function buildAccessExport(db: PrivacyDb, requestId: string, now: Date): Promise<AccessExport | null> {
+export async function buildAccessExport(db: PrivacyDb, requestId: string, now: Date, hashKey?: string): Promise<AccessExport | null> {
   const request = await db.privacyRequest.findUnique({ where: { id: requestId } });
   if (!request) return null;
-  const matches = await loadMatches(db, requestId);
-  const scopes = await loadScopes(db, matches);
+  // The one linked person, never every record the identifiers matched (register.ts resolutionOf).
+  const resolution = await resolutionOf(db, requestId, hashKey);
+  const scopes = resolution.kind === "principal" ? await loadScopes(db, [resolution.principal]) : [];
   const datasets: ExportDataset[] = [];
+  if (resolution.kind === "identifier-only") {
+    const ds = RESIDUE_DATASETS.find((d) => d.key === "onboarding-orphans")!;
+    datasets.push({
+      key: ds.key,
+      label: ds.label,
+      purpose: ds.purpose,
+      fields: ORPHAN_EXPORT_FIELDS.map((f) => ({ ...f })),
+      records: resolution.rows.map((r) => ({ id: String(r.id), values: pickValues(ORPHAN_EXPORT_FIELDS, r) })),
+    });
+  }
   for (const scope of scopes) {
     const type: PrincipalType = scope.kind === "staff" ? "staff" : scope.principalType;
     for (const ds of DATASETS.filter((d) => d.principals.includes(type))) {
@@ -89,12 +111,13 @@ export async function downloadAccessExport(user: SessionUser, id: string, deps: 
     if (!r) return "missing" as const;
     if (r.kind !== "access") return "kind" as const;
     await requireVerified(tx, id);
+    await requireResolved(tx, id, deps.hashKey);
     return "ok" as const;
   });
   if (!checked.ok) return checked;
   if (checked.data === "missing") return fail(404, "That privacy request wasn't found. Go back to the register and open it again.");
   if (checked.data === "kind") return fail(409, "Only an access request has an export. Log an access request if the person asks for their data.");
-  const data = await buildAccessExport(deps.db, id, deps.now());
+  const data = await buildAccessExport(deps.db, id, deps.now(), deps.hashKey);
   if (!data) return fail(404, "That privacy request wasn't found. Go back to the register and open it again.");
   await writeAudit(deps.db, {
     actorId: user!.id,

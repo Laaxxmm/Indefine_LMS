@@ -17,8 +17,11 @@
 // Two passes per person: DATASETS (their records, one item per row) and RESIDUE_DATASETS (copies of
 // their identifiers inside notes, comments, findings, figures and logs: one item per dataset,
 // listing the rows; identifiers become "[erased]" in place, scrub.ts). Onboarding runs that never
-// reached a client record are found by the person's identifiers; when the request matched no client
-// at all, by the keyed hash of the identifiers the request was logged with.
+// reached a client record are found by the person's identifiers. Who the plan is for follows the
+// single-principal rule (register.ts resolutionOf): the one linked record, or — when no record
+// matched — the onboarding runs that hold exactly the identifiers the request was logged with
+// (identifier-only.ts). A parked request (several records matched) or one that matched nothing
+// gets an empty plan, and confirmErasure() refuses it.
 import { createHash } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import type { SessionUser } from "@/lib/access";
@@ -26,13 +29,12 @@ import { formatDate } from "@/lib/agents/core/format";
 import { Refusal, fail, ok, type ServiceResult } from "@/lib/corrections/result";
 import { canDecideErasure } from "./access";
 import { DATASETS, EXTERNAL_SYSTEMS, RESIDUE_DATASETS, eraseOnboardingRun, scrubberOf, type DataSet, type ModelName, type PrivacyReadDb, type Row } from "./inventory";
-import { IDENTIFIER_KINDS, identifierHash, normaliseIdentifier, type Identifier, type IdentifierKind } from "./locator";
 import type { DutyId, RequestStatus } from "./policy";
-import { guardRegister, loadMatches, loadOpen, requireVerified, writeAudit, type PrivacyDeps, type Tx } from "./register";
+import { guardRegister, loadOpen, requireResolved, requireVerified, resolutionOf, writeAudit, type PrivacyDeps, type Tx } from "./register";
 import { restrictInTx } from "./consent";
 import { assertErasureDecider } from "./duties";
 import { dutiesForScope, loadScopes, type DutyInForce } from "./scope";
-import { ERASED_TOKEN, scrubberFor } from "./scrub";
+import { scrubberFor } from "./scrub";
 
 export type PlanAction = "anonymise" | "hold" | "keep" | "manual";
 
@@ -145,51 +147,17 @@ function residueItem(ds: DataSet, scopeRef: string, rows: { row: Row; set: Row }
   };
 }
 
-const ORPHAN_COMBINATIONS_MAX = 256;
-
-/** Identifier candidates in an onboarding run that never reached a client record. */
-function runIdentifiers(r: Row): Map<IdentifierKind, Set<string>> {
-  const spec = (r.spec ?? {}) as Row;
-  const text = [String(r.prompt ?? ""), JSON.stringify(r.spec ?? null)].join(" ");
-  const out = new Map<IdentifierKind, Set<string>>(IDENTIFIER_KINDS.map((k) => [k, new Set<string>()]));
-  const add = (kind: IdentifierKind, raw: unknown) => {
-    const n = typeof raw === "string" ? normaliseIdentifier(kind, raw) : null;
-    if (n) out.get(kind)!.add(n);
-  };
-  add("pan", spec.pan);
-  for (const g of Array.isArray(spec.gstins) ? spec.gstins : [spec.gstin]) add("gstin", g);
-  add("email", spec.contactEmail);
-  add("phone", spec.contactPhone);
-  for (const m of text.matchAll(/\b[A-Za-z]{5}\d{4}[A-Za-z]\b/g)) add("pan", m[0]);
-  for (const m of text.matchAll(/\b\d{2}[A-Za-z]{5}\d{4}[A-Za-z][0-9A-Za-z][Zz][0-9A-Za-z]\b/g)) add("gstin", m[0]);
-  for (const m of text.matchAll(/[^\s@"',;:<>()]+@[^\s@"',;:<>()]+\.[A-Za-z]{2,}/g)) add("email", m[0]);
-  for (const m of text.matchAll(/(?<!\d)[6-9](?:[\s-]?\d){9}(?!\d)/g)) add("phone", m[0]);
-  return out;
-}
-
-/** Whether some combination of the run's identifiers is exactly what the request was logged with. */
-function matchesRequestHash(r: Row, hash: string, hashKey: string | undefined): boolean {
-  let combos: Identifier[][] = [[]];
-  for (const [kind, values] of runIdentifiers(r)) {
-    const next: Identifier[][] = [];
-    for (const c of combos) {
-      next.push(c);
-      for (const v of values) next.push([...c, { kind, value: v }]);
-    }
-    combos = next.slice(0, ORPHAN_COMBINATIONS_MAX);
-  }
-  return combos.some((c) => c.length > 0 && identifierHash(c, hashKey) === hash);
-}
-
 export interface PlanOptions {
   /** HMAC key the request's identifiers were hashed with (PrivacyDeps.hashKey; production: AUTH_SECRET). */
   hashKey?: string;
 }
 
 export async function planErasure(db: PrivacyReadDb, requestId: string, now: Date, opts: PlanOptions = {}): Promise<ErasurePlan | null> {
-  const request = await db.privacyRequest.findUnique({ where: { id: requestId }, select: { id: true, identifierHash: true } });
+  const request = await db.privacyRequest.findUnique({ where: { id: requestId }, select: { id: true } });
   if (!request) return null;
-  const scopes = await loadScopes(db, await loadMatches(db, requestId));
+  // The single-principal rule: the one linked person, or the rows of a person known only by identifiers.
+  const resolution = await resolutionOf(db, requestId, opts.hashKey);
+  const scopes = resolution.kind === "principal" ? await loadScopes(db, [resolution.principal]) : [];
   const items: PlanItem[] = [];
   const planned = new Set<string>(); // "model:id" of rows a residue item already covers
 
@@ -309,17 +277,13 @@ export async function planErasure(db: PrivacyReadDb, requestId: string, now: Dat
     }
   }
 
-  // An onboarding that failed before any client record existed, for a person no client record
-  // matched: found by the keyed hash of the identifiers the request was logged with (they are not
-  // stored again). No engagement started, so nothing is held.
-  if (request.identifierHash) {
-    const orphans = await db.onboardingRun.findMany({ where: { firmClientId: null }, orderBy: { createdAt: "asc" }, take: 5000 });
-    const hits = orphans.filter((r) => !planned.has(`onboardingRun:${r.id}`) && r.prompt !== ERASED_TOKEN && matchesRequestHash(r as Row, request.identifierHash!, opts.hashKey));
-    if (hits.length) {
-      const ds = RESIDUE_DATASETS.find((d) => d.key === "onboarding-orphans")!;
-      const none = scrubberFor([]);
-      items.push(residueItem(ds, "request", hits.map((row) => ({ row: row as Row, set: eraseOnboardingRun(row as Row, none) })), []));
-    }
+  // A person known only by identifiers: the onboarding runs that never reached a client record and
+  // hold exactly the identifiers the request was logged with (they are not stored again; matched by
+  // their keyed hash). No engagement started, so nothing is held.
+  if (resolution.kind === "identifier-only") {
+    const ds = RESIDUE_DATASETS.find((d) => d.key === "onboarding-orphans")!;
+    const none = scrubberFor([]);
+    items.push(residueItem(ds, "request", resolution.rows.map((row) => ({ row, set: eraseOnboardingRun(row, none) })), []));
   }
 
   const counts: Record<PlanAction, number> = { anonymise: 0, hold: 0, keep: 0, manual: 0 };
@@ -387,6 +351,7 @@ export async function confirmErasure(user: SessionUser, id: string, input: { fin
     const outcome = await deps.db.$transaction(async (tx: Tx) => {
       await loadOpen(tx, id, ["erasure"]);
       await requireVerified(tx, id);
+      await requireResolved(tx, id, deps.hashKey); // never "0 items anonymised" for nobody, or an erasure across several people
       await assertErasureDecider(tx, id, user); // separation of duties: not the person who verified
       const plan = await planErasure(tx, id, now, { hashKey: deps.hashKey });
       if (!plan) throw new Refusal(404, "That privacy request wasn't found. Go back to the register and open it again.");

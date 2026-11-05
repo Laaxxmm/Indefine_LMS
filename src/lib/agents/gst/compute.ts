@@ -10,12 +10,20 @@
 //   reported in GSTR-1 but carry no liability here.
 // - 3.1(d) / 4(A)(3): inward supplies under reverse charge — marked RCM in the books, or a ledger the
 //   model classifies as a notified RCM service (unless a registered supplier lawfully charged tax
-//   forward at an allowed rate). Tax = the tax in the books when recorded, else taxable × rate.
+//   forward at an allowed rate). Tax = the tax in the books when recorded, else taxable × rate —
+//   IGST when the supplier's state differs from the place of supply. The supplier's state is its
+//   GSTIN prefix; for an unregistered supplier, the register's optional supplier-state column, else
+//   the client's state.
 // - 4(A)(5) = ITC on purchase documents matched to GSTR-2B with ITC available, at the LOWER of
 //   books and 2B per tax head (credit notes: the larger reduction). Books documents missing in 2B
 //   are deferred (not claimed); a supplier credit note missing in 2B still reduces ITC.
 // - 4(B)(1) = ITC of matched documents in a s.17(5) category; 4(B)(2) = rule 37 reversal (+ any
 //   net-negative head of 4(A)(5)). 4(C) = 4(A) − 4(B). 4(D)(2) memo = 2B documents with ITC not available.
+//   Credit notes on blocked purchases net against this period's blocked ITC; any excess (ITC that
+//   was never availed) is kept out of 4(A) too, so it never reduces net ITC (memo row in Table 4).
+// - A head whose outward tax is negative (credit notes above invoices) is nil in the liability
+//   set off; the excess is carried forward to a later period's output tax (rule
+//   gst.negative-outward-tax, warn; memo row under Table 3.1). It is never ITC.
 // - B2CL: unregistered recipient, inter-state, invoice value > GST_CONFIG.b2clThresholdPaise.
 //   Notes to unregistered persons are netted into B2CS (CDNUR is not produced in v1.0.0).
 // - Time-barred credit notes (owner-approved 2026-11-05): a credit note dated after the s.34(2)
@@ -136,7 +144,8 @@ export type Analysis = {
   timeBarredNotes: SalesA[];
   purchases: PurchaseA[];
   gstr1: { b2b: SalesA[]; b2cl: SalesA[]; b2cs: B2csRow[]; cdnr: SalesA[]; hsn: HsnRow[]; docs: DocsRow[] };
-  outward: { taxable: number; tax: TaxSplit; nilExempt: number };
+  /** `tax` is signed; `carryForward` = the negative part of each head (credit notes above invoices), not set off this period. */
+  outward: { taxable: number; tax: TaxSplit; nilExempt: number; carryForward: TaxSplit };
   rcm: { taxable: number; tax: TaxSplit };
   recon: ReconRow[];
   itc: {
@@ -152,6 +161,8 @@ export type Analysis = {
     deferred: TaxSplit;
     unavailable2b: TaxSplit;
     notBooked: TaxSplit;
+    /** Credit notes on s.17(5) blocked purchases above this period's blocked ITC: kept out of 4(A) (never availed). */
+    blockedNoteExcess: TaxSplit;
     rule37Rows: Rule37Row[];
   };
   liability: TaxSplit;
@@ -327,7 +338,9 @@ function analysePurchases(x: GstExtract, clientState: string): PurchaseA[] {
     let rcmTax = zeroTax();
     let rcmTaxable = 0;
     if (rcm) {
-      const supplierState = d.gstin ? d.gstin.slice(0, 2) : clientState;
+      // Registered supplier: its GSTIN state. Unregistered: the register's supplier-state column
+      // when given (a supplier in another state → IGST), else the client's state (CGST + SGST).
+      const supplierState = d.gstin ? d.gstin.slice(0, 2) : (d.supplierState ?? clientState);
       const inter = supplierState !== (d.pos ?? clientState);
       const k = sign(d.docType);
       for (const l of d.lines) {
@@ -459,17 +472,29 @@ export function analyse(x: GstExtract): Analysis {
   const rcmTax = sumTax(rcmDocs.map((p) => p.rcmTax));
   const rcmTaxable = rcmDocs.reduce((n, p) => n + p.rcmTaxable, 0);
 
-  // 4(A)(3): RCM tax paid is credit, except on a bill whose ledger the model abstained on (held back).
-  const a3 = pos0(subTax(rcmTax, sumTax(rcmDocs.map((p) => p.heldBack))));
   const heldBack = sumTax(purchases.map((p) => p.heldBack));
   const claimedAll = sumTax(recon.map((r) => r.claimed));
-  const a5 = pos0(claimedAll);
+  // 4(B)(1): s.17(5) ITC of this period's blocked documents, SIGNED (a credit note on a blocked
+  // purchase is negative). Such a note reduces ITC that was never availed — it was reversed in
+  // 4(B)(1) when the bill was booked — so it must not reduce net ITC. When the notes exceed this
+  // period's blocked ITC for a head, 4(B)(1) stays at nil (it cannot be negative) and the excess is
+  // kept out of Table 4(A) at its source — 4(A)(5) for notes in the 2B reconciliation, 4(A)(3) for
+  // reverse-charge notes — so 4(C) = 4(A) − 4(B) equals available ITC − signed blocked ITC −
+  // 4(B)(2). The excess is a memo row in Table 4 (itc.blockedNoteExcess).
   const blockedClaimed = sumTax(recon.filter((r) => r.books?.blocked).map((r) => r.claimed));
   const blockedRcm = sumTax(rcmDocs.filter((p) => p.blocked).map((p) => p.rcmTax));
-  const b1 = pos0(addTax(blockedClaimed, blockedRcm));
+  const blockedSigned = addTax(blockedClaimed, blockedRcm);
+  const b1 = pos0(blockedSigned);
+  const blockedNoteExcess = neg0(blockedSigned);
+  const excessFromA5 = minTax(blockedNoteExcess, neg0(blockedClaimed));
+  const excessFromA3 = subTax(blockedNoteExcess, excessFromA5);
+  // 4(A)(3): RCM tax paid is credit, except on a bill whose ledger the model abstained on (held back).
+  const a3 = pos0(addTax(subTax(rcmTax, sumTax(rcmDocs.map((p) => p.heldBack))), excessFromA3));
+  const claimedA5 = addTax(claimedAll, excessFromA5);
+  const a5 = pos0(claimedA5);
   const r37 = rule37Rows(x.payables, pi.end);
   const rule37 = sumTax(r37.map((r) => r.reversal));
-  const b2 = addTax(rule37, neg0(claimedAll));
+  const b2 = addTax(rule37, neg0(claimedA5));
   const available = addTax(a3, a5);
   const netRaw = subTax(subTax(available, b1), b2);
   const net = pos0(netRaw);
@@ -479,6 +504,9 @@ export function analyse(x: GstExtract): Analysis {
   const unavailable2b = sumTax(recon.filter((r) => r.status === "itc-unavailable").map((r) => scaleTax(r.twoBTax, sign(r.docType))));
   const notBooked = sumTax(recon.filter((r) => r.status === "missing-in-books").map((r) => scaleTax(r.twoBTax, sign(r.docType))));
 
+  // A head with negative outward tax (credit notes above this period's invoices) cannot be set
+  // off or paid as negative: it is nil here and the excess is carried forward (never ITC).
+  const outwardCarryForward = neg0(outTax);
   const liability = addTax(pos0(outTax), excessReversal);
   const openingCredit = x.prev ? pos0(x.prev.closingCredit) : zeroTax();
   const so = setOff(liability, addTax(openingCredit, net), pos0(rcmTax));
@@ -504,10 +532,10 @@ export function analyse(x: GstExtract): Analysis {
       hsn: hsnRows(reported),
       docs: docsRows(x.sales),
     },
-    outward: { taxable, tax: outTax, nilExempt },
+    outward: { taxable, tax: outTax, nilExempt, carryForward: outwardCarryForward },
     rcm: { taxable: rcmTaxable, tax: rcmTax },
     recon,
-    itc: { a3, a5, available, b1, b2, rule37, net, heldBack, deferred, unavailable2b, notBooked, rule37Rows: r37 },
+    itc: { a3, a5, available, b1, b2, rule37, net, heldBack, deferred, unavailable2b, notBooked, blockedNoteExcess, rule37Rows: r37 },
     liability,
     openingCredit,
     setoff: so,
@@ -543,6 +571,7 @@ export function computeFigures(x: GstExtract): Record<string, number> {
     outwardSgstPaise: a.outward.tax.sgst,
     outwardCessPaise: a.outward.tax.cess,
     outwardTaxPaise: taxTotal(a.outward.tax),
+    outwardCarryForwardPaise: taxTotal(a.outward.carryForward),
     nilExemptPaise: a.outward.nilExempt,
     rcmTaxablePaise: a.rcm.taxable,
     rcmTaxPaise: taxTotal(a.rcm.tax),
@@ -555,6 +584,7 @@ export function computeFigures(x: GstExtract): Record<string, number> {
     itcDeferredPaise: taxTotal(a.itc.deferred),
     itcUnavailable2bPaise: taxTotal(a.itc.unavailable2b),
     itcNotBookedPaise: taxTotal(a.itc.notBooked),
+    itcBlockedNoteExcessPaise: taxTotal(a.itc.blockedNoteExcess),
     cashIgstPaise: so.cash.igst,
     cashCgstPaise: so.cash.cgst,
     cashSgstPaise: so.cash.sgst,

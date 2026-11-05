@@ -245,7 +245,21 @@ export function msmeDisallowance(rows: MsmeRow[], rules: TaxRuleSet): { findings
 
 // ------------------------------------------------------------------ interest and fee
 
-/** Months "or part of a month" from `start` (inclusive) to `end` (inclusive); 0 when end < start. */
+/**
+ * Months "or part of a month" from `start` (inclusive) to `end` (inclusive); 0 when end < start.
+ *
+ * Rule text: interest "for every month or part of a month comprised in a period" counts any
+ * fraction of a month as a full month (rule 269(b) of the Income-tax Rules, 2026; rule 119A(b) of
+ * the 1962 Rules — the 1962 Rules are not in the firm's library). Neither text says where a month
+ * ends, so it does not require a change to this convention:
+ *   the n-th month of the period begins on the start's day-of-month, n − 1 months later; when that
+ *   month has no such day, it begins on the 1st of the month after. So 31 Jan → 28 Feb is ONE month
+ *   (February has no 31st, so no second month starts in it), 31 Jan → 1 Mar is two, 31 Jan →
+ *   31 Mar is three; 28 Feb → 27 Mar is one, 28 Feb → 28 Mar two.
+ * A period starting on the 1st — every s.234A period after a month-end due date and every s.234B
+ * period (from 1 April) — counts calendar months under any reading. Partner to confirm the
+ * convention for a mid-month start (an extended due date): verify note "Advance tax and interest".
+ */
 export function monthsOrPart(start: string, end: string): number {
   if (end < start) return 0;
   const [sy, sm, sd] = start.split("-").map(Number);

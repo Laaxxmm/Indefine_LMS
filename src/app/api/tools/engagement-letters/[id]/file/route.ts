@@ -5,11 +5,15 @@ import { prisma } from "@/lib/prisma";
 import { canUseOfficeTools } from "@/lib/office-tools/access";
 import { MAX_PDF_BYTES, fileName, uploadLetterPdf, type FileKind } from "@/lib/office-tools/engagement-letters";
 import { WAITING, can, type Step } from "@/lib/office-tools/engagement-letter-flow";
+import { PDF_TYPES, readMultipartUpload } from "@/lib/hardening/uploads";
 
 export const maxDuration = 60;
 
 const STEP: Record<FileKind, Step> = { draft: "uploadDraft", signed: "uploadSigned", client: "uploadClient" };
 const ACTION: Record<FileKind, string> = { draft: "draft-upload", signed: "signed-upload", client: "client-signed-upload" };
+// A letter saved with Chrome/Edge "Save as PDF" is ~0.2 MB; a big file almost always means
+// "Microsoft Print to PDF" (every page saved as a picture) or a large signature photo.
+const TOO_BIG = `The PDF is over the ${MAX_PDF_BYTES / 1024 / 1024} MB limit. Print again and choose Destination "Save as PDF", not "Microsoft Print to PDF"; it should be well under 1 MB.`;
 
 // Upload one of the three PDFs to SharePoint: the unsigned draft (for approval), the
 // Indefine-signed letter (only after approval) or the client's countersigned copy.
@@ -23,23 +27,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const letter = await prisma.engagementLetter.findUnique({ where: { id } });
   if (!letter) return NextResponse.json({ error: "Letter not found" }, { status: 404 });
 
-  const form = await req.formData().catch(() => null);
-  const kind = form?.get("kind") as FileKind | null;
-  const file = form?.get("file");
+  // Body capped before it is read, then the one PDF screened (type, content, size, scan hook).
+  const read = await readMultipartUpload(req, { fields: ["file"], types: PDF_TYPES, maxBytes: MAX_PDF_BYTES, maxFiles: 1, source: "engagement-letter" });
+  if (!read.ok) {
+    if (read.res.status !== 413) return read.res;
+    return NextResponse.json({ error: TOO_BIG }, { status: 413 });
+  }
+  const kind = read.form.get("kind") as FileKind | null;
   if (kind !== "draft" && kind !== "signed" && kind !== "client") return NextResponse.json({ error: "Unknown file kind" }, { status: 400 });
   if (!can(STEP[kind], letter.status)) return NextResponse.json({ error: WAITING[STEP[kind]] }, { status: 409 });
-  if (!(file instanceof File)) return NextResponse.json({ error: "Choose a PDF" }, { status: 400 });
-  if (file.size > MAX_PDF_BYTES) {
-    // A letter saved with Chrome/Edge "Save as PDF" is ~0.2 MB; a big file almost always means
-    // "Microsoft Print to PDF" (every page saved as a picture) or a large signature photo.
-    const mb = (file.size / 1024 / 1024).toFixed(1);
-    return NextResponse.json(
-      { error: `PDF is ${mb} MB (limit 3 MB). Print again and choose Destination "Save as PDF", not "Microsoft Print to PDF"; it should be well under 1 MB.` },
-      { status: 413 }
-    );
-  }
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  if (new TextDecoder().decode(bytes.slice(0, 5)) !== "%PDF-") return NextResponse.json({ error: "That file is not a PDF" }, { status: 400 });
+  const bad = read.rejected[0];
+  if (bad) return NextResponse.json({ error: bad.status === 413 ? TOO_BIG : bad.reason === "The content does not look like a .pdf file" ? "That file is not a PDF" : bad.reason }, { status: bad.status === 413 ? 413 : 400 });
+  const file = read.files[0];
+  if (!file) return NextResponse.json({ error: "Choose a PDF" }, { status: 400 });
+  const bytes = file.bytes;
 
   let item;
   try {

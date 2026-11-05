@@ -149,10 +149,30 @@ describe("list, view and the draft panel", () => {
     expect(await loadDraft(w.db, null, d.id)).toMatchObject({ ok: false, status: 403 });
   });
 
-  it("a client-level draft is visible to staff on that client's jobs", async () => {
+  it("a client-level draft (no job) opens only for its author, the client's primary handler and managers — not for staff on the client's other jobs", async () => {
+    acme.client.primaryHandlerId = "u-handler";
+    const handler = person("u-handler");
     await createDraft(w.db, manager, { kind: "query-response", clientCode: "ACME01", department: "GST", topic: "rent", answer: "Yes, it applies." }, offline());
-    expect((await loadDraft(w.db, priya, w.drafts[0].id)).ok).toBe(true);
-    expect((await loadDraft(w.db, other, w.drafts[0].id)).ok).toBe(false);
+    const id = w.drafts[0].id;
+    expect(w.drafts[0].jobTaskId).toBeNull();
+    expect((await loadDraft(w.db, manager, id)).ok).toBe(true); // author (and a manager)
+    expect((await loadDraft(w.db, handler, id)).ok).toBe(true); // the client's primary handler
+    expect(await loadDraft(w.db, priya, id)).toMatchObject({ ok: false, status: 403 }); // assignee of another job of the client
+    expect(await loadDraft(w.db, other, id)).toMatchObject({ ok: false, status: 403 });
+    // The /comms list follows the same rule.
+    expect((await listDrafts(w.db, handler)).map((r) => r.id)).toEqual([id]);
+    expect(await listDrafts(w.db, priya)).toEqual([]);
+    // Outlook needs the same access as opening the draft.
+    const outlook: OutlookPort = { create: vi.fn(), find: vi.fn() };
+    expect(await openInOutlook(w.db, priya, id, { token: async () => "t", outlook })).toMatchObject({ ok: false, status: 403 });
+    expect(outlook.create).not.toHaveBeenCalled();
+  });
+
+  it("a client-level draft by staff stays with them when the client has no primary handler match", async () => {
+    await createDraft(w.db, priya, { kind: "query-response", clientCode: "ACME01", department: "GST", topic: "rent", answer: "Yes, it applies." }, offline());
+    const id = w.drafts[0].id;
+    expect((await loadDraft(w.db, priya, id)).ok).toBe(true);
+    expect(await loadDraft(w.db, person("u-ravi"), id)).toMatchObject({ ok: false, status: 403 }); // reviewer of the job, not the client's handler
   });
 
   it("loadDraftContext from a run: the run's job, document suggestions, defaults", async () => {

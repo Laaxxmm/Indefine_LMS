@@ -5,7 +5,8 @@ import { describe, expect, it } from "vitest";
 import { echoWorld, user, NOW } from "../../../tests/fakes/agent-world";
 import { AGENTS, visibleAgents } from "@/lib/agents/registry";
 import { NextTaskViewZ } from "./contract";
-import { actionFor, defaultRank, getNextTask, getNextTaskView, listNextTaskCandidates, type NextTaskCandidate, type NextTaskDeps } from "./next-task";
+import { coachRank } from "./coach-rank";
+import { actionFor, defaultRank, getNextTask, getNextTaskView, listNextTaskCandidates, rankCandidates, rankedNextTasks, type NextTaskCandidate, type NextTaskDeps } from "./next-task";
 import { PORTAL_NOTE, sopSteps, stepChecklist } from "./sop-steps";
 
 const agents = visibleAgents({ FIRM_OS_ECHO_AGENT: "1" });
@@ -60,12 +61,26 @@ describe("the next task for the assignee", () => {
     addJob(w, "overdue", { internalDueOn: day("2026-11-02"), statutoryDueOn: day("2026-11-11") });
     const cands = await listNextTaskCandidates(user("priya"), w.deps);
     expect(defaultRank(cands, NOW).map((r) => r.candidate.id)).toEqual(["overdue", "stat-overdue", "soon-a", "soon-b", "later", "job-1"]);
-    const view = await getNextTaskView(user("priya"), w.deps);
+    const view = await getNextTaskView(user("priya"), { ...w.deps, rank: defaultRank });
     expect(view.remaining).toBe(5);
     expect(view.task!.job).toMatchObject({ id: "overdue", internalDue: "02 Nov 2026", statutoryDue: "11 Nov 2026", overdue: true });
     expect(view.task!.why).toBe(
       "You prepare this job and it is ready for the agent. Its internal due date was 02 Nov 2026, 3 days ago. The statutory due date is 11 Nov 2026. It comes first because it is overdue.",
     );
+  });
+
+  it("by default the Daily Coach ranking decides: a passed statutory date beats a passed internal one, and says so", async () => {
+    const w = world();
+    addJob(w, "later", { internalDueOn: day("2026-11-20"), statutoryDueOn: day("2026-11-25") });
+    addJob(w, "soon-a", { internalDueOn: day("2026-11-10"), statutoryDueOn: day("2026-11-12") });
+    addJob(w, "stat-overdue", { statutoryDueOn: day("2026-11-01") });
+    addJob(w, "overdue", { internalDueOn: day("2026-11-02"), statutoryDueOn: day("2026-11-11") });
+    const cands = await listNextTaskCandidates(user("priya"), w.deps);
+    expect(rankCandidates(cands, NOW).map((r) => r.candidate.id)).toEqual(coachRank(cands, NOW).map((r) => ("candidate" in r ? r.candidate.id : r.id)));
+    const view = await getNextTaskView(user("priya"), w.deps);
+    expect(view.task!.job.id).toBe("stat-overdue");
+    expect(view.task!.why.endsWith("It comes first because its statutory due date has passed.")).toBe(true);
+    expect((await rankedNextTasks(user("priya"), w.deps)).map((r) => r.candidate.id).slice(0, 2)).toEqual(["stat-overdue", "overdue"]);
   });
 
   it("due today and not yet due read plainly", async () => {

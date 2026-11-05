@@ -38,9 +38,8 @@ data breach is recorded. Code: `src/lib/privacy/`. Screens: **Admin → Firm OS 
 | Verify identity | Not the person who logged the request. An "Other" check needs a note of at least 20 characters saying what was checked |
 | Confirm an erasure | A partner, or an admin, who did **not** verify the identity (so one person checks who is asking, another decides what is erased) |
 
-The erasure rule is enforced in `confirmErasure()`. The two verify rules are enforced once
-`register.ts verifyIdentity()` calls `verificationNoteProblem()` and `assertNotCreator()` (owned by
-the security-integration work; see the open points).
+Enforced in `register.ts verifyIdentity()` (`verificationNoteProblem()`, `assertNotCreator()`) and
+`erasure.ts confirmErasure()` (`assertErasureDecider()`).
 
 ## Response timelines (data, verify)
 
@@ -62,7 +61,32 @@ page also shows the outer limit.
    have none), date received, how it arrived, notes. Firm OS looks the person up by exact match:
    PAN / GSTIN on the client master (individual entity types only — a company's PAN is not a
    person), contact email / phone on the client master, and LMS user email for staff. A company's
-   contact person is a `client-contact`; an individual client is a `client-person`.
+   contact person is a `client-contact`; an individual client is a `client-person`. Client lookups
+   go through the shared identifier search (`findByIdentifier`, purpose `privacy-request`): exact,
+   rate limited and audited like any search.
+   **One request, one person.** The request is linked (`principalRef`) only when exactly one record
+   matches. When the identifiers match several records (a shared office email, a family's common
+   phone) it is parked as "Needs manual resolution": an admin or partner chooses the record it is
+   about on the request page (`…/[id]/resolve`), and until then nothing can be exported, corrected,
+   restricted or erased. Every step below works on the linked record only. When nothing matched,
+   the request cannot be completed as done (the person's data may sit where the search does not
+   reach): log it again with another identifier, or refuse it with the reason.
+   **Known only by identifiers.** One exception to "nothing matched": no client or staff record
+   matches, but an onboarding that never became a client record holds exactly the identifiers the
+   request was logged with (found by the request's keyed hash; `src/lib/privacy/identifier-only.ts`).
+   The request is then resolved to those rows: the export lists them, an erasure erases them, and
+   the request can be closed; correction and consent withdrawal have no record to act on and say so.
+   One rule decides all of this for export, erasure and close (`register.ts resolutionOf()`):
+
+   | Matched | Resolved? | Export / erasure / close as done |
+   |---|---|---|
+   | Exactly one client or staff record | Yes, to that record | Allowed, for that record only |
+   | Several records (even if an onboarding run also matches) | No — parked | Refused until a person chooses |
+   | No record, but onboarding runs holding exactly the identifiers | Yes, to those rows | Allowed, for those rows only |
+   | Nothing anywhere | No | Refused (refusing with a reason still works) |
+
+   A phone or email another client shares never pulls an unlinked onboarding into a client's
+   erasure: only identifiers that pin that person alone do.
 2. **Verify identity** (`…/[id]/verify`): reply from the email on record, call back to the phone on
    record, photo ID in person, signed letter, or other (with a note of at least 20 characters). Done
    by someone other than the person who logged the request.
@@ -107,9 +131,10 @@ It walks two lists:
   findings, figures, notes, deliverable pointers) are held under the client's duties; derived
   copies are cleaned even while the client's own records are held.
 
-An onboarding run that failed before the client record existed is found by the person's PAN,
-GSTIN, email or phone in its prompt or details (never by a name alone); when the request matched no
-client at all, by the keyed hash of the identifiers the request was logged with.
+An onboarding run that failed before the client record existed is found by the identifiers that
+pin the person alone in its prompt or details — PAN, GSTIN, CIN, and an email or phone no other
+client record shares; never by a name. For a person known only by identifiers (see step 1), the
+plan covers the onboarding runs that hold exactly the identifiers the request was logged with.
 
 | Outcome | When | What happens |
 |---|---|---|
@@ -152,10 +177,14 @@ It does **not** undo processing already done, nor stop the work the person engag
 records the law makes the firm keep (DPDP Act s.7 legitimate uses, s.8(7)). A partner decides
 whether the engagement continues.
 
-**Enforcement points (owned by other modules):** the agent runner / ModelRouter callers and comms
-drafting should call `isAiProcessingRestricted(db, firmClientId)` from `src/lib/privacy/consent.ts`
-before starting work. Until they do, the restriction is recorded and shown but not enforced in
-code. Lifting a restriction (consent given again) is not built yet.
+**Enforcement:** enforced in code — see `docs/dpdp/consent-purpose.md` "Security integration" for
+every entry point and the refusal people see.
+
+**Lifting a restriction** (consent given again, or a legal hold ended): partner only, with a
+written reason, from the request page ("Lift restriction") or `POST …/[id]/lift-restriction`.
+Recorded as `AuditEvent "lift-restriction"` on the same `Client` / `User` (and one on the request);
+the restriction's own record stays. A restriction recorded by another request on the same person
+stays in force.
 
 ## Breach register
 
@@ -178,5 +207,4 @@ clock (late notices are marked late). An incident closes only after both notices
 - Decide whether erasure requests from active clients end the engagement.
 - Confirm the identity-verification methods are enough for each kind of request, and the 20-character minimum for an "Other" note.
 - Confirm the hold basis per residue dataset (inventory "What erasure walks"): review trail, findings, figures and job notes held as working papers (SA 230); Turia checklists, mistake examples, nudges, model errors and privacy notes cleaned at once as copies.
-- Engineering: wire the two verify checks into `register.ts verifyIdentity()` — `verificationNoteProblem()` before its step and `assertNotCreator(tx, id, user)` right after `loadOpen(tx, id)` (`src/lib/privacy/duties.ts`).
 - `src/lib/privacy/inventory.ts` and `docs/dpdp/data-inventory.md` are reconciled (2026-11-06); keep them changing together.

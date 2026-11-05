@@ -1,8 +1,10 @@
 import { requireAgentUser, toJson } from "@/lib/agents/http";
 import { defaultAgentDeps, exportDeliverable } from "@/lib/agents/service";
+import { firmOsEnabled, firmOsOffResponse } from "@/lib/workspace/flag";
 
 // Download a deliverable from SharePoint (access-checked, audited as an export; streamed, never re-hosted).
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (!firmOsEnabled()) return firmOsOffResponse();
   const g = await requireAgentUser();
   if (g.res) return g.res;
   const { id } = await params;

@@ -21,7 +21,7 @@
 import { Prisma } from "@prisma/client";
 import type { prisma } from "@/lib/prisma";
 import type { DutyId, PrincipalType } from "./policy";
-import { ERASED_TOKEN, clientNeedles, codeNeedle, phoneNeedle, phraseNeedle, namePartNeedles, scrubColumns, scrubberFor, type Needle, type Scrubber } from "./scrub";
+import { ERASED_TOKEN, clientNeedles, codeNeedle, namePartNeedles, panNeedle, phoneNeedle, phraseNeedle, scrubColumns, scrubberFor, type Needle, type Scrubber } from "./scrub";
 
 export type Row = Record<string, unknown>;
 
@@ -480,6 +480,24 @@ interface Linked {
 const linkedCache = new WeakMap<ClientScope, Promise<Linked>>();
 const ORPHAN_SCAN_LIMIT = 5000;
 
+/**
+ * The identifiers that pin this person alone, for finding rows NOT linked to their record: PAN,
+ * GSTIN and CIN of a client person; contact email and phone only when no other client record shares
+ * them (a family phone or an office email must never pull in someone else's onboarding — the
+ * single-principal rule). Names never count.
+ */
+async function ownIdentifiers(db: PrivacyReadDb, s: ClientScope): Promise<Scrubber> {
+  const c = s.client;
+  const others = async (where: Row) => (await finder(db, "client").findMany({ where: { ...where, id: { not: String(c.id) } }, select: { id: true }, take: 1 })).length > 0;
+  const list: (Needle | null)[] = [];
+  if (s.principalType === "client-person") list.push(c.pan ? panNeedle(c.pan) : null, c.gstin ? codeNeedle(c.gstin) : null, c.cin ? codeNeedle(c.cin) : null);
+  const email = typeof c.contactEmail === "string" ? c.contactEmail.trim() : "";
+  const phone = typeof c.contactPhone === "string" ? c.contactPhone.trim() : "";
+  if (email && !(await others({ contactEmail: { equals: email, mode: "insensitive" } }))) list.push(codeNeedle(email));
+  if (phone && !(await others({ contactPhone: phone }))) list.push(phoneNeedle(phone));
+  return scrubberFor(list.filter((n): n is Needle => n !== null));
+}
+
 async function loadLinked(db: PrivacyReadDb, s: ClientScope): Promise<Linked> {
   const fc = s.firmClient;
   const jobIds = ids(s.jobTasks);
@@ -488,9 +506,9 @@ async function loadLinked(db: PrivacyReadDb, s: ClientScope): Promise<Linked> {
   const runIds = ids(runs);
   const turiaWhere = [...(jobIds.length ? [{ jobTaskId: { in: jobIds } }] : []), ...(fc ? [{ firmClientId: fc.id }] : [])];
   // An onboarding that failed before the client record existed has no firmClientId: it is found by
-  // the person's identifiers (PAN, GSTIN, email, phone) in its prompt or extracted details, never by
-  // a name alone.
-  const sc = scrubberOf(s);
+  // the identifiers that pin this person alone (ownIdentifiers) in its prompt or extracted details,
+  // never by a name and never by a phone or email another client shares.
+  const sc = await ownIdentifiers(db, s);
   const unlinked = await finder(db, "onboardingRun").findMany({ where: { firmClientId: null }, orderBy: { createdAt: "asc" }, take: ORPHAN_SCAN_LIMIT });
   return {
     runs,

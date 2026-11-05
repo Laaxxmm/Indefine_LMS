@@ -8,6 +8,14 @@ import { createRequest, verifyIdentity, type PrivacyDeps } from "@/lib/privacy/r
 import { recordBreach } from "@/lib/privacy/breach";
 import type { PrivacyDb } from "@/lib/privacy/inventory";
 
+// Firm OS switched on for these tests (FIRM_OS_ENABLED defaults off: src/lib/workspace/flag.ts).
+beforeEach(() => {
+  vi.stubEnv("FIRM_OS_ENABLED", "1");
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
 const state = vi.hoisted(() => ({ db: null as unknown }));
 vi.mock("@/lib/auth", () => ({ auth: vi.fn(), signIn: vi.fn(), signOut: vi.fn(), handlers: {} }));
 vi.mock("@/lib/prisma", () => ({ prisma: new Proxy({}, { get: (_t, k) => (state.db as Record<string | symbol, unknown>)[k] }) }));
@@ -29,7 +37,7 @@ const clean = (html: string) => html.replace(/<!-- -->/g, "");
 async function request(db: MemoryDb, kind: string, identifiers: Record<string, string>, opts: { receivedOn?: string; verify?: boolean } = {}) {
   const r = await createRequest(USERS.admin, { kind, identifiers, receivedOn: opts.receivedOn }, deps(db));
   if (!r.ok) throw new Error(r.error);
-  if (opts.verify) await verifyIdentity(USERS.admin, r.data.id, { method: "Photo ID seen in person" }, deps(db));
+  if (opts.verify) await verifyIdentity(USERS.partner, r.data.id, { method: "Photo ID seen in person" }, deps(db)); // logged by the admin, checked by the partner (duties.ts)
   return r.data.id;
 }
 
@@ -97,7 +105,7 @@ describe("/admin/firm-os/privacy", () => {
     const before = clean(await renderHtml(await PrivacyRequestPage(idp(id))));
     expect(before).toContain("Mark identity verified");
     expect(before).not.toContain("Download export");
-    await verifyIdentity(USERS.admin, id, { method: "Photo ID seen in person" }, deps(db));
+    await verifyIdentity(USERS.partner, id, { method: "Photo ID seen in person" }, deps(db)); // not the admin who logged it
     const after = clean(await renderHtml(await PrivacyRequestPage(idp(id))));
     expect(after).toContain(`href="/api/firm-os/privacy/requests/${id}/export"`);
     expect(after).toContain("Download export (JSON)");
@@ -117,6 +125,28 @@ describe("/admin/firm-os/privacy", () => {
     expect(clean(await renderHtml(await PrivacyRequestPage(idp(nomination))))).toContain("Record nominee");
     const grievance = await request(db, "grievance", { email: "kiran@kumartraders.test" });
     expect(clean(await renderHtml(await PrivacyRequestPage(idp(grievance))))).toContain("Send reply and close");
+  });
+
+  it("a restriction in force shows the Lift restriction action to a partner (admin layout), and a sentence to an admin who is not a partner", async () => {
+    const db = privacyWorld();
+    state.db = db;
+    const consent = await request(db, "consent-withdrawal", { pan: PAN_PROP }, { verify: true });
+    const { withdrawConsent, liftRestriction } = await import("@/lib/privacy/consent");
+    await withdrawConsent(USERS.admin, consent, deps(db));
+    const asAdmin = clean(await renderHtml(await PrivacyRequestPage(idp(consent))));
+    expect(asAdmin).toContain("Restriction in force");
+    expect(asAdmin).toContain("1 record of this person is restricted: No new AI processing; No new message drafts; No growth or marketing use.");
+    expect(asAdmin).toContain("Only a partner can lift this restriction.");
+    expect(asAdmin).not.toContain("Lift restriction…");
+    signedIn(activeSession({ role: "ADMIN", level: "PARTNER", id: USERS.partner.id }));
+    const asPartner = clean(await renderHtml(await PrivacyRequestPage(idp(consent))));
+    expect(asPartner).toContain("Lift restriction…");
+    expect(asPartner).toContain("Why can the restriction be lifted?");
+    await liftRestriction(USERS.partner, consent, { reason: "Client gave written consent again" }, deps(db));
+    const lifted = clean(await renderHtml(await PrivacyRequestPage(idp(consent))));
+    expect(lifted).not.toContain("Restriction in force");
+    expect(lifted).toContain("Restriction lifted by a partner");
+    expect(lifted).toContain("Reason: Client gave written consent again");
   });
 
   it("is admin only, and an unknown request is not found", async () => {

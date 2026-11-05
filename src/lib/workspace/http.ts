@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import type { Session } from "next-auth";
 import { z, type ZodSchema } from "zod";
 import { auth } from "@/lib/auth";
-import { isAdmin } from "@/lib/access";
+import { canManageWorkspace } from "@/lib/rbac/policy";
 import { ADMIN_ONLY, type AdminResult } from "./admin";
 import { MODULE_KEYS } from "./registry";
 
@@ -22,7 +22,7 @@ export async function signedInUser(): Promise<Signed> {
 export async function adminUser(): Promise<Signed> {
   const s = await signedInUser();
   if (s.res) return s;
-  if (!isAdmin(s.user)) return { res: NextResponse.json({ error: ADMIN_ONLY }, { status: 403 }) };
+  if (!canManageWorkspace(s.user)) return { res: NextResponse.json({ error: ADMIN_ONLY }, { status: 403 }) };
   return s;
 }
 

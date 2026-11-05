@@ -6,16 +6,24 @@
 // Every step writes an AuditEvent on entity "PrivacyRequest" (actions: create, locate,
 // verify-identity, complete, reject, nominate, export, ...). Identifiers typed by staff are never
 // stored raw: the register keeps a keyed hash and a masked label, and free text is scrubbed.
-// AuditEvent rows are written directly; switch to logAudit() (src/lib/audit) when it merges.
+// AuditEvent rows are written through logAudit() (src/lib/audit/log.ts).
+//
+// One request, one person: resolutionOf() decides what a request is linked to — one record, or
+// (no record matched) the rows of a person known only by identifiers — for export, erasure and
+// close alike. Separation of duties (duties.ts): the person who logs a request does not verify it.
 import type { Prisma } from "@prisma/client";
 import { isActive, type SessionUser } from "@/lib/access";
+import { logAudit } from "@/lib/audit/log";
 import { formatDate, formatDateTimeIst } from "@/lib/agents/core/format";
 import { maskName, scrubFreeText } from "@/lib/corrections/mask";
 import { Refusal, fail, ok, type ServiceResult } from "@/lib/corrections/result";
 import { istDayKey, parseDayKey, DAY_MS } from "@/lib/ist";
 import { PRIVACY_NOT_ALLOWED, SIGN_IN, canUsePrivacyRegister } from "./access";
-import type { PrivacyDb } from "./inventory";
-import { IDENTIFIER_HINTS, IDENTIFIER_KINDS, identifierHash, normaliseIdentifier, prismaPrincipalLocator, type Identifier, type PrincipalLocator } from "./locator";
+import { assertNotCreator, verificationNoteProblem } from "./duties";
+import { identifierOnlyRows } from "./identifier-only";
+import type { PrivacyDb, Row } from "./inventory";
+import { IDENTIFIER_HINTS, IDENTIFIER_KINDS, identifierHash, identifierPrincipalLocator, normaliseIdentifier, type Identifier, type PrincipalLocator } from "./locator";
+import { memoryRateLimiter, type SearchRateLimiter } from "@/lib/search/rate-limit";
 import {
   KIND_LABELS,
   OPEN_STATUSES,
@@ -36,7 +44,10 @@ import type { MatchRef } from "./scope";
 export interface PrivacyDeps {
   db: PrivacyDb;
   now: () => Date;
+  /** Default: identifierPrincipalLocator (findByIdentifier, purpose "privacy-request") for the acting person. */
   locator?: PrincipalLocator;
+  /** Identifier-search limiter for the default locator (production: the shared database limiter; tests: in memory). */
+  searchLimiter?: SearchRateLimiter;
   /** HMAC key for identifierHash (production: AUTH_SECRET). */
   hashKey?: string;
 }
@@ -45,7 +56,7 @@ export type Tx = Parameters<Parameters<PrivacyDb["$transaction"]>[0]>[0];
 type AuditDb = Pick<PrivacyDb, "auditEvent">;
 
 export async function writeAudit(db: AuditDb | Tx, e: { actorId: string; action: string; entity: string; entityId: string; meta?: Prisma.InputJsonObject }): Promise<void> {
-  await db.auditEvent.create({ data: { actorId: e.actorId, action: e.action, entity: e.entity, entityId: e.entityId, meta: e.meta ?? {} }, select: { id: true } });
+  await logAudit(db, { actorId: e.actorId, action: e.action, entity: e.entity, entityId: e.entityId, meta: e.meta ?? {} });
 }
 
 /** Signed in, active, admin or partner — else the refusal to return. */
@@ -57,6 +68,18 @@ export function guardRegister(user: SessionUser): { ok: false; status: 401 | 403
 
 const NOT_FOUND = "That privacy request wasn't found. Go back to the register and open it again.";
 const CLOSED = "This request is already closed, so nothing more can be done on it. Log a new request if the person asks again.";
+
+/** principalLabel of a request whose identifiers matched several records (shown in the register list). */
+export const needsResolutionLabel = (n: number) => `Needs manual resolution: ${n} records match these identifiers`;
+/** Told to the person logging such a request. */
+export const NEEDS_RESOLUTION_NOTE = (n: number) =>
+  `These identifiers match ${n} different records, so the request is not linked to anyone yet. Open the request and choose the one it is about before anything is shared, changed or erased.`;
+/** Refusal for any step that would read, change or erase the person's data before one record is chosen. */
+export const NOT_RESOLVED =
+  "This request is not linked to one person yet, so nobody's data can be shared, changed or erased from it. Choose the record it is about in Step 1 first.";
+/** Refusal for completing a request (or confirming an erasure) when no record matched at all. */
+export const NOTHING_MATCHED =
+  "No record in Firm OS is linked to this person, so the request can't be completed as done: their data may still be held somewhere the search does not reach. Log the request again with another identifier, or refuse it with the reason.";
 
 // ------------------------------------------------------------------ create
 
@@ -97,15 +120,28 @@ export async function createRequest(user: SessionUser, input: CreateRequestInput
   }
   const typed = PRINCIPAL_TYPES.find((t) => t === input.principalType) ?? null;
 
-  const locator = deps.locator ?? prismaPrincipalLocator(deps.db);
-  const located = identifiers.length ? await locator.locate(identifiers) : { matches: [], notes: [] };
-  const first = located.matches[0];
-  const principalType: PrincipalType = first?.principalType ?? typed ?? "client-contact";
-  const label = located.matches.length
-    ? located.matches.map((m) => m.label).join("; ")
-    : identifiers.length
-      ? "No matching records in Firm OS"
-      : "Not identified";
+  const locator = deps.locator ?? identifierPrincipalLocator(user, { db: deps.db, limiter: deps.searchLimiter ?? memoryRateLimiter(), now: deps.now });
+  let located: Awaited<ReturnType<PrincipalLocator["locate"]>>;
+  try {
+    located = identifiers.length ? await locator.locate(identifiers) : { matches: [], notes: [] };
+  } catch (e) {
+    if (e instanceof Refusal) return fail(e.status, e.message); // e.g. too many identifier searches: nothing is logged
+    throw e;
+  }
+  // One request, one person. Identifiers that match several records (a shared office email or
+  // phone, a family's common number) never pick one: the request is parked until a person chooses,
+  // so no export, correction, restriction or erasure can reach someone else's data.
+  const only = located.matches.length === 1 ? located.matches[0] : null;
+  const ambiguous = located.matches.length > 1;
+  const principalType: PrincipalType = only?.principalType ?? typed ?? "client-contact";
+  const label = only
+    ? only.label
+    : ambiguous
+      ? needsResolutionLabel(located.matches.length)
+      : identifiers.length
+        ? "No matching records in Firm OS"
+        : "Not identified";
+  const locatedNotes = ambiguous ? [...located.notes, NEEDS_RESOLUTION_NOTE(located.matches.length)] : located.notes;
   const channel = input.channel?.trim() ? `Received by ${input.channel.trim().slice(0, 40)}.` : "";
   const notes = [channel, input.notes?.trim() ? scrubFreeText(input.notes).slice(0, 2000) : ""].filter(Boolean).join(" ");
   const actorId = user!.id;
@@ -115,7 +151,7 @@ export async function createRequest(user: SessionUser, input: CreateRequestInput
       data: {
         kind,
         principalType,
-        principalRef: first?.ref ?? null,
+        principalRef: only?.ref ?? null,
         principalLabel: label.slice(0, 500),
         identifierHash: identifierHash(identifiers, deps.hashKey),
         receivedAt,
@@ -132,11 +168,12 @@ export async function createRequest(user: SessionUser, input: CreateRequestInput
       action: "locate",
       entity: "PrivacyRequest",
       entityId: r.id,
-      meta: { matches: located.matches.map((m) => ({ principalType: m.principalType, ref: m.ref, matchedOn: m.matchedOn })), searched: identifiers.map((i) => i.kind) },
+      // Candidates with their masked labels (initials, code, last 4), for choosing when several match.
+      meta: { matches: located.matches.map((m) => ({ principalType: m.principalType, ref: m.ref, matchedOn: m.matchedOn, label: m.label })), searched: identifiers.map((i) => i.kind), resolved: !!only },
     });
     return r;
   });
-  return ok({ id: created.id, matches: located.matches.length, notes: located.notes });
+  return ok({ id: created.id, matches: located.matches.length, notes: locatedNotes });
 }
 
 // ------------------------------------------------------------------ list / detail
@@ -231,6 +268,8 @@ const ACTION_LABELS: Record<string, string> = {
   correct: "Field corrected",
   "erasure-confirmed": "Erasure carried out",
   "restrict-processing": "Processing restricted",
+  "lift-restriction": "Restriction lifted by a partner",
+  "resolve-principal": "Linked to one record",
   nominate: "Nominee recorded",
   complete: "Request completed",
   reject: "Request refused",
@@ -245,17 +284,104 @@ function eventDetail(action: string, meta: Prisma.JsonObject): string | null {
   if (action === "complete" || action === "reject") return typeof meta.note === "string" ? meta.note : null;
   if (action === "erasure-confirmed") return `${String(meta.anonymised ?? 0)} anonymised, ${String(meta.held ?? 0)} on legal hold, ${String(meta.kept ?? 0)} kept as they are.`;
   if (action === "nominate") return typeof meta.nominee === "string" ? `Nominee ${meta.nominee}` : null;
+  if (action === "lift-restriction") return typeof meta.reason === "string" ? `Reason: ${meta.reason}` : null;
   return null;
 }
 
-export async function loadMatches(db: Pick<PrivacyDb, "auditEvent">, requestId: string): Promise<MatchRef[]> {
+export type Candidate = MatchRef & { label: string };
+
+/**
+ * Every record the identifiers matched when the request was logged (the "locate" event): the
+ * candidates to choose from. Never use this to scope data — use principalOf().
+ */
+export async function loadMatches(db: Pick<PrivacyDb, "auditEvent">, requestId: string): Promise<Candidate[]> {
   const ev = await db.auditEvent.findFirst({ where: { entity: "PrivacyRequest", entityId: requestId, action: "locate" }, orderBy: { createdAt: "desc" }, select: { meta: true } });
   const raw = ((ev?.meta ?? {}) as Prisma.JsonObject).matches;
   if (!Array.isArray(raw)) return [];
   return raw
     .map((m) => m as Prisma.JsonObject)
     .filter((m) => typeof m.ref === "string" && PRINCIPAL_TYPES.includes(m.principalType as PrincipalType))
-    .map((m) => ({ principalType: m.principalType as PrincipalType, ref: String(m.ref) }));
+    .map((m) => ({ principalType: m.principalType as PrincipalType, ref: String(m.ref), label: typeof m.label === "string" ? m.label : "A matching record" }));
+}
+
+/**
+ * The one person a request is about (PrivacyRequest.principalRef), as the only scope any export,
+ * correction, restriction or erasure may use; empty until exactly one record is linked.
+ */
+export async function principalOf(db: Pick<PrivacyDb, "privacyRequest">, requestId: string): Promise<MatchRef[]> {
+  const r = await db.privacyRequest.findUnique({ where: { id: requestId }, select: { principalRef: true, principalType: true } });
+  if (!r?.principalRef || !PRINCIPAL_TYPES.includes(r.principalType as PrincipalType)) return [];
+  return [{ principalType: r.principalType as PrincipalType, ref: r.principalRef }];
+}
+
+/**
+ * What a request is linked to (the single-principal rule, shared by export, erasure and close):
+ *
+ *   principal        exactly one client or staff record is linked (principalRef)
+ *   identifier-only  no record matched, but rows that never reached a client record (an abandoned
+ *                    onboarding) hold exactly the identifiers the request was logged with
+ *                    (identifier-only.ts): the person is known only by those identifiers
+ *   parked           several records matched: a person chooses the one it is about first
+ *   nothing          nothing matched anywhere
+ *
+ * Only the first two are resolved. Names never resolve a request.
+ */
+export type Resolution =
+  | { kind: "principal"; principal: MatchRef }
+  | { kind: "identifier-only"; rows: Row[] }
+  | { kind: "parked"; candidates: number }
+  | { kind: "nothing" };
+export type Resolved = Extract<Resolution, { kind: "principal" | "identifier-only" }>;
+
+type ResolutionDb = Pick<PrivacyDb, "privacyRequest" | "auditEvent" | "onboardingRun">;
+
+export async function resolutionOf(db: ResolutionDb, requestId: string, hashKey?: string): Promise<Resolution> {
+  const [principal] = await principalOf(db, requestId);
+  if (principal) return { kind: "principal", principal };
+  const candidates = (await loadMatches(db, requestId)).length;
+  if (candidates > 1) return { kind: "parked", candidates };
+  const r = await db.privacyRequest.findUnique({ where: { id: requestId }, select: { identifierHash: true } });
+  const rows = await identifierOnlyRows(db, r?.identifierHash, hashKey);
+  return rows.length ? { kind: "identifier-only", rows } : { kind: "nothing" };
+}
+
+/** Refuse a data step unless the request is resolved: NOT_RESOLVED when several matched, NOTHING_MATCHED when nothing did. */
+export async function requireResolved(tx: Tx, id: string, hashKey?: string): Promise<Resolved> {
+  const r = await resolutionOf(tx, id, hashKey);
+  if (r.kind === "parked") throw new Refusal(409, NOT_RESOLVED);
+  if (r.kind === "nothing") throw new Refusal(409, NOTHING_MATCHED);
+  return r;
+}
+
+/** Refusal for a step that needs a client or staff record when the person is known only by identifiers. */
+export const IDENTIFIER_ONLY_NO_RECORD =
+  "This person has no client or staff record in Firm OS, only an onboarding that never became a client record, so there is nothing here to correct or restrict. Erase that onboarding if they ask, or close the request with that reply.";
+
+/** Like requireResolved(), for steps that act on the person's own record (correction, restriction). */
+export async function requirePrincipal(tx: Tx, id: string, hashKey?: string): Promise<MatchRef> {
+  const r = await requireResolved(tx, id, hashKey);
+  if (r.kind !== "principal") throw new Refusal(409, IDENTIFIER_ONLY_NO_RECORD);
+  return r.principal;
+}
+
+/**
+ * "This request is about this record": links a request whose identifiers matched several records
+ * to the one chosen. Only one of the records found when it was logged can be chosen; nothing else
+ * changes, and the choice is recorded (resolve-principal).
+ */
+export async function resolvePrincipal(user: SessionUser, id: string, input: { ref: string }, deps: PrivacyDeps): Promise<ServiceResult<{ id: string; principalLabel: string }>> {
+  const denied = guardRegister(user);
+  if (denied) return denied;
+  return step(deps, async (tx) => {
+    await loadOpen(tx, id);
+    const r = await tx.privacyRequest.findUnique({ where: { id }, select: { principalRef: true } });
+    if (r?.principalRef) throw new Refusal(409, "This request is already linked to one person. Log a new request if it is about someone else.");
+    const chosen = (await loadMatches(tx, id)).find((m) => m.ref === input.ref);
+    if (!chosen) throw new Refusal(400, "Choose one of the records found for this request.");
+    await tx.privacyRequest.update({ where: { id }, data: { principalRef: chosen.ref, principalType: chosen.principalType, principalLabel: chosen.label.slice(0, 500), handledById: user!.id } });
+    await writeAudit(tx, { actorId: user!.id, action: "resolve-principal", entity: "PrivacyRequest", entityId: id, meta: { principalType: chosen.principalType, ref: chosen.ref } });
+    return { id, principalLabel: chosen.label };
+  });
 }
 
 export async function isVerified(db: Pick<PrivacyDb, "auditEvent">, requestId: string): Promise<boolean> {
@@ -290,6 +416,9 @@ export async function getRequest(db: PrivacyDb, id: string, now: Date) {
     timelineBasis: RESPONSE_TIMELINES[kind],
     notes: r.notes,
     outcome: r.outcome,
+    /** The one person this request is about (null until exactly one record is linked). */
+    principalRef: r.principalRef,
+    /** Records found when the request was logged: the choices while principalRef is null. */
     matches: await loadMatches(db, id),
     verified: events.some((e) => e.action === "verify-identity"),
     timeline,
@@ -331,9 +460,11 @@ export async function verifyIdentity(user: SessionUser, id: string, input: { met
   if (denied) return denied;
   if (!(VERIFY_METHODS as readonly string[]).includes(input.method)) return fail(400, "Pick how the person's identity was checked.");
   const note = input.note?.trim() ?? "";
-  if (input.method.startsWith("Other") && note.length < 5) return fail(400, "Say how the identity was checked, in the note.");
+  const noteProblem = verificationNoteProblem(input.method, input.note); // "Other" needs a real note (duties.ts)
+  if (noteProblem) return fail(400, noteProblem);
   return step(deps, async (tx) => {
     await loadOpen(tx, id);
+    await assertNotCreator(tx, id, user); // separation of duties: not the person who logged it
     if ((await tx.auditEvent.count({ where: { entity: "PrivacyRequest", entityId: id, action: "verify-identity" } })) > 0) {
       throw new Refusal(409, "This person's identity is already verified for this request. Go on to the next step.");
     }
@@ -366,7 +497,10 @@ export async function closeRequest(
     if (input.outcome === "completed") {
       const elsewhere = CLOSE_ELSEWHERE[r.kind];
       if (elsewhere) throw new Refusal(409, elsewhere);
-      if (r.kind !== "grievance") await requireVerified(tx, id);
+      if (r.kind !== "grievance") {
+        await requireVerified(tx, id);
+        await requireResolved(tx, id, deps.hashKey); // never "done" for nobody, or for several people at once
+      }
     }
     const status: RequestStatus = input.outcome === "completed" ? "COMPLETED" : "REJECTED";
     const scrubbed = scrubFreeText(note).slice(0, 2000);

@@ -12,6 +12,7 @@ import { BREAK_POLICY, type BreakPolicy } from "./config";
 import { breakMessage, evaluateBreak } from "./breaks";
 import { audit, createOnce, dedupeKey, type CoachDb } from "./db";
 import { isBreakNudgeEnabled } from "./flags";
+import { canDismissCoachEvent } from "@/lib/rbac/policy";
 
 type Env = Record<string, string | undefined>;
 
@@ -92,7 +93,7 @@ export async function recordHeartbeat(userId: string, deps: ActivityDeps): Promi
 export async function dismissEvent(userId: string, eventId: string, deps: Pick<ActivityDeps, "db" | "now">): Promise<CoachResult<{ id: string; dismissedAt: string }>> {
   const now = deps.now?.() ?? new Date();
   const e = await deps.db.coachEvent.findUnique({ where: { id: eventId }, select: { id: true, userId: true, kind: true, dismissedAt: true } });
-  if (!e || e.userId !== userId) return { ok: false, status: 404, error: "Notice not found" };
+  if (!e || !canDismissCoachEvent({ id: userId }, e)) return { ok: false, status: 404, error: "Notice not found" };
   if (e.dismissedAt) return { ok: true, data: { id: e.id, dismissedAt: e.dismissedAt.toISOString() } };
   await deps.db.coachEvent.update({ where: { id: e.id }, data: { dismissedAt: now }, select: { id: true } });
   // A break nudge's audit row names no kind (ADR-006: no lasting trace of break activity).
