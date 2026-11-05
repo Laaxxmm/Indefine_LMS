@@ -21,7 +21,7 @@ import { Refusal, fail, ok, type ServiceResult } from "@/lib/corrections/result"
 import { canDecideErasure } from "./access";
 import { DATASETS, EXTERNAL_SYSTEMS, type ModelName, type PrivacyReadDb, type Row } from "./inventory";
 import type { DutyId, RequestStatus } from "./policy";
-import { guardRegister, loadMatches, loadOpen, requireVerified, writeAudit, type PrivacyDeps, type Tx } from "./register";
+import { guardRegister, loadOpen, principalOf, requireResolved, requireVerified, writeAudit, type PrivacyDeps, type Tx } from "./register";
 import { restrictInTx } from "./consent";
 import { dutiesForScope, loadScopes, type DutyInForce } from "./scope";
 
@@ -87,7 +87,7 @@ const fieldLabels = (key: string, names: string[]) => {
 export async function planErasure(db: PrivacyReadDb, requestId: string, now: Date): Promise<ErasurePlan | null> {
   const request = await db.privacyRequest.findUnique({ where: { id: requestId }, select: { id: true } });
   if (!request) return null;
-  const scopes = await loadScopes(db, await loadMatches(db, requestId));
+  const scopes = await loadScopes(db, await principalOf(db, requestId)); // the one linked person only
   const items: PlanItem[] = [];
 
   for (const scope of scopes) {
@@ -243,6 +243,7 @@ export async function confirmErasure(user: SessionUser, id: string, input: { fin
     const outcome = await deps.db.$transaction(async (tx: Tx) => {
       await loadOpen(tx, id, ["erasure"]);
       await requireVerified(tx, id);
+      await requireResolved(tx, id); // never "0 items anonymised" for nobody, or an erasure across several people
       const plan = await planErasure(tx, id, now);
       if (!plan) throw new Refusal(404, "That privacy request wasn't found. Go back to the register and open it again.");
       if (plan.fingerprint !== input.fingerprint) {

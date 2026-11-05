@@ -21,7 +21,7 @@ import { scrubFreeText } from "@/lib/corrections/mask";
 import { LIFT_NOT_ALLOWED, canLiftRestriction } from "./access";
 import type { PrivacyReadDb } from "./inventory";
 import { RESTRICTIONS, WITHDRAWAL_LIMITS, type RestrictionKey } from "./policy";
-import { guardRegister, loadMatches, loadOpen, requireVerified, writeAudit, type PrivacyDeps, type Tx } from "./register";
+import { NOT_RESOLVED, guardRegister, loadMatches, loadOpen, principalOf, requireVerified, writeAudit, type PrivacyDeps, type Tx } from "./register";
 
 /** What a person sees when work would send a restricted client's data to a model. */
 export const AI_RESTRICTED_MESSAGE = "This client has restricted AI processing. Prepare this by hand or ask a partner to lift the restriction.";
@@ -50,8 +50,12 @@ export async function withdrawConsent(user: SessionUser, id: string, deps: Priva
     const out = await deps.db.$transaction(async (tx: Tx) => {
       await loadOpen(tx, id, ["consent-withdrawal"]);
       await requireVerified(tx, id);
-      const matches = await loadMatches(tx, id);
-      if (!matches.length) throw new Refusal(409, "No records were found for this person, so there is nothing to restrict. Close the request with that reply instead.");
+      // Only the one person the request is linked to; several matching records must be resolved first.
+      const matches = await principalOf(tx, id);
+      if (!matches.length) {
+        if ((await loadMatches(tx, id)).length > 1) throw new Refusal(409, NOT_RESOLVED);
+        throw new Refusal(409, "No records were found for this person, so there is nothing to restrict. Refuse the request with that reply instead.");
+      }
       const applied = new Set<RestrictionKey>();
       for (const m of matches) {
         if (m.principalType === "staff") {

@@ -6,7 +6,7 @@ import { btnGhost, card } from "@/components/ui";
 import { BackLink, chip, eyebrow, focusRing, pageTitle, sectionTitle } from "@/app/agents/parts";
 import { HistoryLink } from "@/components/CorrectionHistory";
 import { prisma } from "@/lib/prisma";
-import { getRequest } from "@/lib/privacy/register";
+import { NOTHING_MATCHED, NOT_RESOLVED, getRequest } from "@/lib/privacy/register";
 import { buildAccessExport } from "@/lib/privacy/export";
 import { planErasure, publicPlan, type PlanAction } from "@/lib/privacy/erasure";
 import { KIND_SECTIONS, PRINCIPAL_LABELS, RESTRICTIONS, VERIFY_METHODS, WITHDRAWAL_LIMITS, type PrincipalType } from "@/lib/privacy/policy";
@@ -55,9 +55,13 @@ export default async function PrivacyRequestPage({ params }: { params: Promise<{
   if (!d) notFound();
 
   const open = d.daysLeft !== null;
-  const clientRefs = d.matches.filter((m) => m.principalType !== "staff").map((m) => m.ref);
+  // Every data step works on the one linked person only; several matches are resolved in Step 1 first.
+  const linked = !!d.principalRef;
+  const unresolved = !linked && d.matches.length > 1;
+  const notLinked = unresolved ? NOT_RESOLVED : NOTHING_MATCHED;
+  const clientRefs = linked && d.principalType !== "staff" ? [d.principalRef as string] : [];
   const firmClients = d.kind === "correction" && clientRefs.length ? await prisma.firmClient.findMany({ where: { lmsClientId: { in: clientRefs } }, select: { id: true, lmsClientId: true, clientCode: true } }) : [];
-  const access = d.kind === "access" && d.verified ? await buildAccessExport(prisma, id, now) : null;
+  const access = d.kind === "access" && d.verified && linked ? await buildAccessExport(prisma, id, now) : null;
   const plan = d.kind === "erasure" ? await planErasure(prisma, id, now) : null;
   const shown = plan ? publicPlan(plan) : null;
   const principalType = (d.principalType in PRINCIPAL_LABELS ? d.principalType : "client-contact") as PrincipalType;
@@ -83,10 +87,30 @@ export default async function PrivacyRequestPage({ params }: { params: Promise<{
           <Step n={1} title="Logged" done>
             <p className="text-[13.5px]">
               Received {d.receivedLabel}.{" "}
-              {d.matches.length
-                ? `Found ${d.matches.length} matching record${d.matches.length === 1 ? "" : "s"} in Firm OS and the LMS client master.`
-                : "No matching records were found. If the person is not a client, contact or staff member, the reply says the firm holds no data about them."}
+              {linked
+                ? "Linked to one record in Firm OS and the LMS client master; every step below works on that record only."
+                : unresolved
+                  ? `These identifiers match ${d.matches.length} different records. Choose the one this request is about; until then nothing is shared, changed or erased.`
+                  : "No matching records were found. The request can't be completed as done; log it again with another identifier, or refuse it with the reason."}
             </p>
+            {unresolved && open && (
+              <ul className="mt-3 space-y-3">
+                {d.matches.map((m) => (
+                  <li key={`${m.principalType}:${m.ref}`} className="rounded-xl border border-border p-3">
+                    <p className="text-[13.5px] font-semibold break-words">{m.label}</p>
+                    <p className="text-[12px] text-ink-mute mb-2">{PRINCIPAL_LABELS[m.principalType]}</p>
+                    <ConfirmStep
+                      url={`/api/firm-os/privacy/requests/${encodeURIComponent(d.id)}/resolve`}
+                      body={{ ref: m.ref }}
+                      label="This request is about this record…"
+                      confirmLabel="Link to this record"
+                      consequence="Only this record's data will be shared, corrected, restricted or erased for this request. The other matches are left alone."
+                      tone="primary"
+                    />
+                  </li>
+                ))}
+              </ul>
+            )}
             {d.notes && <p className="text-[13px] text-ink-soft mt-2 whitespace-pre-wrap">{d.notes}</p>}
           </Step>
 
@@ -107,6 +131,8 @@ export default async function PrivacyRequestPage({ params }: { params: Promise<{
             <Step n={3} title="Share the data">
               {!d.verified ? (
                 <p className="text-[13px] text-ink-mute">Verify identity first; the export is available after that.</p>
+              ) : !linked ? (
+                <p className="text-[13px] text-ink-mute">{notLinked}</p>
               ) : (
                 <>
                   <ul className="space-y-1.5 text-[13.5px] mb-4 list-disc pl-5">
@@ -127,6 +153,8 @@ export default async function PrivacyRequestPage({ params }: { params: Promise<{
             <Step n={3} title="Correct the records">
               {!d.verified ? (
                 <p className="text-[13px] text-ink-mute">Verify identity first; corrections open after that.</p>
+              ) : !linked ? (
+                <p className="text-[13px] text-ink-mute">{notLinked}</p>
               ) : principalType === "staff" ? (
                 <p className="text-[13.5px]">Staff details are corrected in Admin → Team &amp; hierarchy. Make the change there, then close this request with the reply.</p>
               ) : clientRefs.length === 0 ? (
@@ -199,6 +227,8 @@ export default async function PrivacyRequestPage({ params }: { params: Promise<{
                   <p className="text-[13px] text-ink-mute">This request is closed.</p>
                 ) : !d.verified ? (
                   <p className="text-[13px] text-ink-mute">Verify identity first; a partner or admin can confirm the erasure after that.</p>
+                ) : !linked ? (
+                  <p className="text-[13px] text-ink-mute">{notLinked}</p>
                 ) : (
                   <ConfirmStep
                     url={`/api/firm-os/privacy/requests/${encodeURIComponent(d.id)}/erasure`}
@@ -222,12 +252,14 @@ export default async function PrivacyRequestPage({ params }: { params: Promise<{
                 ))}
               </ul>
               <p className="text-[12.5px] text-ink-soft mb-3">{WITHDRAWAL_LIMITS}</p>
-              {open && d.verified ? (
+              {open && d.verified && unresolved ? (
+                <p className="text-[13px] text-ink-mute">{NOT_RESOLVED}</p>
+              ) : open && d.verified ? (
                 <ConfirmStep
                   url={`/api/firm-os/privacy/requests/${encodeURIComponent(d.id)}/consent-withdrawal`}
                   label="Restrict processing…"
                   confirmLabel="Confirm restrictions"
-                  consequence="The restrictions apply to every record that matched this person and the request is completed. Firm OS keeps the record of the restriction."
+                  consequence="The restrictions apply to the record this request is linked to, and the request is completed. Firm OS keeps the record of the restriction."
                   tone="primary"
                 />
               ) : (

@@ -20,6 +20,7 @@ const consent = await import("@/app/api/firm-os/privacy/requests/[id]/consent-wi
 const nomination = await import("@/app/api/firm-os/privacy/requests/[id]/nomination/route");
 const pcorrection = await import("@/app/api/firm-os/privacy/requests/[id]/correction/route");
 const lift = await import("@/app/api/firm-os/privacy/requests/[id]/lift-restriction/route");
+const resolve = await import("@/app/api/firm-os/privacy/requests/[id]/resolve/route");
 const breaches = await import("@/app/api/firm-os/privacy/breaches/route");
 const breach = await import("@/app/api/firm-os/privacy/breaches/[id]/route");
 const corrections = await import("@/app/api/firm-os/corrections/route");
@@ -112,6 +113,22 @@ describe("privacy request routes", () => {
     expect(fixed.status).toBe(200);
     const notMine = await pcorrection.POST(post({ entity: "JobTask", id: "j-assigned", field: "title", newValue: "X", reason: "Client moved office" }), params(k));
     expect(notMine.status).toBe(400);
+  });
+
+  it("resolve: links a request to one of the records found; staff refused; a record not found refused", async () => {
+    const a = db.tables.client.find((c) => c.id === "c-prop")!;
+    db.seed("client", [{ ...a, id: "c-twin", name: "Twin Stores", folderName: "Twin Stores", pan: "ABCPT1111K", gstin: null }]);
+    const r = await requests.POST(post({ kind: "access", identifiers: { phone: "9876543210" } }));
+    const id = String((await json(r)).id);
+    expect(db.tables.privacyRequest.find((x) => x.id === id)?.principalRef).toBeNull();
+    as(USERS.staff);
+    expect((await resolve.POST(post({ ref: "c-prop" }), params(id))).status).toBe(403);
+    as(admin);
+    expect((await resolve.POST(post({ ref: "c-co" }), params(id))).status).toBe(400);
+    expect((await resolve.POST(post({}), params(id))).status).toBe(400);
+    const ok = await resolve.POST(post({ ref: "c-twin" }), params(id));
+    expect(ok.status).toBe(200);
+    expect(db.tables.privacyRequest.find((x) => x.id === id)?.principalRef).toBe("c-twin");
   });
 
   it("lift restriction: partner only, with a reason; admins and staff get a sentence, not a lift", async () => {

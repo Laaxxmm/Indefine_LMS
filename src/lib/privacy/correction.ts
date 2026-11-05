@@ -5,7 +5,7 @@
 import type { SessionUser } from "@/lib/access";
 import { correctField, type CorrectionDeps, type CorrectionDone } from "@/lib/corrections/service";
 import { fail, type ServiceResult } from "@/lib/corrections/result";
-import { guardRegister, loadMatches, loadOpen, requireVerified, step, writeAudit, type PrivacyDeps } from "./register";
+import { guardRegister, loadOpen, requireResolved, requireVerified, step, writeAudit, type PrivacyDeps } from "./register";
 
 export const PRIVACY_CORRECTABLE_ENTITIES = ["Client", "FirmClient"] as const;
 
@@ -28,11 +28,12 @@ export async function correctForRequest(
   const checked = await step(deps, async (tx) => {
     await loadOpen(tx, requestId, ["correction"]);
     await requireVerified(tx, requestId);
-    return true;
+    return requireResolved(tx, requestId);
   });
   if (!checked.ok) return checked;
 
-  const matches = await loadMatches(deps.db, requestId);
+  // Only the one person the request is linked to (never every record its identifiers matched).
+  const matches = [checked.data];
   if (matches.some((m) => m.principalType === "staff") && !matches.some((m) => m.principalType !== "staff")) {
     return fail(409, "Staff details are corrected in Admin → Team & hierarchy, not here. Make the change there and then close this request.");
   }

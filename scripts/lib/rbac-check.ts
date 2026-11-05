@@ -107,6 +107,7 @@ export const EXPECTED_POLICIES: ExpectedPolicy[] = [
   { route: "/api/firm-os/privacy/requests/[id]/close", method: "POST", policies: ["canHandlePrivacyRequests"], why: PRIVACY },
   { route: "/api/firm-os/privacy/requests/[id]/nomination", method: "POST", policies: ["canHandlePrivacyRequests"], why: PRIVACY },
   { route: "/api/firm-os/privacy/requests/[id]/consent-withdrawal", method: "POST", policies: ["canHandlePrivacyRequests"], why: PRIVACY },
+  { route: "/api/firm-os/privacy/requests/[id]/resolve", method: "POST", policies: ["canHandlePrivacyRequests"], why: `${PRIVACY}; links the request to exactly one of the records found` },
   { route: "/api/firm-os/privacy/requests/[id]/lift-restriction", method: "POST", policies: ["canHandlePrivacyRequests", "canLiftRestriction"], why: "lifting a DPDP processing restriction resumes AI processing and drafting: partner only, with a reason" },
   { route: "/api/firm-os/privacy/requests/[id]/export", method: "GET", policies: ["canHandlePrivacyRequests"], why: `${PRIVACY}; the export holds the person's data` },
   { route: "/api/firm-os/privacy/requests/[id]/correction", method: "POST", policies: ["canHandlePrivacyRequests", "canCorrect"], why: `${PRIVACY}; the field itself goes through the corrections rule` },

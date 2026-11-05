@@ -7,7 +7,7 @@ import { fail, ok, type ServiceResult } from "@/lib/corrections/result";
 import type { SessionUser } from "@/lib/access";
 import { DATASETS, EXTERNAL_SYSTEMS, SHARED_WITH, type PrivacyDb, type Row } from "./inventory";
 import { PRINCIPAL_LABELS, type PrincipalType } from "./policy";
-import { guardRegister, loadMatches, requireVerified, step, writeAudit, type PrivacyDeps } from "./register";
+import { guardRegister, principalOf, requireResolved, requireVerified, step, writeAudit, type PrivacyDeps } from "./register";
 import { loadScopes } from "./scope";
 
 export interface ExportDataset {
@@ -44,7 +44,7 @@ function pickValues(fields: readonly { name: string }[], row: Row, derived?: Row
 export async function buildAccessExport(db: PrivacyDb, requestId: string, now: Date): Promise<AccessExport | null> {
   const request = await db.privacyRequest.findUnique({ where: { id: requestId } });
   if (!request) return null;
-  const matches = await loadMatches(db, requestId);
+  const matches = await principalOf(db, requestId); // the one linked person, never every record the identifiers matched
   const scopes = await loadScopes(db, matches);
   const datasets: ExportDataset[] = [];
   for (const scope of scopes) {
@@ -89,6 +89,7 @@ export async function downloadAccessExport(user: SessionUser, id: string, deps: 
     if (!r) return "missing" as const;
     if (r.kind !== "access") return "kind" as const;
     await requireVerified(tx, id);
+    await requireResolved(tx, id);
     return "ok" as const;
   });
   if (!checked.ok) return checked;
