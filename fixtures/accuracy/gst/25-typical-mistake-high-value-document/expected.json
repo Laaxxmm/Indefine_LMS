@@ -1,0 +1,271 @@
+{
+  "description": "Typical gap (promoted mistake gst.mistake-high-value-documents): 01-clean-tally-csv with invoice INV/26/101 at taxable value Rs 60,00,000 (CGST and SGST Rs 5,40,000 each), above the Rs 50 lakh SOP threshold for supporting papers. Outward taxable Rs 60,70,000 (+59,00,000), CGST / SGST Rs 5,41,800 each, B2B taxable Rs 60,50,000; ITC unchanged, so cash CGST / SGST Rs 5,34,150 each and cash tax Rs 10,75,500.",
+  "category": "typical-gap",
+  "job": {
+    "fy": "2026-27",
+    "period": "2026-10",
+    "title": "GSTR-3B"
+  },
+  "flags": [
+    {
+      "ruleId": "gst.mistake-high-value-documents",
+      "severity": "warn"
+    }
+  ],
+  "figures": {
+    "outwardTaxablePaise": 607000000,
+    "outwardIgstPaise": 900000,
+    "outwardCgstPaise": 54180000,
+    "outwardSgstPaise": 54180000,
+    "itcAvailablePaise": 1710000,
+    "itcNetPaise": 1710000,
+    "cashIgstPaise": 720000,
+    "cashCgstPaise": 53415000,
+    "cashSgstPaise": 53415000,
+    "cashTaxPaise": 107550000,
+    "creditUtilisedPaise": 1710000,
+    "b2bInvoiceCount": 2,
+    "b2bTaxablePaise": 605000000,
+    "b2clInvoiceCount": 0,
+    "b2csTaxablePaise": 2000000,
+    "hsnRowCount": 3,
+    "docsIssuedCount": 3,
+    "docsCancelledCount": 0,
+    "reconMatchedCount": 3,
+    "interestPaise": 0,
+    "lateFeePaise": 0
+  },
+  "deliverables": [
+    {
+      "name": "GSTR-1 draft",
+      "sheets": [
+        {
+          "name": "B2B",
+          "columns": [
+            "GSTIN/UIN of Recipient",
+            "Receiver Name",
+            "Invoice Number",
+            "Invoice Date",
+            "Invoice Value",
+            "Place Of Supply",
+            "Reverse Charge",
+            "Invoice Type",
+            "Rate",
+            "Taxable Value",
+            "IGST",
+            "CGST",
+            "SGST",
+            "Cess",
+            "IRN"
+          ]
+        },
+        {
+          "name": "B2CL",
+          "columns": [
+            "Invoice Number",
+            "Invoice Date",
+            "Invoice Value",
+            "Place Of Supply",
+            "Rate",
+            "Taxable Value",
+            "IGST",
+            "Cess"
+          ]
+        },
+        {
+          "name": "B2CS",
+          "columns": [
+            "Type",
+            "Place Of Supply",
+            "Rate",
+            "Taxable Value",
+            "IGST",
+            "CGST",
+            "SGST",
+            "Cess"
+          ]
+        },
+        {
+          "name": "CDNR",
+          "columns": [
+            "GSTIN/UIN of Recipient",
+            "Receiver Name",
+            "Note Number",
+            "Note Date",
+            "Note Type",
+            "Place Of Supply",
+            "Reverse Charge",
+            "Note Value",
+            "Rate",
+            "Taxable Value",
+            "IGST",
+            "CGST",
+            "SGST",
+            "Cess",
+            "Original Invoice Number",
+            "Original Invoice Date"
+          ]
+        },
+        {
+          "name": "HSN",
+          "columns": [
+            "Supply Type",
+            "HSN",
+            "Description",
+            "UQC",
+            "Total Quantity",
+            "Rate",
+            "Taxable Value",
+            "IGST",
+            "CGST",
+            "SGST",
+            "Cess",
+            "Total Value"
+          ]
+        },
+        {
+          "name": "Docs",
+          "columns": [
+            "Nature of Document",
+            "Sr. No. From",
+            "Sr. No. To",
+            "Total Number",
+            "Cancelled",
+            "Net Issued"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "GSTR-3B computation",
+      "sheets": [
+        {
+          "name": "3.1 Outward",
+          "columns": [
+            "Nature of supplies",
+            "Taxable Value",
+            "IGST",
+            "CGST",
+            "SGST",
+            "Cess"
+          ]
+        },
+        {
+          "name": "4 ITC",
+          "columns": [
+            "Details",
+            "IGST",
+            "CGST",
+            "SGST",
+            "Cess"
+          ]
+        },
+        {
+          "name": "6.1 Payment",
+          "columns": [
+            "Tax head",
+            "Tax payable",
+            "Paid through IGST credit",
+            "Paid through CGST credit",
+            "Paid through SGST credit",
+            "Paid through cess credit",
+            "Tax paid in cash",
+            "Interest",
+            "Late fee"
+          ]
+        },
+        {
+          "name": "Interest and fees",
+          "columns": [
+            "Item",
+            "Detail",
+            "Amount"
+          ]
+        },
+        {
+          "name": "Notes",
+          "columns": [
+            "Topic",
+            "Note"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2B reconciliation",
+      "sheets": [
+        {
+          "name": "Summary",
+          "columns": [
+            "Status",
+            "Documents",
+            "Tax as per books",
+            "Tax as per 2B",
+            "ITC claimed"
+          ]
+        },
+        {
+          "name": "Reconciliation",
+          "columns": [
+            "Status",
+            "Supplier GSTIN",
+            "Supplier",
+            "Doc Type",
+            "Document Number",
+            "Date",
+            "Books Taxable",
+            "Books IGST",
+            "Books CGST",
+            "Books SGST",
+            "Books Cess",
+            "2B Taxable",
+            "2B IGST",
+            "2B CGST",
+            "2B SGST",
+            "2B Cess",
+            "ITC Claimed",
+            "Books location",
+            "2B location"
+          ]
+        },
+        {
+          "name": "Rule 37",
+          "columns": [
+            "Supplier",
+            "GSTIN",
+            "Invoice Number",
+            "Invoice Date",
+            "Days to period end",
+            "Unpaid",
+            "IGST",
+            "CGST",
+            "SGST",
+            "Cess",
+            "Location"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Exceptions",
+      "sheets": [
+        {
+          "name": "Exceptions",
+          "columns": [
+            "Severity",
+            "Rule",
+            "Check",
+            "Status",
+            "Finding",
+            "Evidence",
+            "Location"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Client document requests",
+      "sheets": []
+    }
+  ]
+}
