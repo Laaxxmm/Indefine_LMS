@@ -3,16 +3,20 @@
 //
 //   morning   09:00 IST, working days: a CoachEvent "board" per person whose move it is on at least
 //             one open job (dedupeKey board:<user>:<istDay>), unless they turned the board off.
+//   reminders every 30 min, working time: T−2h / T−30m "reminder" before the internal due moment
+//             (dedupeKey reminder:<job>:<user>:<slot>); once overdue, one "escalation" per job per
+//             day (dedupeKey escalation:<job>:<istDay>). Jobs before filing only (reminders.ts).
 //
 // Delivery is in-app only (the /coach page and the dashboard card). The LMS has no Teams or e-mail
 // channel to staff: the work tracker's chat posts as its lead into one two-person chat and is not a
 // general channel, and sending mail as a person is a client-facing send path the Firm OS forbids.
 import { formatDate } from "@/lib/agents/core/format";
-import { istDayKey } from "@/lib/ist";
+import { addDays, istDayKey, istDayStart } from "@/lib/ist";
 import { DEFAULT_CALENDAR, type CoachCalendar } from "./config";
 import { toRankInputs } from "./board";
-import { COACH_ACTOR, COACH_JOB_SELECT, MAX_ROWS, audit, createOnce, dedupeKey, type CoachDb, type CoachJobRow } from "./db";
+import { COACH_ACTOR, COACH_JOB_SELECT, MAX_ROWS, audit, createOnce, dedupeKey, jobLabel, type CoachDb, type CoachJobRow } from "./db";
 import { PRE_FILING_STATES, buildBoard, stepHolder, type RankOptions, type RankedBoard, type RankedItem } from "./rank";
+import { dueReminderSlot, escalationMessage, escalationTarget, isInternalOverdue, reminderMessage } from "./reminders";
 import { isCoachWorkingTime } from "./workdays";
 
 export type CoachCronDeps = {
@@ -110,18 +114,97 @@ export async function runMorning(deps: CoachCronDeps): Promise<MorningSummary> {
   return s;
 }
 
+// ------------------------------------------------------------------ reminders + escalation
+
+export interface ReminderRunSummary {
+  at: string;
+  skipped?: "outside-working-time";
+  checked: number;
+  reminders: number;
+  escalations: number;
+  /** Overdue jobs with nobody to escalate to (no reviewer, holder has no manager). */
+  unescalated: string[];
+}
+
+/**
+ * Every 30 minutes in working time: T−2h / T−30m reminders to whoever holds the next step on jobs
+ * before filing, and one escalation per overdue job per IST day. Reason "internal-due" /
+ * "internal-overdue" in the payload; the close-loop reconciler's are "close-loop" / "done-recheck".
+ */
+export async function runReminders(deps: CoachCronDeps): Promise<ReminderRunSummary> {
+  const { now, calendar } = setup(deps);
+  const s: ReminderRunSummary = { at: now.toISOString(), checked: 0, reminders: 0, escalations: 0, unescalated: [] };
+  if (!isCoachWorkingTime(now, calendar)) return { ...s, skipped: "outside-working-time" };
+
+  // Due dates up to a week ahead can roll back onto today (weekend, holiday); everything earlier is overdue.
+  const rows = await preFilingJobs(deps.db, { internalDueOn: { not: null, lt: addDays(istDayStart(now), 8) } });
+  const ids = new Set<string>();
+  for (const r of rows) {
+    const h = stepHolder(r)?.userId;
+    if (h) ids.add(h);
+    for (const id of [r.reviewerId, r.engagement?.reviewerId]) if (id) ids.add(id);
+  }
+  const users = await activeUsers(deps.db, [...ids].sort());
+  const managerIds = [...new Set([...users.values()].map((u) => u.managerId).filter((x): x is string => !!x && !users.has(x)))];
+  for (const [id, u] of await activeUsers(deps.db, managerIds)) users.set(id, u);
+  const managerOf = (id: string) => users.get(id)?.managerId ?? null;
+  const day = istDayKey(now);
+  const opts = { calendar };
+
+  for (const r of rows) {
+    if (!r.internalDueOn) continue;
+    s.checked += 1;
+    const holder = stepHolder(r);
+    const label = jobLabel(r);
+    if (!isInternalOverdue(r.internalDueOn, now, opts)) {
+      const slot = dueReminderSlot(r.internalDueOn, now, opts);
+      if (!slot || !holder || !users.has(holder.userId)) continue;
+      const payload = { reason: "internal-due", slot: slot.label, dueAt: slot.dueAt.toISOString(), state: r.state, message: reminderMessage(label, slot) };
+      const created = await createOnce(deps.db, {
+        userId: holder.userId,
+        kind: "reminder",
+        jobTaskId: r.id,
+        dedupeKey: dedupeKey.reminder(r.id, holder.userId, slot.key),
+        payload,
+      });
+      if (created) s.reminders += 1;
+      continue;
+    }
+    const to = escalationTarget(r, holder?.userId ?? null, managerOf, (id) => users.has(id));
+    if (!to) {
+      s.unescalated.push(r.id);
+      continue;
+    }
+    const holderName = holder ? users.get(holder.userId)?.name ?? null : null;
+    const payload = {
+      reason: "internal-overdue",
+      state: r.state,
+      holderId: holder?.userId ?? null,
+      internalDueOn: r.internalDueOn.toISOString(),
+      message: escalationMessage(label, r.internalDueOn, r.state, holderName),
+    };
+    const created = await createOnce(deps.db, { userId: to, kind: "escalation", jobTaskId: r.id, dedupeKey: dedupeKey.escalation(r.id, day), payload });
+    if (!created) continue;
+    s.escalations += 1;
+    await audit(deps.db, { actorId: COACH_ACTOR, action: "escalate", entity: "JobTask", entityId: r.id, meta: { to, reason: "internal-overdue", day } });
+  }
+  return s;
+}
+
 // ------------------------------------------------------------------ entry
 
-export const COACH_JOBS = ["morning"] as const;
+export const COACH_JOBS = ["morning", "reminders"] as const;
 export type CoachJob = (typeof COACH_JOBS)[number];
 
 export function isCoachJob(v: string | null): v is CoachJob {
   return !!v && (COACH_JOBS as readonly string[]).includes(v);
 }
 
-export async function runCoachJob(job: CoachJob, deps: CoachCronDeps): Promise<MorningSummary> {
+export async function runCoachJob(job: CoachJob, deps: CoachCronDeps): Promise<MorningSummary | ReminderRunSummary> {
   switch (job) {
     case "morning":
       return runMorning(deps);
+    case "reminders":
+      return runReminders(deps);
   }
 }
