@@ -1,0 +1,31 @@
+{
+  "system.echo-extract": {
+    "rows": [
+      {
+        "ref": "INV-10",
+        "party": "Delta Paper Mills",
+        "date": "2026-10-03",
+        "amountPaise": 1250000
+      },
+      {
+        "ref": "INV-11",
+        "party": "Eastern Freight",
+        "date": "2026-10-08",
+        "amountPaise": 25000000
+      },
+      {
+        "ref": "INV-12",
+        "party": "Fern Stationers",
+        "date": "2026-10-09",
+        "amountPaise": 432175
+      }
+    ]
+  },
+  "system.check:echo.related-party": {
+    "status": "pass",
+    "evidence": {
+      "quote": "Eastern Freight",
+      "location": "register.csv row 3"
+    }
+  }
+}
