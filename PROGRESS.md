@@ -1,6 +1,6 @@
 # PROGRESS — Indefine Firm OS
-Current phase: 5–8 | Branch: firm-os/phase-0-inventory | Last green: 2026-11-05 22:40 IST
-Tests: unit+integration 2252/2252 ×3 runs (103 files; Firm OS coverage 99.7% lines / 97.4% branches) · e2e 4/4 (smoke, local, no DB) · accuracy (recorded mode, hardened harness): echo pass | GST pass (23) | ROC pass (22) | TAX pass (22) | BOOKS pass (15) | AUDIT pass (15) — independent audit round 2 done (fixes in progress)
+Current phase: 5–8 | Branch: firm-os/phase-0-inventory | Last green: 2026-11-05 22:55 IST
+Tests: unit+integration 2293/2293 (104 files; Firm OS coverage 99.7% lines / 97.4% branches) · e2e 4/4 (smoke, local, no DB) · accuracy (recorded mode, hardened harness): echo pass | GST pass (23) | ROC pass (24) | TAX pass (22) | BOOKS pass (19) | AUDIT pass (20) — audit round 2 data fixes merged; harness items with guardrails work
 Model mode: CLAUDE_ONLY + LOCAL_STUB(fail-closed) | Turia bridge: MANUAL (ADR-003)
 
 ## Phase checklist (✅ only when QA gate green)
@@ -143,15 +143,15 @@ UI audit (owner request: every button, navigation, flow, breadcrumb) — merged 
 | echo (hardened) | accuracy/echo (6) | det. block 1.000/1.000 (1/0/0) | det. warn 1.000/1.000 (2/0/0) | 6/6 | 6/6 | 1/1 | 6/6 code path | pass · input sensitivity 6/6 | 05 Nov 2026 21:17 IST |
 
 **Independent accuracy audit round 2 (fable model, ~21:55 IST, read-only, all six agents):** every gate passes and re-runs byte-identical; C1 resolved for every agent (inputs parsed in code; independent ±₹1 probes on gst and books caught by figures); 31 fixtures recomputed by hand across the five agents — **no figure mismatch** (GST set-off per rule 88A incl. deficits-first, s.50 interest, late fee, rule 37 proportional; BRS; TDS due dates; materiality, CARO para 1(2), MUS interval; AGM/AOC-4/MGT-7 arithmetic, CSR averaging; FY 2025-26 slabs, 87A marginal relief (checked against the Act text), 44AD, 234B/C, 288A/B). Findings:
-- **H1 HIGH** — unverified small-company limits (₹10 cr / ₹100 cr "w.e.f. 1 Dec 2025") applied in ROC and Audit; expected values share the assumption, so the gate cannot catch it. → fix in progress: only partner-verified limits apply (2022: ₹4 cr / ₹40 cr); a warn flag when classification depends on the unverified set; fixtures corrected.
+- **H1 HIGH** — unverified small-company limits (₹10 cr / ₹100 cr "w.e.f. 1 Dec 2025") applied in ROC and Audit; expected values share the assumption, so the gate cannot catch it. → **fixed (8ce3ac1)**: only partner-verified limits apply (2022: ₹4 cr / ₹40 cr); a warn flag when classification depends on the unverified set; fixtures corrected.
 - **M1** model-dependent rules (gst.rcm-liability, roc.financials-tie, tax.ais-not-in-books …) gated as deterministic → label by provenance via task ruleIds (guardrails agent).
 - **M2** input sensitivity proves only one file is read → per-file probes (guardrails agent).
-- **M3** GST fixtures pin a subset of figures → mandatory core figure set (fix agent).
-- **M4** books.tds-not-deposited blocks before the due date → warn before due, block after (fix agent; partner to confirm SOP).
+- **M3** GST fixtures pin a subset of figures → **fixed**: 18-key core set pinned in all 23 fixtures, enforced by a test.
+- **M4** → **fixed**: books.tds-due-soon (warn) before the due date, tds-not-deposited (block) on/after it; partner to confirm SOP.
 - **M5** tax depends on roc helpers → move to core (guardrails agent).
-- **M6** audit MUS fixtures degenerate (all items equal; seed change invisible) → mixed populations, pin first point + fingerprint (fix agent).
+- **M6** → **fixed**: two mixed-size MUS fixtures (items ≥ interval, multi-hit items), every audit fixture pins random start + fingerprint48; verified by an independent scratch calculator; seed change now fails the gate.
 - **Coverage guard gap** — counts/labels pass with little substance → per-rule coverage row: every rule expected to fail in ≥1 and pass in ≥1 fixture (guardrails agent).
-- L1 thin block support (books 3, audit 2) · L2 ADR-008 framework layers not yet enforced (in progress) · L3 GST docs table shows series gaps as "cancelled" · L4 stale recordings housekeeping.
+- L1 → **fixed**: books block support 6, audit 5 (opening TB off by ₹1, BRS differences both directions, prior-year unmapped group, sample below minimum — now block, partner to confirm) · L3 → **fixed**: GST Table 13 gaps shown as "to be explained", cancelled stays 0 · L2 ADR-008 framework layers not yet enforced (in progress) · L3 GST docs table shows series gaps as "cancelled" · L4 stale recordings housekeeping.
 
 **Independent accuracy audit (fable model, 20:46 IST, read-only):** echo figures recomputed independently 6/6 match; flags hand-derived 6/6 agree; thresholds equal the spec; P/R maths correct; self-test fails as it should; mistake replay genuinely depends on the promoted rule. Findings:
 - **C1 CRITICAL** — scored pipeline never read input/: figures + deterministic rules derived from recorded.json; ₹1 input change and an injected duplicate ref still passed. → harness fix in progress (echo parses input in code; mandatory input-sensitivity probe for production agents). Phases 5–7 agents told to parse input in code.
@@ -191,6 +191,7 @@ UI audit (owner request: every button, navigation, flow, breadcrumb) — merged 
 - **Small-company limits for FY 2025-26 (decisive)** · audit H1 · confirm whether s.2(85) limits were raised to ₹10 cr paid-up / ₹100 cr turnover w.e.f. 1 Dec 2025 (cite the G.S.R.); until confirmed only ₹4 cr / ₹40 cr (2022) apply · 2026-11-05
 - **Partner verification — ROC/Tax** (data.ts verify notes + "Verify" sheet in each workbook): small company ₹4 cr/₹40 cr → ₹10 cr/₹100 cr from 1 Dec 2025 (confirm G.S.R.); CSR thresholds read on PBT; AGM 6/9/15 months; AOC-4/MGT-7/ADT-1 day counting; fee and additional-fee tables; DIR-3 KYC frequency; rotation classes; tax FY 2025-26 slabs, 87A ₹12L/₹60k with marginal relief, surcharge caps, CG rates 20%/12.5%, 44AD/44ADA limits, 44AB, 43B(h) 15/45 days, advance tax + 234B/C, 234F, ITR-1/4 limits. **Income-tax Act 2025 (tax year 2026-27) rates are stored as unverified and the tax agent refuses that year until a partner publishes verified numbers.** · 2026-11-05
 - **Partner verification — Books/Audit** (config.ts verify notes): bank match windows 5/31 days; unreconciled > 30 days; expense spike > 50% and ≥ ₹50k; TDS deposit 7th / 30 Apr (2025-Act equivalent?); materiality 1% revenue, PM 75%; variance ≥ PM and ≥ 20%; min sample 25, MUS factor 3.0; CARO exemption limits; small company ₹10 cr / ₹100 cr (Dec 2025 amendment — confirm); s.138 thresholds; severities (GST mismatch / negative cash / suspense = warn; TDS not deposited, BRS difference = block) · 2026-11-05
+- **Agent conventions to confirm (round-2 fixes)**: TDS warn-before-due / block-on-due; audit sample below SOP minimum = block; should draft GST figures exclude a time-barred credit note (GST 12) and ITC on a bill the model abstained on (GST 23)?; books has no prior-month TB balance check; no input for cancelled documents (Table 13 cancelled always 0) · 2026-11-05
 - **Seed SopPacks** · runner loads the active SopPack from DB · run the seed functions (gst seed.ts; books/audit publish v1.0.0 from defaultChecklist) on staging/prod after partner review · 2026-11-05
 - **Engagement-letter "Send" (LMS)** · emails the letter to the client from the user's mailbox (sendMailAsUser) — conflicts with the Firm OS rule that client-facing sends are human-only with no code path · decide: keep (it is a deliberate staff click), or change to "create Outlook draft" · 2026-11-05
 - Push branches / open PRs · no gh CLI on this machine · human approval to push firm-os/* branches · 2026-11-05
@@ -251,3 +252,4 @@ UI audit (owner request: every button, navigation, flow, breadcrumb) — merged 
 - 22:05 · ui · Merged UI audit (27 fixes, ui-links verifier, Waiting-for-you list); resolved agents.test.ts conflict; two tests updated for registered agents · 2236/2236 · all six accuracy gates pass · build green
 - 22:06 · ui · Follow-up agent started: re-run, retract filing, Record Turia close wording, client-page jobs, dashboard link · –
 - 22:40 · ui · Merged UI follow-ups (re-run, retract filing, Record Turia close, client-page jobs, dashboard link); fixed one timeout flake (cold-import test → 30 s) · 2252/2252 ×3 · build green
+- 22:55 · 5–7 · Merged audit round-2 data fixes (H1 small-company limits behind partner verification, M3, M4, M6, L1, L3); roc 24 / books 19 / audit 20 fixtures · 2293/2293 · all six pass
