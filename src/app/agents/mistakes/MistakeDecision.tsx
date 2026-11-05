@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { btnDanger, btnPrimary, call, errorText } from "@/components/ui";
+import { btnDanger, btnSuccess, call, errorText } from "@/components/ui";
 import { focusRing } from "../parts";
 
 /** Approve (→ new SOP pack minor version) or reject a proposed rule. Partners and managers only. */
@@ -25,7 +25,7 @@ export function MistakeDecision({ id, label }: { id: string; label: string }) {
       <button type="button" disabled={busy} onClick={() => decide("reject")} aria-label={`Reject rule: ${label}`} className={`${btnDanger} ${focusRing}`}>
         Reject
       </button>
-      <button type="button" disabled={busy} onClick={() => decide("approve")} aria-label={`Approve rule: ${label}`} className={`${btnPrimary} ${focusRing}`}>
+      <button type="button" disabled={busy} onClick={() => decide("approve")} aria-label={`Approve rule: ${label}`} className={`${btnSuccess} ${focusRing}`}>
         Approve rule
       </button>
       {error && (

@@ -13,5 +13,5 @@ export default async function AgentMistakesPage() {
   if (!session?.user) redirect("/");
   if (!canDecideMistakes(session.user) && !canSeeAllRuns(session.user)) redirect("/agents");
   const { data, names } = await loadMistakesPage(session.user);
-  return <MistakesView data={data} names={names} backHref={{ href: "/agents", label: "All runs" }} />;
+  return <MistakesView data={data} names={names} backHref={{ href: "/agents", label: "Runs" }} />;
 }

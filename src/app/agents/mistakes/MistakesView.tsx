@@ -2,10 +2,11 @@
 // decided ones (with the diff they made). Rendered at /agents/mistakes (partners, managers and
 // admins) and /admin/firm-os/mistakes (admin area). Only partners and managers get the buttons.
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import type { RuleDefinition } from "@/lib/agents/core/checklist";
 import type { MistakeRow } from "@/lib/agents/views";
 import { card } from "@/components/ui";
-import { EmptyState, eyebrow, focusRing, pageTitle, sectionTitle } from "../parts";
+import { chip, eyebrow, focusRing, pageTitle, sectionTitle } from "../parts";
 import { MistakeDecision } from "./MistakeDecision";
 
 function RuleLines({ rule }: { rule: RuleDefinition }) {
@@ -78,7 +79,7 @@ function Row({ row, canDecide, names }: { row: MistakeRow; canDecide: boolean; n
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] font-bold uppercase tracking-wide ${STATUS_TONE[row.status]}`}>
+          <span className={`${chip} ${STATUS_TONE[row.status]}`}>
             {row.status}
             {row.promotedToVersion && ` → v${row.promotedToVersion}`}
           </span>
@@ -95,13 +96,13 @@ export function MistakesView({ data, names, backHref }: { data: { canDecide: boo
     <div>
       {backHref && (
         <Link href={backHref.href} className={`inline-flex items-center gap-1.5 text-sm font-semibold text-ink-mute hover:text-ink transition mb-4 rounded ${focusRing}`}>
-          ← {backHref.label}
+          <ArrowLeft className="w-4 h-4" aria-hidden="true" /> {backHref.label}
         </Link>
       )}
       <div className="mb-6">
         <p className={eyebrow}>Firm OS · supervised learning</p>
         <h1 className={pageTitle}>Mistake log</h1>
-        <p className="text-ink-mute text-[14.5px] mt-1.5 max-w-2xl">
+        <p className="text-ink-mute text-[15px] mt-1.5 max-w-2xl">
           Findings reviewers say an agent missed or got wrong. Approving one adds its rule to a new minor version of the SOP pack; the next runs use it. Nothing is promoted without a partner or manager.
         </p>
       </div>
@@ -110,7 +111,7 @@ export function MistakesView({ data, names, backHref }: { data: { canDecide: boo
           Waiting for a decision ({data.proposed.length})
         </h2>
         {data.proposed.length === 0 ? (
-          <EmptyState title="Nothing waiting" />
+          <p className="text-[13px] text-ink-mute">Nothing waiting.</p>
         ) : (
           <ul className="divide-y divide-border">
             {data.proposed.map((r) => (

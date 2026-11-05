@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
-import { btnPrimary, call, errorText } from "@/components/ui";
+import { btnGhost, call, errorText } from "@/components/ui";
 import { focusRing } from "../parts";
 
 /** "Run agent" for the assignee: prepares the draft pack and opens the review screen. */
@@ -23,7 +23,7 @@ export function RunAgentButton({ agent, jobId, label }: { agent: string; jobId: 
 
   return (
     <span className="inline-flex flex-col items-end gap-1">
-      <button type="button" onClick={run} disabled={busy} aria-label={label} className={`${btnPrimary} ${focusRing} inline-flex items-center gap-1.5`}>
+      <button type="button" onClick={run} disabled={busy} aria-label={label} className={`${btnGhost} ${focusRing} inline-flex items-center gap-1.5`}>
         {busy && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />}
         {busy ? "Running…" : "Run agent"}
       </button>

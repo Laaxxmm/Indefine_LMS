@@ -25,7 +25,7 @@ export default async function AgentPage({ params }: { params: Promise<{ agent: s
   return (
     <div>
       <Link href="/agents" className={`inline-flex items-center gap-1.5 text-sm font-semibold text-ink-mute hover:text-ink transition mb-4 rounded ${focusRing}`}>
-        <ArrowLeft className="w-4 h-4" aria-hidden="true" /> All runs
+        <ArrowLeft className="w-4 h-4" aria-hidden="true" /> Runs
       </Link>
       <div className="mb-6">
         <p className={eyebrow}>Agent · {def.service}</p>
@@ -56,7 +56,7 @@ export default async function AgentPage({ params }: { params: Promise<{ agent: s
               </thead>
               <tbody>
                 {jobs.map((j) => (
-                  <tr key={j.id} className="border-t border-border h-11">
+                  <tr key={j.id} className="border-t border-border hover:bg-muted/40 h-11">
                     <td className={`${td} font-semibold`}>{j.title}</td>
                     <td className={td}>{j.clientCode}</td>
                     <td className={`${td} tabular-nums`}>

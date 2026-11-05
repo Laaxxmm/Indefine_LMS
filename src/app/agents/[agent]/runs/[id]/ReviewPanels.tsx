@@ -75,15 +75,15 @@ export function DeliverablesPanel({ deliverables }: { deliverables: DeliverableV
       {open && preview && current && (
         <div className="mt-4">
           {preview.sheets.length > 1 && (
-            <div role="tablist" aria-label="Sheets" className="flex gap-1 mb-2 flex-wrap">
+            <div role="group" aria-label="Sheets" className="flex gap-1 mb-2 flex-wrap">
               {preview.sheets.map((s, i) => (
-                <button key={s.name} type="button" role="tab" aria-selected={i === sheet} onClick={() => setSheet(i)} className={`${i === sheet ? btnPrimary : btnGhost} ${focusRing}`}>
+                <button key={s.name} type="button" aria-pressed={i === sheet} onClick={() => setSheet(i)} className={`${btnGhost} ${i === sheet ? "bg-muted text-ink" : ""} ${focusRing}`}>
                   {s.name}
                 </button>
               ))}
             </div>
           )}
-          <div className="overflow-auto max-h-[480px] rounded-lg border border-border" role="tabpanel" tabIndex={0} aria-label={`Preview of sheet ${current.name}`}>
+          <div className="overflow-auto max-h-[480px] rounded-lg border border-border" role="region" tabIndex={0} aria-label={`Preview of sheet ${current.name}`}>
             <table className="text-[12px] tabular-nums">
               <caption className="sr-only">Sheet {current.name}, read-only</caption>
               <tbody>

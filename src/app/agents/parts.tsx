@@ -20,7 +20,7 @@ export const th = "px-4 py-3 font-bold";
 export const td = "px-4 py-3";
 export const linkText = `font-semibold text-brand-600 hover:text-brand-700 hover:underline rounded ${focusRing}`;
 
-const chip = "inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-bold uppercase tracking-wide whitespace-nowrap";
+export const chip = "inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-bold uppercase tracking-wide whitespace-nowrap";
 
 const STATE_TONE: Record<JobTaskState, string> = {
   DRAFT: "border-border bg-muted text-ink-soft",
@@ -116,7 +116,7 @@ export function RunsTable({ runs, showAgent = true }: { runs: RunRow[]; showAgen
               <td className={`${td} text-right tabular-nums whitespace-nowrap`}>
                 <span className={r.blockFails ? "text-rose-700 font-bold" : "text-ink-mute"}>{r.blockFails} block</span>
                 <span className="text-ink-mute" aria-hidden="true"> · </span>
-                <span className={r.warnFails ? "text-amber-800 font-bold" : "text-ink-mute"}>{r.warnFails} warn</span>
+                <span className={r.warnFails ? "text-amber-800 font-bold" : "text-ink-mute"}>{r.warnFails} warning</span>
               </td>
               <td className={`${td} text-ink-mute tabular-nums whitespace-nowrap`}>{r.startedAt}</td>
             </tr>

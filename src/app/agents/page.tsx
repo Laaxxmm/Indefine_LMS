@@ -20,7 +20,7 @@ export default async function AgentsPage() {
       <div className="mb-6">
         <p className={eyebrow}>Firm OS</p>
         <h1 className={pageTitle}>{all ? "Agent runs" : "My agent runs"}</h1>
-        <p className="text-ink-mute text-[14.5px] mt-1.5 max-w-2xl">
+        <p className="text-ink-mute text-[15px] mt-1.5 max-w-2xl">
           Draft packs prepared by task agents for review. A person checks every finding, approves the pack and files it; the app never files or sends anything.
         </p>
       </div>
