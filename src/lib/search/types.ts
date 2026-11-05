@@ -61,6 +61,7 @@ export const IDENTIFIER_LABELS: Record<IdentifierKind, string> = { pan: "PAN", g
 
 /** What GET/POST /api/firm-os/search returns on success. */
 export type SearchResponse = {
+  /** The text searched; the masked identifier for an identifier search; empty for part of an identifier or an Aadhaar number. */
   query: string;
   /** text = names, codes and titles; identifier = exact PAN/GSTIN/phone/email; partial = part of an identifier (codes only). */
   mode: "text" | "identifier" | "partial" | "unsupported";
