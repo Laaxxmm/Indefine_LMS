@@ -172,13 +172,14 @@ describe("runChecklist", () => {
     expect(results[2]).toMatchObject({ status: "na", flags: ["llm-evidence-missing"], evidence: null });
   });
 
-  it("accepts an LLM pass with quote + location and uses the default message", async () => {
+  it("accepts an LLM pass with quote + location and uses the default message; a link from the model is never kept (ADR-009, LLM05)", async () => {
     const results = await runChecklist(ok(loadRuleSet(pack, registry)), cleanInput, {
       registry,
       llmContext,
-      llmCheck: async () => ({ status: "pass", evidence: { quote: "No RCM supplies", location: "notes p.2", link: "https://sp/doc" } }),
+      llmCheck: async () => ({ status: "pass", evidence: { quote: "No RCM supplies", location: "notes p.2", link: "javascript:alert(1)" } }),
     });
-    expect(results[2]).toMatchObject({ status: "pass", message: "RCM liability: OK", evidence: { quote: "No RCM supplies", location: "notes p.2", link: "https://sp/doc" } });
+    expect(results[2]).toMatchObject({ status: "pass", message: "RCM liability: OK" });
+    expect(results[2].evidence).toEqual({ quote: "No RCM supplies", location: "notes p.2" });
   });
 
   it("uses failMessage when a failing check gives no message", async () => {

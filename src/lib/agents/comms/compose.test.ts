@@ -43,7 +43,7 @@ describe("draftMessage — English", () => {
     expect(sent).not.toContain("Ravi Kumar");
     expect(sent).not.toContain("Priya Sharma"); // the signature never goes to the model
     expect(sent).toContain("⟨ORG_1⟩");
-    expect(r.rows.map((x) => [x.task, x.agent, x.privacy, x.anonymized, x.status])).toEqual([["comms.polish.gst@1", "comms", "anonymize-then-cloud", true, "OK"]]);
+    expect(r.rows.map((x) => [x.task, x.agent, x.privacy, x.anonymized, x.status])).toEqual([["comms.polish.gst@2", "comms", "anonymize-then-cloud", true, "OK"]]);
     expect(out.stats.modelCalls).toBe(1);
   });
 

@@ -5,6 +5,14 @@ import { loadRouterConfig } from "@/lib/ai/config";
 import { NoProviderAvailableError } from "@/lib/ai/errors";
 import { createRouter, type ModelCallRepo, type ModelCallRow } from "@/lib/ai/router";
 import type { ModelProvider, ProviderId, ProviderRequest } from "@/lib/ai/types";
+import { UNTRUSTED_FENCE } from "@/lib/agents/core/guardrails/untrusted";
+
+/** The message as the model reads it: the guardrail session fences it as untrusted data (ADR-009); the fake reads inside the fence. */
+export function unfence(content: string): string {
+  const open = content.indexOf(`${UNTRUSTED_FENCE.open}\n`);
+  const close = content.lastIndexOf(`\n${UNTRUSTED_FENCE.close}`);
+  return open >= 0 && close > open ? content.slice(open + UNTRUSTED_FENCE.open.length + 1, close) : content;
+}
 
 /** A scripted answer: the model's `output` (wrapped with a confidence), a function of the masked request, or an Error to throw. */
 export type Step = unknown | Error | ((req: ProviderRequest, input: Record<string, unknown>) => unknown);
@@ -29,7 +37,7 @@ export function scriptedRouter(steps: Step[], opts: { available?: boolean; confi
       const step = queue.shift();
       if (step === undefined) throw new Error("comms test router: no scripted step left");
       if (step instanceof Error) throw step;
-      const input = JSON.parse(req.messages[0].content) as Record<string, unknown>;
+      const input = JSON.parse(unfence(req.messages[0].content)) as Record<string, unknown>;
       const output = typeof step === "function" ? (step as (r: ProviderRequest, i: Record<string, unknown>) => unknown)(req, input) : step;
       return { output: { output, confidence: opts.confidence ?? 0.95 } as T, model: req.model, tokensIn: 400, tokensOut: 200, latencyMs: 5 };
     },

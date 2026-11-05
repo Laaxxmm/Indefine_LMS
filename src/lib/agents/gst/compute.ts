@@ -30,6 +30,12 @@
 //   (itc.heldBack, figure itcHeldBackPaise, a memo row in Table 4) and raised by rule
 //   gst.model-questions and the client document requests with the amount. A supplier credit note
 //   on such a ledger still reduces ITC; RCM liability (3.1(d)) is unchanged.
+// - ITC held back on withheld ledgers (owner-approved 2026-11-06, ADR-009): a ledger the
+//   injection screen kept away from the model (its text read like an instruction to the AI;
+//   LedgerClass.withheld) is treated exactly like an abstained one — its ITC is held back, counted
+//   in itcHeldBackPaise, and raised by gst.model-questions and the client document requests —
+//   alongside the run's block flag possible-prompt-injection. Whatever the ledger would otherwise
+//   have been (blocked, claimed, reverse charge), nothing on it is claimed until a person answers.
 import { BLOCKED_CATEGORIES, GST_CONFIG, RCM_SERVICES, type BlockedCategory, type RcmService } from "./config";
 import { hsnFromText, ledgerKeyOf } from "./classify";
 import {
@@ -298,7 +304,8 @@ export function docsRows(sales: SalesDoc[]): DocsRow[] {
 const isBlocked = (v: string): v is BlockedCategory => Object.prototype.hasOwnProperty.call(BLOCKED_CATEGORIES, v);
 const isRcm = (v: string): v is RcmService => Object.prototype.hasOwnProperty.call(RCM_SERVICES, v);
 /** The model could not say whether ITC is blocked or whether reverse charge applies (or its answer was ungrounded). */
-export const isAbstained = (c: LedgerClass | null): boolean => !!c && (c.blockedCategory === "insufficient_evidence" || c.rcmService === "insufficient_evidence");
+/** The ledger's ITC is held back: the model abstained on it, or the injection screen withheld it (owner-approved 2026-11-06). */
+export const isAbstained = (c: LedgerClass | null): boolean => !!c && (c.withheld === true || c.blockedCategory === "insufficient_evidence" || c.rcmService === "insufficient_evidence");
 
 function analysePurchases(x: GstExtract, clientState: string): PurchaseA[] {
   const cls = new Map(x.ledgers.map((l) => [l.ledger, l]));
@@ -306,8 +313,9 @@ function analysePurchases(x: GstExtract, clientState: string): PurchaseA[] {
     const key = ledgerKeyOf(d);
     const c = cls.get(key) ?? null;
     const abstained = isAbstained(c);
-    const blocked = c && isBlocked(c.blockedCategory) ? c.blockedCategory : null;
-    const rcmService = c && isRcm(c.rcmService) ? c.rcmService : null;
+    // A withheld ledger was never classified: neither blocked nor RCM, whatever its fields say (its ITC is held back).
+    const blocked = c && !c.withheld && isBlocked(c.blockedCategory) ? c.blockedCategory : null;
+    const rcmService = c && !c.withheld && isRcm(c.rcmService) ? c.rcmService : null;
     const booksTax = lineTax(d.lines);
     const booksTaxable = lineTaxable(d.lines);
     const forwardOk =

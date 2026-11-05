@@ -11,7 +11,7 @@ describe("loadGuardrailSignals", () => {
     const db = {
       auditEvent: {
         findMany: vi.fn(async () => [
-          { createdAt: AT, meta: { agent: "gst", judgements: 3, abstained: 1, groundChecked: 9, ungrounded: 1, agreementChecks: 2, disagreements: 1, scopeViolations: 0, wrongInput: 0 } },
+          { createdAt: AT, meta: { agent: "gst", judgements: 3, abstained: 1, groundChecked: 9, ungrounded: 1, agreementChecks: 2, disagreements: 1, scopeViolations: 0, wrongInput: 0, injections: 2, tasks: { "gst.read-hsn@2": { checked: 8, ungrounded: 1 }, bad: "x" } } },
           { createdAt: AT, meta: { judgements: 5 } },
           { createdAt: AT, meta: { agent: "tax", judgements: "x" } },
         ]),
@@ -24,8 +24,8 @@ describe("loadGuardrailSignals", () => {
     const s = await loadGuardrailSignals(from, to, db as never);
     expect(db.auditEvent.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { action: "guardrail-run", createdAt: { gte: from, lt: to } } }));
     expect(s.runs).toEqual([
-      { createdAt: AT, agent: "gst", judgements: 3, abstained: 1, groundChecked: 9, ungrounded: 1, agreementChecks: 2, disagreements: 1, scopeViolations: 0, wrongInput: 0 },
-      { createdAt: AT, agent: "tax", judgements: 0, abstained: 0, groundChecked: 0, ungrounded: 0, agreementChecks: 0, disagreements: 0, scopeViolations: 0, wrongInput: 0 },
+      { createdAt: AT, agent: "gst", judgements: 3, abstained: 1, groundChecked: 9, ungrounded: 1, agreementChecks: 2, disagreements: 1, scopeViolations: 0, wrongInput: 0, injections: 2, tasks: { "gst.read-hsn@2": { checked: 8, ungrounded: 1 } } },
+      { createdAt: AT, agent: "tax", judgements: 0, abstained: 0, groundChecked: 0, ungrounded: 0, agreementChecks: 0, disagreements: 0, scopeViolations: 0, wrongInput: 0, injections: 0, tasks: {} },
     ]);
     expect(s.reviews.map((r) => r.kind)).toEqual(["run", "changes-requested", "run", "mistake"]);
   });
@@ -38,6 +38,8 @@ describe("recordGuardrailBreaches", () => {
     rates: {} as GuardrailDay["rates"],
     scopeViolations: 0,
     wrongInput: 0,
+    hallucination: [],
+    injections: 1,
     breaches: breached ? [{ metric: "abstain", rate: 0.456789, count: 5, threshold: 0.3, sample: 11 }] : [],
   });
 
@@ -59,7 +61,7 @@ describe("recordGuardrailBreaches", () => {
           action: "guardrail-breach",
           entity: "AgentGuardrails",
           entityId: "gst:2026-11-05",
-          meta: { agent: "gst", day: "2026-11-05", breaches: [{ metric: "abstain", rate: 0.4568, count: 5, threshold: 0.3, sample: 11 }] },
+          meta: { agent: "gst", day: "2026-11-05", breaches: [{ metric: "abstain", rate: 0.4568, count: 5, threshold: 0.3, sample: 11 }], injections: 1 },
         },
         select: { id: true }, // written through logAudit (src/lib/audit/log.ts)
       },

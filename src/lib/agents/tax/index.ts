@@ -17,7 +17,8 @@ import { dayNumber, paiseToRupeeString, rupeesToPaise } from "@/lib/agents/core/
 import { analyseTax, isAisIncome, type AisMatch, type TaxExtract } from "./analyse";
 import { ruleSetFor } from "./data";
 import { taxDeliverables } from "./deliverables";
-import { TAX_MATCH_AIS_SPEC, TAX_MODEL_TASKS, acceptedAisMatches, matchAisUserMessage } from "./model-tasks";
+import { AIS_SCREEN, TAX_MATCH_AIS_SPEC, TAX_MODEL_TASKS, acceptedAisMatches, aisPromptLines, matchAisUserMessage } from "./model-tasks";
+import { screenForModel } from "@/lib/agents/core/guardrails/untrusted";
 import { taxInputSchema, type TaxInput } from "./parse";
 import { TAX_CHECKLIST, TAX_KEY, taxRegistry } from "./rules";
 
@@ -142,15 +143,24 @@ export const taxAgent: AgentDefinition<TaxInput, TaxExtract> = {
       aisMatches = incomeLines.map((l) => ({ aisId: l.id, outcome: "not_in_books", bookId: null }));
     } else if (incomeLines.length) {
       const ctx = { ais, books };
+      // ADR-009: an AIS line or books ledger that reads like an instruction to the AI is not sent
+      // (model-tasks.ts leaves it out of the prompt and of every accepted answer); it is recorded
+      // here for the run's possible-prompt-injection flag and its AIS line becomes a reviewer question.
+      const lines = aisPromptLines(ctx);
+      const screened = screenForModel(model, TAX_MATCH_AIS_SPEC.name, [...lines.ais, ...lines.books], AIS_SCREEN);
+      const kept = new Set<unknown>(screened.clean);
+      const sendable = lines.ais.filter((a) => kept.has(a));
       // Scoped call (ADR-008): the framework supplies the system prompt (firm + income-tax
       // preambles + task prompt) and runs the task's validator as the router's contradictions.
-      const out = await model({
-        task: TAX_MATCH_AIS_SPEC.name,
-        privacy: "anonymize-then-cloud",
-        difficulty: "sop",
-        schema: TAX_MATCH_AIS_SPEC.schema,
-        messages: [{ role: "user", content: matchAisUserMessage(rs.rules, ctx, notes) }],
-      });
+      const out = sendable.length
+        ? await model({
+            task: TAX_MATCH_AIS_SPEC.name,
+            privacy: "anonymize-then-cloud",
+            difficulty: "sop",
+            schema: TAX_MATCH_AIS_SPEC.schema,
+            messages: [{ role: "user", content: matchAisUserMessage(rs.rules, ctx, notes) }],
+          })
+        : { matches: [] };
       // After a final validator failure the router still returns its last output (needs review):
       // only validated answers are used; the rest become reviewer questions.
       aisMatches = acceptedAisMatches(out, ctx);

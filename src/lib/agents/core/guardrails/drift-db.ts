@@ -15,6 +15,18 @@ export type DriftDb = Pick<AppDb, "auditEvent" | "agentRun" | "mistakeLog">;
 
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
 
+/** `meta.tasks` → { "<task>@<v>": { checked, ungrounded } }; anything malformed is skipped. */
+function taskCounts(v: unknown): Record<string, { checked: number; ungrounded: number }> {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return {};
+  const out: Record<string, { checked: number; ungrounded: number }> = {};
+  for (const [task, t] of Object.entries(v as Record<string, unknown>)) {
+    if (!t || typeof t !== "object") continue;
+    const c = t as Record<string, unknown>;
+    out[task] = { checked: num(c.checked), ungrounded: num(c.ungrounded) };
+  }
+  return out;
+}
+
 /** Guardrail-run records, runs / request-changes and MistakeLog proposals created in [from, to). */
 export async function loadGuardrailSignals(from: Date, to: Date, db: DriftDb): Promise<{ runs: GuardrailRunSignal[]; reviews: ReviewSignal[] }> {
   const range = { gte: from, lt: to };
@@ -38,6 +50,9 @@ export async function loadGuardrailSignals(from: Date, to: Date, db: DriftDb): P
       disagreements: num(m.disagreements),
       scopeViolations: num(m.scopeViolations),
       wrongInput: num(m.wrongInput),
+      // ADR-009: withheld injection attempts and per-task grounding counts (hallucination budget).
+      injections: num(m.injections),
+      tasks: taskCounts(m.tasks),
     });
   }
   const reviews: ReviewSignal[] = [];
@@ -68,7 +83,8 @@ export async function recordGuardrailBreaches(days: GuardrailDay[], db: Pick<App
       action: GUARDRAIL_BREACH_ACTION,
       entity: GUARDRAIL_BREACH_ENTITY,
       entityId: id,
-      meta: { agent: d.agent, day: d.day, breaches: d.breaches.map((b) => ({ ...b, rate: b.rate === null ? null : Math.round(b.rate * 10_000) / 10_000 })) },
+      // ADR-009: the day's injection-screen count travels with the breach record.
+      meta: { agent: d.agent, day: d.day, breaches: d.breaches.map((b) => ({ ...b, rate: b.rate === null ? null : Math.round(b.rate * 10_000) / 10_000 })), injections: d.injections },
     });
     done.add(id);
     written.push(id);

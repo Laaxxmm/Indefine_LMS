@@ -332,7 +332,8 @@ export function documentRequests(a: Analysis, x: GstExtract): DocRequest[] {
   for (const d of x.sales) if (d.docType !== "INV" && !d.origNumber) out.push({ item: `Original invoice number and date for note ${d.number.trim()} (${d.party})`, reason: "Credit/debit note must reference the original invoice", ref: d.loc });
   // insufficient_evidence answers become questions, never defaults (ADR-008); the bill's ITC is held back until answered.
   for (const l of x.ledgers) {
-    if (l.blockedCategory !== "insufficient_evidence" && l.rcmService !== "insufficient_evidence") continue;
+    // A ledger withheld by the injection screen is asked about the same way (owner-approved 2026-11-06).
+    if (!l.withheld && l.blockedCategory !== "insufficient_evidence" && l.rcmService !== "insufficient_evidence") continue;
     const doc = a.purchases.find((p) => p.key === l.ledger);
     const held = heldBackFor(a, l.ledger);
     out.push({
