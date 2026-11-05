@@ -1,0 +1,202 @@
+import { describe, expect, it, vi } from "vitest";
+import { DEFAULT_CALENDAR } from "@/lib/agents/core";
+import type { RouterResult } from "@/lib/ai/router";
+import { ManualBridge } from "@/lib/integrations/turia/manual-bridge";
+import { FakeTuriaRepo } from "../../../../tests/fakes/fake-turia-repo";
+import { MemoryOnboardingStore } from "../../../../tests/fakes/fake-onboarding-store";
+import { PAN, PEOPLE, completeSpec, gstinFor } from "./__fixtures__/synthetic";
+import type { ExtractRouter } from "./extract";
+import { createCalendarPlanner } from "./planner";
+import { createSaga } from "./saga";
+import { OnboardingError, createOnboardingService } from "./service";
+import type { ExtractedSpec } from "./spec";
+import type { ValidationPorts } from "./validators";
+
+const NOW = new Date("2026-11-05T10:00:00Z");
+
+function routerReturning(...outputs: ExtractedSpec[]): ExtractRouter {
+  return {
+    async run<T>() {
+      const output = outputs.shift() ?? {};
+      return { status: "ok", output, needsPartnerReview: false, attempts: 1, provider: "claude", model: "m", confidence: 0.9, escalated: false, anonymized: true, tokensIn: 1, tokensOut: 1, costInr: 0 } as RouterResult<T>;
+    },
+  };
+}
+
+function setup(o: { confirmRequired?: boolean; outputs?: ExtractedSpec[]; ports?: Partial<ValidationPorts> } = {}) {
+  const store = new MemoryOnboardingStore(PEOPLE);
+  const repo = new FakeTuriaRepo();
+  const manual = new ManualBridge(repo, () => NOW);
+  const firmClients = store.firmClients;
+  const ports: ValidationPorts = {
+    findFirmClientByCode: async (code) => {
+      const f = firmClients.find((x) => x.clientCode === code);
+      return f ? { lmsClientId: f.lmsClientId, legalName: store.clients.find((c) => c.id === f.lmsClientId)!.name } : null;
+    },
+    findLmsClient: async () => null,
+    findActiveUser: async (id) => PEOPLE.find((p) => p.id === id) ?? null,
+    turia: manual,
+    ...o.ports,
+  };
+  const sharepoint = {
+    ensureClientSite: vi.fn(async (code: string) => ({ siteUrl: `https://srcaassociate.sharepoint.com/sites/CL-${code}`, created: ["site"] })),
+    ensureFyTree: vi.fn(async () => ({ siteUrl: "s", folders: 10, created: [] })),
+  };
+  const turiaRefs = new Map<string, string>();
+  const audits: string[] = [];
+  const service = createOnboardingService({
+    runs: store,
+    router: routerReturning(...(o.outputs ?? [])),
+    people: async () => PEOPLE,
+    ports,
+    planner: createCalendarPlanner({ loadPack: async () => ({ pack: DEFAULT_CALENDAR, source: "Statutory calendar: defaults" }) }),
+    saga: createSaga({ store, turia: manual, sharepoint, now: () => NOW }),
+    turiaMode: "MANUAL",
+    confirmRequired: o.confirmRequired ?? true,
+    manual,
+    listTuriaSyncs: async (fc) => repo.rows.filter((r) => r.firmClientId === fc),
+    getTuriaSync: (id) => repo.get(id),
+    setTuriaClientRef: async (fc, ref) => void turiaRefs.set(fc, ref),
+    audit: async (e) => void audits.push(e.action),
+    now: () => NOW,
+  });
+  return { service, store, repo, sharepoint, turiaRefs, audits };
+}
+
+const FULL_ANSWERS = (() => {
+  const s = completeSpec();
+  return {
+    clientCode: s.clientCode, pan: s.pan, gstins: s.gstins.join("\n"), cin: s.cin!, firstPeriod: s.firstPeriod!, fy: s.fy,
+    contactName: s.contactName, contactEmail: s.contactEmail, contactPhone: s.contactPhone, turnoverInr: "2.5 Cr",
+    billing: s.billing, dscHolder: s.dscHolder!, booksSoftware: "Tally",
+  };
+})();
+
+describe("onboarding service — conversation", () => {
+  it("start: extracts, resolves people and asks only what is missing (≤ 5)", async () => {
+    const { service, store } = setup({
+      outputs: [{ legalName: "Acme Widgets Private Limited", entityType: "PVT_LTD", services: [{ service: "GST", frequency: "MONTHLY" }, { service: "ROC" }, { service: "Books", frequency: "MONTHLY" }], assigneeName: "Priya Sharma", reviewerName: "Ravi" }],
+    });
+    const v = await service.start("Onboard Acme Widgets Private Limited …", "u-partner");
+    expect(v.status).toBe("DRAFT");
+    expect(v.spec).toMatchObject({ assigneeId: "u-priya", reviewerId: "u-ravi" });
+    expect(v.questions.map((q) => q.field)).toEqual(["clientCode", "fy", "pan", "gstins", "cin"]);
+    expect(v.complete).toBe(false);
+    expect(store.runs.get(v.id)!.prompt).toMatch(/Onboard Acme/);
+  });
+
+  it("answer: merges answers, re-validates, and re-asks invalid values with the reason", async () => {
+    const { service } = setup({ outputs: [{ legalName: "Acme Widgets Private Limited", entityType: "PVT_LTD", services: [{ service: "GST", frequency: "MONTHLY" }], assigneeName: "Priya Sharma", reviewerName: "Ravi" }] });
+    const v0 = await service.start("x", "u");
+    const v1 = await service.answer(v0.id, { answers: { ...FULL_ANSWERS, gstins: gstinFor("29", PAN.company2), turnoverInr: "lots" } });
+    const gstQ = v1.questions.find((q) => q.field === "gstins");
+    expect(gstQ?.error).toMatch(/belongs to PAN AAACB5678K/);
+    expect(v1.questions.find((q) => q.field === "turnoverInr")?.error).toMatch(/Enter an amount/);
+    const v2 = await service.answer(v0.id, { answers: { gstins: FULL_ANSWERS.gstins, turnoverInr: "2.5 Cr" } });
+    expect(v2.questions).toEqual([]);
+    expect(v2.complete).toBe(true);
+    expect(v2.checks[0]).toMatch(/Search Turia .* ACME01/);
+  });
+
+  it("answer with a follow-up sentence runs the extractor over the spec so far", async () => {
+    const { service } = setup({ outputs: [{ legalName: "Acme" }, { clientCode: "acme9" }] });
+    const v0 = await service.start("Onboard Acme", "u");
+    const v1 = await service.answer(v0.id, { message: "code is acme9" });
+    expect(v1.spec).toMatchObject({ legalName: "Acme", clientCode: "ACME9" });
+  });
+
+  it("errors that are not this turn's questions are listed separately", async () => {
+    const { service } = setup({ outputs: [{ ...completeSpec({ entityType: "PROPRIETORSHIP", pan: PAN.individual, gstins: [gstinFor("29", PAN.individual)] }), cin: "U12345KA2020PTC123456", services: [{ service: "GST", frequency: "MONTHLY" }] }] });
+    const v = await service.start("x", "u");
+    expect(v.errors.map((e) => e.message)).toContain("A proprietorship has no CIN/LLPIN");
+    expect(v.complete).toBe(false);
+  });
+
+  it("refuses to plan while questions remain, and unknown runs", async () => {
+    const { service } = setup({ outputs: [{ legalName: "Acme" }] });
+    const v = await service.start("x", "u");
+    await expect(service.plan(v.id, "u")).rejects.toMatchObject({ code: "invalid" });
+    await expect(service.get("nope")).rejects.toBeInstanceOf(OnboardingError);
+  });
+});
+
+async function planned(o: Parameters<typeof setup>[0] = {}) {
+  const ctx = setup({ outputs: [{ legalName: "Acme Widgets Private Limited", entityType: "PVT_LTD", services: [{ service: "GST", frequency: "MONTHLY" }, { service: "ROC" }, { service: "Books", frequency: "MONTHLY" }], assigneeName: "Priya Sharma", reviewerName: "Ravi" }], ...o });
+  const v0 = await ctx.service.start("x", "u-partner");
+  await ctx.service.answer(v0.id, { answers: FULL_ANSWERS });
+  const v = await ctx.service.plan(v0.id, "u-partner");
+  return { ...ctx, v, runId: v0.id };
+}
+
+describe("onboarding service — plan, create, resume, Turia confirm", () => {
+  it("plan preview lists everything and waits for Create", async () => {
+    const { v, store } = await planned();
+    expect(v.status).toBe("DRAFT");
+    expect(v.plan).toMatchObject({ clientCode: "ACME01", confirmRequired: true, lmsClient: { action: "create" }, plannerSource: "Statutory calendar: defaults" });
+    expect(v.plan!.people).toEqual({ assignee: { id: "u-priya", name: "Priya Sharma" }, reviewer: { id: "u-ravi", name: "Ravi Kumar" } });
+    expect(v.plan!.jobs.length).toBeGreaterThan(10);
+    expect(store.clients).toHaveLength(0); // nothing written before Create
+  });
+
+  it("create runs the saga; Done in Turia stores the client ref and settles the step", async () => {
+    const { service, runId, store, repo, turiaRefs, audits } = await planned();
+    const v = await service.create(runId, "u-partner");
+    expect(v.status).toBe("DONE");
+    expect(store.jobTasks.length).toBe(v.plan!.jobs.length);
+    expect(v.turia.map((t) => t.operation)).toEqual(["createClient", "addService", "addService", "addService", ...Array(v.plan!.turia.tasksNow).fill("createTask")]);
+    expect(v.turia[0].checklist?.steps.length).toBeGreaterThan(3);
+    expect(audits).toContain("onboarding.confirm");
+
+    const createClient = repo.rows[0];
+    const after = await service.turiaConfirm(runId, { syncId: createClient.id, turiaRef: "TUR-CL-1" }, "u-staff");
+    expect(turiaRefs.get(store.firmClients[0].id)).toBe("TUR-CL-1");
+    expect(after.turia[0]).toMatchObject({ status: "CONFIRMED", turiaRef: "TUR-CL-1" });
+    expect(after.steps!.find((s) => s.key === "turia")!.status).toBe("waiting");
+    for (const r of repo.rows.slice(1)) await service.turiaConfirm(runId, { syncId: r.id, turiaRef: `R-${r.id}` }, "u-staff");
+    const done = await service.get(runId);
+    expect(done.steps!.filter((s) => s.status !== "done")).toEqual([]);
+    expect(audits.filter((a) => a === "turia.confirm")).toHaveLength(repo.rows.length);
+    expect(done.questions).toEqual([]); // no questions once confirmed
+  });
+
+  it("turiaConfirm refuses a sync from another client and an unconfirmed run", async () => {
+    const { service, runId, repo } = await planned();
+    await expect(service.turiaConfirm(runId, { syncId: "sync-x", turiaRef: "R" }, "u")).rejects.toMatchObject({ code: "not-found" });
+    await service.create(runId, "u");
+    repo.rows[0].firmClientId = "other";
+    await expect(service.turiaConfirm(runId, { syncId: repo.rows[0].id, turiaRef: "R" }, "u")).rejects.toMatchObject({ code: "not-found" });
+  });
+
+  it("resume continues a failed run; resume of a draft and answer after confirm are refused", async () => {
+    const { service, runId, store, sharepoint } = await planned();
+    await expect(service.resume(runId, "u")).rejects.toMatchObject({ code: "conflict" });
+    sharepoint.ensureFyTree.mockRejectedValueOnce(new Error("Graph 503"));
+    const failed = await service.create(runId, "u");
+    expect(failed.status).toBe("FAILED");
+    expect(failed.steps!.find((s) => s.key === "sharepoint")!.status).toBe("failed");
+    const ok = await service.resume(runId, "u");
+    expect(ok.status).toBe("DONE");
+    expect(store.clients).toHaveLength(1);
+    await expect(service.answer(runId, { answers: {} })).rejects.toMatchObject({ code: "conflict" });
+    await expect(service.plan(runId, "u")).rejects.toMatchObject({ code: "conflict" });
+  });
+
+  it("create needs a plan", async () => {
+    const { service } = setup({ outputs: [{ legalName: "Acme" }] });
+    const v = await service.start("x", "u");
+    await expect(service.create(v.id, "u")).rejects.toMatchObject({ code: "invalid" });
+  });
+
+  it("answers after planning make the plan stale (cleared)", async () => {
+    const { service, runId } = await planned();
+    const v = await service.answer(runId, { answers: { billing: "Per filing" } });
+    expect(v.plan).toBeNull();
+  });
+
+  it("FIRM_OS_ONBOARD_CONFIRM=false: planning executes straight away", async () => {
+    const { v, store } = await planned({ confirmRequired: false });
+    expect(v.status).toBe("DONE");
+    expect(v.confirmRequired).toBe(false);
+    expect(store.firmClients).toHaveLength(1);
+  });
+});

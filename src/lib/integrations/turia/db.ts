@@ -1,9 +1,10 @@
 // Prisma-backed TuriaSyncRepo. Append/update only: nothing here removes a TuriaSync row.
-import type { Prisma, PrismaClient, TuriaSync } from "@prisma/client";
+import type { Prisma, TuriaSync } from "@prisma/client";
+import type { prisma } from "@/lib/prisma";
 import type { TuriaMode, TuriaOperation } from "./adapter";
 import type { NewTuriaSync, TuriaEvidence, TuriaSyncPatch, TuriaSyncRecord, TuriaSyncRepo } from "./manual-bridge";
 
-type Db = Pick<PrismaClient, "turiaSync">;
+type Db = Pick<typeof prisma, "turiaSync">;
 
 export function toRecord(row: TuriaSync): TuriaSyncRecord {
   return {
