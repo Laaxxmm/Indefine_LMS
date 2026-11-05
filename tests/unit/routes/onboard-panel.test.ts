@@ -76,6 +76,11 @@ describe("OnboardPanel screens", () => {
     const done = await svc.create(v0.id, "u");
     const after = await render(done);
     expect(after).toContain("Onboarded");
+    // The summary links go where each created thing lives, named after it.
+    expect(after).toMatch(/href="\/clients\/[^"]+"[^>]*>[^<]*in Clients</);
+    expect(after).toContain("CL-ACME01 SharePoint site");
+    expect(after).toContain('href="/agents"');
+    expect(after).toContain('rel="noopener noreferrer"');
     expect(after).toContain("Waiting on you");
     expect(after).toContain("Done in Turia");
     expect(after).toContain('aria-label="Copy PAN"');

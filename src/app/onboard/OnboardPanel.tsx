@@ -4,6 +4,7 @@
 //   describe → answer (≤ 5 questions) → plan preview ("Create") → progress (+ Turia checklists).
 // Every action goes through /api/firm-os/onboard/* with the shared call() helper.
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Check, Copy, Loader2 } from "lucide-react";
 import { btnGhost, btnPrimary, btnSm, call, card, errorText, field, h2 } from "@/components/ui";
@@ -21,6 +22,7 @@ const input = `${field} ${focusField}`;
 const label = "text-[11px] font-bold text-ink-mute";
 const primary = `${btnPrimary} ${focusBtn} inline-flex items-center gap-2`;
 const ghost = `${btnGhost} ${focusBtn} inline-flex items-center gap-1.5`;
+const summaryLink = `underline font-semibold text-ink ${focusBtn} rounded`;
 
 /** DD MMM YYYY in IST. */
 const day = (iso: string | null | undefined) => (iso ? istLabel(new Date(iso), { day: "2-digit", month: "short", year: "numeric" }) : null);
@@ -411,12 +413,22 @@ function Progress({ run, busy, error, onResume, onConfirm }: { run: RunView; bus
         <p className="font-display font-bold text-xl">{heading}</p>
         <ol className="mt-2 divide-y divide-border">{steps.map((s) => <StepRow key={s.key} step={s} />)}</ol>
         {run.status === "DONE" && summary && (
-          <p className="text-[13px] text-ink-mute mt-3">
-            {summary.jobTasks} jobs assigned.
-            {summary.nextInternalDue && ` Next internal due: ${summary.nextInternalDue.title} ${summary.nextInternalDue.period} on ${day(summary.nextInternalDue.on)}.`}{" "}
-            {summary.clientUrl && <a href={summary.clientUrl} className={`underline font-semibold text-ink ${focusBtn} rounded`}>Open client</a>}
-            {summary.siteUrl && <> · <a href={summary.siteUrl} target="_blank" rel="noreferrer" className={`underline font-semibold text-ink ${focusBtn} rounded`}>SharePoint site</a></>}
-          </p>
+          <div className="text-[13px] text-ink-mute mt-3">
+            <p>
+              {summary.jobTasks} job{summary.jobTasks === 1 ? "" : "s"} assigned{run.plan && ` to ${run.plan.people.assignee.name}, reviewer ${run.plan.people.reviewer.name}`}.
+              {summary.nextInternalDue && ` Next internal due: ${summary.nextInternalDue.title} ${summary.nextInternalDue.period} on ${day(summary.nextInternalDue.on)}.`}
+            </p>
+            {/* Where each created thing lives: the client record, its CL- site, and Agents, where the jobs are worked on. */}
+            <ul className="mt-2 flex flex-wrap gap-x-5 gap-y-1">
+              {summary.clientUrl && (
+                <li><Link href={summary.clientUrl} className={summaryLink}>{run.plan ? `${run.plan.legalName} in Clients` : "The client in Clients"}</Link></li>
+              )}
+              {summary.siteUrl && (
+                <li><a href={summary.siteUrl} target="_blank" rel="noopener noreferrer" className={summaryLink}>{run.plan ? `CL-${run.plan.clientCode} SharePoint site` : "SharePoint site"}</a></li>
+              )}
+              <li><Link href="/agents" className={summaryLink}>Jobs on Agents</Link></li>
+            </ul>
+          </div>
         )}
         <ErrorBox error={error} keys={["resume", "create"]} />
         {canResume && (

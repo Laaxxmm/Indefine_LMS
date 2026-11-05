@@ -91,6 +91,50 @@ describe("/agents", () => {
     expect(await renderHtml(await RunsPage())).toContain("No agent runs yet");
   });
 
+  it("Waiting for you: the assignee finds a new job and its Run agent entry point on /agents", async () => {
+    as(user("priya"));
+    const html = await renderHtml(await RunsPage());
+    expect(html).toContain("Waiting for you");
+    expect(html).toContain("Echo register");
+    expect(html).toContain("ACME01");
+    expect(html).toContain("Acme Pvt Ltd");
+    expect(html).toContain(">Preparer<");
+    expect(html).toContain("Run agent");
+    expect(html).toContain('aria-label="Run agent on Echo register for ACME01"');
+    // The reviewer has nothing to do until the pack is submitted; outsiders and partners not on the job see nothing.
+    for (const who of ["ravi", "outsider", "partner"] as const) {
+      as(user(who));
+      expect(await renderHtml(await RunsPage())).toContain("Nothing waiting for you");
+    }
+  });
+
+  it("Waiting for you follows the job: preparer submits, then the reviewer reviews, then it leaves both queues", async () => {
+    await startAgentRun(user("priya"), "echo", "job-1", state.world.deps);
+    as(user("priya"));
+    let html = await renderHtml(await RunsPage());
+    expect(html).toContain('href="/agents/echo/runs/run-1"');
+    expect(html).toContain(">Open pack to submit<");
+    expect(html).not.toContain('aria-label="Run agent on'); // AGENT_DONE: no run button, re-run needs a note on the review screen
+
+    await submitForReview(user("priya"), "run-1", state.world.deps);
+    expect(await renderHtml(await RunsPage())).toContain("Nothing waiting for you");
+    as(user("ravi"));
+    html = await renderHtml(await RunsPage());
+    expect(html).toContain(">Review pack<");
+    expect(html).toContain(">Reviewer<");
+
+    await approvePack(user("ravi"), "run-1", null, state.world.deps);
+    expect(await renderHtml(await RunsPage())).toContain("Nothing waiting for you");
+  });
+
+  it("Waiting for you says when no agent exists for the job's service yet", async () => {
+    vi.stubEnv("FIRM_OS_ECHO_AGENT", "");
+    as(user("priya"));
+    const html = await renderHtml(await RunsPage());
+    expect(html).toContain("No agent for Books yet");
+    expect(html).not.toContain('aria-label="Run agent on');
+  });
+
   it("staff see only their runs; partners see all", async () => {
     as(user("priya"));
     await startAgentRun(user("priya"), "echo", "job-1", state.world.deps);
