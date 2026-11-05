@@ -1,7 +1,8 @@
 // Wrong-department input fails closed (ADR-008 §7): a deterministic look at the header rows of
 // the supplied files, BEFORE any model call. When the documents belong to another department the
 // run stops with a message naming the agent to use. Shared by Books Close and Audit Assist.
-import { HEADER_SCAN_ROWS, parseCsv, type Cells } from "./table";
+import { HEADER_SCAN_ROWS, parseCsv, readTable, type Cells } from "./table";
+import { parseTb, type TbField } from "./tb";
 
 export type Department = { agent: "gst" | "tax" | "roc" | "books" | "audit"; label: string };
 
@@ -45,3 +46,44 @@ export class WrongDepartmentError extends Error {
 }
 
 export const wrongDepartmentMessage = (file: string, dept: Department, self: string) => new WrongDepartmentError(file, dept, self).message;
+
+/**
+ * The ADR-008 framework sniff (AgentScope.inputSniff) for Books Close and Audit Assist, run
+ * before any model call with the same signals and conditions as the input schema and parser:
+ * without a trial balance (by file name) every CSV is sniffed (and `noTb` may name another
+ * reason, e.g. a bank statement given to Audit); a trial balance that does not parse as one
+ * (column-map.json overrides applied) is sniffed by its rows.
+ */
+export async function sniffDepartment(
+  files: { name: string; bytes: Buffer }[],
+  self: string,
+  isTb: (name: string) => boolean,
+  noTb?: (files: { name: string; bytes: Buffer }[]) => string | null,
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const tbs = files.filter((f) => isTb(f.name));
+  if (!tbs.length) {
+    for (const f of files) {
+      const d = sniffCsv(f.name, f.bytes);
+      if (d) return { ok: false, reason: wrongDepartmentMessage(f.name, d, self) };
+    }
+    const other = noTb?.(files);
+    return other ? { ok: false, reason: other } : { ok: true };
+  }
+  let overrides: Partial<Record<TbField, string>> = {};
+  const map = files.find((f) => /^column[-_ ]?map\.json$/i.test(f.name));
+  if (map) {
+    try {
+      const j = JSON.parse(map.bytes.toString("utf8")) as { tb?: Partial<Record<TbField, string>> };
+      if (j && typeof j.tb === "object" && j.tb) overrides = j.tb;
+    } catch {
+      // ignored, as the parser does
+    }
+  }
+  for (const f of tbs) {
+    const { table } = await readTable(f);
+    if (parseTb(f.name, table.rows, overrides).tb) continue;
+    const d = sniffRows(table.rows);
+    if (d) return { ok: false, reason: wrongDepartmentMessage(f.name, d, self) };
+  }
+  return { ok: true };
+}
