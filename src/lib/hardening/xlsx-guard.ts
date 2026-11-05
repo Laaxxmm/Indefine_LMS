@@ -18,7 +18,7 @@
 // above WORKER_THRESHOLD is parsed in a worker_thread with its own heap limit and a time budget
 // (20 s), so a slow file cannot block the event loop or grow the main heap; the cell values come
 // back by structured clone and the caller formats them exactly as an inline parse would.
-import { createRequire } from "node:module";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { Worker } from "node:worker_threads";
 import { createInflateRaw } from "node:zlib";
@@ -386,13 +386,15 @@ const ExcelJS = require(d.exceljs);
 `;
 
 let exceljsPath: string | null | undefined;
+/**
+ * The exceljs package folder under the app root (`next start` runs from it; so do the tests). The
+ * worker's own Node `require` loads it by folder (package.json "main"), outside the server bundle;
+ * a plain path keeps the bundler from trying to resolve it at build time.
+ */
 function resolveExceljs(): string | null {
   if (exceljsPath === undefined) {
-    try {
-      exceljsPath = createRequire(join(process.cwd(), "package.json")).resolve("exceljs");
-    } catch {
-      exceljsPath = null;
-    }
+    const dir = join(process.cwd(), "node_modules", "exceljs");
+    exceljsPath = existsSync(join(dir, "package.json")) ? dir : null;
   }
   return exceljsPath;
 }
