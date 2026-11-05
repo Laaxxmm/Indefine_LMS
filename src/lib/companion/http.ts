@@ -10,6 +10,7 @@
 //            → provider.nextTask. Every refusal is one plain sentence in { error }.
 //
 // CORS lives here, in the route handler, not in next.config.ts (which belongs to hardening).
+import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import type { PrismaClient } from "@prisma/client";
 import { isActive } from "@/lib/access";
@@ -32,7 +33,7 @@ function json(body: unknown, status: number, allowOrigin: string | null, extra: 
   const headers: Record<string, string> = { "cache-control": "no-store", vary: "Origin", ...extra };
   if (allowOrigin) {
     headers["access-control-allow-origin"] = allowOrigin;
-    headers["access-control-expose-headers"] = "Retry-After";
+    headers["access-control-expose-headers"] = "Retry-After, ETag";
   }
   return NextResponse.json(body, { status, headers });
 }
@@ -46,7 +47,7 @@ export function handlePreflight(req: Request, origins: readonly string[]): Respo
     headers: {
       "access-control-allow-origin": allowed,
       "access-control-allow-methods": "GET, OPTIONS",
-      "access-control-allow-headers": "Authorization",
+      "access-control-allow-headers": "Authorization, If-None-Match",
       "access-control-max-age": "600",
       vary: "Origin",
     },
@@ -98,7 +99,11 @@ export async function handleNextTask(req: Request, deps: NextTaskDeps): Promise<
     const user = await loadCompanionUser(deps.db, verified.userId);
     if (!user || !isActive(user)) return send({ error: MSG.accountInactive }, 403);
     if (!(await hasCompanionAccess(deps.db, user))) return send({ error: MSG.noAccess }, 403);
-    return send(await deps.provider.nextTask(user, now), 200);
+    const body = await deps.provider.nextTask(user, now);
+    // Weak ETag over everything but the timestamp: an unchanged task is a 304 with no body.
+    const etag = `W/"${createHash("sha256").update(JSON.stringify({ ...(body as object), generatedAt: undefined })).digest("base64url").slice(0, 27)}"`;
+    if (req.headers.get("if-none-match") === etag) return new Response(null, { status: 304, headers: { etag, "cache-control": "no-store", vary: "Origin", ...(cors.allowed ? { "access-control-allow-origin": cors.allowed, "access-control-expose-headers": "Retry-After, ETag" } : {}) } });
+    return send(body, 200, { etag });
   } catch (e) {
     console.error("[companion] next-task failed", e);
     return send({ error: MSG.serverError }, 500);

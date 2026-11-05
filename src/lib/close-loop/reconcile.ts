@@ -25,11 +25,13 @@ import { formatDuration } from "./cycle-time";
 import {
   audit,
   JOB_SELECT,
+  loadDoneFacts,
   loadEvents,
-  loadFinalDeliverables,
   type CloseJobRow,
   type CloseLoopDb,
   type CoachEventData,
+  type DeliverableRow,
+  type JobEventRow,
 } from "./db";
 import { GATE_ACTOR_REF, closeJob, parseGateEvidence, verifyDeliverable, type CanCloseResult, type GateDeps } from "./gate";
 import { onFiledByHuman, type HookDeps } from "./hooks";
@@ -100,18 +102,25 @@ async function nudgeOnce(db: CloseLoopDb, data: CoachEventData, dedupeKey: strin
   }
 }
 
+/** Per-run memo of the user reads escalationRecipients makes (a manager per assignee, the partners once). */
+export type RecipientMemo = { managers: Map<string, Promise<string | null>>; partners?: Promise<string[]> };
+export const recipientMemo = (): RecipientMemo => ({ managers: new Map() });
+
 /** Reviewer (job, else engagement) and the assignee's manager; partners when there is nobody. Never the assignee. */
-export async function escalationRecipients(db: CloseLoopDb, job: CloseJobRow): Promise<string[]> {
+export async function escalationRecipients(db: CloseLoopDb, job: CloseJobRow, memo: RecipientMemo = recipientMemo()): Promise<string[]> {
   const ids = new Set<string>();
   const reviewer = job.reviewerId ?? job.engagement?.reviewerId ?? null;
   if (reviewer) ids.add(reviewer);
   if (job.assigneeId) {
-    const manager = (await db.user.findUnique({ where: { id: job.assigneeId }, select: { managerId: true } }))?.managerId;
+    const assignee = job.assigneeId;
+    if (!memo.managers.has(assignee)) memo.managers.set(assignee, Promise.resolve(db.user.findUnique({ where: { id: assignee }, select: { managerId: true } })).then((u) => u?.managerId ?? null));
+    const manager = await memo.managers.get(assignee)!;
     if (manager) ids.add(manager);
   }
   const out = [...ids].filter((id) => id !== job.assigneeId);
   if (out.length) return out.sort();
-  return (await db.user.findMany({ where: { level: "PARTNER", active: true }, select: { id: true }, orderBy: { id: "asc" } })).map((u) => u.id);
+  memo.partners ??= Promise.resolve(db.user.findMany({ where: { level: "PARTNER", active: true }, select: { id: true }, orderBy: { id: "asc" } })).then((us) => us.map((u) => u.id));
+  return [...(await memo.partners)];
 }
 
 function missingList(m: CanCloseResult["missing"]): string[] {
@@ -132,7 +141,7 @@ async function filedAtOf(db: CloseLoopDb, job: CloseJobRow): Promise<Date> {
 
 // ------------------------------------------------------------------ open jobs
 
-async function reconcileOpen(job: CloseJobRow, deps: ReconcileDeps, now: Date, s: ReconcileSummary): Promise<void> {
+async function reconcileOpen(job: CloseJobRow, deps: ReconcileDeps, now: Date, s: ReconcileSummary, memo: RecipientMemo): Promise<void> {
   let state: JobTaskState = job.state;
   if (state === "FILED_BY_HUMAN") {
     const hook = await onFiledByHuman(job.id, { ...deps, now: () => now });
@@ -159,7 +168,7 @@ async function reconcileOpen(job: CloseJobRow, deps: ReconcileDeps, now: Date, s
   }
   if (age > ESCALATE_AFTER_MS) {
     const message = `${jobLabel(job)} has waited ${formatDuration(age)} since filing without closing. Still needed: ${missing.join("; ")}.`;
-    for (const to of await escalationRecipients(deps.db, job)) {
+    for (const to of await escalationRecipients(deps.db, job, memo)) {
       const data: CoachEventData = { userId: to, kind: "escalation", jobTaskId: job.id, payload: { ...base, message, assigneeId: job.assigneeId } };
       if (await nudgeOnce(deps.db, data, dedupeKeys.escalation(job.id, to, day))) s.escalations += 1;
     }
@@ -168,9 +177,11 @@ async function reconcileOpen(job: CloseJobRow, deps: ReconcileDeps, now: Date, s
 
 // ------------------------------------------------------------------ DONE jobs
 
-async function recheckDone(job: CloseJobRow, deps: ReconcileDeps, now: Date, s: ReconcileSummary): Promise<void> {
+type DoneFacts = { events: JobEventRow[]; rows: DeliverableRow[] };
+
+async function recheckDone(job: CloseJobRow, deps: ReconcileDeps, now: Date, s: ReconcileSummary, facts: DoneFacts, memo: RecipientMemo): Promise<void> {
   s.doneChecked += 1;
-  const events = await loadEvents(deps.db, job.id);
+  const events = facts.events;
   const doneEvent = events.filter((e) => e.toState === "DONE").at(-1);
   const evidence =
     doneEvent && doneEvent.fromState === "CLOSING" && doneEvent.actorId === GATE_ACTOR_REF ? parseGateEvidence(doneEvent.note) : null;
@@ -180,7 +191,7 @@ async function recheckDone(job: CloseJobRow, deps: ReconcileDeps, now: Date, s: 
     s.backstopViolations.push(job.id);
     problems.push("DONE was set without close-gate evidence (not by system:close-gate)");
   }
-  const rows = await loadFinalDeliverables(deps.db, job.id);
+  const rows = facts.rows;
   const toCheck = evidence ? evidence.deliverables : rows.map((r) => ({ id: r.id, sha256: r.sha256 }));
   let unverifiable = false;
   for (const want of toCheck) {
@@ -200,7 +211,7 @@ async function recheckDone(job: CloseJobRow, deps: ReconcileDeps, now: Date, s: 
   const message = `${jobLabel(job)} is DONE but needs attention: ${problems.join("; ")}. The job was not reopened.`;
   const payload = { reason: "done-recheck", problems, message, assigneeId: job.assigneeId };
   const day = istDayKey(now);
-  const [first, ...rest] = await escalationRecipients(deps.db, job);
+  const [first, ...rest] = await escalationRecipients(deps.db, job, memo);
   if (!first) return;
   // The run that creates done-alert:<job>:<day> owns today's alert: it alone notifies the others
   // and writes the AuditEvent. A concurrent or later run gets the unique violation and stops.
@@ -235,7 +246,8 @@ export async function reconcile(deps: ReconcileDeps): Promise<ReconcileSummary> 
     take: MAX_JOBS_PER_RUN,
   });
   s.open = open.length;
-  for (const job of open) await reconcileOpen(job, deps, now, s);
+  const memo = recipientMemo();
+  for (const job of open) await reconcileOpen(job, deps, now, s, memo);
 
   const since = new Date(now.getTime() - RECHECK_DONE_DAYS * 24 * 60 * 60_000);
   const done = await deps.db.jobTask.findMany({
@@ -244,6 +256,8 @@ export async function reconcile(deps: ReconcileDeps): Promise<ReconcileSummary> 
     orderBy: { id: "asc" },
     take: MAX_JOBS_PER_RUN,
   });
-  for (const job of done) await recheckDone(job, deps, now, s);
+  // Two reads for all DONE jobs (their DONE events and Final deliverables), not two per job.
+  const facts = await loadDoneFacts(deps.db, done.map((j) => j.id));
+  for (const job of done) await recheckDone(job, deps, now, s, facts.get(job.id)!, memo);
   return s;
 }

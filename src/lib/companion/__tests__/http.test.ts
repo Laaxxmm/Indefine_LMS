@@ -68,7 +68,7 @@ describe("CORS", () => {
     expect(ok.status).toBe(204);
     expect(ok.headers.get("access-control-allow-origin")).toBe(EXT);
     expect(ok.headers.get("access-control-allow-methods")).toBe("GET, OPTIONS");
-    expect(ok.headers.get("access-control-allow-headers")).toBe("Authorization");
+    expect(ok.headers.get("access-control-allow-headers")).toBe("Authorization, If-None-Match");
     expect(ok.headers.get("access-control-allow-credentials")).toBeNull();
     const refused: Array<Record<string, string>> = [{ origin: "https://evil.example" }, { origin: OTHER_EXT }, {}];
     for (const headers of refused) {
@@ -159,6 +159,27 @@ describe("access (403) and success (200)", () => {
     expect(db.tokens[0].lastUsedAt).toEqual(NOW);
   });
 
+  it("carries a weak ETag over everything but the timestamp; a matching If-None-Match gets 304 with no body", async () => {
+    const { t, provider, deps } = setup();
+    const first = await handleNextTask(bearer(t), deps);
+    const etag = first.headers.get("etag");
+    expect(etag).toMatch(/^W\/"[A-Za-z0-9_-]{27}"$/);
+    expect(first.headers.get("access-control-expose-headers")).toBe("Retry-After, ETag");
+    // Same task, a later timestamp: still 304.
+    provider.nextTask.mockResolvedValueOnce({ ...NONE, generatedAt: new Date(NOW.getTime() + 60_000).toISOString() });
+    const same = await handleNextTask(get({ authorization: `Bearer ${t}`, origin: EXT, "if-none-match": etag! }), deps);
+    expect(same.status).toBe(304);
+    expect(await same.text()).toBe("");
+    expect(same.headers.get("etag")).toBe(etag);
+    expect(same.headers.get("access-control-allow-origin")).toBe(EXT);
+    expect(same.headers.get("cache-control")).toBe("no-store");
+    // A changed answer: 200 with the new body and a new ETag.
+    provider.nextTask.mockResolvedValueOnce({ ...NONE, counts: { open: 1, overdue: 0 } } as never);
+    const changed = await handleNextTask(get({ authorization: `Bearer ${t}`, origin: EXT, "if-none-match": etag! }), deps);
+    expect(changed.status).toBe(200);
+    expect(changed.headers.get("etag")).not.toBe(etag);
+  });
+
   it("a provider failure is a plain 500, with the detail only in the server log", async () => {
     const { t, provider, deps } = setup();
     provider.nextTask.mockRejectedValueOnce(new Error("connection reset by db-host-7"));
@@ -182,7 +203,7 @@ describe("rate limit (429)", () => {
     expect(limited.status).toBe(429);
     expect(await limited.json()).toEqual({ error: MSG.rateLimited });
     expect(Number(limited.headers.get("retry-after"))).toBeGreaterThan(0);
-    expect(limited.headers.get("access-control-expose-headers")).toBe("Retry-After");
+    expect(limited.headers.get("access-control-expose-headers")).toBe("Retry-After, ETag");
     const lookups = db.calls.filter((c) => c.method === "findUnique" && c.model === "companionToken").length;
     expect(lookups).toBe(3); // the limited request never reached the database
 

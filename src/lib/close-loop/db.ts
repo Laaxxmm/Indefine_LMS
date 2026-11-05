@@ -196,6 +196,30 @@ export function loadCloseSyncs(db: CloseLoopTx, jobTaskId: string): PromiseLike<
   return db.turiaSync.findMany({ where: { jobTaskId, operation: "closeTask" }, select: SYNC_SELECT, orderBy: { updatedAt: "desc" } });
 }
 
+/** The two batched reads of the reconciler's DONE re-check. PrismaClient has both shapes. */
+interface DoneRecheckReads {
+  jobTaskEvent: {
+    findMany(args: { where: { jobTaskId: { in: string[] }; toState: "DONE" }; select: typeof EVENT_SELECT & { jobTaskId: true }; orderBy: { createdAt: "asc" } }): PromiseLike<(JobEventRow & { jobTaskId: string })[]>;
+  };
+  deliverable: {
+    findMany(args: { where: { jobTaskId: { in: string[] }; kind: "Final" }; select: typeof DELIVERABLE_SELECT & { jobTaskId: true }; orderBy: { createdAt: "asc" } }): PromiseLike<(DeliverableRow & { jobTaskId: string })[]>;
+  };
+}
+
+/** DONE events and Final deliverables of many jobs: two reads in all, grouped by job. */
+export async function loadDoneFacts(db: CloseLoopTx, ids: string[]): Promise<Map<string, { events: JobEventRow[]; rows: DeliverableRow[] }>> {
+  const out = new Map(ids.map((id) => [id, { events: [] as JobEventRow[], rows: [] as DeliverableRow[] }]));
+  if (!ids.length) return out;
+  const reads = db as unknown as DoneRecheckReads;
+  const [events, rows] = await Promise.all([
+    reads.jobTaskEvent.findMany({ where: { jobTaskId: { in: ids }, toState: "DONE" }, select: { ...EVENT_SELECT, jobTaskId: true }, orderBy: { createdAt: "asc" } }),
+    reads.deliverable.findMany({ where: { jobTaskId: { in: ids }, kind: "Final" }, select: { ...DELIVERABLE_SELECT, jobTaskId: true }, orderBy: { createdAt: "asc" } }),
+  ]);
+  for (const { jobTaskId, ...e } of events) out.get(jobTaskId)?.events.push(e);
+  for (const { jobTaskId, ...d } of rows) out.get(jobTaskId)?.rows.push(d);
+  return out;
+}
+
 /** One AuditEvent through src/lib/audit/log.ts (validated action/entity, capped meta). */
 export async function audit(db: CloseLoopTx, data: AuditEventData): Promise<void> {
   await logAudit(db, { ...data, meta: data.meta as Record<string, unknown> | undefined });

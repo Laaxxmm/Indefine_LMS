@@ -531,9 +531,10 @@ export async function runAgent<I, E>(def: AgentDefinition<I, E>, jobTaskId: stri
       });
       if (results.length) await tx.checklistResult.createMany({ data: toChecklistResultRows(runId, results) });
       if (session) await logAudit(tx, session.auditEvent(runId, "ok").data);
-      for (const s of stored) {
-        await tx.deliverable.create({
-          data: {
+      if (stored.length) {
+        // One INSERT for all of the run's Working deliverables (was one per file).
+        await tx.deliverable.createMany({
+          data: stored.map((s) => ({
             jobTaskId,
             agentRunId: runId,
             kind: "Working",
@@ -544,7 +545,7 @@ export async function runAgent<I, E>(def: AgentDefinition<I, E>, jobTaskId: stri
             sha256: s.sha256,
             sizeBytes: s.sizeBytes,
             version: s.version,
-          },
+          })),
         });
       }
     });

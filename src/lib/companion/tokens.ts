@@ -162,6 +162,9 @@ export async function revokePairing(db: CompanionTokenDb, user: CompanionUser, p
   });
 }
 
+/** How stale CompanionToken.lastUsedAt may get before an accepted use rewrites it. */
+export const LAST_USED_RESOLUTION_MS = 10 * 60_000;
+
 export type VerifyFailure = "missing" | "unknown" | "revoked" | "expired";
 export type VerifyResult = { ok: true; tokenId: string; userId: string } | { ok: false; reason: VerifyFailure };
 
@@ -173,10 +176,13 @@ export async function verifyPairing(db: TokenOnlyDb, raw: string | null, now: Da
   if (!raw) return { ok: false, reason: "missing" };
   if (!isTokenShape(raw)) return { ok: false, reason: "unknown" };
   const hash = hashToken(raw);
-  const row = await db.companionToken.findUnique({ where: { tokenHash: hash }, select: { id: true, userId: true, tokenHash: true, createdAt: true, revokedAt: true } });
+  const row = await db.companionToken.findUnique({ where: { tokenHash: hash }, select: { id: true, userId: true, tokenHash: true, createdAt: true, revokedAt: true, lastUsedAt: true } });
   if (!row || !hashesEqual(row.tokenHash, hash)) return { ok: false, reason: "unknown" };
   const status = tokenStatus(row, now);
   if (status !== "active") return { ok: false, reason: status };
-  await db.companionToken.update({ where: { id: row.id }, data: { lastUsedAt: now } });
+  // "Last used" is shown to the minute-ish; one write per LAST_USED_RESOLUTION_MS, not one per poll.
+  if (!row.lastUsedAt || now.getTime() - row.lastUsedAt.getTime() >= LAST_USED_RESOLUTION_MS) {
+    await db.companionToken.update({ where: { id: row.id }, data: { lastUsedAt: now } });
+  }
   return { ok: true, tokenId: row.id, userId: row.userId };
 }

@@ -14,6 +14,7 @@ import {
   jobLink,
   nextPollDelay,
   nextTaskUrl,
+  resolveUnchanged,
   taskKey,
   ticksFor,
   tidyToken,
@@ -76,6 +77,15 @@ describe("interpret — one state per answer", () => {
     expect(interpret({ kind: "http", status: 500, body: { error: "TypeError at line 4" } })).toEqual({ view: "error", message: TEXT.serverError });
     expect(interpret({ kind: "http", status: 502, body: null }).view).toBe("error");
     expect(interpret({ kind: "network" })).toEqual({ view: "offline", message: TEXT.offline });
+  });
+
+  it("304 (If-None-Match matched) keeps the task on screen; a 304 with nothing on screen is not trusted", () => {
+    const next = interpret({ kind: "http", status: 304, body: null, etag: 'W/"abc"' });
+    expect(next).toEqual({ view: "unchanged" });
+    expect(resolveUnchanged(next, task)).toEqual({ view: "task", data: task });
+    expect(resolveUnchanged(next, null)).toEqual({ view: "error", message: TEXT.unexpected });
+    const fresh = interpret({ kind: "http", status: 200, body: task });
+    expect(resolveUnchanged(fresh, null)).toBe(fresh);
   });
 
   it("shows a server sentence only when it is short and plain", () => {

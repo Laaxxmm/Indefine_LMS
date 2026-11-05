@@ -1,4 +1,9 @@
-# Firm OS efficiency — proposed patches (not applied)
+# Firm OS efficiency — proposed patches
+
+**Status 06 Nov 2026: all applied** (P3, P5, P6 by hand on the current code; P4c in the owner's
+variant — a `close-refused` AuditEvent only when the refusal reasons change; the companion
+extension sends `If-None-Match`). Measured before/after in `docs/qa/efficiency-report.md`
+("Patches applied"). The diffs below are kept as the record of what was proposed.
 
 These touch files other agents own (views, workspace, coach, close loop, agent core, companion),
 so they are written here as exact unified diffs against this branch and **not** applied. Each was
