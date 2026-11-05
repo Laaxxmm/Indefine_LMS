@@ -36,6 +36,7 @@
     "itcBlockedPaise": 0,
     "itcOtherReversalPaise": 0,
     "itcNetPaise": 670000,
+    "itcHeldBackPaise": 0,
     "cashCessPaise": 0,
     "daysLate": 0,
     "interestPaise": 0,

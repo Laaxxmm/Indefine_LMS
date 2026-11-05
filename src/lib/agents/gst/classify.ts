@@ -73,7 +73,8 @@ export async function classifyLedgers(purchases: PurchaseDoc[], model: ModelCall
   const all = ledgerPrompts(purchases);
   if (!all.length) return [];
   const { clean: prompts, withheld } = screenForModel(model, CLASSIFY_LEDGERS_TASK, all, { text: ledgerLine, location: (p) => p.location });
-  const held = new Map(withheld.map((w) => [w.item.key, insufficientLedger(w.item.key, withheldNote(w))]));
+  // A withheld ledger is an abstention with a reason: insufficient_evidence + `withheld`, so compute holds its ITC back (owner-approved 2026-11-06).
+  const held = new Map(withheld.map((w) => [w.item.key, { ...insufficientLedger(w.item.key, withheldNote(w)), withheld: true as const }]));
   if (!prompts.length) return all.map((p) => held.get(p.key) as LedgerClass);
   const out = await model({
     task: CLASSIFY_LEDGERS_TASK,

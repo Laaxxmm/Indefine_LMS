@@ -87,13 +87,20 @@ statement, management review and internal audit. These are recorded as an owner 
   are tested against ordinary accounting phrases ("ignore rounding", "System generated", "Hand
   tools: …", Devanagari joiners). A false positive withholds one item and asks a person to look;
   it never changes a number.
-- Withholding an item has the same effect on figures as `insufficient_evidence`. For a GST ledger
-  that would otherwise be classed as blocked credit, the draft shows that ITC as unblocked until
-  the reviewer answers. The block flag and the reviewer question make this visible. A more
-  conservative treatment is a GST owner decision (see open items).
+- A withheld GST ledger has its ITC **held back** (owner decision, 2026-11-06, consistent with the
+  2026-11-05 rule for abstained bills). Its ITC is not claimed in 4(A)(5) or 4(A)(3). It is counted
+  in `itcHeldBackPaise` and raised as a `gst.model-questions` question and a client document
+  request, next to the `possible-prompt-injection` block flag. This applies whatever the ledger
+  would otherwise have been: claimed, blocked or reverse charge (`LedgerClass.withheld`,
+  `gst/compute.ts`). The red-team fixtures `gst/redteam-01` (otherwise claimed) and `gst/redteam-03`
+  (otherwise blocked) carry the hand computation. They list the moved figures in `baselineExcept`.
+- The review screen lists the `possible-prompt-injection` row under Open questions as a "check by
+  hand" item, never a client document request (`src/lib/agents/views.ts`).
 - Any new model task must declare privacy, documents and a `TASK_LIMITS` entry, or the tests fail.
-  This includes Phase 10 `comms.*` tasks: their composed prompts include FIRM_PREAMBLE, so after
-  the merge their versions must be bumped and the lock and the profile document regenerated.
+  The 14 Phase 10 `comms.*` tasks did this at the merge. They were bumped @1 → @2 (FIRM_PREAMBLE),
+  they declare `anonymize-then-cloud`, and they have limits entries. `comms/drafting.ts` screens
+  every template part and translation segment before the call; a hit keeps the template wording
+  or the English, with a staff note.
 
 ## Alternatives considered
 
@@ -103,16 +110,15 @@ statement, management review and internal audit. These are recorded as an owner 
 - **A second model as an injection classifier.** Rejected for now. It is costly, non-deterministic
   and itself injectable. The deterministic screen is testable and explainable, and the fence and
   the closed outputs cover what it misses.
-- **Screen in the router, for every caller.** Deferred. The router also serves onboarding and the
-  in-progress comms and coach features. The screen lives in the guardrails module so that each
-  caller adopts it explicitly, and comms must adopt it (open item).
+- **Screen in the router, for every caller.** Deferred. The router also serves onboarding, comms
+  and coach. The screen lives in the guardrails module so that each caller adopts it explicitly.
+  Onboarding and comms have adopted it; a future caller must too.
 
 ## Open items
 
 | Item | Owner |
 |---|---|
 | Pin `@anthropic-ai/sdk` exactly in `package.json` (today `^1.5.0`; the lockfile pins 1.5.0). | Owner (package.json) |
-| Comms (Phase 10) adopts the fence and screen for client e-mail text, declares privacy, documents and limits for `comms.*` tasks, and bumps their versions after the merge. | Phase 10 |
-| Treatment of a withheld GST ledger in the figures (today: as `insufficient_evidence`, so neither blocked nor RCM). | GST owner |
+| The workspace "next task" view (`src/lib/workspace`) lists guardrail questions with a closed kind enum. Add `possible-prompt-injection` there too if the workspace should show the injection question; the review screen already does. | Workspace owner |
 | Live canary of the red-team fixtures once a live key exists (recorded mode proves the code path; a live model's resistance is measured then). | Phase 2b |
 | ISO/IEC 42001 organisational elements (scope, management review, internal audit). | Owner |

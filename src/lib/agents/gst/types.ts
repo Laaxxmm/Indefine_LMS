@@ -113,6 +113,8 @@ export type LedgerClass = {
   rcmService: RcmService | "none" | "insufficient_evidence";
   evidence: ModelEvidence | null;
   note: string;
+  /** ADR-009: the injection screen kept this ledger away from the model (possible prompt injection); its ITC is held back like an abstention (owner-approved 2026-11-06). */
+  withheld?: true;
 };
 export type HsnRead = { description: string; location: string; hsn: string | null; status: "read" | "insufficient_evidence"; evidence: ModelEvidence | null; note: string };
 

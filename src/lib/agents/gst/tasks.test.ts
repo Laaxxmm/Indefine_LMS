@@ -205,6 +205,7 @@ describe("classification calls", () => {
       rcmService: INSUFFICIENT,
       evidence: null,
       note: "Not sent to the AI: the text asks the reader to ignore or override its instructions, so it may be a prompt-injection attempt. Check this item by hand.",
+      withheld: true, // its ITC is held back like an abstention (owner-approved 2026-11-06)
     });
     expect(recorded).toEqual([`${CLASSIFY_LEDGERS_TASK} purchases.csv row 6`]);
     // Every item withheld → no model call at all; HSN descriptions follow the same rule.
