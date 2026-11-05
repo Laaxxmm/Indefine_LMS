@@ -10,7 +10,7 @@
 //                                                       it reads jobTask for the signed-in person
 //   /tools      "Firm OS onboarding" → /onboard          partners, managers, admins (canOnboard)
 //   /clients    "Firm OS onboarding" → /onboard          partners, managers, admins (canOnboard)
-//   /admin      Firm OS group → /admin/firm-os/*         LMS admins
+//   /admin      Firm OS group → /admin/firm-os/*         LMS admins (models, mistakes, cycle time, workspace)
 // Adding to this list is a go-live decision, not a test fix: record it in docs/go-live.md first.
 // The break nudge is flag-gated (FIRM_OS_BREAK_NUDGE): off → no heartbeat is stored.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -109,10 +109,10 @@ describe("Firm OS surface on LMS pages with every FIRM_OS_* flag off", () => {
     expect(firmOsQueries()).toEqual([]);
   });
 
-  it("/admin: the Firm OS group is shown to LMS admins only (models, mistakes, cycle time)", async () => {
+  it("/admin: the Firm OS group is shown to LMS admins only (models, mistakes, cycle time, workspace)", async () => {
     signedIn(PEOPLE.admin);
     const html = await renderPage(await import("@/app/admin/page"), {}, await import("@/app/admin/layout"));
-    expect(firmOsHrefs(html)).toEqual(["/admin/firm-os/cycle-time", "/admin/firm-os/mistakes", "/admin/firm-os/models"]);
+    expect(firmOsHrefs(html)).toEqual(["/admin/firm-os/cycle-time", "/admin/firm-os/mistakes", "/admin/firm-os/models", "/admin/firm-os/workspace"]);
   });
 
   it("the Echo test agent stays hidden from /agents navigation", async () => {

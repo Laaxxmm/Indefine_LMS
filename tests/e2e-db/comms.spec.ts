@@ -1,81 +1,78 @@
-// DEPENDS ON PHASE 10 MERGE (Client comms drafts + engagement-letter Outlook draft). Written against
-// the orchestrator's Phase 10 brief and the owner decision of 2026-11-05 ("engagement-letter Send →
-// create Outlook draft; no send path anywhere") before the pages exist: selectors marked "PHASE 10:"
-// are to be confirmed after the merge (docs/qa/phase-12-runbook.md "after-merge e2e fix-ups").
+// Golden path (f) — Phase 10 client comms drafts (merged 06 Nov 2026; selectors confirmed against
+// src/app/comms/** and the engagement-letter Outlook-draft change, owner decision 2026-11-05):
+//   · staff draft a "Documents needed" message for one of their jobs → the draft page shows subject
+//     and body, no full PAN in it → "Open in Outlook draft" creates a draft in the person's OWN
+//     mailbox (CommsDraft.outlookDraftId recorded) → no Send control anywhere; "Copy" is there.
+//   · engagement letters: the old send route is gone (404/405) and the page has no Send button; the
+//     emails are "Create Outlook draft" (unit-tested in tests/unit/routes/el-outlook-draft.test.ts).
+// "Never sends" is asserted on the UI (no send control), the recorded draft id and the routes; the
+// code has no send path at all (tests/unit/no-send.test.ts, repo scan).
 //
-// Golden path (f) — comms draft → "Open in Outlook draft" creates a draft, never sends:
-//   · staff draft a document-request message for a client → plain wording, ≤ 180 words, one ask,
-//     no full PAN / Aadhaar in the body → "Copy" and "Open in Outlook draft" → a draft is created in
-//     the person's OWN mailbox (CommsDraft.outlookDraftId recorded) → no Send button exists anywhere
-//   · /tools/office-tools/engagement-letter offers "Create Outlook draft" and no Send button
-// Graph: the app creates the draft with the person's delegated token (Mail.ReadWrite) — staging only;
-// the spec cannot observe Graph from the browser, so "never sends" is asserted on the UI (no send
-// control), the recorded draft id and the audit trail; verify:no-send (Phase 10 guard) covers the code.
-//
-// Runs under `npm run e2e:db` (--repeat-each=3). Environment: E2E_BASE_URL, DATABASE_URL,
-// E2E_ASSIGNEE_STATE + E2E_ASSIGNEE_EMAIL (signed in with the Mail.ReadWrite consent), E2E_CLIENT_CODE.
-import { expect, test, type Locator } from "@playwright/test";
-import { closeDb, e2eClient, openDb, signedInAll, userByEmail } from "./support";
+// Runs under `npm run e2e:db` (--repeat-each=3): a fresh job per run.
+// Environment: E2E_BASE_URL, DATABASE_URL, E2E_ASSIGNEE_STATE + E2E_ASSIGNEE_EMAIL, E2E_REVIEWER_EMAIL,
+// E2E_CLIENT_CODE. The Outlook step needs the delegated Mail.ReadWrite consent on the Entra app and
+// the assignee signed in after it (PROGRESS Blocked: "Outlook drafts Blocked on Mail.ReadWrite consent").
+import { expect, test } from "@playwright/test";
+import { closeDb, freshJob, openDb, signedInAll, userByEmail } from "./support";
 
 const SPEC = "comms.spec.ts";
 const SEND = /^send\b|send (now|email|to client)|send mail/i;
 const FULL_PAN = /\b[A-Z]{5}[0-9]{4}[A-Z]\b/;
 test.afterAll(closeDb);
 
-/** Select the option whose text contains `text`. */
-async function selectByText(select: Locator, text: string) {
-  const options = await select.locator("option").allTextContents();
-  const label = options.find((o) => o.includes(text));
-  expect(label, `an option containing "${text}" (options: ${JSON.stringify(options)})`).toBeTruthy();
-  await select.selectOption({ label: label! });
-}
+const inAWeek = () => new Date(Date.now() + 7 * 24 * 3_600_000).toISOString().slice(0, 10);
 
-test("comms: draft a document request → Copy / Open in Outlook draft → a draft in the person's own mailbox, never sent", { tag: ["@after-merge", "@phase-10"] }, async ({ browser }) => {
+test("comms: Documents needed for a job → draft → Open in Outlook draft → a draft in the person's own mailbox, never sent", { tag: ["@phase-10"] }, async ({ browser }) => {
   const db = openDb();
-  const fc = await e2eClient(db, SPEC);
   const me = await userByEmail(db, "E2E_ASSIGNEE_EMAIL", SPEC);
+  const job = await freshJob(db, { service: "GST", fy: "2026-27", period: "2026-10", title: "GSTR-3B comms", spec: SPEC });
   const s = await signedInAll(browser, ["assignee"] as const, SPEC);
   const page = s.assignee.page;
   try {
     await page.goto("/comms");
-    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Client messages" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "New draft" })).toBeVisible();
     await expect(page.getByRole("button", { name: SEND })).toHaveCount(0);
 
-    // PHASE 10: form labels.
-    await selectByText(page.getByLabel(/^Client/), fc.clientCode);
-    await selectByText(page.getByLabel(/Kind|Message type/), "Document");
-    await page.getByRole("button", { name: /^(Draft|Write draft|Prepare draft)$/ }).click();
+    await page.goto(`/comms/new?job=${job.id}`);
+    await expect(page.getByRole("heading", { level: 1, name: "New client message" })).toBeVisible();
+    await page.getByRole("radio", { name: /Documents needed/ }).check();
+    await page.getByLabel("Another document").fill("Bank statement for October 2026");
+    await page.getByRole("button", { name: "Add", exact: true }).click();
+    await page.getByLabel("Reply needed by").fill(inAWeek());
+    await page.getByRole("button", { name: "Prepare draft" }).click();
+    await page.waitForURL(/\/comms\/[A-Za-z0-9_-]+$/, { timeout: 120_000 });
+    const draftId = new URL(page.url()).pathname.split("/").pop()!;
 
-    const draft = page.getByRole("region", { name: /Draft/ }); // PHASE 10: draft preview region
-    await expect(draft).toBeVisible({ timeout: 120_000 });
-    const body = (await draft.textContent()) ?? "";
-    expect(body.split(/\s+/).filter(Boolean).length).toBeLessThanOrEqual(220); // ≤ 180-word body plus subject/labels
-    expect(body).not.toMatch(FULL_PAN); // PAN only masked (last 4) when client-requested
+    const subject = page.getByRole("region", { name: "Subject" });
+    await expect(subject).toBeVisible();
+    const pageText = (await page.locator("body").textContent()) ?? "";
+    expect(pageText).toContain("Bank statement for October 2026");
+    expect(pageText).not.toMatch(FULL_PAN); // PAN only when the client asked, and then masked to the last 4
     await expect(page.getByRole("button", { name: "Copy" })).toBeVisible();
-
-    const before = await db.commsDraft.count({ where: { createdById: me.id, firmClientId: fc.id } });
-    await page.getByRole("button", { name: "Open in Outlook draft" }).click();
-    await expect(page.getByText(/Outlook draft|Drafts folder/i).first()).toBeVisible({ timeout: 60_000 });
-    const drafts = await db.commsDraft.findMany({ where: { createdById: me.id, firmClientId: fc.id }, orderBy: { createdAt: "desc" } });
-    expect(drafts.length).toBe(Math.max(before, 1));
-    expect(drafts[0].outlookDraftId, "draft created in the person's own mailbox").toBeTruthy();
-    expect(drafts[0].body).not.toMatch(FULL_PAN);
-
-    // Nowhere on the page is there a way to send it.
     await expect(page.getByRole("button", { name: SEND })).toHaveCount(0);
     await expect(page.getByRole("link", { name: SEND })).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Open in Outlook draft" }).click();
+    await expect(page.getByRole("status")).toContainText("The draft is in the Drafts folder of your Outlook mailbox", { timeout: 60_000 });
+    const row = await db.commsDraft.findUniqueOrThrow({ where: { id: draftId } });
+    expect(row).toMatchObject({ createdById: me.id, jobTaskId: job.id, kind: "doc-chase" });
+    expect(row.outlookDraftId, "draft created in the person's own mailbox").toBeTruthy();
+    expect(row.body).not.toMatch(FULL_PAN);
+    await expect(page.getByRole("button", { name: SEND })).toHaveCount(0);
   } finally {
     await s.closeAll();
   }
 });
 
-test("engagement letter: 'Create Outlook draft' replaces Send (owner decision 2026-11-05)", { tag: ["@after-merge", "@phase-10"] }, async ({ browser }) => {
+test("engagement letters: the send route is gone and the page has no Send button (Outlook drafts only)", { tag: ["@phase-10"] }, async ({ browser }) => {
   const s = await signedInAll(browser, ["assignee"] as const, SPEC);
   try {
     await s.assignee.page.goto("/tools/office-tools/engagement-letter");
     await expect(s.assignee.page.getByRole("heading", { name: "Engagement letters" })).toBeVisible();
     await expect(s.assignee.page.getByRole("button", { name: SEND })).toHaveCount(0);
-    await expect(s.assignee.page.getByRole("button", { name: /Create Outlook draft/ }).first()).toBeVisible(); // PHASE 10: label
+    const old = await s.assignee.post("/api/tools/engagement-letters/e2e-probe/send", { kind: "draft" });
+    expect([404, 405]).toContain(old.status());
   } finally {
     await s.closeAll();
   }

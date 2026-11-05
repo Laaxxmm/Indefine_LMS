@@ -40,17 +40,19 @@ git status   # clean
    The Phase 9 coach chaos test is already live: `tests/chaos/coach-reminders-duplicate-cron.test.ts`.
 2. **E2E selectors for the new pages** — confirm every marked line against the merged UI:
    ```sh
-   grep -rn "PHASE 10:\|PHASE 11:" tests/e2e-db
+   grep -rn "PHASE 11:" tests/e2e-db
    ```
-   Specs: `comms.spec.ts` (@phase-10), `rbac-phase-10-11.spec.ts` (@phase-10, @phase-11). Keep the
-   assertions; change selectors / routes only. `coach.spec.ts` (@phase-9) was confirmed against the
-   merged Phase 9 UI on 06 Nov 2026. When both are merged, drop the `@after-merge` tags.
+   Only `rbac-phase-10-11.spec.ts` still has Phase 11 tests (`@after-merge @phase-11`: spot checks,
+   partner-only SOP decision). Keep the assertions; change selectors / routes only, then drop the
+   `@after-merge` tags. `coach.spec.ts` (@phase-9) and `comms.spec.ts` + the comms denial (@phase-10)
+   were confirmed against the merged UI on 06 Nov 2026.
 3. **Flags-off regression allowlist** — `tests/regression/firm-os-flags-off.test.ts`. If a phase adds a
    Firm OS entry point to an LMS page (e.g. the coach board card on /dashboard), it must be hidden with
    its flag off; if it is deliberately visible, record that in `docs/go-live.md` §3 first, then extend
    the allowlist. Add any new `FIRM_OS_*` names to `FIRM_OS_FLAGS` in `tests/regression/support/render.ts`.
-4. **Go-live doc** — copy the Phase 9–11 variables from `.env.example` into `docs/go-live.md` §2.4 / §2.5.
-5. **Visual render** picks up `/coach`, `/comms`, `/agents/spot-checks` automatically (step 14).
+4. **Go-live doc** — copy the Phase 11 variables from `.env.example` into `docs/go-live.md` §2.4 / §2.5
+   (Phases 9–10 are in).
+5. **Visual render** picks up `/agents/spot-checks` automatically once it exists (step 14).
 
 ## 2. Lint
 
@@ -70,13 +72,11 @@ npm run typecheck       # tsc --noEmit, no output
 for i in 1 2 3; do npm test || { echo "RED on run $i"; break; }; done
 git status --porcelain src/lib/integrations/turia   # a run must not rewrite the Turia snapshot; if it did: git checkout -- <file>
 ```
-Baseline at Phase 12 prep (06 Nov 2026, after the Phase 9 merge, before 10–11): **2655 tests in 136
-files** — of which chaos **46** (8 files) and LMS regression **72** (5 files). Expect more after the
-merges. Known load flake at prep: in 1 of 3 full runs two heavy accuracy-harness tests timed out at
-the 5 s default (`src/lib/agents/core/accuracy-probes.test.ts` "a probe that changes nothing → FAIL",
-`src/lib/agents/tax/index.test.ts` "wrong-department input fails the run before any model call");
-both pass alone and in the other runs. Give them an explicit timeout (as the cold-import test got
-30 s on 05 Nov) before this step — a flake is red.
+Baseline at Phase 12 prep (06 Nov 2026, after the Phase 9 and 10 merges, before 11): chaos **46**
+(8 files) and LMS regression **72** (5 files) inside the full suite (counts in PROGRESS). Load flake
+seen during prep, before the Phase 10 merge raised the default `testTimeout` to 20 s: in 1 of 3 full
+runs two heavy accuracy-harness tests timed out at 5 s (`accuracy-probes.test.ts`, `tax/index.test.ts`).
+If anything times out again, it is red — raise that test's timeout with a reason, never retry.
 
 ## 5. Coverage (new modules ≥ 80 % lines)
 
@@ -145,7 +145,7 @@ npm run build           # prisma generate && next build
 ```sh
 npx playwright test --config playwright.db.config.ts --list
 ```
-At prep: **26 tests in 12 files** (21 runnable now + 5 tagged `@after-merge` for Phases 10–11). All must load with no
+At prep: **26 tests in 12 files** (24 runnable now + 2 tagged `@after-merge` for Phase 11). All must load with no
 environment set (nothing runs at import time).
 
 ## 14. Visual first look (local)
@@ -154,7 +154,7 @@ environment set (nothing runs at import time).
 npx vitest run --config tests/regression/visual.vitest.config.ts
 # open test-results/visual/index.html — every Firm OS page at 390 / 1280 / 1440
 ```
-Look for overflow and broken layout before the staging UI pass (step 18). At prep (after the Phase 9 merge): 14/14 pages render, /coach included.
+Look for overflow and broken layout before the staging UI pass (step 18). At prep (after the Phase 9 and 10 merges): 20/20 pages render (coach, comms, search, focus, companion, admin workspace included).
 
 ---
 

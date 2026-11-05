@@ -53,7 +53,7 @@ export function anchors(html: string): { href: string; target: string | null; re
 export const hrefs = (html: string) => anchors(html).map((a) => a.href);
 
 /** Firm OS routes (pages and APIs). Anything here on an LMS page is a Firm OS entry point. */
-export const FIRM_OS_HREF = /^\/(onboard|agents|coach|comms|admin\/firm-os|api\/firm-os)(\/|$|\?)/;
+export const FIRM_OS_HREF = /^\/(onboard|agents|coach|comms|workspace|search|focus|companion|admin\/firm-os|api\/firm-os)(\/|$|\?)/;
 export const firmOsHrefs = (html: string) => [...new Set(hrefs(html).filter((h) => FIRM_OS_HREF.test(h)))].sort();
 
 /** Prisma models that belong to Firm OS (prisma/schema.prisma "Firm OS" sections). */

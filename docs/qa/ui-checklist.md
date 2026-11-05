@@ -40,12 +40,17 @@ Phase column: pages marked 9 / 10 / 11 exist only after that phase is merged.
 | 6 | Turia spot checks | `/agents/spot-checks` | partner | 11 |
 | 7 | Morning board (page) | `/coach` | staff | 9 |
 | 8 | Morning board card + reminders + break nudge on the dashboard | `/dashboard` | staff | 9 |
-| 9 | Client comms drafts (list, draft, Copy / Open in Outlook draft) | `/comms` | staff | 10 |
+| 9 | Client comms drafts — list, new draft form, draft page (Copy / Open in Outlook draft) | `/comms`, `/comms/new?job=<id>`, `/comms/<id>` | staff | 10 |
 | 10 | Engagement letter — Create Outlook draft (owner decision 2026-11-05) | `/tools/office-tools/engagement-letter` | staff | 10 |
 | 11 | Admin — Model usage (cost by day / agent / provider, guardrail drift) | `/admin/firm-os/models` | LMS admin | 2 |
 | 12 | Admin — Mistake log (rule diffs) | `/admin/firm-os/mistakes` | LMS admin | 4 |
 | 13 | Admin — Cycle time (median / p90, bottleneck) | `/admin/firm-os/cycle-time` | LMS admin | 8 |
 | 14 | Client page — Firm OS jobs card (FIRM_OS_CL_PATHS on) | `/clients/<id>` | partner | 1, UI audit |
+| 15 | Job workspace (tabs, next action) | `/workspace/<jobId>` | staff (assignee) | owner request, merged with 10 |
+| 16 | Search | `/search` | staff | owner request, merged with 10 |
+| 17 | Focus | `/focus` | staff | owner request, merged with 10 |
+| 18 | Companion (browser-extension pairing) | `/companion` | staff | owner request, merged with 10 |
+| 19 | Admin — Workspace modules | `/admin/firm-os/workspace` | LMS admin | owner request, merged with 10 |
 
 ## Results
 
@@ -103,6 +108,21 @@ Tester: ________________________  Date: ____ ___ 2026  Build / commit: _________
 | 14 Client page — Firm OS jobs card | 1280 | | | | | | | | | | |
 | 14 Client page — Firm OS jobs card | 1440 | | | | | | | | | | |
 | 14 Client page — Firm OS jobs card | 390 | | | | | | | | | | |
+| 15 Job workspace | 1280 | | | | | | | | | | |
+| 15 Job workspace | 1440 | | | | | | | | | | |
+| 15 Job workspace | 390 | | | | | | | | | | |
+| 16 Search | 1280 | | | | | | | | | | |
+| 16 Search | 1440 | | | | | | | | | | |
+| 16 Search | 390 | | | | | | | | | | |
+| 17 Focus | 1280 | | | | | | | | | | |
+| 17 Focus | 1440 | | | | | | | | | | |
+| 17 Focus | 390 | | | | | | | | | | |
+| 18 Companion | 1280 | | | | | | | | | | |
+| 18 Companion | 1440 | | | | | | | | | | |
+| 18 Companion | 390 | | | | | | | | | | |
+| 19 Admin — Workspace modules | 1280 | | | | | | | | | | |
+| 19 Admin — Workspace modules | 1440 | | | | | | | | | | |
+| 19 Admin — Workspace modules | 390 | | | | | | | | | | |
 
 ## Known before the staging pass
 
@@ -112,7 +132,7 @@ From the UI audit (PROGRESS "UI audit", "Known gaps") — check that each is sti
 - LMS (not Firm OS) pages: `/clients`, `/work`, `/tools` headers do not wrap at 390 px; `ink-faint` text
   ≈ 2:1 contrast across the LMS; dashboard emoji. These are LMS debts, not Firm OS failures — note them
   but do not fail a Firm OS row for them.
-- Local visual render (2026-11-06, `tests/regression/visual-render.ts`): all 14 current Firm OS / comparison
-  pages render with the compiled CSS, /coach included. /comms and /agents/spot-checks appear automatically after their merges.
+- Local visual render (2026-11-06, after the Phase 9 and 10 merges, `tests/regression/visual-render.ts`): all 20
+  current Firm OS / comparison pages render with the compiled CSS. /agents/spot-checks appears automatically after Phase 11. (Workspace job pages need a job id; check them on staging.)
 
 Sign-off: UI checklist complete and passing — ________________________ (owner) date ____________

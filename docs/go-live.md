@@ -88,7 +88,9 @@ the ensure-* functions.
 | `FIRM_OS_TURIA_UI` | unset (off) | UI automation against practice.turia.in — off until Turia confirms it is permitted. |
 | `FIRM_OS_BREAK_NUDGE` (Phase 9) | unset (off) | LMS activity heartbeats + gentle break nudges (ADR-006: kept 7 days, aggregate only, never reported to managers). Tell staff what is collected **before** turning it on. Off = no heartbeat stored, no ping sent. |
 | `FIRM_OS_HOLIDAYS` (Phase 9) | set to the firm's holidays | Comma-separated `YYYY-MM-DD` the coach skips when counting working days (the LMS has no holiday table); blank = weekends only. Not a feature flag — set it before Stage 1. |
-| Phase 10 / 11 flags | *fill in after merge* | Comms drafts, rate limits — copy the names from `.env.example` after the merges and add rows here. |
+| `FIRM_OS_COMPANION_EXTENSION_ORIGIN` (merged with Phase 10) | unset unless the extension id differs | CORS origin the companion API answers besides the extension's fixed id (`src/lib/companion/config.ts`). Not in `.env.example` yet. |
+| Phase 10 comms | no flag | Comms drafts have no `FIRM_OS_*` switch: /comms is reached from the Firm OS pages only (not from LMS pages — `firm-os-flags-off.test.ts`). "Open in Outlook draft" and engagement-letter drafts need the delegated **Mail.ReadWrite** consent (§8). |
+| Phase 11 flags | *fill in after merge* | Rate limits etc. — copy the names from `.env.example` after the merge and add rows here. |
 
 `FIRM_OS_ONBOARD_CONFIRM`, `FIRM_OS_TURIA_BRIDGE`, `FIRM_OS_TURIA_UI` and the `GUARDRAIL_*` variables are
 read by the code but missing from `.env.example` — add them there (owner of `.env.example`).
@@ -112,7 +114,9 @@ because they are gated by role, not by a flag (`tests/regression/firm-os-flags-o
   active user, plus the **My day** morning-board card to everyone with open Firm OS jobs — so the
   dashboard queries Firm OS jobs for every signed-in person even with all flags off;
 - `/tools` and `/clients` show **Firm OS onboarding** (→ /onboard) to partners, managers and admins;
-- `/admin` shows the **Firm OS** group (models, mistakes, cycle time) to LMS admins.
+- `/admin` shows the **Firm OS** group (models, mistakes, cycle time, workspace modules) to LMS admins.
+- /comms, /workspace, /search, /focus and /companion are linked only from Firm OS pages, never from an
+  LMS page (pinned by `tests/regression/firm-os-flags-off.test.ts`).
 
 The pages behind them work (draft packs only; no portal, no send), but the staged rollout below
 ("partners → 2 pilot staff → all") cannot be enforced by flags alone. Before Stage 1 choose one:
@@ -187,8 +191,8 @@ On the exact commit that will be merged (all from `docs/qa/phase-12-runbook.md`)
 - [ ] No button anywhere submits to a government portal or sends client email.
 
 Automated counterparts (staging, `npm run e2e:db`): onboard, gst (incl. request changes → re-run),
-roc, tax, books, audit, golden-path, close-loop, rbac; after the Phase 9–11 merges: coach, comms,
-rbac-phase-10-11.
+roc, tax, books, audit, golden-path, close-loop, rbac, coach, comms, rbac-phase-10-11 (its Phase 11
+tests run after that merge).
 
 ## 8. Partner verification (from PROGRESS "Blocked / needs human")
 
@@ -206,7 +210,9 @@ verify notes or PROGRESS, before the corresponding agent's SOP pack is seeded (�
 Other human actions still open (PROGRESS "Blocked"): Turia API docs/credentials (ADR-003; MANUAL
 until then); PnP certificate + SharePoint/Entra admin consent; Entra groups claim for role mapping;
 Graph app-only creds + consent; SP_SITE_OWNER + hub registration; ANTHROPIC_API_KEY (+ optional
-XAI_API_KEY); staging DATABASE_URL; opening the PR (no gh CLI on the build machine).
+XAI_API_KEY); delegated Mail.ReadWrite on the sign-in app with admin consent (comms and engagement-letter
+Outlook drafts; staff reconnect at /connect?mail=1); staging DATABASE_URL; opening the PR (no gh CLI
+on the build machine).
 
 ## 9. Rollback
 
