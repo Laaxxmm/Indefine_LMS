@@ -54,14 +54,13 @@ function seenFor(db: AuditDb): Map<string, number> {
   return m;
 }
 
-function prune(m: Map<string, number>, now: number) {
+/** Over MAX_REMEMBERED: keep only this hour's marks (and, after a burst, only the newest). Rebuilt, not mutated. */
+function prune(db: AuditDb, m: Map<string, number>, now: number) {
   if (m.size <= MAX_REMEMBERED) return;
-  for (const [k, at] of m) if (now - at >= VIEW_DEDUPE_MS) m.delete(k);
+  let kept = [...m].filter(([, at]) => now - at < VIEW_DEDUPE_MS);
   // Still too many (a burst within the hour): forget the oldest; worst case one extra row each.
-  for (const k of m.keys()) {
-    if (m.size <= MAX_REMEMBERED) break;
-    m.delete(k);
-  }
+  if (kept.length > MAX_REMEMBERED) kept = kept.sort((a, b) => a[1] - b[1]).slice(-MAX_REMEMBERED);
+  remembered.set(db, new Map(kept));
 }
 
 /**
@@ -74,18 +73,18 @@ export async function auditRead(db: AuditDb, e: ReadAudit): Promise<boolean> {
   const now = (e.now ?? new Date()).getTime();
   const seen = seenFor(db);
   const key = `${e.actorId ?? "-"}|${e.entity}|${e.entityId ?? "-"}`;
+  const last = seen.get(key);
   if (action === "view") {
-    const last = seen.get(key);
     if (last !== undefined && now - last < VIEW_DEDUPE_MS && now >= last) return false;
-    seen.delete(key); // re-insert at the end: Map order = age order for prune()
     seen.set(key, now);
-    prune(seen, now);
+    prune(db, seen, now);
   }
   try {
     await logAudit(db, { actorId: e.actorId, action, entity: e.entity, entityId: e.entityId, meta: maskReadMeta(e.meta) });
     return true;
   } catch (err) {
-    if (action === "view" && seen.get(key) === now) seen.delete(key); // try again next time
+    // Forget this mark so the next load tries again.
+    if (action === "view") seenFor(db).set(key, last ?? Number.NEGATIVE_INFINITY);
     console.error(`[audit] could not record ${action} of ${e.entity} ${e.entityId ?? ""}: ${(err as Error).message}`);
     return false;
   }
