@@ -22,7 +22,7 @@ export function createMemoryStore(driveId = "memory-drive"): MemoryStore {
     const name = withVersion(fileName, v);
     const buf = Buffer.from(bytes);
     files.set(k(d, folder, name), buf);
-    return { item: { id: `mem-item-${++seq}`, name, size: buf.length }, driveId: d, folder, fileName: name, version: v, sha256: sha256Hex(buf), sizeBytes: buf.length };
+    return { item: { id: `mem-item-${++seq}`, name, size: buf.length }, driveId: d, folder, fileName: name, version: v, sha256: sha256Hex(buf), sizeBytes: buf.length, quickXorHash: null, cTag: null };
   }
 
   return {

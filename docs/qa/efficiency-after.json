@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-05T22:59:01.194Z",
+  "generatedAt": "2026-11-05T23:06:26.621Z",
   "label": "after",
   "agents": {
     "echo": {
@@ -581,6 +581,50 @@
       "note": "open 30, closed 10, DONE re-checked 170, alerts 0, reminders 20, escalations 33"
     },
     "reconciler · run 2 (30 min later) · files written by this process (copyToFinal)": {
+      "ops": {
+        "auditEvent.findFirst": 20,
+        "coachEvent.create": 53,
+        "deliverable.findMany": 21,
+        "jobTask.findFirst": 20,
+        "jobTask.findMany": 2,
+        "jobTaskEvent.findMany": 21,
+        "turiaSync.findMany": 20,
+        "user.findUnique": 11
+      },
+      "total": 168,
+      "sql": 212,
+      "graph": {
+        "GET item by path": 190
+      },
+      "graphTotal": 190,
+      "note": "open 20, closed 0, DONE re-checked 170, alerts 0, reminders 0, escalations 0"
+    },
+    "reconciler · run 1 · files this app uploaded, fingerprint on the row (first run after a restart)": {
+      "ops": {
+        "$transaction": 20,
+        "auditEvent.create": 32,
+        "auditEvent.findFirst": 20,
+        "coachEvent.create": 53,
+        "deliverable.findMany": 41,
+        "deliverable.updateMany": 10,
+        "jobTask.findFirst": 50,
+        "jobTask.findMany": 2,
+        "jobTask.findUnique": 20,
+        "jobTask.updateMany": 20,
+        "jobTaskEvent.create": 20,
+        "jobTaskEvent.findMany": 31,
+        "turiaSync.findMany": 50,
+        "user.findUnique": 11
+      },
+      "total": 380,
+      "sql": 504,
+      "graph": {
+        "GET item by path": 200
+      },
+      "graphTotal": 200,
+      "note": "open 30, closed 10, DONE re-checked 170, alerts 0, reminders 20, escalations 33"
+    },
+    "reconciler · run 2 (30 min later) · files this app uploaded, fingerprint on the row (first run after a restart)": {
       "ops": {
         "auditEvent.findFirst": 20,
         "coachEvent.create": 53,

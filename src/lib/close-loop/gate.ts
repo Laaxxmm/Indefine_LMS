@@ -172,7 +172,13 @@ export async function verifyDeliverable(
   if (!d.driveItemId) return fail("final-missing", "no SharePoint item id recorded");
 
   const expectedPath = `${f.folder.path}/${d.name}`;
-  const ref: DeliverableRef = { clientCode: job.firmClient.clientCode, driveId: d.driveId, driveItemId: d.driveItemId, path: expectedPath };
+  const ref: DeliverableRef = {
+    clientCode: job.firmClient.clientCode,
+    driveId: d.driveId,
+    driveItemId: d.driveItemId,
+    path: expectedPath,
+    recorded: { sha256: d.sha256, quickXorHash: d.quickXorHash ?? null, cTag: d.cTag ?? null, sizeBytes: d.sizeBytes },
+  };
   try {
     const live = await verifier.getItem(ref);
     if (!live.exists) return fail("final-missing", `not found in SharePoint at ${f.folder.serverRelativeUrl}`);

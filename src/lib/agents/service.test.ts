@@ -99,6 +99,11 @@ describe("review flow", () => {
     expect(w.fake.fileContent(w.drive, `${FINAL}/ACME01_Echo-register_2026-10_v1.xlsx`)?.toString()).toBe("earlier approved pack");
     const [working, final] = rows(w.db, "deliverable");
     expect(final).toMatchObject({ kind: "Final", name: "ACME01_Echo-register_2026-10_v2.xlsx", version: 2, spPath: "/sites/CL-ACME01/Compliance/FY2026-27/Books/2026-10/Final", sha256: working.sha256 });
+    // SharePoint's content fingerprint is kept on both rows (upload and finalize): same bytes, same
+    // quickXorHash; each item has its own content tag. The close gate verifies from these after a restart.
+    expect(working).toMatchObject({ quickXorHash: expect.any(String), cTag: expect.stringMatching(/^"c:/) });
+    expect(final).toMatchObject({ quickXorHash: working.quickXorHash, cTag: expect.stringMatching(/^"c:/) });
+    expect(final.cTag).not.toBe(working.cTag);
     expect(w.fake.fileContent(w.drive, `${FINAL}/ACME01_Echo-register_2026-10_v2.xlsx`)?.equals(w.fake.fileContent(w.drive, `${WORKING}/ACME01_Echo-register_2026-10_v1.xlsx`)!)).toBe(true);
     expect(w.fake.violations).toEqual([]);
     // Idempotent: a retry adds nothing.

@@ -39,6 +39,9 @@ export type DeliverableRec = {
   driveId: string | null;
   driveItemId: string | null;
   sha256: string;
+  /** SharePoint fingerprint recorded at upload (optional: older rows and most tests have none). */
+  quickXorHash?: string | null;
+  cTag?: string | null;
   sizeBytes: number;
   verifiedAt: Date | null;
   createdAt: Date;

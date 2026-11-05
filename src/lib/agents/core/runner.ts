@@ -543,6 +543,8 @@ export async function runAgent<I, E>(def: AgentDefinition<I, E>, jobTaskId: stri
             driveId: s.driveId,
             driveItemId: s.item.id,
             sha256: s.sha256,
+            quickXorHash: s.quickXorHash,
+            cTag: s.cTag,
             sizeBytes: s.sizeBytes,
             version: s.version,
           })),

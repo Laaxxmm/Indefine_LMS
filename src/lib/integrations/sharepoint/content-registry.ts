@@ -13,10 +13,10 @@
 // misses here and is downloaded and hashed as before. quickXorHash alone (not collision resistant)
 // is never trusted on its own; an item without a cTag is always downloaded.
 //
-// Process memory only (bounded LRU, pinned on globalThis so every server bundle shares one): a
-// restart forgets everything and the first check of each file downloads it once. Storing
-// quickXorHash + cTag on the Deliverable row would make this survive restarts; that needs a schema
-// change (see docs/qa/efficiency-patches.md).
+// Process memory only (bounded LRU, pinned on globalThis so every server bundle shares one). The
+// same facts are also written to the Deliverable row (quickXorHash, cTag) at upload / finalize, and
+// the close-gate verifier reads them from the row, so after a restart a file this app uploaded is
+// still verified without a download; files without a recorded fingerprint are downloaded once.
 import type { GraphItem } from "./graph-client";
 import { quickXorHash } from "./quick-xor-hash";
 

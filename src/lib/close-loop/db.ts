@@ -65,6 +65,8 @@ export const DELIVERABLE_SELECT = {
   driveId: true,
   driveItemId: true,
   sha256: true,
+  quickXorHash: true,
+  cTag: true,
   sizeBytes: true,
   verifiedAt: true,
 } as const;
@@ -77,6 +79,9 @@ export type DeliverableRow = {
   driveId: string | null;
   driveItemId: string | null;
   sha256: string;
+  /** SharePoint's quickXorHash + content tag recorded at upload (null for older rows): verify without download. */
+  quickXorHash: string | null;
+  cTag: string | null;
   sizeBytes: number;
   verifiedAt: Date | null;
 };
