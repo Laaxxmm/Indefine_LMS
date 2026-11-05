@@ -3,11 +3,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Session } from "next-auth";
 import { echoWorld, rows, user, type World } from "../../fakes/agent-world";
+import { recordingHook } from "../../fakes/agent-close-loop";
 
-const state = vi.hoisted(() => ({ world: null as unknown as World }));
+const state = vi.hoisted(() => ({ world: null as unknown as World, hook: null as unknown as ReturnType<typeof recordingHook> }));
 
 vi.mock("@/lib/auth", () => ({ auth: vi.fn(), signIn: vi.fn(), signOut: vi.fn(), handlers: {} }));
 vi.mock("@/lib/agents/service", async (orig) => ({ ...(await orig<typeof import("@/lib/agents/service")>()), defaultAgentDeps: async () => state.world.deps }));
+// The routes inject the close-loop hook; here it is the real afterTransition over the world.
+vi.mock("@/lib/close-loop/defaults", async (orig) => ({
+  ...(await orig<typeof import("@/lib/close-loop/defaults")>()),
+  withCloseLoopHook: (d: World["deps"]) => ({ ...d, afterTransition: state.hook.hook }),
+}));
 
 const { auth } = await import("@/lib/auth");
 const run = await import("@/app/api/firm-os/agents/[agent]/jobs/[jobId]/run/route");
@@ -28,6 +34,7 @@ const runJob = () => run.POST(post(), p({ agent: "echo", jobId: "job-1" }));
 
 beforeEach(() => {
   state.world = echoWorld();
+  state.hook = recordingHook(state.world);
 });
 afterEach(() => vi.clearAllMocks());
 
@@ -111,7 +118,13 @@ describe("happy paths", () => {
     as(user("ravi"));
     const ap = await approve.POST(post({ note: null }), p({ id: "run-2" }));
     expect(await ap.json()).toEqual({ state: "APPROVED", final: ["ACME01_Echo-register_2026-10_v2.xlsx"] });
+    // The approve route fired the close-loop hook once (it made the Final copy); the routes' other
+    // transitions went through it with nothing to do.
+    const fired = state.hook.hook.mock.calls.map((c) => `${c[0].from}→${c[0].to}`);
+    expect(fired).toEqual(["AGENT_DONE→IN_REVIEW", "IN_REVIEW→IN_PREP", "AGENT_DONE→IN_REVIEW", "IN_REVIEW→APPROVED"]);
+    expect(state.hook.outcomes.at(-1)).toEqual({ hook: "approved", result: { status: "copied", copied: 1 } });
     expect((await finalize.POST(post(), p({ id: "run-2" }))).status).toBe(200);
+    expect(rows(state.world.db, "deliverable").filter((d) => d.kind === "Final")).toHaveLength(1);
     as(user("partner"));
     const mid = rows(state.world.db, "mistakeLog")[0].id as string;
     expect(await (await decide.POST(post({ decision: "approve" }), p({ id: mid }))).json()).toEqual({ status: "APPROVED", promotedToVersion: "1.1.0" });
