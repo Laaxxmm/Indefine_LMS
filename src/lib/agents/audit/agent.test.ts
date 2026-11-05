@@ -174,6 +174,19 @@ describe("pipeline on fixtures", () => {
     expect(out.flags).toContainEqual({ ruleId: "audit.tb-balanced", severity: "block" });
     expect(auditAgent.probeMutation!([{ name: "notes.txt", source: "fixture", bytes: Buffer.from("x") }])[0].bytes.toString()).toBe("x");
   });
+  it("a changed sampling seed is caught: the MUS random start and selection fingerprints are pinned figures", async () => {
+    const fx = byId("clean-mus-mixed-sales");
+    const pack = packWithMistakes(auditAgent, loadApprovedMistakes(ROOT, "audit"));
+    const reseeded = {
+      ...fx,
+      inputFiles: fx.inputFiles.map((f) => (f.name === "sampling.json" ? { ...f, bytes: Buffer.from(f.bytes.toString("utf8").replace('"FIXTURE-FY2025-26"', '"FIXTURE-FY2025-26-B"')) } : f)),
+    };
+    const out = await runFixtureOnce(auditAgent, reseeded, pack);
+    const keys = compareFigures(fx.expected.figures, out.figures).map((d) => d.key);
+    expect(keys).toEqual(expect.arrayContaining(["sample.sales.randomStart", "sample.sales.fingerprint48", "sample.expenses.fingerprint48"]));
+    // The mixed population exercises the MUS paths the uniform fixtures never reach.
+    expect(fx.expected.figures).toMatchObject({ "sample.sales.plannedSize": 25, "sample.sales.selected": 23, "sample.sales.randomStart": 4344147 });
+  });
   it("the audit accuracy gate passes (thresholds unchanged)", async () => {
     const score = await runAgentAccuracy(auditAgent, { root: ROOT });
     expect(failureDetails(score)).toEqual([]);
