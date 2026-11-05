@@ -162,7 +162,12 @@ function auditSheet(x: TaxExtract, a: TaxAnalysis): SheetSpec {
     ["Rule set", `${a.rules.act}; AY ${a.rules.ay}`],
     ["Taxpayer status", `${x.organiser.profile.status} (${x.organiser.profile.residentialStatus})`],
     ["Regime", a.regime.used ? `${a.regime.used} (${a.regime.reason})` : a.regime.reason],
-    ["Presumptive scheme", a.presumptive.claimed ? `${a.presumptive.claimed}: ${a.presumptive.eligible ? "conditions met" : a.presumptive.reasons.join("; ")}` : "not claimed"],
+    [
+      "Presumptive scheme",
+      a.presumptive.claimed
+        ? `${a.presumptive.claimed}: ${a.presumptive.eligible ? "conditions met" : a.presumptive.reasons.join("; ")}${a.presumptive.declaredLower ? `; income declared ₹${r(a.businessIncome)} below the deemed ₹${r(a.presumptive.incomePaise)} (declared income used)` : ""}`
+        : "not claimed",
+    ],
     ["Tax audit u/s 44AB", `${a.audit.required ? "required" : "not required"}: ${a.audit.reason}`],
     ["Due date u/s 139(1)", `${formatDayKey(a.due139)} (${a.dueCategory})`],
     ["Planned filing", formatDayKey(x.organiser.profile.plannedFilingDate)],

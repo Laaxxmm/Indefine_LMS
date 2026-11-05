@@ -1,0 +1,21 @@
+Indefine Fixture Traders Pvt Ltd
+Trial Balance 1-Oct-2026 to 31-Oct-2026
+Particulars,Group,Debit,Credit
+Share Capital,Capital Account,,"5,00,000.00"
+Furniture and Fixtures,Fixed Assets,"3,64,200.00",
+HDFC Bank,Bank Accounts,"1,42,500.00",
+Cash in Hand,Cash-in-Hand,"18,250.00",
+Alpha Retail,Sundry Debtors,"2,10,000.00",
+Beta Supplies,Sundry Creditors,,"1,45,000.00"
+Sales,Sales Accounts,,"6,20,000.00"
+Purchases,Purchase Accounts,"3,80,000.00",
+Rent,Indirect Expenses,"60,000.00",
+Salaries,Indirect Expenses,"1,40,000.00",
+Bank Charges,Indirect Expenses,"1,250.00",
+Electricity,Indirect Expenses,"12,000.00",
+TDS Payable,Duties & Taxes,,"20,000.00"
+Output CGST,Duties & Taxes,,"55,800.00"
+Output SGST,Duties & Taxes,,"55,800.00"
+Input CGST,Duties & Taxes,"34,200.00",
+Input SGST,Duties & Taxes,"34,200.00",
+Grand Total,,"13,96,600.00","13,96,600.00"
