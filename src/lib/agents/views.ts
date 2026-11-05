@@ -7,6 +7,7 @@ import { canDecideMistakes, canUseAgents, canViewJob, jobScopeWhere, reviewActio
 import { ChecklistPackSchema, withPromotedRule, type ChecklistPack } from "@/lib/agents/core/checklist";
 import { formatDate, formatDateTimeIst, formatInr } from "@/lib/agents/core/format";
 import { openQuestions, type OpenQuestion } from "@/lib/agents/core/guardrails/review";
+import { INJECTION_FLAG } from "@/lib/agents/core/guardrails/untrusted";
 import { diffPacks, type PackDiff } from "@/lib/agents/core/mistakes";
 import { latestPackQuery, type AnyAgent, type FirmDb } from "@/lib/agents/core/runner";
 import { getAgent } from "@/lib/agents/registry";
@@ -177,16 +178,27 @@ export const ABSTENTION_RULES: Readonly<Record<string, { heldBack?: { figure: st
   "books.classification-questions": {},
 };
 
+/**
+ * The review screen's question kinds: the guardrail questions (core/guardrails/review.ts) plus
+ * ADR-009's framework row that withheld document text reading like an instruction to the AI —
+ * the reviewer checks those items by hand (it is never a client document request).
+ */
+export type OpenQuestionKind = OpenQuestion["kind"] | typeof INJECTION_FLAG;
+
 /** An open question as the review screen shows it: its checklist row's id and evidence, and any amount held back (₹ Indian grouping). */
-export type OpenQuestionView = OpenQuestion & { id: string; quote: string | null; link: string | null; heldBack: { label: string; amount: string } | null };
+export type OpenQuestionView = Omit<OpenQuestion, "kind"> & { kind: OpenQuestionKind; id: string; quote: string | null; link: string | null; heldBack: { label: string; amount: string } | null };
 
 const isAbstentionRule = (ruleId: string) => Object.prototype.hasOwnProperty.call(ABSTENTION_RULES, ruleId);
-const KIND_ORDER: Record<OpenQuestion["kind"], number> = { "insufficient-evidence": 0, "model-disagreement": 1, "out-of-scope": 2 };
+const KIND_ORDER: Record<OpenQuestionKind, number> = { "insufficient-evidence": 0, "possible-prompt-injection": 1, "model-disagreement": 2, "out-of-scope": 3 };
 
-/** Open questions for the review screen (abstentions first, then disagreements, then out-of-scope rules; by rule id, checklist order within one). */
+/** Open questions for the review screen (abstentions first, then text withheld as a possible prompt injection (ADR-009), then disagreements, then out-of-scope rules; by rule id, checklist order within one). */
 export function openQuestionViews(checklist: readonly ChecklistView[], figures: Readonly<Record<string, number>>): OpenQuestionView[] {
   const out: OpenQuestionView[] = [];
   for (const c of checklist) {
+    if (c.flags.includes(INJECTION_FLAG)) {
+      out.push({ ruleId: c.ruleId, kind: INJECTION_FLAG, question: c.message, location: c.location, clientRequest: false, id: c.id, quote: c.quote, link: c.link, heldBack: null });
+      continue;
+    }
     const row = c.status === "fail" && c.flags.length === 0 && isAbstentionRule(c.ruleId) ? { ...c, flags: ["insufficient-evidence"] } : c;
     // One row at a time, so each question keeps its own row's id and evidence.
     for (const q of openQuestions([row])) {

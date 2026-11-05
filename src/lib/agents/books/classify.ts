@@ -17,12 +17,13 @@
 // Suggestions are labelled as such and never posted to the books.
 import { z } from "zod";
 import type { ModelCaller } from "@/lib/agents/core/runner";
+import { screenForModel, withheldNote } from "@/lib/agents/core/guardrails/untrusted";
 import type { BankLine } from "./bank";
 import type { Suggestion } from "./analysis";
 import { matchRows, type TbData } from "./tb";
 
 export const BOOKS_CLASSIFY_TASK = "books.classify-expenses" as const;
-export const BOOKS_CLASSIFY_VERSION = 1;
+export const BOOKS_CLASSIFY_VERSION = 2;
 export const INSUFFICIENT = "insufficient_evidence" as const;
 export const MAX_TEXT = 300;
 
@@ -129,19 +130,42 @@ export function classifyPrompt(lines: BankLine[], heads: string[], notes: string
   ].join("\n");
 }
 
+/** Where a bank line is, for the reviewer (ADR-009 flag): side, row and line id. */
+export const bankLineLocation = (l: BankLine) => `bank ${l.id.startsWith("L") ? "book" : "statement"} row ${l.row} (${l.id})`;
+
+/** A head offered to the model with the trial-balance row it comes from. */
+type HeadItem = { name: string; location: string };
+const headItems = (tb: TbData | null, heads: string[]): HeadItem[] =>
+  heads.map((name) => {
+    const row = tb?.rows.find((r) => r.ledger === name)?.row;
+    return { name, location: row !== undefined ? `${tb!.file} row ${row}` : `trial balance ledger "${name}"` };
+  });
+
 export async function suggestClassifications(model: ModelCaller, lines: BankLine[], tb: TbData | null, notes: string | null): Promise<{ suggestions: Suggestion[]; heads: string[] }> {
-  const heads = chartHeads(tb);
-  if (!lines.length) return { suggestions: [], heads };
-  // No ledger list to choose from: nothing for the model to pick — every line is a reviewer question.
-  if (!heads.length) return { suggestions: toSuggestions({ suggestions: [] }, lines), heads };
-  const schema = classifySchema(lines, heads);
+  const offered = chartHeads(tb);
+  if (!lines.length) return { suggestions: [], heads: offered };
+  // ADR-009: a client ledger name or a bank narration that reads like an instruction to the AI is
+  // not sent: the ledger is not offered as a head, the line becomes a reviewer question, and the
+  // run carries the possible-prompt-injection flag with the location.
+  const heads = screenForModel(model, BOOKS_CLASSIFY_TASK, headItems(tb, offered), { text: (h) => h.name, location: (h) => h.location }).clean.map((h) => h.name);
+  const screened = screenForModel(model, BOOKS_CLASSIFY_TASK, lines, { text: lineText, location: bankLineLocation });
+  const held = new Map(screened.withheld.map((w) => [w.item.id, w]));
+  const send = screened.clean;
+  const asWithheld = (all: Suggestion[]) =>
+    all.map((s): Suggestion => {
+      const w = held.get(s.lineId);
+      return w ? { lineId: s.lineId, ledger: INSUFFICIENT, confidence: 0, reason: withheldNote(w), status: "insufficient_evidence", evidence: null } : s;
+    });
+  // No ledger list to choose from (or nothing left to send): every line is a reviewer question.
+  if (!heads.length || !send.length) return { suggestions: asWithheld(toSuggestions({ suggestions: [] }, lines)), heads };
+  const schema = classifySchema(send, heads);
   const out = await model({
     task: BOOKS_CLASSIFY_TASK,
     privacy: "anonymize-then-cloud",
     difficulty: "sop",
     schema,
-    contradictions: (o) => validateClassification(o, lines),
-    messages: [{ role: "user", content: classifyPrompt(lines, heads, notes) }],
+    contradictions: (o) => validateClassification(o, send),
+    messages: [{ role: "user", content: classifyPrompt(send, heads, notes) }],
   });
-  return { suggestions: toSuggestions(out, lines), heads };
+  return { suggestions: asWithheld(toSuggestions(out, lines)), heads };
 }

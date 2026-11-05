@@ -11,6 +11,7 @@ import { getAgent } from "@/lib/agents/registry";
 import {
   GUARDRAIL_METRICS,
   GUARDRAIL_METRIC_LABELS,
+  breachLabel,
   formatCount,
   formatInr,
   formatRate,
@@ -24,6 +25,7 @@ import {
   type UsageBucket,
 } from "@/lib/ai/usage";
 import { loadGuardrailSignals, recordGuardrailBreaches } from "@/lib/agents/core/guardrails/drift-db";
+import { hallucinationBudgetFor } from "@/lib/agents/core/guardrails/limits";
 
 export const dynamic = "force-dynamic";
 
@@ -45,8 +47,8 @@ function GuardrailsTable({ days, th }: { days: GuardrailDay[]; th: GuardrailThre
         Guardrails
       </h2>
       <p className="text-sm text-ink-mute mb-3">
-        Drift per agent per day (ADR-008). A rate breaches when it is above its limit and has at least {formatCount(th.minSample)} cases; any scope violation
-        breaches. Limits:{" "}
+        Drift per agent per day (ADR-008, ADR-009). A rate breaches when it is above its limit and has at least {formatCount(th.minSample)} cases; any scope violation
+        breaches, and so does a task whose share of ungrounded answers is over its hallucination budget. Limits:{" "}
         {GUARDRAIL_METRICS.map((m) => `${GUARDRAIL_METRIC_LABELS[m]} ${Math.round(th[m] * 1000) / 10}%`).join(" · ")}. Override with{" "}
         <code className="text-xs">{guardrailThresholdEnv("schemaFail")}</code> and the other <code className="text-xs">GUARDRAIL_*</code> settings.
       </p>
@@ -71,6 +73,8 @@ function GuardrailsTable({ days, th }: { days: GuardrailDay[]; th: GuardrailThre
                     </th>
                   ))}
                   <th scope="col" className={`${num} font-semibold py-2.5 px-3`}>Scope violations</th>
+                  <th scope="col" className="text-left font-semibold py-2.5 px-3">Hallucination (worst task vs budget)</th>
+                  <th scope="col" className={`${num} font-semibold py-2.5 px-3`}>Injections withheld</th>
                   <th scope="col" className="text-left font-semibold py-2.5 pl-3">Status</th>
                 </tr>
               </thead>
@@ -87,10 +91,14 @@ function GuardrailsTable({ days, th }: { days: GuardrailDay[]; th: GuardrailThre
                         </td>
                       ))}
                       <td className={`${num} px-3 ${d.scopeViolations > 0 ? "font-semibold text-red-700" : ""}`}>{formatCount(d.scopeViolations)}</td>
+                      <td className={`px-3 ${d.hallucination[0]?.breach ? "font-semibold text-red-700" : ""}`} title={d.hallucination.map((h) => `${h.task}: ${formatRate(h.rate)} of ${formatCount(h.rate.d)}, budget ${Math.round(h.budget * 1000) / 10}%`).join("; ")}>
+                        {d.hallucination[0] ? `${formatRate(d.hallucination[0].rate)} ${d.hallucination[0].task} (budget ${Math.round(d.hallucination[0].budget * 1000) / 10}%)` : "—"}
+                      </td>
+                      <td className={`${num} px-3 ${d.injections > 0 ? "font-semibold text-red-700" : ""}`}>{formatCount(d.injections)}</td>
                       <td className="pl-3">
                         {d.breaches.length > 0 ? (
                           <span className="inline-flex items-center rounded-md bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700 ring-1 ring-inset ring-red-200">
-                            Breach: {d.breaches.map((b) => GUARDRAIL_METRIC_LABELS[b.metric]).join(", ")}
+                            Breach: {d.breaches.map(breachLabel).join(", ")}
                           </span>
                         ) : (
                           <span className="text-ink-mute">Within limits</span>
@@ -158,7 +166,7 @@ export default async function ModelUsagePage({ searchParams }: { searchParams: P
   const t = summary.totals;
   const thresholds = loadGuardrailThresholds();
   const signals = await loadGuardrailSignals(range.from, range.to, prisma);
-  const guardrailDays = guardrailRates(calls, signals.runs, signals.reviews, thresholds);
+  const guardrailDays = guardrailRates(calls, signals.runs, signals.reviews, thresholds, hallucinationBudgetFor);
   await recordGuardrailBreaches(guardrailDays, prisma);
 
   const stats = [

@@ -24,6 +24,7 @@ import { z, type ZodType, type ZodTypeDef } from "zod";
 import type { AgentName, AgentTask, ModelRequest, RouterResult } from "@/lib/ai/router";
 import { validateScope, type AgentScope } from "./guardrails/scope";
 import { createGuardrailSession, type GuardrailSession, type ModelCallRequest } from "./guardrails/session";
+import type { ItemScreen } from "./guardrails/untrusted";
 import type { DeliverableStore, StoredFile } from "@/lib/integrations/sharepoint/deliverable-store";
 import { deliverablePath, parsePeriod, type DeliverableKind, type DeliverablePath } from "@/lib/integrations/sharepoint/paths";
 import {
@@ -106,8 +107,11 @@ export type JobContext = {
  * Model call bound to the current run. Returns the schema-valid output or throws. For a scoped
  * agent the task must be declared in its scope (the schema and system prompt come from the task
  * spec) and the output comes back grounded (`source`: the documents text, default the user messages).
+ * `screen` (scoped agents, ADR-009) screens document items for prompt injection before a call and
+ * records what it withholds for the run's `possible-prompt-injection` reviewer flag; agents use it
+ * through `screenForModel` (guardrails/untrusted.ts).
  */
-export type ModelCaller = <T>(req: ModelCallRequest<T>) => Promise<T>;
+export type ModelCaller = (<T>(req: ModelCallRequest<T>) => Promise<T>) & { screen?: ItemScreen };
 
 export type ExtractContext<I> = {
   input: I;
@@ -350,7 +354,7 @@ export async function runAgent<I, E>(def: AgentDefinition<I, E>, jobTaskId: stri
     guard = def.scope ? createGuardrailSession({ agent: def, scope: def.scope, route, unwrap }) : null;
     const session = guard;
     const model: ModelCaller = session
-      ? session.model
+      ? Object.assign(<T>(req: ModelCallRequest<T>) => session.model<T>(req), { screen: session.screen })
       : async <T>(req: ModelCallRequest<T>): Promise<T> => unwrap(await route<T>(legacyRequest(req)));
 
     // Rules: the pack, plus approved mistake rules the pack does not already carry.
@@ -409,6 +413,12 @@ export async function runAgent<I, E>(def: AgentDefinition<I, E>, jobTaskId: stri
           });
     const results = await runChecklist(loaded.ruleSet, checkInput, { registry: def.checklistRegistry, llmCheck, llmContext });
     session?.assertNoViolation();
+    // ADR-009: text the injection screen kept out of any model call is a block-severity reviewer flag.
+    const injection = session?.injectionResult();
+    if (injection) results.push(injection);
+    // ADR-009: documents cut at a task's input limit are a warn row naming what was not sent.
+    const truncated = session?.truncationResult();
+    if (truncated) results.push(truncated);
     session?.finish(results);
 
     // Deliverables → Working/.

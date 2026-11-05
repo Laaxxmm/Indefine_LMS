@@ -266,7 +266,7 @@ export function validateEchoVerdict(v: ScopedVerdict, documents: string): string
 
 export const ECHO_RELATED_PARTY_SPEC: ModelTaskSpec<ScopedVerdict, string> = {
   name: ECHO_RELATED_PARTY_TASK,
-  version: 1,
+  version: 2,
   schema: ScopedVerdictSchema,
   systemPrompt: [
     CHECK_TASK_INSTRUCTIONS,
@@ -276,6 +276,8 @@ export const ECHO_RELATED_PARTY_SPEC: ModelTaskSpec<ScopedVerdict, string> = {
   highStakes: true,
   difficulty: "judgement",
   ruleIds: ["echo.related-party"],
+  privacy: "anonymize-then-cloud",
+  profile: { documents: "LLM context: register rows (ref, party, date, amount), one labelled line each (register.csv row n)." },
 };
 
 export const ECHO_SCOPE: AgentScope = {

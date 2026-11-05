@@ -105,6 +105,11 @@ export const MAX_RANGE_DAYS = 366;
 // (disagreements / agreement checks), and reviewer override rate ((request-changes + MistakeLog
 // proposals) / runs). Scope violations breach at any count. A rate breaches when it is above its
 // threshold and its denominator is at least `minSample`. Thresholds are env-overridable.
+//
+// ADR-009 adds, per agent per day: the hallucination rate of each task (ungrounded / ground-checked
+// items of that task) against the task's budget — a task over budget with at least `minSample`
+// checks is a "hallucination" breach naming the task — and the count of document items the
+// injection screen withheld (shown, not a breach: each one is already a block flag on its run).
 
 /** One run's `guardrail-run` AuditEvent (meta = the run's GuardrailStats). */
 export interface GuardrailRunSignal {
@@ -118,7 +123,18 @@ export interface GuardrailRunSignal {
   disagreements: number;
   scopeViolations: number;
   wrongInput: number;
+  /** Items the injection screen withheld (ADR-009). */
+  injections?: number;
+  /** Per task (`<task>@<version>`): model items checked against the documents and how many were ungrounded (ADR-009). */
+  tasks?: Record<string, { checked: number; ungrounded: number }>;
 }
+
+/** A task's hallucination budget (share of its checked items that may be ungrounded per day). The page wires guardrails' table. */
+export type HallucinationBudget = (task: string) => number;
+export const DEFAULT_HALLUCINATION_BUDGET = 0.02;
+
+/** One task's hallucination rate on one agent-day. */
+export type TaskHallucination = { task: string; rate: Rate; budget: number; breach: boolean };
 
 /** Reviewer activity: a run produced, a run sent back (request changes), a MistakeLog proposal. */
 export interface ReviewSignal {
@@ -130,7 +146,7 @@ export interface ReviewSignal {
 export const GUARDRAIL_METRICS = ["schemaFail", "escalation", "abstain", "ungrounded", "disagreement", "override"] as const;
 export type GuardrailMetric = (typeof GUARDRAIL_METRICS)[number];
 
-export const GUARDRAIL_METRIC_LABELS: Readonly<Record<GuardrailMetric | "scopeViolation", string>> = Object.freeze({
+export const GUARDRAIL_METRIC_LABELS: Readonly<Record<GuardrailMetric | "scopeViolation" | "hallucination", string>> = Object.freeze({
   schemaFail: "Schema / validator fail",
   escalation: "Escalation",
   abstain: "Abstain",
@@ -138,6 +154,7 @@ export const GUARDRAIL_METRIC_LABELS: Readonly<Record<GuardrailMetric | "scopeVi
   disagreement: "Disagreement",
   override: "Reviewer override",
   scopeViolation: "Scope violation",
+  hallucination: "Hallucination budget",
 });
 
 export type GuardrailThresholds = Record<GuardrailMetric, number> & { minSample: number };
@@ -177,15 +194,30 @@ export function loadGuardrailThresholds(env: Record<string, string | undefined> 
 export const guardrailThresholdEnv = (k: keyof GuardrailThresholds) => THRESHOLD_ENV[k];
 
 export type Rate = { n: number; d: number; rate: number | null };
-export type GuardrailBreach = { metric: GuardrailMetric | "scopeViolation"; rate: number | null; count: number; threshold: number | null; sample: number };
+export type GuardrailBreach = {
+  metric: GuardrailMetric | "scopeViolation" | "hallucination";
+  rate: number | null;
+  count: number;
+  threshold: number | null;
+  sample: number;
+  /** The task, for a hallucination-budget breach. */
+  task?: string;
+};
 export type GuardrailDay = {
   agent: string;
   day: string;
   rates: Record<GuardrailMetric, Rate>;
   scopeViolations: number;
   wrongInput: number;
+  /** Per task with checked items: hallucination rate against its budget, worst first (ADR-009). */
+  hallucination: TaskHallucination[];
+  /** Document items the injection screen withheld (ADR-009; each is a block flag on its run). */
+  injections: number;
   breaches: GuardrailBreach[];
 };
+
+/** "metric (task)" for a breach list. */
+export const breachLabel = (b: Pick<GuardrailBreach, "metric" | "task">) => `${GUARDRAIL_METRIC_LABELS[b.metric]}${b.task ? ` (${b.task})` : ""}`;
 
 /** A model call that failed its schema or a validator (validator failures log as LOW_CONFIDENCE + "contradiction:"). */
 export const isSchemaOrValidatorFailure = (c: Pick<UsageCall, "status" | "error">) => c.status === "SCHEMA_FAIL" || (c.status === "LOW_CONFIDENCE" && /(^|;\s*)contradiction:/.test(c.error ?? ""));
@@ -193,13 +225,35 @@ export const isSchemaOrValidatorFailure = (c: Pick<UsageCall, "status" | "error"
 const rate = (n: number, d: number): Rate => ({ n, d, rate: d > 0 ? n / d : null });
 
 /** Per agent per IST day guardrail rates and breaches, newest day first. */
-export function guardrailRates(calls: UsageCall[], runs: GuardrailRunSignal[], reviews: ReviewSignal[], th: GuardrailThresholds = DEFAULT_GUARDRAIL_THRESHOLDS): GuardrailDay[] {
-  type Acc = { calls: number; schemaFail: number; escalated: number; judgements: number; abstained: number; groundChecked: number; ungrounded: number; checks: number; disagreements: number; scope: number; wrongInput: number; runs: number; overrides: number };
+export function guardrailRates(
+  calls: UsageCall[],
+  runs: GuardrailRunSignal[],
+  reviews: ReviewSignal[],
+  th: GuardrailThresholds = DEFAULT_GUARDRAIL_THRESHOLDS,
+  budgetFor: HallucinationBudget = () => DEFAULT_HALLUCINATION_BUDGET,
+): GuardrailDay[] {
+  type Acc = {
+    calls: number;
+    schemaFail: number;
+    escalated: number;
+    judgements: number;
+    abstained: number;
+    groundChecked: number;
+    ungrounded: number;
+    checks: number;
+    disagreements: number;
+    scope: number;
+    wrongInput: number;
+    runs: number;
+    overrides: number;
+    injections: number;
+    tasks: Map<string, { checked: number; ungrounded: number }>;
+  };
   const acc = new Map<string, Acc>();
   const at = (agent: string, d: Date) => {
     const k = `${agent}\u0000${istDayKey(d)}`;
     let a = acc.get(k);
-    if (!a) acc.set(k, (a = { calls: 0, schemaFail: 0, escalated: 0, judgements: 0, abstained: 0, groundChecked: 0, ungrounded: 0, checks: 0, disagreements: 0, scope: 0, wrongInput: 0, runs: 0, overrides: 0 }));
+    if (!a) acc.set(k, (a = { calls: 0, schemaFail: 0, escalated: 0, judgements: 0, abstained: 0, groundChecked: 0, ungrounded: 0, checks: 0, disagreements: 0, scope: 0, wrongInput: 0, runs: 0, overrides: 0, injections: 0, tasks: new Map() }));
     return a;
   };
   for (const c of calls) {
@@ -219,6 +273,11 @@ export function guardrailRates(calls: UsageCall[], runs: GuardrailRunSignal[], r
     a.disagreements += r.disagreements;
     a.scope += r.scopeViolations;
     a.wrongInput += r.wrongInput;
+    a.injections += r.injections ?? 0;
+    for (const [task, t] of Object.entries(r.tasks ?? {})) {
+      const cur = a.tasks.get(task) ?? { checked: 0, ungrounded: 0 };
+      a.tasks.set(task, { checked: cur.checked + t.checked, ungrounded: cur.ungrounded + t.ungrounded });
+    }
   }
   for (const r of reviews) {
     const a = at(r.agent, r.createdAt);
@@ -242,7 +301,16 @@ export function guardrailRates(calls: UsageCall[], runs: GuardrailRunSignal[], r
       if (r.rate !== null && r.d >= th.minSample && r.rate > th[m]) breaches.push({ metric: m, rate: r.rate, count: r.n, threshold: th[m], sample: r.d });
     }
     if (a.scope > 0) breaches.push({ metric: "scopeViolation", rate: null, count: a.scope, threshold: 0, sample: a.runs });
-    out.push({ agent, day, rates, scopeViolations: a.scope, wrongInput: a.wrongInput, breaches });
+    const hallucination: TaskHallucination[] = [...a.tasks.entries()]
+      .filter(([, t]) => t.checked > 0)
+      .map(([task, t]) => {
+        const r = rate(t.ungrounded, t.checked);
+        const budget = budgetFor(task);
+        return { task, rate: r, budget, breach: r.rate !== null && r.d >= th.minSample && r.rate > budget };
+      })
+      .sort((x, y) => (y.rate.rate ?? 0) - (x.rate.rate ?? 0) || x.task.localeCompare(y.task));
+    for (const h of hallucination) if (h.breach) breaches.push({ metric: "hallucination", rate: h.rate.rate, count: h.rate.n, threshold: h.budget, sample: h.rate.d, task: h.task });
+    out.push({ agent, day, rates, scopeViolations: a.scope, wrongInput: a.wrongInput, hallucination, injections: a.injections, breaches });
   }
   return out.sort((x, y) => y.day.localeCompare(x.day) || x.agent.localeCompare(y.agent));
 }

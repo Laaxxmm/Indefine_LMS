@@ -91,11 +91,11 @@ describe("gate rules that close the audit's gaps", () => {
     expect(scoreboardMarkdown([uncovered], new Date())).toContain("| input sensitivity · bank.csv (required) | – | – | – | no probe declared · required input | FAIL |");
   });
 
-  it("a thin production set → FAIL (9 fixtures where 15 are required)", async () => {
+  it("a thin production set → FAIL (9 fixtures where 15 are required; no red-team fixtures where 2 are required, ADR-009)", async () => {
     const prod: AgentDefinition<EchoInput, EchoExtract> = { ...echoAgent, internal: false };
     const s = await runAgentAccuracy(prod);
     expect(s.pass).toBe(false);
-    expect(s.reasons).toEqual(["thin fixture set: 9 fixture(s), echo needs at least 15"]);
+    expect(s.reasons).toEqual(["thin fixture set: 9 fixture(s), echo needs at least 15", "red-team: 0 fixture(s) with injection attempts inside input documents, need at least 2 (ADR-009)"]);
   });
 
   it("a probe that changes nothing → FAIL", async () => {

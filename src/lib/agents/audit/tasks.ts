@@ -66,7 +66,7 @@ export type AuditModelTask = ModelTaskSpec<ScopedVerdict, string, "audit"> & {
 export const AUDIT_MODEL_TASKS: readonly AuditModelTask[] = Object.freeze([
   {
     name: AUDIT_RELATED_PARTY_TASK,
-    version: 1,
+    version: 2,
     systemPrompt: AUDIT_CHECK_SYSTEM,
     schema: ScopedVerdictSchema,
     outputSchema: ScopedVerdictSchema,
@@ -75,6 +75,8 @@ export const AUDIT_MODEL_TASKS: readonly AuditModelTask[] = Object.freeze([
     rules: ["audit.related-party-disclosure"],
     ruleIds: ["audit.related-party-disclosure"],
     validate: validateRelatedPartyVerdict,
+    privacy: "anonymize-then-cloud",
+    profile: { documents: "LLM context: trial-balance ledger names and groups (labelled rows) and the disclosure-note lines (labelled lines). No amounts." },
   },
 ]);
 
