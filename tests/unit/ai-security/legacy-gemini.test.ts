@@ -36,7 +36,7 @@ const bodies: { url: string; body: string }[] = [];
 beforeEach(() => {
   bodies.length = 0;
   db.audits.length = 0;
-  process.env.GEMINI_API_KEY = "test-key-not-real";
+  process.env.GEMINI_API_KEY = "<test key, not real>";
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string | URL, init?: RequestInit) => {
@@ -67,7 +67,7 @@ describe("#7 SOP Builder: staff free text is masked and gated before Gemini", ()
     for (const s of ["ABCDE1234F", AADHAAR, "9876543210", "rajesh@example.com", "Rajesh Kumar"]) expect(sent).not.toContain(s);
     expect(sent).toMatch(/⟨PAN_1⟩/);
     expect(out.brief?.objective).toContain("ABCDE1234F"); // restored for the author
-    expect(bodies[0].url).not.toContain("test-key-not-real");
+    expect(bodies[0].url).not.toContain("test key");
   });
 
   it("the production default reads the client master + staff names (here: the fake database)", async () => {

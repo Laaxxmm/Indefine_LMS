@@ -12,74 +12,74 @@ const aadhaarValid = (() => {
 const a4 = (s: string, sep: string) => `${s.slice(0, 4)}${sep}${s.slice(4, 8)}${sep}${s.slice(8)}`;
 const NOW = new Date("2026-11-06T00:00:00Z");
 
-type Case = { name: string; text: string; secret: string; dictionary?: { value: string; kind: "NAME" | "ORG" | "ADDRESS" }[] };
+type Case = { name: string; text: string; leak: string; dictionary?: { value: string; kind: "NAME" | "ORG" | "ADDRESS" }[] };
 
 export const ADVERSARIAL_CASES: Case[] = [
   // ---- PAN variants
-  { name: "PAN with spaces 'ABCDE 1234 F'", text: "PAN of assessee: ABCDE 1234 F per form", secret: "ABCDE 1234 F" },
-  { name: "PAN with dots 'ABCDE.1234.F'", text: "PAN ABCDE.1234.F", secret: "ABCDE.1234.F" },
-  { name: "lowercase PAN", text: "pan abcde1234f on invoice", secret: "abcde1234f" },
-  { name: "PAN with U+200B zero-width space", text: "PAN ABCDE​1234F", secret: "ABCDE​1234F" },
-  { name: "PAN with U+200C ZWNJ", text: "PAN ABC‌DE1234F", secret: "ABC‌DE1234F" },
-  { name: "PAN with U+FEFF BOM char", text: "PAN ABCDE1234﻿F", secret: "ABCDE1234﻿F" },
-  { name: "PAN in fullwidth chars", text: "PAN ＡＢＣＤＥ１２３４Ｆ", secret: "ＡＢＣＤＥ１２３４Ｆ" },
-  { name: "PAN with Cyrillic look-alikes (А В С)", text: "PAN АВСDE1234F", secret: "АВСDE1234F" },
-  { name: "PAN in JSON value", text: '{"pan":"ABCDE1234F","name":"x"}', secret: "ABCDE1234F" },
-  { name: "PAN in CSV cell", text: "row,ABCDE1234F,500.00", secret: "ABCDE1234F" },
-  { name: "PAN in file name", text: "attached ABCDE1234F_bank_statement.pdf", secret: "ABCDE1234F" },
-  { name: "PAN glued to a word (ABCDE1234Fbank.pdf)", text: "file ABCDE1234Fbank.pdf", secret: "ABCDE1234F" },
-  { name: "PAN-card / Form 16 layout, one character per box", text: "PAN A B C D E 1 2 3 4 F", secret: "1 2 3 4" },
+  { name: "PAN with spaces 'ABCDE 1234 F'", text: "PAN of assessee: ABCDE 1234 F per form", leak: "ABCDE 1234 F" },
+  { name: "PAN with dots 'ABCDE.1234.F'", text: "PAN ABCDE.1234.F", leak: "ABCDE.1234.F" },
+  { name: "lowercase PAN", text: "pan abcde1234f on invoice", leak: "abcde1234f" },
+  { name: "PAN with U+200B zero-width space", text: "PAN ABCDE​1234F", leak: "ABCDE​1234F" },
+  { name: "PAN with U+200C ZWNJ", text: "PAN ABC‌DE1234F", leak: "ABC‌DE1234F" },
+  { name: "PAN with U+FEFF BOM char", text: "PAN ABCDE1234﻿F", leak: "ABCDE1234﻿F" },
+  { name: "PAN in fullwidth chars", text: "PAN ＡＢＣＤＥ１２３４Ｆ", leak: "ＡＢＣＤＥ１２３４Ｆ" },
+  { name: "PAN with Cyrillic look-alikes (А В С)", text: "PAN АВСDE1234F", leak: "АВСDE1234F" },
+  { name: "PAN in JSON value", text: '{"pan":"ABCDE1234F","name":"x"}', leak: "ABCDE1234F" },
+  { name: "PAN in CSV cell", text: "row,ABCDE1234F,500.00", leak: "ABCDE1234F" },
+  { name: "PAN in file name", text: "attached ABCDE1234F_bank_statement.pdf", leak: "ABCDE1234F" },
+  { name: "PAN glued to a word (ABCDE1234Fbank.pdf)", text: "file ABCDE1234Fbank.pdf", leak: "ABCDE1234F" },
+  { name: "PAN-card / Form 16 layout, one character per box", text: "PAN A B C D E 1 2 3 4 F", leak: "1 2 3 4" },
   // ---- Aadhaar
-  { name: "Aadhaar with dashes", text: `Aadhaar ${a4(aadhaarValid, "-")}`, secret: a4(aadhaarValid, "-") },
-  { name: "Aadhaar with spaces", text: `UID ${a4(aadhaarValid, " ")}`, secret: a4(aadhaarValid, " ") },
-  { name: "Aadhaar bare 12 digits, no context", text: `ref ${aadhaarValid} ok`, secret: aadhaarValid },
-  { name: "Aadhaar inside a longer digit run", text: `ref 99${aadhaarValid}77`, secret: aadhaarValid },
-  { name: "Aadhaar with dot separators", text: `Aadhaar ${a4(aadhaarValid, ".")}`, secret: a4(aadhaarValid, ".") },
+  { name: "Aadhaar with dashes", text: `Aadhaar ${a4(aadhaarValid, "-")}`, leak: a4(aadhaarValid, "-") },
+  { name: "Aadhaar with spaces", text: `UID ${a4(aadhaarValid, " ")}`, leak: a4(aadhaarValid, " ") },
+  { name: "Aadhaar bare 12 digits, no context", text: `ref ${aadhaarValid} ok`, leak: aadhaarValid },
+  { name: "Aadhaar inside a longer digit run", text: `ref 99${aadhaarValid}77`, leak: aadhaarValid },
+  { name: "Aadhaar with dot separators", text: `Aadhaar ${a4(aadhaarValid, ".")}`, leak: a4(aadhaarValid, ".") },
   // ---- phones
-  { name: "phone '+91 98765 43210'", text: "call +91 98765 43210 now", secret: "98765 43210" },
-  { name: "phone '0 98765-43210'", text: "call 0 98765-43210 now", secret: "98765-43210" },
-  { name: "phone '98765 43210'", text: "call 98765 43210 now", secret: "98765 43210" },
-  { name: "phone '9876543210' inside text", text: "mob:9876543210,ok", secret: "9876543210" },
-  { name: "phone with dots '98765.43210'", text: "mob 98765.43210", secret: "98765.43210" },
-  { name: "phone with parentheses '(+91) 98765 43210'", text: "(+91) 98765 43210", secret: "98765 43210" },
+  { name: "phone '+91 98765 43210'", text: "call +91 98765 43210 now", leak: "98765 43210" },
+  { name: "phone '0 98765-43210'", text: "call 0 98765-43210 now", leak: "98765-43210" },
+  { name: "phone '98765 43210'", text: "call 98765 43210 now", leak: "98765 43210" },
+  { name: "phone '9876543210' inside text", text: "mob:9876543210,ok", leak: "9876543210" },
+  { name: "phone with dots '98765.43210'", text: "mob 98765.43210", leak: "98765.43210" },
+  { name: "phone with parentheses '(+91) 98765 43210'", text: "(+91) 98765 43210", leak: "98765 43210" },
   // ---- email
-  { name: "email plus-addressing uppercase", text: "mail First.Last+tag@Example.COM", secret: "First.Last+tag@Example.COM" },
-  { name: "email split by zero-width space", text: "mail first​.last@example.com", secret: "last@example.com" },
-  { name: "email with ' at ' / ' dot ' obfuscation", text: "mail first.last at example dot com", secret: "first.last at example dot com" },
-  { name: "UPI VPA (no TLD) 'rajesh.k@okhdfcbank'", text: "UPI/P2A/rajesh.k@okhdfcbank/NEFT", secret: "rajesh.k@okhdfcbank" },
+  { name: "email plus-addressing uppercase", text: "mail First.Last+tag@Example.COM", leak: "First.Last+tag@Example.COM" },
+  { name: "email split by zero-width space", text: "mail first​.last@example.com", leak: "last@example.com" },
+  { name: "email with ' at ' / ' dot ' obfuscation", text: "mail first.last at example dot com", leak: "first.last at example dot com" },
+  { name: "UPI VPA (no TLD) 'rajesh.k@okhdfcbank'", text: "UPI/P2A/rajesh.k@okhdfcbank/NEFT", leak: "rajesh.k@okhdfcbank" },
   // ---- dictionary names
-  { name: "dictionary name split across newline", text: "Signed by Rajesh\nKumar on behalf", secret: "Rajesh\nKumar", dictionary: [{ value: "Rajesh Kumar", kind: "NAME" }] },
-  { name: "dictionary name extra whitespace + case", text: "signed by RAJESH    kumar", secret: "RAJESH    kumar", dictionary: [{ value: "Rajesh Kumar", kind: "NAME" }] },
-  { name: "dictionary name possessive", text: "Rajesh Kumar's account", secret: "Rajesh Kumar", dictionary: [{ value: "Rajesh Kumar", kind: "NAME" }] },
-  { name: "dictionary name as 'Kumar, Rajesh'", text: "Kumar, Rajesh", secret: "Kumar, Rajesh", dictionary: [{ value: "Rajesh Kumar", kind: "NAME" }] },
-  { name: "dictionary name: first name alone (dictionary has full name only)", text: "Ask Rajesh to sign", secret: "Rajesh", dictionary: [{ value: "Rajesh Kumar", kind: "NAME" }] },
-  { name: "dictionary ORG with zero-width space inside", text: "Acme​ Widgets Pvt Ltd", secret: "Widgets Pvt Ltd", dictionary: [{ value: "Acme Widgets Pvt Ltd", kind: "ORG" }] },
-  { name: "person name NOT in dictionary (bank narration)", text: "NEFT-RAJESH KUMAR SHARMA-SAL OCT", secret: "RAJESH KUMAR SHARMA" },
+  { name: "dictionary name split across newline", text: "Signed by Rajesh\nKumar on behalf", leak: "Rajesh\nKumar", dictionary: [{ value: "Rajesh Kumar", kind: "NAME" }] },
+  { name: "dictionary name extra whitespace + case", text: "signed by RAJESH    kumar", leak: "RAJESH    kumar", dictionary: [{ value: "Rajesh Kumar", kind: "NAME" }] },
+  { name: "dictionary name possessive", text: "Rajesh Kumar's account", leak: "Rajesh Kumar", dictionary: [{ value: "Rajesh Kumar", kind: "NAME" }] },
+  { name: "dictionary name as 'Kumar, Rajesh'", text: "Kumar, Rajesh", leak: "Kumar, Rajesh", dictionary: [{ value: "Rajesh Kumar", kind: "NAME" }] },
+  { name: "dictionary name: first name alone (dictionary has full name only)", text: "Ask Rajesh to sign", leak: "Rajesh", dictionary: [{ value: "Rajesh Kumar", kind: "NAME" }] },
+  { name: "dictionary ORG with zero-width space inside", text: "Acme​ Widgets Pvt Ltd", leak: "Widgets Pvt Ltd", dictionary: [{ value: "Acme Widgets Pvt Ltd", kind: "ORG" }] },
+  { name: "person name NOT in dictionary (bank narration)", text: "NEFT-RAJESH KUMAR SHARMA-SAL OCT", leak: "RAJESH KUMAR SHARMA" },
   // ---- GSTIN / IFSC / bank
-  { name: "GSTIN lowercase", text: "gstin 29abcde1234f1z5", secret: "29abcde1234f1z5" },
-  { name: "IFSC + account split by newline", text: "IFSC: HDFC0001234\nAccount: 50100123456789", secret: "50100123456789" },
-  { name: "bank account alone, no IFSC, no context word", text: "credited to 50100123456789 on 3rd", secret: "50100123456789" },
-  { name: "bank account with 'A/c' 60 chars earlier (context window 50)", text: "A/c details are given below for the refund that is due:\n50100123456789", secret: "50100123456789" },
-  { name: "IFSC lowercase", text: "ifsc hdfc0001234", secret: "hdfc0001234" },
+  { name: "GSTIN lowercase", text: "gstin 29abcde1234f1z5", leak: "29abcde1234f1z5" },
+  { name: "IFSC + account split by newline", text: "IFSC: HDFC0001234\nAccount: 50100123456789", leak: "50100123456789" },
+  { name: "bank account alone, no IFSC, no context word", text: "credited to 50100123456789 on 3rd", leak: "50100123456789" },
+  { name: "bank account with 'A/c' 60 chars earlier (context window 50)", text: "A/c details are given below for the refund that is due:\n50100123456789", leak: "50100123456789" },
+  { name: "IFSC lowercase", text: "ifsc hdfc0001234", leak: "hdfc0001234" },
   // ---- DOB
-  { name: "DOB 01/01/1990 with label", text: "DOB: 01/01/1990", secret: "01/01/1990" },
-  { name: "DOB '1 Jan 1990' with label", text: "Date of birth 1 Jan 1990", secret: "1 Jan 1990" },
-  { name: "DOB 1990-01-01 with 'born on'", text: "born on 1990-01-01", secret: "1990-01-01" },
-  { name: "DOB with no label (bare date)", text: "01/01/1990 Rajesh", secret: "01/01/1990" },
-  { name: "DOB label AFTER the date ('01/01/1990 (DOB)')", text: "01/01/1990 (DOB)", secret: "01/01/1990" },
-  { name: "DOB as '1st January 1990' with label", text: "DOB 1st January 1990", secret: "1st January 1990" },
+  { name: "DOB 01/01/1990 with label", text: "DOB: 01/01/1990", leak: "01/01/1990" },
+  { name: "DOB '1 Jan 1990' with label", text: "Date of birth 1 Jan 1990", leak: "1 Jan 1990" },
+  { name: "DOB 1990-01-01 with 'born on'", text: "born on 1990-01-01", leak: "1990-01-01" },
+  { name: "DOB with no label (bare date)", text: "01/01/1990 Rajesh", leak: "01/01/1990" },
+  { name: "DOB label AFTER the date ('01/01/1990 (DOB)')", text: "01/01/1990 (DOB)", leak: "01/01/1990" },
+  { name: "DOB as '1st January 1990' with label", text: "DOB 1st January 1990", leak: "1st January 1990" },
   // ---- other identifiers
-  { name: "DIN without context", text: "director 01234567 signed", secret: "01234567" },
-  { name: "passport number 'A1234567'", text: "Passport A1234567", secret: "A1234567" },
-  { name: "voter id 'ABC1234567'", text: "Voter ID ABC1234567", secret: "ABC1234567" },
-  { name: "address with PIN (no dictionary)", text: "No. 12, 4th Cross, Jayanagar, Bengaluru 560041", secret: "Jayanagar" },
+  { name: "DIN without context", text: "director 01234567 signed", leak: "01234567" },
+  { name: "passport number 'A1234567'", text: "Passport A1234567", leak: "A1234567" },
+  { name: "voter id 'ABC1234567'", text: "Voter ID ABC1234567", leak: "ABC1234567" },
+  { name: "address with PIN (no dictionary)", text: "No. 12, 4th Cross, Jayanagar, Bengaluru 560041", leak: "Jayanagar" },
 ];
 
 describe("mask(): 50 adversarial formats — none reaches the cloud unmasked", () => {
   it("there are 50 cases", () => expect(ADVERSARIAL_CASES).toHaveLength(50));
   it.each(ADVERSARIAL_CASES.map((c) => [c.name, c] as const))("%s", (_name, c) => {
     const { masked, map } = mask(c.text, { dictionary: c.dictionary, now: NOW });
-    expect(masked, `secret ${JSON.stringify(c.secret)} survived in ${JSON.stringify(masked)}`).not.toContain(c.secret);
+    expect(masked, `secret ${JSON.stringify(c.leak)} survived in ${JSON.stringify(masked)}`).not.toContain(c.leak);
     expect(unmask(masked, map)).toBe(c.text); // exact round trip
     expect(detectPii(masked, { dictionary: c.dictionary })).toEqual([]); // the leak gate agrees nothing is left
   });
