@@ -1,0 +1,24 @@
+{
+  "profile": {
+    "name": "Fixture Traders (proprietor)",
+    "status": "individual",
+    "dateOfBirth": "1980-01-10",
+    "residentialStatus": "resident",
+    "regimeClaimed": "new",
+    "businessKind": "business",
+    "plannedFilingDate": "2026-07-31",
+    "notes": "Proprietor of Fixture Traders, wholesale stationery, Bengaluru. No foreign assets, accounts or income.",
+    "presumptive": "44AD",
+    "itrFormPlanned": "ITR-4"
+  },
+  "otherSources": [],
+  "tdsInBooks": [],
+  "business": {
+    "turnover": "1,80,00,000",
+    "cashReceipts": "30,00,000",
+    "digitalReceipts": "1,50,00,000",
+    "booksProfit": "10,50,000",
+    "cashPayments": "2,00,000",
+    "totalPayments": "1,69,50,000"
+  }
+}

@@ -1,0 +1,159 @@
+{
+  "description": "Trap: senior citizen (born 10-08-1965, 60 during FY 2025-26), old regime. Pension 6,00,000 - std 50,000 = 5,50,000; FD interest 3,00,000; GTI 8,50,000. Deductions: 80C 1,50,000; 80D self 50,000 (senior cap); 80TTB 50,000; 80TTA 10,000 claimed but not allowed to a senior (warn tax.deduction-caps) -> 2,50,000; TI 6,00,000. Senior slabs: 3-5L 5% 10,000 + 5-6L 20% 20,000 = 30,000; no 87A (TI > 5L); cess 1,200; total 31,200. New regime (comparison): 6,00,000 - 75,000 + 3,00,000 = 8,25,000; tax 20,000 + 2,500 = 22,500, fully rebated u/s 87A (TI <= 12L) -> 0, so the new regime is cheaper (info tax.regime-comparison). TDS 194A 30,000 = 26AS. Assessed tax 1,200 and senior without business -> no advance tax. Net payable 31,200 - 30,000 = 1,200.",
+  "category": "trap",
+  "job": {
+    "fy": "2025-26",
+    "period": "Annual",
+    "title": "Income-tax return AY 2026-27"
+  },
+  "flags": [
+    {
+      "ruleId": "tax.deduction-caps",
+      "severity": "warn"
+    },
+    {
+      "ruleId": "tax.regime-comparison",
+      "severity": "info"
+    }
+  ],
+  "figures": {
+    "grossTotalIncomePaise": 85000000,
+    "deductionsAllowedPaise": 25000000,
+    "totalIncomePaise": 60000000,
+    "taxOldPaise": 3120000,
+    "taxNewPaise": 0,
+    "taxLiabilityPaise": 3120000,
+    "rebate87APaise": 0,
+    "surchargePaise": 0,
+    "cessPaise": 120000,
+    "regimeNew": 0,
+    "businessIncomePaise": 0,
+    "presumptiveIncomePaise": 0,
+    "msmeDisallowancePaise": 0,
+    "capitalGainsPaise": 0,
+    "tdsBooksPaise": 3000000,
+    "tds26asPaise": 3000000,
+    "tdsCreditPaise": 3000000,
+    "aisUnexplainedPaise": 0,
+    "advanceTaxPaidPaise": 0,
+    "interest234APaise": 0,
+    "interest234BPaise": 0,
+    "interest234CPaise": 0,
+    "lateFee234FPaise": 0,
+    "netPayablePaise": 120000,
+    "auditRequired": 0,
+    "itrForm": 1,
+    "dueDate139": 20260731,
+    "lossCarriedForwardPaise": 0,
+    "lossLostPaise": 0,
+    "bfLossSetOffPaise": 0
+  },
+  "deliverables": [
+    {
+      "name": "Tax computation",
+      "sheets": [
+        {
+          "name": "Computation",
+          "columns": [
+            "Particulars",
+            "Amount (regime used)",
+            "Old regime",
+            "New regime"
+          ]
+        },
+        {
+          "name": "26AS vs books",
+          "columns": [
+            "TAN",
+            "Deductor",
+            "TDS per books",
+            "TDS per 26AS",
+            "Difference",
+            "Credit claimed"
+          ]
+        },
+        {
+          "name": "AIS vs books",
+          "columns": [
+            "AIS id",
+            "Category",
+            "Source",
+            "AIS amount",
+            "Books ledger",
+            "Not explained",
+            "Result"
+          ]
+        },
+        {
+          "name": "Advance tax",
+          "columns": [
+            "Instalment date",
+            "Cumulative %",
+            "Tax due",
+            "Paid by date",
+            "Shortfall (rounded)",
+            "Months",
+            "Interest"
+          ]
+        },
+        {
+          "name": "Capital gains",
+          "columns": [
+            "Asset",
+            "Type",
+            "Acquired",
+            "Sold",
+            "Sale value",
+            "Cost + expenses",
+            "Gain / (loss)",
+            "Section"
+          ]
+        },
+        {
+          "name": "MSME 43B(h)",
+          "columns": [
+            "Vendor",
+            "Category",
+            "Accepted on",
+            "Paid on",
+            "Days to pay",
+            "Allowed days",
+            "Amount",
+            "Result"
+          ]
+        },
+        {
+          "name": "Audit and ITR",
+          "columns": [
+            "Check",
+            "Result"
+          ]
+        },
+        {
+          "name": "Missing documents",
+          "columns": [
+            "Document or question",
+            "Kind"
+          ]
+        },
+        {
+          "name": "Checklist",
+          "columns": [
+            "Rule",
+            "Severity",
+            "Status",
+            "Finding",
+            "Evidence"
+          ]
+        },
+        {
+          "name": "Verify",
+          "columns": [
+            "Rate / threshold / date",
+            "Partner to verify"
+          ]
+        }
+      ]
+    }
+  ]
+}

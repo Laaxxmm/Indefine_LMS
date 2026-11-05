@@ -9,8 +9,8 @@
 //
 // Model use: only to match AIS income lines to books ledgers by name (tax.match-ais) and for the
 // one LLM rule (foreign assets). All tax, interest, totals and thresholds are deterministic code.
-import type { AgentDefinition } from "@/lib/agents/core/runner";
-import { dayNumber } from "@/lib/agents/roc/util";
+import type { AgentDefinition, InputFile } from "@/lib/agents/core/runner";
+import { dayNumber, paiseToRupeeString, rupeesToPaise } from "@/lib/agents/roc/util";
 import { analyseTax, isAisIncome, type AisMatch, type TaxExtract } from "./analyse";
 import { ruleSetFor } from "./data";
 import { taxDeliverables } from "./deliverables";
@@ -25,6 +25,30 @@ export type { TaxExtract } from "./analyse";
 export type { TaxInput } from "./parse";
 
 export const TAX_MATCH_TASK = TAX_MATCH_AIS_SPEC.name;
+
+/**
+ * Accuracy-harness input-sensitivity probe: a copy of the files with one income amount in
+ * organiser.json raised by ₹1 — business turnover and books profit when there is a business
+ * (so presumptive and books cases both move), else gross salary, else the first other-source
+ * ledger. Gross total income changes on every fixture. The originals are not modified.
+ */
+export function taxProbeMutation(files: InputFile[]): InputFile[] {
+  const f = files.find((x) => x.name.toLowerCase() === "organiser.json");
+  if (!f) return files;
+  const org = JSON.parse(f.bytes.toString("utf8")) as {
+    business?: Record<string, unknown> | null;
+    salary?: Record<string, unknown> | null;
+    otherSources?: Record<string, unknown>[];
+  };
+  const bump = (o: Record<string, unknown>, k: string) => (o[k] = paiseToRupeeString(rupeesToPaise(o[k] ?? 0, k) + 100));
+  if (org.business) {
+    bump(org.business, "turnover");
+    bump(org.business, "booksProfit");
+  } else if (org.salary) bump(org.salary, "gross");
+  else if (org.otherSources?.length) bump(org.otherSources[0], "amount");
+  else return files;
+  return files.map((x) => (x === f ? { ...x, bytes: Buffer.from(JSON.stringify(org, null, 2), "utf8") } : { ...x }));
+}
 const ITR_NUMBER = { "ITR-1": 1, "ITR-2": 2, "ITR-3": 3, "ITR-4": 4, "ITR-5": 5, "ITR-6": 6 } as const;
 
 /** Integer figures for the run (paise for amounts; dates YYYYMMDD; flags 0/1). */
@@ -73,6 +97,7 @@ export const taxAgent: AgentDefinition<TaxInput, TaxExtract> = {
   inputSchema: taxInputSchema,
   defaultChecklist: TAX_CHECKLIST,
   checklistRegistry: taxRegistry,
+  probeMutation: taxProbeMutation,
 
   async extract({ input, job, model, notes }) {
     const rs = ruleSetFor(job.fy);

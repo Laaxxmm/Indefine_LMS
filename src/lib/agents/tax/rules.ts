@@ -93,7 +93,7 @@ export const taxRegistry = createRuleRegistry<TaxCheckInput>({
     return fail(
       `s.43B(h): ${inr(m.disallowedPaise)} owed to micro / small enterprises at the year end and not paid within the allowed days is added back: ${hits.map((h) => `${h.vendor} ${inr(h.amountPaise)} (${h.daysToPay === null ? "unpaid" : `${h.daysToPay} days`}, allowed ${h.allowedDays})`).join("; ")}`,
       `${f.vendor},${f.category},${f.acceptanceDate}`,
-      `msme.csv row ${(x.msme ?? []).indexOf(m.findings.find((z) => z.disallowed)!) + 2}`,
+      `msme.csv row ${m.findings.findIndex((z) => z.disallowed) + 2}`, // findings keep the file's row order
     );
   },
   "tax.advance-tax-interest": ({ extracted: x }) => {
@@ -145,6 +145,8 @@ export const taxRegistry = createRuleRegistry<TaxCheckInput>({
     return fail(`AIS reports ${l.category} (${l.source}, ${inr(l.amountPaise)}): explain its source of funds in the file`, `${l.id},${l.category},${l.source}`, `ais.csv row ${i + 2}`);
   },
   "tax.income-over": ({ extracted: x }, rule: RuleDefinition) => {
+    const statuses = strings(rule.params?.statuses);
+    if (statuses.length && !statuses.includes(x.organiser.profile.status)) return na(`${x.organiser.profile.status}: outside this rule's scope (${statuses.join(", ")})`);
     const limit = num(rule.params?.limitPaise, Number.MAX_SAFE_INTEGER);
     const ti = analyseTax(x).chosen.totalIncome;
     if (ti <= limit) return pass();

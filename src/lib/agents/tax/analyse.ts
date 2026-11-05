@@ -325,7 +325,8 @@ function analyse(x: TaxExtract): TaxAnalysis {
   let businessIncome = 0;
   let msmeApplied = false;
   if (b && p.businessKind !== "none") {
-    if (pres.claimed && pres.eligible) businessIncome = Math.max(pres.incomePaise, b.booksProfitPaise);
+    // Presumptive: the deemed income, or a higher sum the taxpayer declares — never the books profit by default.
+    if (pres.claimed && pres.eligible) businessIncome = Math.max(pres.incomePaise, b.declaredIncomePaise);
     else {
       msmeApplied = true;
       businessIncome = b.booksProfitPaise + msmeRes.totalPaise + b.otherDisallowancesPaise;

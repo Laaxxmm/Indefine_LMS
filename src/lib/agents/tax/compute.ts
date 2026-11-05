@@ -193,8 +193,18 @@ export function capitalGains(rows: CgRow[], rules: TaxRuleSet): CgResult {
   for (const r of out) b[r.bucket] += r.gainPaise;
   let stLoss = 0;
   let ltLoss = 0;
-  for (const k of ["stcgOther", "stcg111A"] as const) if (b[k] < 0) (stLoss -= b[k]), (b[k] = 0);
-  for (const k of ["ltcg112", "ltcg112A"] as const) if (b[k] < 0) (ltLoss -= b[k]), (b[k] = 0);
+  for (const k of ["stcgOther", "stcg111A"] as const) {
+    if (b[k] < 0) {
+      stLoss -= b[k];
+      b[k] = 0;
+    }
+  }
+  for (const k of ["ltcg112", "ltcg112A"] as const) {
+    if (b[k] < 0) {
+      ltLoss -= b[k];
+      b[k] = 0;
+    }
+  }
   const absorb = (loss: number, order: CgBucket[]) => {
     for (const k of order) {
       const t = Math.min(loss, b[k]);

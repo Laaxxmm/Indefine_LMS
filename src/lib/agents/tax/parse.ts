@@ -59,6 +59,7 @@ const OrganiserSchema = z
         nonAccountPayeeChequeReceipts: OptAmount,
         digitalReceipts: OptAmount,
         booksProfit: Amount,
+        declaredIncome: OptAmount,
         cashPayments: OptAmount,
         totalPayments: OptAmount,
         otherDisallowances: OptAmount,
@@ -100,6 +101,8 @@ export type Organiser = {
     nonAccountPayeeChequePaise: number;
     digitalReceiptsPaise: number;
     booksProfitPaise: number;
+    /** Presumptive cases: a higher income the taxpayer chooses to declare (s.44AD(1) "a sum higher"); 0 = none. */
+    declaredIncomePaise: number;
     cashPaymentsPaise: number;
     totalPaymentsPaise: number;
     otherDisallowancesPaise: number;
@@ -164,6 +167,7 @@ export function parseOrganiser(file: InputFile): Organiser {
           nonAccountPayeeChequePaise: optPaise(o.business.nonAccountPayeeChequeReceipts, at("business.nonAccountPayeeChequeReceipts")),
           digitalReceiptsPaise: optPaise(o.business.digitalReceipts, at("business.digitalReceipts")),
           booksProfitPaise: rupeesToPaise(o.business.booksProfit, at("business.booksProfit")),
+          declaredIncomePaise: optPaise(o.business.declaredIncome, at("business.declaredIncome")),
           cashPaymentsPaise: optPaise(o.business.cashPayments, at("business.cashPayments")),
           totalPaymentsPaise: optPaise(o.business.totalPayments, at("business.totalPayments")),
           otherDisallowancesPaise: optPaise(o.business.otherDisallowances, at("business.otherDisallowances")),
