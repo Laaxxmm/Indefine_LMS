@@ -41,6 +41,7 @@ function questionTone(q: OpenQuestionView): Omit<Tone, "icon"> {
 
 const QUESTION_KIND: Record<OpenQuestionView["kind"], string> = {
   "insufficient-evidence": "the documents do not show the answer",
+  "possible-prompt-injection": "document text reads like an instruction to the AI and was not sent to it",
   "model-disagreement": "two model reads disagree",
   "out-of-scope": "not one of this agent's checks",
 };
