@@ -1,6 +1,6 @@
 # PROGRESS — Indefine Firm OS
-Current phase: 5–8 | Branch: firm-os/phase-0-inventory | Last green: 2026-11-05 21:43 IST
-Tests: unit+integration 2200/2200 (100 files; Firm OS coverage 99.7% lines / 97.4% branches) · e2e 4/4 (smoke, local, no DB) · accuracy (recorded mode, hardened harness): echo pass | GST pass (23) | ROC pass (22) | TAX pass (22) | BOOKS pass (15) | AUDIT pass (15) — independent audit round 2 done (fixes in progress)
+Current phase: 5–8 | Branch: firm-os/phase-0-inventory | Last green: 2026-11-05 22:05 IST
+Tests: unit+integration 2236/2236 (103 files; Firm OS coverage 99.7% lines / 97.4% branches) · e2e 4/4 (smoke, local, no DB) · accuracy (recorded mode, hardened harness): echo pass | GST pass (23) | ROC pass (22) | TAX pass (22) | BOOKS pass (15) | AUDIT pass (15) — independent audit round 2 done (fixes in progress)
 Model mode: CLAUDE_ONLY + LOCAL_STUB(fail-closed) | Turia bridge: MANUAL (ADR-003)
 
 ## Phase checklist (✅ only when QA gate green)
@@ -75,6 +75,13 @@ Phase 3 (in progress)
 - [ ] e2e 3/3: tests/e2e-db/onboard.spec.ts via `npm run e2e:db` (playwright.db.config.ts, --repeat-each=3) — **Blocked**: staging DB, E2E_PARTNER_STATE, ANTHROPIC_API_KEY
 
 Shared foundation (commit c61d885): additive Prisma section "Firm OS: shared spine" — `FirmClient`, `ModelCall`, `AuditEvent` + enums; migration `20261105190000_firm_os_spine` (CREATE only, no ALTER/DROP of LMS columns).
+
+UI audit (owner request: every button, navigation, flow, breadcrumb) — merged a0363c3
+- [x] scripts/verify-ui-links.ts (`npm run verify:ui-links`, chained into verify:firm-os): route map from src/app incl. methods; every href/redirect/router.push and every call()/fetch to /api checked; 439 targets; 0 errors before and after (no broken links existed — all defects were semantic)
+- [x] 27 defects fixed: nav gating = page guard (Agents, mistake log), current-section highlight (NavLink), one label for nav/title/back links, admin sidebar "Firm OS" group + phone menu (was missing below lg), confirm steps with consequence text (Approve pack, mistake decisions, Create, Mark filed), no double-run window, state-specific idle copy, exact state names on chips, DD MMM YYYY without "Sept", AA contrast, focus rings, phone overflow (page was 756px at 390px), agent titles instead of keys, empty states per role
+- [x] Flow gap built: "Waiting for you" on /agents — each person's actionable jobs with Run agent / Open pack / Review pack
+- [ ] Follow-ups (agent running): re-run with a note from AGENT_DONE; retract filing (manager/partner); "Close in Turia" → "Record Turia close"; flagged Firm OS jobs section on /clients/[id]; dashboard Clients link hidden from inactive users
+- Visual check: SSR pages + compiled Tailwind in the browser pane at 390/1280/1440; no page-level overflow after fixes. Not verifiable here: real sign-in, client-side interactions, Lighthouse.
 
 ## Feature test registry   (feature → test file → status)
 | Feature | Test file | Status |
@@ -185,6 +192,7 @@ Shared foundation (commit c61d885): additive Prisma section "Firm OS: shared spi
 - **Partner verification — ROC/Tax** (data.ts verify notes + "Verify" sheet in each workbook): small company ₹4 cr/₹40 cr → ₹10 cr/₹100 cr from 1 Dec 2025 (confirm G.S.R.); CSR thresholds read on PBT; AGM 6/9/15 months; AOC-4/MGT-7/ADT-1 day counting; fee and additional-fee tables; DIR-3 KYC frequency; rotation classes; tax FY 2025-26 slabs, 87A ₹12L/₹60k with marginal relief, surcharge caps, CG rates 20%/12.5%, 44AD/44ADA limits, 44AB, 43B(h) 15/45 days, advance tax + 234B/C, 234F, ITR-1/4 limits. **Income-tax Act 2025 (tax year 2026-27) rates are stored as unverified and the tax agent refuses that year until a partner publishes verified numbers.** · 2026-11-05
 - **Partner verification — Books/Audit** (config.ts verify notes): bank match windows 5/31 days; unreconciled > 30 days; expense spike > 50% and ≥ ₹50k; TDS deposit 7th / 30 Apr (2025-Act equivalent?); materiality 1% revenue, PM 75%; variance ≥ PM and ≥ 20%; min sample 25, MUS factor 3.0; CARO exemption limits; small company ₹10 cr / ₹100 cr (Dec 2025 amendment — confirm); s.138 thresholds; severities (GST mismatch / negative cash / suspense = warn; TDS not deposited, BRS difference = block) · 2026-11-05
 - **Seed SopPacks** · runner loads the active SopPack from DB · run the seed functions (gst seed.ts; books/audit publish v1.0.0 from defaultChecklist) on staging/prod after partner review · 2026-11-05
+- **Engagement-letter "Send" (LMS)** · emails the letter to the client from the user's mailbox (sendMailAsUser) — conflicts with the Firm OS rule that client-facing sends are human-only with no code path · decide: keep (it is a deliberate staff click), or change to "create Outlook draft" · 2026-11-05
 - Push branches / open PRs · no gh CLI on this machine · human approval to push firm-os/* branches · 2026-11-05
 
 ## Known gaps / tech debt
@@ -198,6 +206,7 @@ Shared foundation (commit c61d885): additive Prisma section "Firm OS: shared spi
 - Tax v1 not modelled: 234C proviso for later CG/dividends, MAT (info flag), grandfathering/indexation/s.54, brought-forward CG/HP losses, HRA, AOP/BOI; ROC: MSME-1/DPT-3 late fees. Tax imports helpers from src/lib/agents/roc (util, grounding, checklistSheet) — move to core with the ADR-008 framework work.
 - GST v1.0.0 not covered: exports/SEZ, imports, ISD, amendments (B2BA/CDNRA), CDNUR, e-way bill checks, s.50(3) interest, interest on rule 37 reversals.
 - compute() receives no SopPack, so GST rates live in module config; rule gst.pack-config blocks if pack and code disagree. Better: framework passes pack params to compute.
+- LMS UI oddities left for the owner (UI audit): /clients /work /tools headers don't wrap at 390px or mark the current section (could adopt NavLink); ink-faint text ≈ 2:1 contrast across LMS incl. shared h2 in ui.ts; "Sept" from en-IN in ist.ts; dashboard emoji; /clients shows legacy "Onboard" next to "Firm OS onboarding"; admin "Videos & Quizzes" not highlighted on /admin/video/[id].
 - CoachEvent has no unique constraint: two concurrent reconciler runs could double-nudge (sequential duplicates are handled). Fix needs a schema change.
 - AgentRun.inputs purge job (inputsPurgeAt, ≤ 30 days) not built yet — Phase 11.
 - Accuracy `--provider` reserved for Phase 2b (exits 2).
@@ -239,3 +248,5 @@ Shared foundation (commit c61d885): additive Prisma section "Firm OS: shared spi
 - 21:41 · 5/7 · Fable auditor re-run requested for gst, books, audit (+ hardened harness) · –
 - 21:43 · 6 · Merged ROC Prep + Tax Prep (22 + 22 fixtures; 4 real bugs found by hand-checking, fixed); registry conflict resolved · 2200/2200 · all six agents pass · build green
 - 21:55 · 5–7 · Independent audit round 2 (fable): all six pass, 31 fixtures hand-recomputed with no mismatch; H1 + M1–M6 + coverage gap → fix agent started, harness items sent to guardrails agent · –
+- 22:05 · ui · Merged UI audit (27 fixes, ui-links verifier, Waiting-for-you list); resolved agents.test.ts conflict; two tests updated for registered agents · 2236/2236 · all six accuracy gates pass · build green
+- 22:06 · ui · Follow-up agent started: re-run, retract filing, Record Turia close wording, client-page jobs, dashboard link · –
