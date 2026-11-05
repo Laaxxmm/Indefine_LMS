@@ -10,7 +10,10 @@
 //   reported in GSTR-1 but carry no liability here.
 // - 3.1(d) / 4(A)(3): inward supplies under reverse charge — marked RCM in the books, or a ledger the
 //   model classifies as a notified RCM service (unless a registered supplier lawfully charged tax
-//   forward at an allowed rate). Tax = the tax in the books when recorded, else taxable × rate.
+//   forward at an allowed rate). Tax = the tax in the books when recorded, else taxable × rate —
+//   IGST when the supplier's state differs from the place of supply. The supplier's state is its
+//   GSTIN prefix; for an unregistered supplier, the register's optional supplier-state column, else
+//   the client's state.
 // - 4(A)(5) = ITC on purchase documents matched to GSTR-2B with ITC available, at the LOWER of
 //   books and 2B per tax head (credit notes: the larger reduction). Books documents missing in 2B
 //   are deferred (not claimed); a supplier credit note missing in 2B still reduces ITC.
@@ -335,7 +338,9 @@ function analysePurchases(x: GstExtract, clientState: string): PurchaseA[] {
     let rcmTax = zeroTax();
     let rcmTaxable = 0;
     if (rcm) {
-      const supplierState = d.gstin ? d.gstin.slice(0, 2) : clientState;
+      // Registered supplier: its GSTIN state. Unregistered: the register's supplier-state column
+      // when given (a supplier in another state → IGST), else the client's state (CGST + SGST).
+      const supplierState = d.gstin ? d.gstin.slice(0, 2) : (d.supplierState ?? clientState);
       const inter = supplierState !== (d.pos ?? clientState);
       const k = sign(d.docType);
       for (const l of d.lines) {

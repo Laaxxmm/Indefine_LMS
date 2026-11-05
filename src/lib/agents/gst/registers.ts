@@ -174,20 +174,25 @@ export function parsePurchaseTable(t: Table): { docs: PurchaseDoc[]; style: Regi
   const { docs, style } = groupDocs(t, "purchases");
   return {
     style,
-    docs: docs.map((d) => ({
-      loc: d.loc,
-      docType: d.docType,
-      number: d.number,
-      date: d.date,
-      supplier: d.party,
-      gstin: d.gstin,
-      pos: stateCodeOf(d.posRaw),
-      reverseCharge: d.rc,
-      value: docValue(d),
-      lines: d.lines,
-      ledger: (str(d.get("ledger")).trim() || d.lines.find((l) => l.description)?.description || "").trim(),
-      paidOn: day(d.get("paidOn"), "payment date", d.loc),
-    })),
+    docs: docs.map((d) => {
+      // Optional supplier-state column: kept only when it names a state (the field is absent otherwise).
+      const supplierState = stateCodeOf(str(d.get("supplierState")));
+      return {
+        loc: d.loc,
+        docType: d.docType,
+        number: d.number,
+        date: d.date,
+        supplier: d.party,
+        gstin: d.gstin,
+        pos: stateCodeOf(d.posRaw),
+        reverseCharge: d.rc,
+        value: docValue(d),
+        lines: d.lines,
+        ledger: (str(d.get("ledger")).trim() || d.lines.find((l) => l.description)?.description || "").trim(),
+        paidOn: day(d.get("paidOn"), "payment date", d.loc),
+        ...(supplierState ? { supplierState } : {}),
+      };
+    }),
   };
 }
 

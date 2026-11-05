@@ -360,6 +360,15 @@ describe("independent formula audit: blocked credit notes, negative outward tax,
     // No negative head: nothing carried forward, row (a) unchanged.
     expect(analyse(extract({ sales: [sale()] })).outward.carryForward).toEqual(zeroTax());
   });
+
+  it("RCM from an unregistered supplier: IGST when the register's supplier state differs; client state when the column is absent; GSTIN state wins", () => {
+    const legal = (over: Parameters<typeof purchase>[0] = {}) => purchase({ number: "L1", gstin: null, ledger: "Legal Fees", lines: [lineTax(R(50000), {}, { rateBps: 0 })], ...over });
+    const ledgers = [{ ledger: "Legal Fees", blockedCategory: "none" as const, rcmService: "legal" as const, evidence: null, note: "" }];
+    expect(analyse(extract({ purchases: [legal({ supplierState: "27" })], ledgers })).rcm.tax).toEqual(T(R(9000), 0, 0));
+    expect(analyse(extract({ purchases: [legal()], ledgers })).rcm.tax).toEqual(T(0, R(4500), R(4500)));
+    expect(analyse(extract({ purchases: [legal({ supplierState: "29" })], ledgers })).rcm.tax).toEqual(T(0, R(4500), R(4500)));
+    expect(analyse(extract({ purchases: [legal({ gstin: GSTIN.sup1, supplierState: "27" })], ledgers })).rcm.tax).toEqual(T(0, R(4500), R(4500)));
+  });
 });
 
 const addTaxes = (a: ReturnType<typeof zeroTax>, b: ReturnType<typeof zeroTax>) => T(a.igst + b.igst, a.cgst + b.cgst, a.sgst + b.sgst, a.cess + b.cess);

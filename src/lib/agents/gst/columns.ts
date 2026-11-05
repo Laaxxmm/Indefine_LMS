@@ -33,6 +33,8 @@ export const REGISTER_FIELDS = {
   paidOn: ["payment date", "paid on", "date of payment"],
   paid: ["amount paid", "paid amount", "paid"],
   reversedEarlier: ["itc reversed earlier", "reversed earlier", "already reversed"],
+  /** Purchase register (optional): the supplier's state, for an unregistered supplier under reverse charge. */
+  supplierState: ["supplier state", "supplier state code", "state of supplier", "vendor state", "source of supply"],
 } as const;
 export type RegisterField = keyof typeof REGISTER_FIELDS;
 
