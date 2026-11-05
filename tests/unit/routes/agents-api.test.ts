@@ -7,6 +7,10 @@ import { recordingHook } from "../../fakes/agent-close-loop";
 
 const state = vi.hoisted(() => ({ world: null as unknown as World, hook: null as unknown as ReturnType<typeof recordingHook> }));
 
+// The agent-run rate limit (src/lib/hardening/rate-limit.ts) counts in RateLimitBucket through the
+// app's Prisma client: the upsert returns the count after this request (1 unless a test says otherwise).
+const bucket = vi.hoisted(() => ({ count: 1, windowStart: new Date() }));
+vi.mock("@/lib/prisma", () => ({ prisma: { $queryRaw: async () => [{ count: bucket.count, windowStart: bucket.windowStart }] } }));
 vi.mock("@/lib/auth", () => ({ auth: vi.fn(), signIn: vi.fn(), signOut: vi.fn(), handlers: {} }));
 vi.mock("next/navigation", async () => (await import("./harness")).navigationMock);
 vi.mock("@/lib/agents/service", async (orig) => ({ ...(await orig<typeof import("@/lib/agents/service")>()), defaultAgentDeps: async () => state.world.deps }));
@@ -75,6 +79,31 @@ describe("auth", () => {
     const id = rows(state.world.db, "deliverable")[0].id as string;
     expect((await download.GET(new Request("http://x"), p({ id }))).status).toBe(404);
     expect((await preview.GET(new Request("http://x"), p({ id }))).status).toBe(404);
+  });
+});
+
+describe("rate limit (429)", () => {
+  it("over the agent-run limit: run, re-run and request changes get 429 with Retry-After and start no run; reads are not limited", async () => {
+    as(user("priya"));
+    expect((await runJob()).status).toBe(201);
+    await submit.POST(post(), p({ id: "run-1" }));
+    bucket.count = 21;
+    bucket.windowStart = new Date(Date.now() - 59 * 60_000 - 30_000); // 30 s left in the hour
+    try {
+      const r = await runJob();
+      expect(r.status).toBe(429);
+      expect(r.headers.get("Retry-After")).toBe("30");
+      expect((await r.json()).error).toMatch(/Too many agent runs: the limit is 20 per window\. Try again in 1 minute\./);
+      as(user("ravi"));
+      expect((await changes.POST(post({ note: "Recheck INV-2" }), p({ id: "run-1" }))).status).toBe(429);
+      as(user("priya"));
+      expect((await rerun.POST(post({ note: "again" }), p({ id: "run-1" }))).status).toBe(429);
+      expect(rows(state.world.db, "agentRun")).toHaveLength(1);
+      const id = rows(state.world.db, "deliverable")[0].id as string;
+      expect((await preview.GET(new Request("http://x"), p({ id }))).status).toBe(200);
+    } finally {
+      bucket.count = 1;
+    }
   });
 });
 

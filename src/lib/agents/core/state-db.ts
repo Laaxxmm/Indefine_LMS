@@ -64,7 +64,18 @@ export interface JobTaskTx {
   checklistResult: {
     count(args: { where: { agentRunId: string; severity: "block"; status: "fail" } }): PromiseLike<number>;
   };
+  /** Raw query on the same connection: arms the DONE trigger (see CLOSE_GATE_SETTING). */
+  $queryRaw(query: TemplateStringsArray, ...values: unknown[]): PromiseLike<unknown>;
 }
+
+/**
+ * ADR-005 database backstop (migration 20261106000000_firm_os_done_trigger): a BEFORE UPDATE OF state
+ * trigger on "JobTask" raises unless current_setting('firm_os.close_gate', true) equals the row's id
+ * when it enters DONE. transitionJobTask sets it — transaction-local, for that one job — only for the
+ * CLOSING → DONE edge, after the state machine accepted a valid CloseGateToken and the token was
+ * consumed, immediately before the UPDATE. Nothing else in the codebase sets this name.
+ */
+export const CLOSE_GATE_SETTING = "firm_os.close_gate";
 
 export interface JobTaskDb {
   $transaction<R>(fn: (tx: JobTaskTx) => Promise<R>): PromiseLike<R>;
@@ -143,8 +154,10 @@ export async function transitionJobTask(
     });
     if (!decision.ok) return decision;
 
-    if (to === "DONE" && !consumeCloseGateToken(opts.gateToken as CloseGateToken)) {
-      return { ok: false, code: "GATE_REQUIRED", reason: "Close gate token already used" };
+    if (to === "DONE") {
+      if (!consumeCloseGateToken(opts.gateToken as CloseGateToken)) return { ok: false, code: "GATE_REQUIRED", reason: "Close gate token already used" };
+      // Arm the DONE trigger for this job only, inside this transaction (is_local = true).
+      await tx.$queryRaw`SELECT set_config(${CLOSE_GATE_SETTING}, ${jobTaskId}, true)`;
     }
 
     const updated = await tx.jobTask.updateMany({

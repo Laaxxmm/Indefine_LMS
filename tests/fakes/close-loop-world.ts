@@ -90,6 +90,8 @@ export class CloseLoopWorld {
   ];
   engagements: { id: string; reviewerId: string | null }[] = [];
   transactions = 0;
+  /** Raw queries (the DONE trigger's set_config), with the transaction number they ran in. */
+  rawQueries: { sql: string; values: unknown[]; transaction: number }[] = [];
   /** SharePoint as the verifier sees it, keyed by driveItemId. */
   sp = new Map<string, { path: string; bytes: Uint8Array; reportSha?: boolean }>();
   verifierCalls = { getItem: 0, download: 0 };
@@ -280,6 +282,12 @@ export class CloseLoopWorld {
         return c ? { id: c.id } : null;
       },
       create: async ({ data }) => {
+        // Like Postgres' unique index on CoachEvent.dedupeKey: the second insert fails with P2002.
+        // The await first lets concurrent callers interleave, as two cron runs would.
+        await Promise.resolve();
+        if (data.dedupeKey && this.coach.some((x) => x.dedupeKey === data.dedupeKey)) {
+          throw Object.assign(new Error("Unique constraint failed on the fields: (`dedupeKey`)"), { code: "P2002", meta: { target: ["dedupeKey"] } });
+        }
         const c = { id: this.id("coach"), ...data, createdAt: this.clock() };
         this.coach.push(c);
         return { id: c.id };
@@ -298,6 +306,11 @@ export class CloseLoopWorld {
         return u ? { managerId: u.managerId } : null;
       },
       findMany: async ({ where }) => this.users.filter((u) => u.level === where.level && u.active === where.active).map((u) => ({ id: u.id })),
+    },
+    // The DONE trigger hook (state-db.ts): records set_config calls with the transaction they ran in.
+    $queryRaw: async (q: TemplateStringsArray, ...values: unknown[]) => {
+      this.rawQueries.push({ sql: q.join("?"), values, transaction: this.transactions });
+      return [{ set_config: values[1] }];
     },
   };
 

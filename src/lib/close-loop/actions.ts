@@ -5,15 +5,15 @@
 //                      confirm), then the close gate is tried.
 //   setJobState        any other human edge of the state machine. A target of DONE is refused
 //                      outright: DONE is set only by closeJob() in gate.ts.
-// Access: the job's assignee or reviewer, a manager or a partner (src/lib/rbac/policy.ts firmRole),
+// Access: the job's assignee or reviewer, a manager or a partner (src/lib/rbac/policy.ts canActOnJob),
 // and only while active. Admin (IT) takes no job edges.
 import type { JobTaskState } from "@prisma/client";
-import { isActive, isManager, isPartner, type SessionUser } from "@/lib/access";
+import type { SessionUser } from "@/lib/access";
 import { actorOf } from "@/lib/agents/access";
 import { transitionJobTask } from "@/lib/agents/core/state-db";
 import type { ManualBridge } from "@/lib/integrations/turia/manual-bridge";
-import { firmRole } from "@/lib/rbac/policy";
-import { audit, loadJob, type CloseJobRow } from "./db";
+import { canActOnJob } from "@/lib/rbac/policy";
+import { audit, loadJob } from "./db";
 import { CloseLoopError, transitionError } from "./errors";
 import { closeJob, type CloseJobResult, type GateDeps } from "./gate";
 import { HOOK_ACTOR, afterTransition, onFiledByHuman, type HookDeps, type HookOutcome, type TuriaStep } from "./hooks";
@@ -23,14 +23,8 @@ export interface CloseLoopDeps extends GateDeps, HookDeps {
   manual: Pick<ManualBridge, "closeTask" | "confirm">;
 }
 
-/** Assignee, reviewer, manager or partner of this job, and active. */
-export function canActOnJob(user: SessionUser, job: Pick<CloseJobRow, "assigneeId" | "reviewerId">): boolean {
-  if (!user || !isActive(user)) return false;
-  const role = firmRole(user);
-  // firmRole ranks admin first; a partner who is also an LMS admin keeps partner access.
-  const managerUp = role === "partner" || role === "manager" || isPartner(user) || isManager(user);
-  return managerUp || user.id === job.assigneeId || user.id === job.reviewerId;
-}
+/** Assignee, reviewer, manager or partner of this job, and active (the rule lives in src/lib/rbac/policy.ts). */
+export { canActOnJob };
 
 async function jobFor(user: SessionUser, jobTaskId: string, deps: CloseLoopDeps) {
   const job = await loadJob(deps.db, jobTaskId);
@@ -63,6 +57,7 @@ export async function markFiled(jobTaskId: string, input: MarkFiledInput, user: 
   const now = deps.now?.() ?? new Date();
   const t = await transitionJobTask(deps.db, jobTaskId, "FILED_BY_HUMAN", actor, { expectedState: "APPROVED", ackRef: input.ackRef ?? null, now });
   if (!t.ok) throw transitionError(t);
+  await audit(deps.db, { actorId: actor.userId, action: t.edge, entity: "JobTask", entityId: jobTaskId, meta: { from: t.from, to: t.to, eventId: t.eventId, ackRef: input.ackRef?.trim() || null } });
   const hook = await onFiledByHuman(jobTaskId, deps, { turiaTaskRef: input.turiaTaskRef, minutes: input.minutes, actorId: actor.userId });
   const job = await loadJob(deps.db, jobTaskId);
   return { state: job?.state ?? "FILED_BY_HUMAN", ackRef: job?.ackRef ?? null, turia: hook.turia, prompt: hook.prompt };
@@ -120,5 +115,7 @@ export async function setJobState(jobTaskId: string, input: SetStateInput, user:
   const { actor } = await jobFor(user, jobTaskId, deps);
   const t = await transitionJobTask(deps.db, jobTaskId, input.to, actor, { expectedState: input.expectedState, note: input.note ?? null, now: deps.now?.() ?? new Date() });
   if (!t.ok) throw transitionError(t);
+  // e.g. "retract-filing" (FILED_BY_HUMAN / CLOSING → APPROVED, manager or partner, note kept).
+  await audit(deps.db, { actorId: actor.userId, action: t.edge, entity: "JobTask", entityId: jobTaskId, meta: { from: t.from, to: t.to, eventId: t.eventId, note: input.note ?? null } });
   return { state: t.to, hook: await afterTransition(t, user, deps) };
 }

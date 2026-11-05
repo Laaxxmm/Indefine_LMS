@@ -10,7 +10,6 @@
 // the same afterTransition the /api/firm-os/jobs/[id]/state route runs. A hook only adds work;
 // its failure never undoes or fails the transition.
 import { randomUUID } from "node:crypto";
-import type { Prisma } from "@prisma/client";
 import type { SessionUser } from "@/lib/access";
 import { actorOf, canDecideMistakes, canViewJob, reviewActions } from "@/lib/agents/access";
 import { decideMistake, proposeMistake, type Decision } from "@/lib/agents/core/mistakes";
@@ -19,6 +18,7 @@ import { jobFolder, runAgent, type AnyAgent, type FirmDb, type RunOutcome, type 
 import { transitionJobTask, type TransitionResult } from "@/lib/agents/core/state-db";
 import { DOCX_MIME, XLSX_MIME } from "@/lib/agents/core/templates";
 import { AGENTS, getAgent } from "@/lib/agents/registry";
+import { logAudit } from "@/lib/audit/log";
 
 /** A successful transition, as transitionJobTask reports it. */
 export type TransitionDone = Extract<TransitionResult, { ok: true }>;
@@ -97,6 +97,20 @@ function outcomeResult(out: RunOutcome): ServiceResult<{ runId: string; status: 
   return fail(out.code === "NOT_FOUND" ? 404 : 409, out.reason);
 }
 
+/** Starts a run and records it (AuditEvent `agent-run` / `rerun` / `request-changes`) once a run row exists. */
+async function runAndAudit(user: SessionUser, def: AnyAgent, jobTaskId: string, deps: AgentServiceDeps, action: string, notes?: string) {
+  const out = await runAgent(def, jobTaskId, deps, { startedById: user?.id ?? null, ...(notes === undefined ? {} : { notes }) });
+  if (out.ok || out.code === "FAILED") {
+    await logAudit(deps.db, { actorId: user?.id, action, entity: "AgentRun", entityId: out.runId, meta: { agent: def.key, jobTaskId, status: out.ok ? "AGENT_DONE" : "FAILED" } });
+  }
+  return outcomeResult(out);
+}
+
+/** Records a JobTask transition this service made (AuditEvent on the JobTask). */
+async function auditTransition(user: SessionUser, deps: AgentServiceDeps, t: TransitionDone, runId: string, extra: Record<string, unknown> = {}) {
+  await logAudit(deps.db, { actorId: user?.id, action: t.edge, entity: "JobTask", entityId: t.jobTaskId, meta: { from: t.from, to: t.to, runId, eventId: t.eventId, ...extra } });
+}
+
 /** Runs the injected hook; a throwing hook is logged and swallowed (the transition stands). */
 async function fireHook(deps: AgentServiceDeps, t: TransitionDone, user: SessionUser): Promise<void> {
   if (!deps.afterTransition) return;
@@ -118,7 +132,7 @@ export async function startAgentRun(user: SessionUser, agentKey: string, jobTask
   const latest = await latestRunId(deps.db, jobTaskId);
   const actions = reviewActions(user, job, latest ? await blockingFailuresOf(deps.db, latest) : 0, deps.now());
   if (!actions.run) return fail(403, "Only the assignee, a manager or a partner can run the agent on an ASSIGNED or IN_PREP job");
-  return outcomeResult(await runAgent(def, jobTaskId, deps, { startedById: user?.id ?? null }));
+  return runAndAudit(user, def, jobTaskId, deps, "agent-run");
 }
 
 /** "Submit for review": AGENT_DONE → IN_REVIEW, on the job's latest run. */
@@ -128,6 +142,7 @@ export async function submitForReview(user: SessionUser, runId: string, deps: Ag
   if ((await latestRunId(deps.db, v.data.jobTaskId)) !== runId) return fail(409, "A newer run exists for this job; open the latest run");
   const t = await transitionJobTask(deps.db, v.data.jobTaskId, "IN_REVIEW", actorOf(user)!, { expectedState: "AGENT_DONE", now: deps.now() });
   if (!t.ok) return fail(t.code === "FORBIDDEN" ? 403 : 409, t.reason);
+  await auditTransition(user, deps, t, runId);
   await fireHook(deps, t, user);
   return { ok: true, data: { state: "IN_REVIEW" } };
 }
@@ -135,7 +150,8 @@ export async function submitForReview(user: SessionUser, runId: string, deps: Ag
 /**
  * Back to IN_PREP with a note, then a new run (attempt n+1) with that note. Shared by "Request
  * changes" (from IN_REVIEW, the reviewer) and "Re-run with a note" (from AGENT_DONE, the preparer);
- * the state machine decides who may take each edge. `onMoved` records anything extra on the old run.
+ * the state machine decides who may take each edge. A change request is also recorded on the old
+ * run (CHANGES_REQUESTED + the reviewer's note); a re-run leaves the old run as it was.
  */
 async function backToPrepAndRun(
   user: SessionUser,
@@ -143,7 +159,6 @@ async function backToPrepAndRun(
   note: string,
   from: "IN_REVIEW" | "AGENT_DONE",
   deps: AgentServiceDeps,
-  onMoved?: () => Promise<unknown>,
 ) {
   const v = await visibleRun(user, deps.db, runId);
   if (!v.ok) return v;
@@ -152,16 +167,15 @@ async function backToPrepAndRun(
   if ((await latestRunId(deps.db, v.data.jobTaskId)) !== runId) return fail(409, "A newer run exists for this job; open the latest run");
   const t = await transitionJobTask(deps.db, v.data.jobTaskId, "IN_PREP", actorOf(user)!, { expectedState: from, note, now: deps.now() });
   if (!t.ok) return fail(t.code === "FORBIDDEN" ? 403 : t.code === "NOTE_REQUIRED" ? 400 : 409, t.reason);
-  if (onMoved) await onMoved();
+  if (from === "IN_REVIEW") await deps.db.agentRun.update({ where: { id: runId }, data: { status: "CHANGES_REQUESTED", reviewNotes: note.trim() } });
+  await auditTransition(user, deps, t, runId, { note: note.trim() });
   await fireHook(deps, t, user);
-  return outcomeResult(await runAgent(def, v.data.jobTaskId, deps, { startedById: user?.id ?? null, notes: note }));
+  return runAndAudit(user, def, v.data.jobTaskId, deps, "agent-run", note);
 }
 
 /** "Request changes": IN_REVIEW → IN_PREP with the reviewer's note, then a new run with that note. */
 export async function requestChanges(user: SessionUser, runId: string, note: string, deps: AgentServiceDeps) {
-  return backToPrepAndRun(user, runId, note, "IN_REVIEW", deps, () =>
-    deps.db.agentRun.update({ where: { id: runId }, data: { status: "CHANGES_REQUESTED", reviewNotes: note.trim() } }),
-  );
+  return backToPrepAndRun(user, runId, note, "IN_REVIEW", deps);
 }
 
 /**
@@ -189,6 +203,7 @@ export async function approvePack(user: SessionUser, runId: string, note: string
     return fail(status, t.reason);
   }
   await deps.db.agentRun.update({ where: { id: runId }, data: { status: "APPROVED" } });
+  await auditTransition(user, deps, t, runId, note ? { note } : {});
   await fireHook(deps, t, user);
   return finalizeRun(user, runId, deps);
 }
@@ -210,6 +225,7 @@ export async function finalizeRun(user: SessionUser, runId: string, deps: AgentS
   const rows = await deps.db.deliverable.findMany({ where: { agentRunId: runId }, orderBy: { createdAt: "asc" } });
   const done = new Set(rows.filter((r) => r.kind === "Final").map((r) => r.sha256));
   const names: string[] = rows.filter((r) => r.kind === "Final").map((r) => r.name);
+  const copied: string[] = [];
   try {
     for (const w of rows.filter((r) => r.kind === "Working" && !done.has(r.sha256))) {
       const driveId = w.driveId ?? (await deps.store.complianceDrive(code));
@@ -231,9 +247,14 @@ export async function finalizeRun(user: SessionUser, runId: string, deps: AgentS
         },
       });
       names.push(copy.fileName);
+      copied.push(copy.fileName);
     }
   } catch (e) {
     return fail(502, `Approved, but copying to Final failed: ${(e as Error).message}. Use "Copy to Final" to retry.`);
+  } finally {
+    // Export to the client's Final folder: one `finalize` AuditEvent naming the files this call copied
+    // (none on a no-op retry). The close-loop hook, when it triggered the copy, adds its own `copy-to-final`.
+    if (copied.length) await logAudit(deps.db, { actorId: user?.id, action: "finalize", entity: "AgentRun", entityId: runId, meta: { jobTaskId: job.id, files: copied } });
   }
   return { ok: true, data: { state: "APPROVED", final: names } };
 }
@@ -244,10 +265,7 @@ export async function addComment(user: SessionUser, runId: string, text: string,
   if (!v.ok) return v;
   const body = text.trim();
   if (!body) return fail(400, "Write a comment first");
-  const ev = await deps.db.auditEvent.create({
-    data: { actorId: user!.id, action: "comment", entity: "AgentRun", entityId: runId, meta: { text: body } as Prisma.InputJsonValue },
-    select: { id: true },
-  });
+  const ev = await logAudit(deps.db, { actorId: user!.id, action: "comment", entity: "AgentRun", entityId: runId, meta: { text: body } });
   return { ok: true, data: { id: ev.id } };
 }
 
@@ -261,13 +279,16 @@ export async function logMistake(
   const v = await visibleRun(user, deps.db, runId);
   if (!v.ok) return v;
   const r = await proposeMistake({ db: deps.db, now: deps.now, agent: (k) => getAgent(k, deps.agents) }, runId, input.finding, input.ruleProposal, input.example, actorOf(user)!);
-  if (r.ok) return r;
+  if (r.ok) {
+    await logAudit(deps.db, { actorId: user?.id, action: "propose", entity: "MistakeLog", entityId: r.data.id, meta: { runId, agent: v.data.agent } });
+    return r;
+  }
   return fail(r.code === "NOT_FOUND" ? 404 : r.code === "CONFLICT" ? 409 : 400, r.reason);
 }
 
-/** Partner / manager approves or rejects a proposed rule. */
+/** A partner approves or rejects a proposed rule (an SOP rule change, Phase 11 RBAC). */
 export async function decideMistakeFor(user: SessionUser, id: string, decision: Decision, deps: AgentServiceDeps) {
-  if (!canDecideMistakes(user)) return fail(403, "Only a partner or manager may decide mistake rules");
+  if (!canDecideMistakes(user)) return fail(403, "Only a partner may decide mistake rules");
   const r = await decideMistake({ db: deps.db, now: deps.now, agent: (k) => getAgent(k, deps.agents) }, id, decision, actorOf(user)!);
   if (r.ok) return r;
   return fail(r.code === "NOT_FOUND" ? 404 : r.code === "FORBIDDEN" ? 403 : r.code === "CONFLICT" ? 409 : 400, r.reason);
@@ -308,6 +329,13 @@ export async function readDeliverable(user: SessionUser, deliverableId: string, 
   } catch (e) {
     return fail(502, `SharePoint: ${(e as Error).message}`);
   }
+}
+
+/** "Download": the file bytes (access-checked) plus an `export` AuditEvent, since the file leaves the firm's systems. */
+export async function exportDeliverable(user: SessionUser, deliverableId: string, deps: AgentServiceDeps): Promise<ServiceResult<DeliverableFile>> {
+  const f = await readDeliverable(user, deliverableId, deps);
+  if (f.ok) await logAudit(deps.db, { actorId: user?.id, action: "export", entity: "Deliverable", entityId: deliverableId, meta: { name: f.data.name, bytes: f.data.bytes.length } });
+  return f;
 }
 
 /** XLSX → sheets of display text for the review screen. DOCX has no preview (download only). */
