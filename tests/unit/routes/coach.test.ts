@@ -5,9 +5,19 @@ import { parseDayKey } from "@/lib/ist";
 import { CoachWorld } from "../../fakes/coach-world";
 import { activeSession, redirectTarget, renderHtml as renderRaw } from "./harness";
 
+// Firm OS switched on for these tests (FIRM_OS_ENABLED defaults off: src/lib/workspace/flag.ts).
+beforeEach(() => {
+  vi.stubEnv("FIRM_OS_ENABLED", "1");
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
 let w: CoachWorld;
 vi.mock("@/lib/auth", () => ({ auth: vi.fn(), signIn: vi.fn(), signOut: vi.fn(), handlers: {} }));
 vi.mock("next/navigation", async () => (await import("./harness")).navigationMock);
+// The layouts read the workspace settings: none saved, so the built-in role defaults apply.
+vi.mock("@/lib/prisma", async () => ({ prisma: (await import("./harness")).prismaMock }));
 vi.mock("@/lib/agents/coach/defaults", () => ({ coachDb: () => w.db, coachDeps: () => ({ db: w.db }) }));
 
 const { auth } = await import("@/lib/auth");

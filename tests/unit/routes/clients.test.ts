@@ -1,9 +1,14 @@
 // Smoke: /clients renders behind a signed-in session and bounces signed-out visitors to "/".
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { activeSession, prismaCalls, redirectTarget, renderHtml } from "./harness";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { activeSession, prismaCalls, redirectTarget, renderHtml, workspaceRow } from "./harness";
 
 vi.mock("@/lib/auth", () => ({ auth: vi.fn(), signIn: vi.fn(), signOut: vi.fn(), handlers: {} }));
-vi.mock("@/lib/prisma", async () => ({ prisma: (await import("./harness")).prismaMock }));
+// The empty database plus a person's own workspace row when a test sets one.
+const ws = vi.hoisted(() => ({ setting: null as unknown }));
+vi.mock("@/lib/prisma", async () => {
+  const { prismaMock, withWorkspace } = await import("./harness");
+  return { prisma: withWorkspace(prismaMock, { setting: () => ws.setting }) };
+});
 vi.mock("next/navigation", async () => (await import("./harness")).navigationMock);
 
 const { auth } = await import("@/lib/auth");
@@ -12,13 +17,16 @@ const { default: ClientsList } = await import("@/app/clients/page");
 const signedIn = (s: unknown) => (auth as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(s);
 const noParams = () => ({ searchParams: Promise.resolve({}) });
 
+afterEach(() => vi.unstubAllEnvs());
+
 describe("/clients", () => {
   beforeEach(() => {
-    signedIn(activeSession());
+    signedIn(activeSession({ level: "MANAGER" }));
     prismaCalls.length = 0;
+    ws.setting = null;
   });
 
-  it("renders the client database (empty state) inside the layout for an active user", async () => {
+  it("renders the client database (empty state) inside the layout for a manager (Clients is on by default)", async () => {
     const page = await ClientsList(noParams());
     const html = await renderHtml(await ClientsLayout({ children: page }));
     expect(html).toContain("Client database");
@@ -40,8 +48,28 @@ describe("/clients", () => {
     expect(await redirectTarget(() => ClientsList(noParams()))).toBe("/");
   });
 
-  it("sends an inactive user back to the dashboard", async () => {
+  it("sends an inactive user back to the dashboard, even with Clients switched on", async () => {
+    ws.setting = workspaceRow(["clients"]);
     signedIn(activeSession({ active: false }));
     expect(await redirectTarget(() => ClientsLayout({ children: null }))).toBe("/dashboard");
+  });
+
+  it("Firm OS on, staff: Clients is off by default (the dashboard explains); on when an admin switches it on", async () => {
+    vi.stubEnv("FIRM_OS_ENABLED", "1");
+    signedIn(activeSession());
+    expect(await redirectTarget(() => ClientsLayout({ children: null }))).toBe("/dashboard?module-off=clients");
+    ws.setting = workspaceRow(["clients"]);
+    expect(await renderHtml(await ClientsLayout({ children: null }))).toContain('href="/clients/new"');
+    vi.unstubAllEnvs();
+  });
+
+  it("Firm OS off (the default): staff open /clients as before; no settings read; no Firm OS onboarding link", async () => {
+    signedIn(activeSession());
+    ws.setting = workspaceRow([]); // would close everything if it were read
+    const html = await renderHtml(await ClientsLayout({ children: null }));
+    expect(html).toContain('href="/clients/new"');
+    expect(html).not.toContain('href="/onboard"');
+    signedIn(activeSession({ level: "PARTNER" }));
+    expect(await renderHtml(await ClientsLayout({ children: null }))).not.toContain('href="/onboard"');
   });
 });

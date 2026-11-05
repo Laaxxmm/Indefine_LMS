@@ -81,7 +81,8 @@ the ensure-* functions.
 
 | Flag | Prod value now | Meaning |
 |---|---|---|
-| `FIRM_OS_CL_PATHS` | unset (off) | /clients folder links resolve to CL-{Code} sites and the client page shows the "Firm OS jobs" card. |
+| `FIRM_OS_ENABLED` | unset (off) | The Firm OS master switch (§3). Off: Firm OS is closed for everyone and LMS pages show and query nothing of it. On: the workspace module settings decide per role and person. |
+| `FIRM_OS_CL_PATHS` | unset (off) | /clients folder links resolve to CL-{Code} sites and the client page shows the "Firm OS jobs" card. Its own switch (folder layout), independent of `FIRM_OS_ENABLED`: keep it off until Stage 1. |
 | `FIRM_OS_ECHO_AGENT` | unset (off) — **never on in prod** | Shows the internal Echo test agent. Staging only (golden-path e2e). |
 | `FIRM_OS_ONBOARD_CONFIRM` | unset (= confirm) — **never `false` in prod** | A partner/manager must click Create before the onboarding saga runs. |
 | `FIRM_OS_TURIA_BRIDGE` | unset (= `MANUAL`) | MANUAL checklists (ADR-003). `UI`/`API` are stubs that block. |
@@ -89,7 +90,7 @@ the ensure-* functions.
 | `FIRM_OS_BREAK_NUDGE` (Phase 9) | unset (off) | LMS activity heartbeats + gentle break nudges (ADR-006: kept 7 days, aggregate only, never reported to managers). Tell staff what is collected **before** turning it on. Off = no heartbeat stored, no ping sent. |
 | `FIRM_OS_HOLIDAYS` (Phase 9) | set to the firm's holidays | Comma-separated `YYYY-MM-DD` the coach skips when counting working days (the LMS has no holiday table); blank = weekends only. Not a feature flag — set it before Stage 1. |
 | `FIRM_OS_COMPANION_EXTENSION_ORIGIN` (merged with Phase 10) | unset unless the extension id differs | CORS origin the companion API answers besides the extension's fixed id (`src/lib/companion/config.ts`). Not in `.env.example` yet. |
-| Phase 10 comms | no flag | Comms drafts have no `FIRM_OS_*` switch: /comms is reached from the Firm OS pages only (not from LMS pages — `firm-os-flags-off.test.ts`). "Open in Outlook draft" and engagement-letter drafts need the delegated **Mail.ReadWrite** consent (§8). |
+| Phase 10 comms | `FIRM_OS_ENABLED` + the comms module | Comms drafts follow the master switch and the workspace settings like every Firm OS module (§3). "Open in Outlook draft" and engagement-letter drafts need the delegated **Mail.ReadWrite** consent (§8). |
 | `RATE_LIMIT_ONBOARD`, `RATE_LIMIT_AGENT_RUN`, `RATE_LIMIT_COMMS_DRAFT` (Phase 11) | blank | `30/1h`, `20/1h`, `30/1h` per user (`src/lib/hardening/rate-limit.ts`); over the limit → 429 with Retry-After. Changing a limit is a threshold change (partner). |
 
 `FIRM_OS_ONBOARD_CONFIRM`, `FIRM_OS_TURIA_BRIDGE`, `FIRM_OS_TURIA_UI` and the `GUARDRAIL_*` variables are
@@ -107,31 +108,51 @@ read by the code but missing from `.env.example` — add them there (owner of `.
 - `.github/workflows/firm-os-retention.yml` (Phase 11): `/api/cron/firm-os/retention` daily 02:30 IST —
   the DPDP retention purge (docs/dpdp/retention.md). Confirm its first runs on staging (§1).
 
-## 3. Rollout gap — decide before Stage 1
+## 3. Master switch and pilot rollout (`FIRM_OS_ENABLED` + workspace settings)
 
-With every `FIRM_OS_*` flag off (production default), Firm OS entry points are **already visible**,
-because they are gated by role, not by a flag (`tests/regression/firm-os-flags-off.test.ts` pins this):
+Firm OS has one master switch, **`FIRM_OS_ENABLED`** (default **off**; `1`/`true`/`on`/`yes` = on;
+`src/lib/workspace/flag.ts`). Below it, the workspace module settings (/admin/firm-os/workspace)
+decide who sees which module. There is no separate pilot e-mail list: the pilot is a set of people
+whose Firm OS modules are switched on in the workspace settings.
 
-- `/dashboard` shows **Agents** (→ /agents) and, since Phase 9, **My day** (→ /coach) to every
-  active user, plus the **My day** morning-board card to everyone with open Firm OS jobs — so the
-  dashboard queries Firm OS jobs for every signed-in person even with all flags off;
-- `/tools` and `/clients` show **Firm OS onboarding** (→ /onboard) to partners, managers and admins;
-- `/admin` shows the **Firm OS** group (models, mistakes, cycle time, workspace modules, privacy requests,
-  breach register) to LMS admins.
-- /comms, /workspace, /search, /focus and /companion are linked only from Firm OS pages, never from an
-  LMS page (pinned by `tests/regression/firm-os-flags-off.test.ts`).
+**Off (production default).** Firm OS is closed for everyone, admins and partners included:
 
-The pages behind them work (draft packs only; no portal, no send), but the staged rollout below
-("partners → 2 pilot staff → all") cannot be enforced by flags alone. Before Stage 1 choose one:
+- no Firm OS link, card or query on any LMS page — the dashboard shows no Agents, My day, Next task,
+  Client messages or Search, no morning-board card and no break-nudge ping, and reads no Firm OS table;
+  /tools and /clients show no Firm OS onboarding; the command palette (Ctrl/⌘+K) is not mounted;
+- the Firm OS modules — onboard, agents (with /focus and /workspace), coach, comms, search — and the
+  companion, spot checks and the admin Firm OS pages send people to the dashboard, which says in a
+  plain sentence that Firm OS is not switched on yet (`/dashboard?module-off=firm-os`);
+- the workspace settings are not even read (`loadWorkspace` returns the LMS modules each role may use,
+  exactly as before Firm OS — staff keep /clients);
+- **one exception:** /admin/firm-os/workspace stays open to LMS admins, so the role defaults can be
+  prepared before the switch goes on. Its page says that Firm OS is off and the settings are not yet used.
+- Firm OS APIs: the security integration adds one line at the top of each handler under
+  `src/app/api/firm-os/**` — `if (!firmOsEnabled()) return firmOsOffResponse();` (404 with the same plain
+  sentence) — except the workspace settings routes (`workspace/roles/[role]`, `workspace/users/[userId]`),
+  which stay open with their page. `workspace/next-task` is already closed through `isModuleEnabled`. The
+  Firm OS crons (`close-loop`, `coach`) skip with `if (!firmOsEnabled()) return firmOsOffCronResponse();`
+  (200, so the GitHub Action does not fail); the DPDP `retention` cron keeps running.
 
-- **A (recommended):** add a master gate — e.g. `FIRM_OS_ENABLED` plus `FIRM_OS_PILOT_EMAILS`
-  (comma-separated, like `WORK_TRACKER_EMAILS`) — checked by the Firm OS layouts, nav links and API
-  guards; then update the allowlist in `firm-os-flags-off.test.ts` (it must then show *no* Firm OS
-  link with the flags off). A code change (Phase 11 follow-up), with tests, before go-live.
-- **B:** accept role-gated visibility and roll out by announcement only (staff can find /agents
-  before they are told).
+`tests/regression/firm-os-flags-off.test.ts` pins the off state: no Firm OS link on the LMS pages and
+no Firm OS or workspace-settings query, with /admin/firm-os/workspace the only allowed entry point.
 
-Decision: ☐ A  ☐ B — owner: ______________________ date: ____________
+**On.** The workspace settings govern, per role default and per person. A switched-on module never
+grants access the role does not have. Without saved role defaults the built-in ones apply (staff:
+learning, leaderboard, work, tools, agents, coach, search; managers add clients, comms, onboard;
+partners and admins everything) — so **save the role defaults before turning the switch on**.
+
+**Pilot procedure** (Stage 1 and 2 in §4):
+
+1. With the switch still off, an admin opens /admin/firm-os/workspace and saves role defaults
+   **without** the Firm OS modules (onboard, agents, coach, comms, search), focus mode off.
+2. Set `FIRM_OS_ENABLED=1` in Railway and redeploy. Nobody sees a Firm OS module yet.
+3. Switch the Firm OS modules on for the pilot people under **People** (Stage 1: the partners;
+   Stage 2: add the two named staff). Allow the companion per person there if wanted.
+4. Stage 3: add the Firm OS modules to the role defaults; clear the pilot people's own lists so they
+   follow their role again.
+
+Rollback at any stage: set `FIRM_OS_ENABLED` off (§9). Saved settings stay for the next time it is on.
 
 ## 4. Feature-flag rollout plan
 
@@ -140,10 +161,10 @@ criteria hold and the owner says so.
 
 | Stage | Who | Turn on | Watch daily | Exit criteria |
 |---|---|---|---|---|
-| **0 — dark** (now) | nobody | nothing; all `FIRM_OS_*` off; SOP packs not seeded in prod | — | §1 preconditions met; §3 decided |
-| **1 — partners** | partners only (pilot list = partners) | master gate for partners (§3 A); `FIRM_OS_CL_PATHS` for partners' clients only if the CL- sites exist; Phase 9–10 flags for partners | /admin/firm-os/models: cost/day vs `AI_DAILY_BUDGET_INR`, guardrail breaches, escalations; AuditEvent `close-refused`, `done-alert`; reconciler summaries; Railway error logs | 5 working days; ≥ 2 real onboardings and ≥ 5 approved packs reviewed by a partner; zero data-loss or wrong-folder incidents; partner sign-off |
-| **2 — 2 pilot staff** | partners + 2 named staff (add to the pilot list) | same flags for the pilot list | as Stage 1, plus RBAC: pilot staff see only their assigned jobs; coach nudges respectful (≤ 3 break nudges/day, dismissible) | 10 working days; close loop reaches DONE on ≥ 10 jobs with Turia time logged; no RBAC leak; staff feedback taken |
-| **3 — all staff** | everyone | master gate on for all; announce | same; weekly accuracy canary | owner's explicit yes |
+| **0 — dark** (now) | nobody | nothing; all `FIRM_OS_*` off (`FIRM_OS_ENABLED` included); SOP packs not seeded in prod; role defaults saved without the Firm OS modules (§3 step 1) | — | §1 preconditions met |
+| **1 — partners** | partners only | `FIRM_OS_ENABLED=1`, then the Firm OS modules switched on per partner (§3 steps 2–3); `FIRM_OS_CL_PATHS` for partners' clients only if the CL- sites exist; Phase 9–10 flags | /admin/firm-os/models: cost/day vs `AI_DAILY_BUDGET_INR`, guardrail breaches, escalations; AuditEvent `close-refused`, `done-alert`; reconciler summaries; Railway error logs | 5 working days; ≥ 2 real onboardings and ≥ 5 approved packs reviewed by a partner; zero data-loss or wrong-folder incidents; partner sign-off |
+| **2 — 2 pilot staff** | partners + 2 named staff | the Firm OS modules switched on for the two staff (workspace settings → People) | as Stage 1, plus RBAC: pilot staff see only their assigned jobs; coach nudges respectful (≤ 3 break nudges/day, dismissible) | 10 working days; close loop reaches DONE on ≥ 10 jobs with Turia time logged; no RBAC leak; staff feedback taken |
+| **3 — all staff** | everyone | the Firm OS modules added to the role defaults (§3 step 4); announce | same; weekly accuracy canary | owner's explicit yes |
 
 Never in prod at any stage: `FIRM_OS_ECHO_AGENT`, `FIRM_OS_ONBOARD_CONFIRM=false`,
 `FIRM_OS_TURIA_UI=true` (until Turia confirms), `LOCAL_LLM_BASE_URL` (until Phase 2b).
@@ -219,8 +240,9 @@ on the build machine).
 
 ## 9. Rollback
 
-- **Switch the flags off** (Railway variables → redeploy, ~2 min). The master gate (§3 A) hides every
-  Firm OS entry point; with B, remove pilot users / set flags off and announce.
+- **Switch the flags off** (Railway variables → redeploy, ~2 min). `FIRM_OS_ENABLED` off closes every
+  Firm OS module and entry point for everyone (§3); to take back one person or module only, switch it
+  off in the workspace settings instead (takes effect on their next page load).
 - **No data loss.** Firm OS migrations are additive only (new tables / columns; no drop or rename of
   LMS columns — guarded by review and `verify:*`). Turning Firm OS off leaves JobTasks, runs,
   deliverable records and audit events in place for when it is turned back on. Nothing in Firm OS

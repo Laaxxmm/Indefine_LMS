@@ -2,9 +2,10 @@ import Link from "next/link";
 import { FileBadge, ArrowRight, BookText, Wrench, LayoutDashboard, Users, CalendarClock, Newspaper, UserPlus } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { canUseNeoCentra } from "@/lib/neo-centra/access";
-import { canOnboard } from "@/lib/rbac/policy";
+import { isModuleEnabled } from "@/lib/workspace/settings";
 
-// Partners and managers only, appended like NEO_CENTRA: Firm OS plain-English onboarding (canOnboard).
+// Partners and managers only, appended like NEO_CENTRA: Firm OS plain-English onboarding, while the
+// onboard module is on for them (its role rule, the Firm OS master switch and the workspace settings).
 const FIRM_OS_ONBOARD = {
   href: "/onboard",
   title: "Firm OS onboarding",
@@ -90,7 +91,7 @@ export default async function ToolsIndex() {
   const session = await auth();
   const tools = [
     ...TOOLS,
-    ...(canOnboard(session?.user) ? [FIRM_OS_ONBOARD] : []),
+    ...((await isModuleEnabled(session?.user, "onboard")) ? [FIRM_OS_ONBOARD] : []),
     ...(canUseNeoCentra(session?.user) ? [NEO_CENTRA] : []),
   ];
   return (

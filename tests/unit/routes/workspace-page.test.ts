@@ -6,6 +6,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NotFoundSignal, redirectTarget, renderHtml as renderRaw } from "./harness";
 import { echoWorld, user, NOW, type World } from "../../fakes/agent-world";
 
+// Firm OS switched on for these tests (FIRM_OS_ENABLED defaults off: src/lib/workspace/flag.ts).
+beforeEach(() => {
+  vi.stubEnv("FIRM_OS_ENABLED", "1");
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
 const state = vi.hoisted(() => ({ world: null as unknown as World, setting: null as null | Record<string, unknown>, docs: [] as Record<string, unknown>[] }));
 
 vi.mock("@/lib/auth", () => ({ auth: vi.fn(), signIn: vi.fn(), signOut: vi.fn(), handlers: {} }));
@@ -55,10 +63,10 @@ afterEach(() => {
 });
 
 describe("layout", () => {
-  it("nav to the next task and the agent runs, a way back; same access as /agents; Agents module required", async () => {
+  it("the Firm OS header (Next task, the runs list, a way back); same access as /agents; Agents module required", async () => {
     as(user("priya"));
     const html = await renderHtml(await Layout({ children: null }));
-    expect(html).toContain('aria-label="Workspace"');
+    expect(html).toContain('aria-label="Firm OS"');
     expect(html).toContain(">Next task</a>");
     expect(html).toContain(">My agent runs</a>");
     expect(html).toContain('href="/dashboard"');

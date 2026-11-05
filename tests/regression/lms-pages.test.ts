@@ -96,7 +96,7 @@ describe("access gates are unchanged", () => {
   it("signed-out visitors go to sign-in from every staff area", async () => {
     signedIn(null);
     const { default: Dashboard } = await import("@/app/dashboard/page");
-    expect(await redirectTarget(() => Dashboard())).toBe("/");
+    expect(await redirectTarget(() => Dashboard({}))).toBe("/");
     for (const layout of [toolsLayout, clientsLayout, workLayout]) {
       const { default: L } = (await layout()) as { default: (p: { children: null }) => unknown };
       expect(await redirectTarget(() => L({ children: null }))).toBe("/");
