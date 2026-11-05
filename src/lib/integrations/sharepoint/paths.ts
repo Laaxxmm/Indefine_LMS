@@ -41,9 +41,15 @@ export class PathError extends Error {
 // ---------------- client code ----------------
 
 const CODE_RE = /^[A-Z0-9]{3,10}$/;
+/**
+ * Windows reserved device names. A folder or file with one of these names cannot be created or
+ * synced by OneDrive / Explorer on the firm's PCs (and SharePoint refuses some of them), so they are
+ * never client codes (security audit, header/paths finding).
+ */
+export const RESERVED_CLIENT_CODES: ReadonlySet<string> = new Set(["CON", "PRN", "AUX", "NUL", ...[1, 2, 3, 4, 5, 6, 7, 8, 9].flatMap((n) => [`COM${n}`, `LPT${n}`])]);
 
 export function isValidClientCode(code: unknown): code is string {
-  return typeof code === "string" && CODE_RE.test(code);
+  return typeof code === "string" && CODE_RE.test(code) && !RESERVED_CLIENT_CODES.has(code);
 }
 
 /** Returns the code unchanged when valid; throws PathError naming the rule it breaks. */
@@ -52,6 +58,7 @@ export function validateClientCode(code: unknown): string {
   if (code.length < 3 || code.length > 10) throw new PathError(`Client code "${code}" must be 3–10 characters`);
   if (/[a-z]/.test(code)) throw new PathError(`Client code "${code}" must be uppercase`);
   if (!CODE_RE.test(code)) throw new PathError(`Client code "${code}" may contain only A–Z and 0–9`);
+  if (RESERVED_CLIENT_CODES.has(code)) throw new PathError(`Client code "${code}" is a reserved Windows name (CON, PRN, AUX, NUL, COM1–9, LPT1–9); choose another code`);
   return code;
 }
 
