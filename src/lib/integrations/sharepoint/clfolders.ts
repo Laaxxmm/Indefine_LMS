@@ -2,9 +2,9 @@
 // Every function checks before it creates, returns what it created, and running it twice
 // leaves SharePoint unchanged the second time. Nothing here deletes, moves or renames.
 import { readSharePointConfig, requirePnp, SITE_OWNER_BLOCKED_ACTION, type SharePointConfig } from "./config";
-import { BlockedError, NotProvisionedError } from "./errors";
+import { BlockedError, GraphError, NotProvisionedError } from "./errors";
 import { defaultSharePointClient } from "./factory";
-import type { ColumnDefinition, GraphSite, SharePointClient } from "./graph-client";
+import { BATCH_MAX, type ColumnDefinition, type GraphSite, type SharePointClient } from "./graph-client";
 import {
   CLIENT_LISTS, CLIENT_UPLOAD_GROUP, COMPLIANCE_LIBRARY, KINDS, PathError, SERVICES,
   clSiteName, clSiteUrl, defaultPeriods, normalizeFy, parsePeriod, periodInFy, validateClientCode, validateService,
@@ -148,13 +148,52 @@ export function createClFolders(deps: ClFoldersDeps) {
         if (!drive) throw new NotProvisionedError(`Library ${COMPLIANCE_LIBRARY} on ${siteUrl} was created but has no drive yet; retry`);
       }
       const fresh = new Set<string>(); // folders created this run: known empty, no need to list them
+      // Folders seen to exist that the plan will list later. When a listing is needed, up to
+      // BATCH_MAX - 1 of them go in the same Graph JSON batch, so an existing tree is read in a
+      // handful of requests instead of one GET per folder. Only folders known to exist are batched
+      // (no wasted lookups on a new tree), and the plan order (and so `created`) is unchanged.
+      const planned = new Set(plan.map(([p]) => p));
+      const known: string[] = [];
+      const enqueued = new Set<string>();
+      const enqueue = (path: string) => {
+        if (planned.has(path) && !enqueued.has(path)) {
+          enqueued.add(path);
+          known.push(path);
+        }
+      };
+      const prefetched = new Map<string, Set<string>>();
+      const driveId = drive.id;
+      async function listingOf(parent: string): Promise<Set<string>> {
+        const ready = prefetched.get(parent);
+        if (ready) {
+          prefetched.delete(parent);
+          return ready;
+        }
+        enqueued.add(parent);
+        const others = known.filter((k) => k !== parent && !prefetched.has(k)).slice(0, BATCH_MAX - 1);
+        const taken = new Set([parent, ...others]);
+        for (let i = known.length - 1; i >= 0; i--) if (taken.has(known[i])) known.splice(i, 1);
+        if (!others.length) return new Set((await client.listChildren(driveId, parent)).map((c) => c.name));
+        const pages = await client.listChildrenMany(driveId, [parent, ...others]);
+        others.forEach((k, i) => {
+          const page = pages[i + 1];
+          if (!page) return;
+          prefetched.set(k, new Set(page.map((c) => c.name)));
+          for (const c of page) enqueue(`${k}/${c.name}`); // its existing subfolders can join the next batch
+        });
+        if (!pages[0]) throw new GraphError(404, "GET", `${parent}:/children`, "folder not found");
+        return new Set(pages[0].map((c) => c.name));
+      }
       let folders = 0;
       for (const [parent, names] of plan) {
-        const existing = fresh.has(parent) ? new Set<string>() : new Set((await client.listChildren(drive.id, parent)).map((c) => c.name));
+        const existing = fresh.has(parent) ? new Set<string>() : await listingOf(parent);
         for (const name of names) {
           folders++;
           const path = parent ? `${parent}/${name}` : name;
-          if (existing.has(name)) continue;
+          if (existing.has(name)) {
+            enqueue(path);
+            continue;
+          }
           const r = await client.createFolder(drive.id, parent, name);
           if (r.created) {
             fresh.add(path);
