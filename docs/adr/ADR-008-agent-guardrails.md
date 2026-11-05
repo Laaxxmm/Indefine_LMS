@@ -1,6 +1,7 @@
 # ADR-008 — Agent guardrails: stay in the department, never guess
 
-Status: Accepted (implementation in progress), 2026-11-05
+Status: Accepted and enforced in the agent framework, 2026-11-05 (see "Implementation" at the end;
+the live nightly canary waits for a live model key, Phase 2b)
 
 ## Context
 
@@ -80,3 +81,37 @@ them; an agent cannot opt out.
   provider unchanged.
 - Temperature 0 for determinism. Not available on the current Claude API; determinism comes from
   closed schemas, grounding, agreement checks and deterministic code instead.
+
+## Implementation
+
+Code: `src/lib/agents/core/guardrails/` (scope, session, schema, grounding, agreement, prompt-lock,
+review, drift-db), wired in `core/runner.ts`; router options `taskVersion`, `forceTier`,
+`secondOpinion` in `src/lib/ai/router.ts`; drift rates in `src/lib/ai/usage.ts`.
+
+1. `AgentDefinition.scope` (required unless `internal`: precondition `NO_SCOPE` / `INVALID_SCOPE`).
+   `ctx.model()` accepts only declared `<key>.<task>` names (else `ScopeViolationError`, run FAILED,
+   no provider call), refuses agent-supplied system messages and foreign schemas, and builds the
+   system prompt as `FIRM_PREAMBLE` + `departmentPreamble(department)` + task prompt. LLM rule R
+   uses task `<key>.check:R` (or the generic `<key>.check`); an LLM rule outside `ruleIds` gets no
+   model call (`na` + `out-of-scope`).
+2. `abstainable()`, `note()` (≤ 300), `evidence()`, `ScopedVerdictSchema`; `unboundedStrings()` is
+   gated by the harness. A per-call schema (`schemaPerCall`) must match the task's template shape.
+3. `insufficient_evidence` → `na` + `insufficient-evidence`; `openQuestions()` lists abstentions as
+   reviewer questions / client document requests (`RunReview.openQuestions`).
+4. `groundCheck()` on every scoped extraction output (quotes; `groundedNumber()` fields).
+5. Task `validate` and per-call `contradictions` run as router contradictions (escalation); after
+   the last escalation the router returns its output as needs-review, so agents keep only the items
+   their validators accept.
+6. Block LLM rules / `highStakes` tasks: second read on HARD (`#2`); disagreement → `na` +
+   `model-disagreement`. Recorded fixtures answer the re-ask from `<task>#2`.
+7. `scope.inputSniff` runs after gathering, before parsing or any model call (fails closed).
+8. `prompts.lock.json` + `scripts/verify-prompts.ts` (`--update` adds new versions only).
+9. `guardrail-run` AuditEvent per scoped run; `/admin/firm-os/models` Guardrails section with
+   env-overridable thresholds (`GUARDRAIL_MAX_*_RATE`, `GUARDRAIL_MIN_SAMPLE`) and one
+   `guardrail-breach` AuditEvent per agent per day (written on page load). `npm run accuracy --
+   --mode=live` is the canary stub (exit 2 until a live key exists).
+
+Accuracy harness rows: scope declared, scope violations = 0, closed outputs = 0, unexpected
+ungrounded output = 0, insufficient_evidence and disagreements matched against `expected.json`
+`guardrails` (recorded mode), expected run failures (`error`), model-dependent flags gated like LLM
+flags, per-input sensitivity probes, per-rule coverage.
