@@ -24,12 +24,19 @@ function report(kind, text) {
   result.replaceChildren(box);
 }
 
-function busy(on) {
-  for (const b of [saveBtn, testBtn, forgetBtn]) b.disabled = on;
+const LABELS = new Map([saveBtn, testBtn, forgetBtn].map((b) => [b, b.textContent]));
+
+/** Disable the buttons while a test runs; the one pressed says what is happening. */
+function busy(on, pressed) {
+  for (const b of [saveBtn, testBtn, forgetBtn]) {
+    b.disabled = on;
+    b.textContent = on && b === pressed ? "Testing the connection…" : LABELS.get(b);
+  }
+  if (on) report("info", "Testing the connection to Firm OS…");
 }
 
-async function test(token) {
-  busy(true);
+async function test(token, pressed) {
+  busy(true, pressed);
   try {
     const next = interpret(await fetchNextTask(token));
     if (next.view === "task") {
@@ -53,19 +60,19 @@ form.addEventListener("submit", async (e) => {
   await saveToken(token);
   input.value = "";
   input.placeholder = "Saved. Paste a new token to replace it.";
-  await test(token);
+  await test(token, saveBtn);
 });
 
 testBtn.addEventListener("click", async () => {
   const token = await readToken();
-  if (!token) return report("warn", TEXT.notPaired);
-  await test(token);
+  if (!token) return report("warn", TEXT.noSavedToken);
+  await test(token, testBtn);
 });
 
 forgetBtn.addEventListener("click", async () => {
   await forgetToken();
   input.placeholder = "";
-  report("ok", "This browser is no longer paired. To stop the token working everywhere, revoke it on the Companion page in Firm OS.");
+  report("ok", TEXT.forgotten);
 });
 
 readToken().then((t) => {

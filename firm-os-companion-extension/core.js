@@ -23,6 +23,8 @@ export const TEXT = {
   unexpected: "Firm OS sent an answer this panel does not understand. Update the extension, or ask your admin.",
   badToken: "That does not look like a whole pairing token. Copy it again from the Companion page in Firm OS.",
   noToken: "Paste a pairing token first.",
+  noSavedToken: "No pairing token is saved in this browser yet. Paste one above and choose Save and test connection.",
+  forgotten: "This browser is no longer paired. To stop the token working everywhere, revoke it on the Companion page in Firm OS.",
 };
 
 export function nextTaskUrl(origin) {

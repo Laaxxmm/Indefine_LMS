@@ -52,14 +52,12 @@ a:hover { color: var(--brand); }
   position: sticky; top: 0; z-index: 1;
 }
 .brand { display: flex; align-items: center; gap: 8px; }
-.brand-mark {
-  width: 28px; height: 28px; border-radius: 8px; flex: none;
-  background: linear-gradient(135deg, #6d5bf0, var(--brand-ink));
-}
-.brand-name { margin: 0; font-weight: 800; font-size: 14px; letter-spacing: -0.01em; }
+/* The LMS LogoMark glyph, at 28px rather than 34px: the side panel is narrow. */
+.brand-mark { display: block; flex: none; }
+.brand-name { margin: 0; font: 800 15px/1.2 "Schibsted Grotesk", "Plus Jakarta Sans", "Segoe UI", system-ui, sans-serif; letter-spacing: -0.02em; }
 .brand-sub { margin: 0; font-size: 10px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-mute); }
 
-.status { margin: 0; padding: 8px 16px 0; font-size: 12px; color: var(--ink-mute); min-height: 26px; }
+.status { margin: 0; padding: 8px 16px 0; font-size: 12px; color: var(--ink-mute); min-height: 24px; }
 .status.warn { color: var(--warn-ink); }
 
 /* ---------------------------------------------------------------- buttons */
@@ -106,6 +104,7 @@ a:hover { color: var(--brand); }
 .notice-warn { background: var(--warn-bg); border: 1px solid var(--warn-line); color: var(--warn-ink); }
 .notice-bad { background: var(--bad-bg); border: 1px solid var(--bad-line); color: var(--bad-ink); }
 .notice-ok { background: var(--ok-bg); border: 1px solid #a7f3d0; color: var(--ok-ink); }
+.notice-info { background: var(--card); border: 1px solid var(--border); color: var(--ink-soft); }
 .notice p { margin: 0 0 8px; }
 .notice p:last-child { margin: 0; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -114,7 +113,7 @@ a:hover { color: var(--brand); }
 .steps { list-style: none; margin: 0; padding: 0; }
 .step {
   display: grid; grid-template-columns: 24px 1fr; gap: 8px;
-  padding: 10px 8px; border-radius: 10px; border: 1px solid transparent;
+  padding: 8px; border-radius: 8px; border: 1px solid transparent;
 }
 .step + .step { margin-top: 4px; }
 .step-n { font-weight: 800; color: var(--ink-mute); text-align: right; font-variant-numeric: tabular-nums; }
@@ -126,6 +125,8 @@ a:hover { color: var(--brand); }
 .step-current .step-n { color: var(--brand-ink); }
 /* ink-mute on brand-soft is ~4.4:1, under AA for small text: the current step uses ink-soft. */
 .step-current .step-where:not(.portal) { color: var(--ink-soft); }
+/* A ticked current step keeps readable text on brand-soft (ink-mute there is under AA). */
+.step-current.step-done .step-text { color: var(--ink-soft); }
 .step-badge { font-size: 11px; font-weight: 800; color: var(--brand-ink); margin: 0 0 2px; text-transform: uppercase; letter-spacing: 0.06em; }
 .tick { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12px; color: var(--ink-soft); cursor: pointer; }
 .tick input { width: 16px; height: 16px; accent-color: var(--brand); margin: 0; }

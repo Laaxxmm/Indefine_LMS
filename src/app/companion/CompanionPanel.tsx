@@ -139,8 +139,13 @@ function CreateForm({ atLimit, maxActive, ttlDays, onCreated }: { atLimit: boole
       </div>
       <div className="mt-4">
         <button type="submit" disabled={busy || atLimit || !name.trim()} className={primary}>
-          {busy && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
-          Create pairing token
+          {busy ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> Creating…
+            </>
+          ) : (
+            "Create pairing token"
+          )}
         </button>
       </div>
     </form>
@@ -235,7 +240,7 @@ function PairingRow({ pairing, onRevoked }: { pairing: PairingView; onRevoked: (
   }
 
   return (
-    <tr className="border-t border-border h-11 align-top">
+    <tr className="border-t border-border hover:bg-muted/40 h-11 align-top">
       <td className={`${td} font-semibold break-words`}>{pairing.label}</td>
       <td className={`${td} tabular-nums whitespace-nowrap`}>{pairing.created}</td>
       <td className={`${td} tabular-nums whitespace-nowrap`}>{pairing.lastUsed ?? <span className="text-ink-mute">Not used yet</span>}</td>
@@ -251,10 +256,18 @@ function PairingRow({ pairing, onRevoked }: { pairing: PairingView; onRevoked: (
                 Cancel
               </button>
               <button type="button" disabled={busy} onClick={revoke} aria-describedby={consequence} className={`${btnDanger} ${focusRing} inline-flex items-center gap-1.5`}>
-                {busy && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />}
-                Confirm revoke
+                {busy ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> Revoking…
+                  </>
+                ) : (
+                  "Confirm revoke"
+                )}
               </button>
             </div>
+            <span aria-live="polite" className="sr-only">
+              {busy ? `Revoking ${pairing.label}…` : ""}
+            </span>
             {error && (
               <p role="alert" className={`${errorText} text-left max-w-[280px]`}>
                 {error}
@@ -262,7 +275,7 @@ function PairingRow({ pairing, onRevoked }: { pairing: PairingView; onRevoked: (
             )}
           </div>
         ) : (
-          <button type="button" onClick={() => setConfirming(true)} aria-label={`Revoke ${pairing.label}`} className={`${btnGhost} ${focusRing}`}>
+          <button type="button" onClick={() => setConfirming(true)} aria-label={`Revoke ${pairing.label}`} className={`${btnDanger} ${focusRing}`}>
             Revoke
           </button>
         )}

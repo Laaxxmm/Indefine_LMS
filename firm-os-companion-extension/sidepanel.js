@@ -16,6 +16,8 @@ let lastTask = null; // the last task shown, kept in memory only (offline keeps 
 let lastRefresh = 0;
 let lastUpdated = ""; // IST time of the last good answer
 let inFlight = false;
+let renderedKey = ""; // the task on screen; a poll that brings the same task leaves the page alone
+let laterOpen = false; // whether "Later" is unfolded, kept across refreshes
 
 // ---------------------------------------------------------------- tiny DOM helpers
 
@@ -32,9 +34,13 @@ function el(tag, attrs = {}, ...children) {
   return node;
 }
 
+/** Replace the view; keyboard focus returns to the same control (by id) when it is still there. */
 function show(...nodes) {
+  const focusedId = view.contains(document.activeElement) ? document.activeElement.id : "";
   view.replaceChildren(...nodes.filter(Boolean));
   view.setAttribute("aria-busy", "false");
+  renderedKey = "";
+  if (focusedId) document.getElementById(focusedId)?.focus();
 }
 
 function say(text) {
@@ -75,7 +81,7 @@ function renderNone(message) {
 // ---------------------------------------------------------------- the task
 
 function copyButton(value) {
-  const btn = el("button", { type: "button", class: "btn btn-sm", "aria-label": `Copy ${value.label}` }, "Copy");
+  const btn = el("button", { type: "button", id: `copy-${value.key}`, class: "btn btn-sm", "aria-label": `Copy ${value.label}` }, "Copy");
   btn.addEventListener("click", async () => {
     try {
       await navigator.clipboard.writeText(value.copy);
@@ -131,6 +137,9 @@ function stepItem(step, ticks, jobId) {
 
 async function renderTask(data, stale) {
   const { task, later, counts } = data;
+  // The minute poll usually brings the same task: leave the page (focus, selection, "Copied") alone.
+  const key = JSON.stringify([task, later, counts, stale]);
+  if (key === renderedKey) return;
   const saved = await readTicks().catch(() => null);
   const ticks = ticksFor(saved, task.jobId);
   if (!saved || saved.jobId !== task.jobId) await saveTicks(ticks).catch(() => {}); // a new job starts with no ticks
@@ -147,7 +156,7 @@ async function renderTask(data, stale) {
     due ? el("p", { class: "meta", text: due }) : null,
     el("p", { class: "why", text: task.why }),
     el("p", { class: "next", text: task.nextAction }),
-    href ? el("a", { class: "btn btn-primary btn-block", href, target: "_blank", rel: "noopener noreferrer" }, task.link.label || "Open in Firm OS") : null,
+    href ? el("a", { id: "open-job", class: "btn btn-primary btn-block", href, target: "_blank", rel: "noopener noreferrer" }, task.link.label || "Open in Firm OS") : null,
   );
 
   const steps = el(
@@ -183,8 +192,8 @@ async function renderTask(data, stale) {
         { class: "card" },
         el(
           "details",
-          {},
-          el("summary", { text: `Later (${counts.open - 1} more${counts.overdue ? `, ${counts.overdue} overdue in all` : ""})` }),
+          { open: laterOpen, ontoggle: (e) => (laterOpen = e.currentTarget.open) },
+          el("summary", { id: "later-summary", text: `Later (${counts.open - 1} more${counts.overdue ? `, ${counts.overdue} overdue in all` : ""})` }),
           el(
             "ul",
             { class: "later" },
@@ -195,14 +204,14 @@ async function renderTask(data, stale) {
     : null;
 
   show(stale ? notice("warn", TEXT.offline) : null, head, steps, checklist, values, laterList);
+  renderedKey = key;
 }
 
 // ---------------------------------------------------------------- refresh loop
 
 async function refresh() {
   if (inFlight) return;
-  inFlight = true;
-  refreshBtn.disabled = true;
+  inFlight = true; // guards against overlapping refreshes; Refresh stays enabled so keyboard focus never drops
   view.setAttribute("aria-busy", "true");
   try {
     const token = await readToken();
@@ -251,7 +260,6 @@ async function refresh() {
     }
   } finally {
     inFlight = false;
-    refreshBtn.disabled = false;
     view.setAttribute("aria-busy", "false");
   }
 }
