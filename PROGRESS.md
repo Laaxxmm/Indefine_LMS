@@ -310,3 +310,4 @@ UI audit (owner request: every button, navigation, flow, breadcrumb) — merged 
 - 07:30 · security · Merged AI data-flow fixes (fast-forward) — both CRITICAL leaks fixed · 4122/4122 · verify:firm-os green · all six accuracy gates pass
 - 07:50 · design · Merged design consistency pass; ActivityPing conflict resolved (design styles + efficiency back-off) · 4149/4149 · verify:firm-os green · all six accuracy gates pass · build green
 - 08:05 · security · Re-audit done (both CRITICALs fixed; 25/33 fixed; NEW-1 HIGH names in free text); clientId columns added (first commit's migration was empty — fixed in 74a4a80); prisma generate blocked by a locked engine DLL while agents run tests — retrying; security round 3 started · –
+- 08:25 · ops · Stopped 3 orphaned processes from finished agents (two next start servers from 02:40/03:06, a hung audit vitest run) that held the Prisma engine DLL; prisma generate succeeded; clientId fields verified in generated types · TSC green
