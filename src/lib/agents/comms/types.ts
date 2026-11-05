@@ -31,6 +31,9 @@ export type ReminderAsk = (typeof REMINDER_ASKS)[number];
 /** Every FirmService, in schema order (department of a comms model task). */
 export const FIRM_SERVICES: readonly FirmService[] = ["GST", "ROC", "IncomeTax", "TDS", "Books", "Audit", "Engagement"];
 
+/** Sign-off line under the staff member's name. */
+export const FIRM_NAME = "Indefine";
+
 /** Limits that keep one message to one screen and one ask. */
 export const LIMITS = Object.freeze({
   /** English body, greeting to signature. */

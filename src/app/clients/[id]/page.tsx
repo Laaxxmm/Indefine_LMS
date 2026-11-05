@@ -84,7 +84,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
         {facts.map(([k, v]) => <div key={k}><dt className="text-[11px] font-bold text-ink-faint uppercase tracking-wide">{k}</dt><dd className="mt-0.5">{v}</dd></div>)}
       </dl>
 
-      {firmJobs && <FirmOsJobs jobs={firmJobs} seesAll={canSeeAllRuns(session.user)} />}
+      {firmJobs && <FirmOsJobs jobs={firmJobs} seesAll={canSeeAllRuns(session.user)} commsHref={clientCode ? `/comms/new?client=${clientCode}` : undefined} />}
 
       <ClientPanels
         clientId={client.id}

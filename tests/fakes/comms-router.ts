@@ -42,7 +42,7 @@ export function scriptedRouter(steps: Step[], opts: { available?: boolean; confi
   const router = createRouter({
     providers: { claude, grok: off("grok"), local: off("local") },
     repo,
-    config: loadRouterConfig({ ANTHROPIC_API_KEY: "test-key-not-real" }),
+    config: loadRouterConfig({}), // providers are injected; no key is read
     now: () => new Date("2026-11-05T06:00:00Z"),
   });
   return { router, calls, rows, remaining: () => queue.length };
