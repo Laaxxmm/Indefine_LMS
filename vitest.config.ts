@@ -5,9 +5,18 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
+  // tsconfig says jsx: "preserve" (Next compiles it); tests import .tsx pages, so compile here.
+  esbuild: { jsx: "automatic" },
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts", "src/**/*.test.tsx", "tests/unit/**/*.test.ts", "tests/integration/**/*.test.ts", "scripts/**/*.test.ts"],
+    include: [
+      "src/**/*.test.ts",
+      "src/**/*.test.tsx",
+      "tests/unit/**/*.test.ts",
+      "tests/unit/**/*.test.tsx",
+      "tests/integration/**/*.test.ts",
+      "scripts/**/*.test.ts",
+    ],
     exclude: ["node_modules/**", ".next/**", "tests/e2e/**"],
     restoreMocks: true,
     coverage: {
