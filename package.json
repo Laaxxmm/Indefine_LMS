@@ -40,7 +40,11 @@
     "accuracy:canary": "tsx scripts/accuracy.ts --mode=live",
     "verify:rbac": "tsx scripts/verify-rbac.ts",
     "verify:audit-coverage": "tsx scripts/verify-audit-coverage.ts",
-    "e2e:done-trigger": "playwright test --config playwright.db.config.ts done-trigger"
+    "e2e:done-trigger": "playwright test --config playwright.db.config.ts done-trigger",
+    "test:chaos": "vitest run tests/chaos",
+    "test:regression": "vitest run tests/regression",
+    "test:visual": "vitest run --config tests/regression/visual.vitest.config.ts",
+    "e2e:db:list": "playwright test --config playwright.db.config.ts --list"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.5.0",

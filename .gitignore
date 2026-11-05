@@ -25,3 +25,6 @@ blob-report/
 
 # Independent audit scratch (probe fixtures, reports)
 .audit/
+
+# Saved Playwright sign-in states (e2e-db) — contain session cookies
+.auth/
