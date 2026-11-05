@@ -2,7 +2,8 @@
 // inside IST working hours (Mon–Sat 09:00–19:00); outside them it does nothing.
 //
 //   FILED_BY_HUMAN    → run the filed hook (Turia step + CLOSING) the request may have missed.
-//   CLOSING           → try closeJob(); if still held:
+//   CLOSING           → try closeJob() (a refusal is audited only when its reasons changed since the
+//                       job's last close-refused event); if still held:
 //                         filed > 15 min ago → remind the assignee (CoachEvent "reminder"),
 //                         filed > 24 h ago   → escalate to the reviewer and the assignee's manager
 //                                              (partners when neither exists) (CoachEvent "escalation").
@@ -150,7 +151,9 @@ async function reconcileOpen(job: CloseJobRow, deps: ReconcileDeps, now: Date, s
       state = "CLOSING";
     }
   }
-  const c = await closeJob(job.id, RECONCILER_ACTOR, { ...deps, now: () => now });
+  // Owner decision (2026-11-06): an automated retry audits a refusal only when its reasons differ
+  // from the job's last close-refused event; a person's attempt (actions.ts) audits every refusal.
+  const c = await closeJob(job.id, RECONCILER_ACTOR, { ...deps, now: () => now }, { refusalAudit: "on-change" });
   if (c.ok) {
     s.closed.push(job.id);
     return;

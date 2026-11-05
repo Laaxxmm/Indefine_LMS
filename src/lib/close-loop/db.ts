@@ -162,6 +162,11 @@ export interface CloseLoopTx extends JobTaskTx {
   };
   auditEvent: {
     create(args: { data: AuditEventData; select: { id: true } }): PromiseLike<{ id: string }>;
+    findFirst(args: {
+      where: { entity: "JobTask"; entityId: string; action: "close-refused" };
+      orderBy: { createdAt: "desc" };
+      select: { meta: true };
+    }): PromiseLike<{ meta: unknown } | null>;
   };
   user: {
     findUnique(args: { where: { id: string }; select: { managerId: true } }): PromiseLike<{ managerId: string | null } | null>;
@@ -194,6 +199,13 @@ export function loadFinalDeliverables(db: CloseLoopTx, jobTaskId: string): Promi
 
 export function loadCloseSyncs(db: CloseLoopTx, jobTaskId: string): PromiseLike<TuriaSyncRow[]> {
   return db.turiaSync.findMany({ where: { jobTaskId, operation: "closeTask" }, select: SYNC_SELECT, orderBy: { updatedAt: "desc" } });
+}
+
+/** The reasons of the job's last `close-refused` AuditEvent (whoever asked), or null when there is none. */
+export async function lastRefusalReasons(db: CloseLoopTx, jobTaskId: string): Promise<string[] | null> {
+  const row = await db.auditEvent.findFirst({ where: { entity: "JobTask", entityId: jobTaskId, action: "close-refused" }, orderBy: { createdAt: "desc" }, select: { meta: true } });
+  const reasons = (row?.meta as { reasons?: unknown } | null | undefined)?.reasons;
+  return Array.isArray(reasons) ? reasons.filter((r): r is string => typeof r === "string") : null;
 }
 
 /** The two batched reads of the reconciler's DONE re-check. PrismaClient has both shapes. */

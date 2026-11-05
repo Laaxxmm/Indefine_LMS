@@ -304,6 +304,10 @@ export class CloseLoopWorld {
         this.audits.push(a);
         return { id: a.id };
       },
+      findFirst: async ({ where }) => {
+        const hit = this.audits.filter((a) => a.entity === where.entity && a.entityId === where.entityId && a.action === where.action).at(-1);
+        return hit ? { meta: hit.meta ?? null } : null;
+      },
     },
     user: {
       findUnique: async ({ where }) => {

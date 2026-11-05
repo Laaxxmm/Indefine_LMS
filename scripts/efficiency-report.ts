@@ -112,7 +112,7 @@ function storage(
     {
       ...line("AuditEvent", [closeRefused], cronAudits.reconcilerPerRun * RECONCILER_RUNS_PER_DAY * VOLUME.workingDays, `reconciler: ${cronAudits.reconcilerPerRun} close-refused per run (held CLOSING jobs) × ${RECONCILER_RUNS_PER_DAY} runs × ${VOLUME.workingDays} days`),
       table: "AuditEvent (automated close-refused)",
-      steadyStateNote: "grows every year (kept); proposal P4c",
+      steadyStateNote: "grows every year (kept); P4c applied: an automated retry writes one only when the job's refusal reasons change",
     },
     { ...line("AuditEvent", [coachAudit], cronAudits.coachPerDay * VOLUME.workingDays, `coach: ${cronAudits.coachPerDay} per day (overdue escalations, board, summary) × ${VOLUME.workingDays} days`), table: "AuditEvent (coach crons)" },
     line("JobTaskEvent", [...events, doneNote], VOLUME.jobs * VOLUME.jobEventsPerJob, `${VOLUME.jobEventsPerJob} transitions per job; the DONE event carries the gate evidence JSON (~${doneNote.note.length} B)`),

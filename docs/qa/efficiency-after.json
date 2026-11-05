@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-05T22:52:53.818Z",
+  "generatedAt": "2026-11-05T22:59:01.194Z",
   "label": "after",
   "agents": {
     "echo": {
@@ -514,6 +514,7 @@
       "ops": {
         "$transaction": 20,
         "auditEvent.create": 32,
+        "auditEvent.findFirst": 20,
         "coachEvent.create": 53,
         "deliverable.findMany": 41,
         "deliverable.updateMany": 10,
@@ -526,8 +527,8 @@
         "turiaSync.findMany": 50,
         "user.findUnique": 11
       },
-      "total": 360,
-      "sql": 484,
+      "total": 380,
+      "sql": 504,
       "graph": {
         "GET item by path": 200,
         "GET file content (download)": 190
@@ -537,7 +538,7 @@
     },
     "reconciler · run 2 (30 min later) · files already in SharePoint (first run after a restart)": {
       "ops": {
-        "auditEvent.create": 20,
+        "auditEvent.findFirst": 20,
         "coachEvent.create": 53,
         "deliverable.findMany": 21,
         "jobTask.findFirst": 20,
@@ -558,6 +559,7 @@
       "ops": {
         "$transaction": 20,
         "auditEvent.create": 32,
+        "auditEvent.findFirst": 20,
         "coachEvent.create": 53,
         "deliverable.findMany": 41,
         "deliverable.updateMany": 10,
@@ -570,8 +572,8 @@
         "turiaSync.findMany": 50,
         "user.findUnique": 11
       },
-      "total": 360,
-      "sql": 484,
+      "total": 380,
+      "sql": 504,
       "graph": {
         "GET item by path": 200
       },
@@ -580,7 +582,7 @@
     },
     "reconciler · run 2 (30 min later) · files written by this process (copyToFinal)": {
       "ops": {
-        "auditEvent.create": 20,
+        "auditEvent.findFirst": 20,
         "coachEvent.create": 53,
         "deliverable.findMany": 21,
         "jobTask.findFirst": 20,
@@ -711,10 +713,10 @@
       "sampleRows": 1,
       "heapPerRow": 264,
       "indexPerRow": 168,
-      "perYearRows": 120000,
-      "perYearMiB": 49.4,
-      "steadyStateNote": "grows every year (kept); proposal P4c",
-      "basis": "reconciler: 20 close-refused per run (held CLOSING jobs) × 20 runs × 300 days"
+      "perYearRows": 0,
+      "perYearMiB": 0,
+      "steadyStateNote": "grows every year (kept); P4c applied: an automated retry writes one only when the job's refusal reasons change",
+      "basis": "reconciler: 0 close-refused per run (held CLOSING jobs) × 20 runs × 300 days"
     },
     {
       "table": "AuditEvent (coach crons)",
