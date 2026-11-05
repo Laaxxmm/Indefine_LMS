@@ -7,6 +7,8 @@ import { DEPARTMENTS, departmentLabel } from "@/lib/ca-firm";
 import { ENTITY_TYPES, JOB_STATUSES, TURNOVER_BANDS, canViewClients, fyOptions, keysOf } from "@/lib/clients/core";
 import { listHandlers } from "@/lib/clients/services";
 import { isDone } from "@/lib/clients/reports";
+import { isSensitiveQuery } from "@/lib/search/query";
+import { ClientSearchForm } from "./ClientSearch";
 import { Plus, Users } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +21,15 @@ export default async function ClientsList({ searchParams }: { searchParams: Prom
   if (!session?.user) redirect("/");
   if (!canViewClients(session.user)) redirect("/dashboard");
   const sp = await searchParams;
+  // DPDP: a PAN, GSTIN, phone or email (or part of one) never stays in the page address or
+  // reaches a "contains" query. The search box sends those by POST; one that arrives in the
+  // address anyway (typed by hand, no JavaScript) is dropped from it, with a plain hint.
+  if (sp.q && isSensitiveQuery(sp.q)) {
+    const keep = new URLSearchParams();
+    for (const k of ["fy", "department", "handler", "status", "band"] as const) if (sp[k]) keep.set(k, sp[k]!);
+    keep.set("hint", "identifier");
+    redirect(`/clients?${keep.toString()}`);
+  }
   const handlers = await listHandlers();
 
   const jobWhere: Prisma.JobWhereInput = {};
@@ -28,7 +39,8 @@ export default async function ClientsList({ searchParams }: { searchParams: Prom
   if (sp.department && (DEPARTMENTS as string[]).includes(sp.department)) jobWhere.serviceType = { department: sp.department as (typeof DEPARTMENTS)[number] };
 
   const where: Prisma.ClientWhereInput = {};
-  if (sp.q) where.OR = [{ name: { contains: sp.q, mode: "insensitive" } }, { pan: { contains: sp.q.toUpperCase() } }];
+  // Name or Firm OS client code. Identifiers are looked up exactly by /api/clients/lookup instead.
+  if (sp.q) where.OR = [{ name: { contains: sp.q, mode: "insensitive" } }, { firmClient: { clientCode: { contains: sp.q.trim().toUpperCase() } } }];
   if (sp.band && sp.band in TURNOVER_BANDS) where.turnoverBand = sp.band as keyof typeof TURNOVER_BANDS;
   if (Object.keys(jobWhere).length) where.jobs = { some: jobWhere };
 
@@ -52,10 +64,15 @@ export default async function ClientsList({ searchParams }: { searchParams: Prom
         </Link>
       </div>
 
-      <form className="flex flex-wrap items-end gap-3 mb-6 bg-card border border-border rounded-2xl p-4 shadow-lift">
+      {sp.hint === "identifier" && (
+        <p role="status" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-900">
+          Searches by PAN, GSTIN, phone or email are not kept in the page address, so that one was removed. Type the full identifier in the search box and press Filter: it is matched exactly and sent privately.
+        </p>
+      )}
+      <ClientSearchForm className="flex flex-wrap items-end gap-3 mb-6 bg-card border border-border rounded-2xl p-4 shadow-lift">
         <label className="flex flex-col gap-1 flex-1 min-w-[180px]">
-          <span className="text-[11px] font-bold text-ink-mute">Name or PAN</span>
-          <input name="q" defaultValue={sp.q ?? ""} className={field} />
+          <span className="text-[11px] font-bold text-ink-mute">Name or code, or a full PAN, GSTIN, phone or email</span>
+          <input name="q" defaultValue={sp.q ?? ""} className={field} autoComplete="off" spellCheck={false} />
         </label>
         <label className="flex flex-col gap-1"><span className="text-[11px] font-bold text-ink-mute">FY</span>
           <select name="fy" defaultValue={sp.fy ?? ""} className={field}><option value="">Any</option>{fyOptions().map((f) => <option key={f}>{f}</option>)}</select>
@@ -74,7 +91,7 @@ export default async function ClientsList({ searchParams }: { searchParams: Prom
         </label>
         <button type="submit" className="px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-[13px] font-bold transition">Filter</button>
         <Link href="/clients" className="px-3 py-2 rounded-lg text-[13px] font-semibold text-ink-mute hover:bg-muted transition">Clear</Link>
-      </form>
+      </ClientSearchForm>
 
       {clients.length === 0 ? (
         <div className="rounded-[20px] bg-card border border-dashed border-border p-12 text-center">

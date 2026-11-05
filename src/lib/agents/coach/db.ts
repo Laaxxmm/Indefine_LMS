@@ -3,6 +3,7 @@
 // row. Heartbeat retention (7 days, ADR-006) is the Phase 11 retention job's; the coach only ever
 // reads the recent window (BREAK_POLICY.lookbackHours ≤ 7 days).
 import type { Prisma } from "@prisma/client";
+import { logAudit } from "@/lib/audit/log";
 
 /** The app's Prisma client (configured with omit), narrowed to the tables the coach touches. */
 type AppPrisma = (typeof import("@/lib/prisma"))["prisma"];
@@ -63,11 +64,11 @@ export async function createOnce(db: Pick<CoachDb, "coachEvent">, e: NewCoachEve
   return r.count === 1;
 }
 
-export type CoachAudit = { actorId: string; action: string; entity: string; entityId?: string | null; meta?: Prisma.InputJsonValue };
+export type CoachAudit = { actorId: string; action: string; entity: string; entityId?: string | null; meta?: Record<string, unknown> };
 
-/** One AuditEvent row (Phase 11 will route this through src/lib/audit/log.ts). */
+/** One AuditEvent row, through logAudit (src/lib/audit/log.ts). Never called for heartbeats or break nudges (ADR-006). */
 export async function audit(db: Pick<CoachDb, "auditEvent">, e: CoachAudit): Promise<void> {
-  await db.auditEvent.create({ data: { actorId: e.actorId, action: e.action, entity: e.entity, entityId: e.entityId ?? null, meta: e.meta }, select: { id: true } });
+  await logAudit(db, { actorId: e.actorId, action: e.action, entity: e.entity, entityId: e.entityId ?? null, meta: e.meta });
 }
 
 /** "GSTR-3B 2026-10 for ACME01". */

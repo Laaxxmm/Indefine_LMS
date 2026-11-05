@@ -5,11 +5,12 @@
 //   anyone else         nothing: not peers, not partners, not admins
 //
 // Break nudges and heartbeats are the person's alone (ADR-006); no screen or route shows them to
-// anyone else.
+// anyone else. The rule itself lives in src/lib/rbac/policy.ts (canViewCoachEvent); this module
+// keeps its public API and delegates.
+import { canViewCoachEvent as viewPolicy } from "@/lib/rbac/policy";
+
 export type CoachViewer = { id: string } | null | undefined;
 
 export function canViewCoachEvent(viewer: CoachViewer, event: { userId: string; kind: string }, owner: { managerId: string | null } | null): boolean {
-  if (!viewer) return false;
-  if (event.userId === viewer.id) return true;
-  return event.kind === "summary" && !!owner?.managerId && owner.managerId === viewer.id;
+  return viewPolicy(viewer, event, owner);
 }

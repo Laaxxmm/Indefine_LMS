@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { closeRequest, createRequest, getRequest, listRequests, recordNomination, verifyIdentity, type PrivacyDeps } from "./register";
 import { dueDateFor, outerLimitFor, RESPONSE_TIMELINES } from "./policy";
-import { identifierHash, normaliseIdentifier, prismaPrincipalLocator } from "./locator";
+import { identifierHash, identifierPrincipalLocator, normaliseIdentifier, prismaPrincipalLocator, type Identifier } from "./locator";
+import { memoryRateLimiter } from "@/lib/search/rate-limit";
 import type { PrivacyDb } from "./inventory";
 import { PAN_CO, PAN_PROP, T0, USERS, privacyWorld } from "./__tests__/fixtures";
 import { removalCalls, type MemoryDb } from "./__tests__/memory-db";
@@ -29,7 +30,9 @@ describe("request register", () => {
     const stored = JSON.stringify([db.tables.privacyRequest, db.tables.auditEvent]);
     expect(stored).not.toContain(PAN_PROP);
     expect(stored).not.toContain("9876543210");
-    expect(db.tables.auditEvent.map((e) => e.action)).toEqual(["create", "locate"]);
+    // The lookup went through findByIdentifier: audited as a search with the purpose and the hash only.
+    expect(db.tables.auditEvent.map((e) => e.action)).toEqual(["identifier-search", "create", "locate"]);
+    expect(db.tables.auditEvent[0]).toMatchObject({ actorId: USERS.admin.id, entity: "Search", meta: { purpose: "privacy-request", identifierKind: "pan", outcome: "ok", resultCount: 1, entityTypes: ["client"] } });
     expect(removalCalls(db.calls)).toEqual([]);
   });
 
@@ -181,5 +184,42 @@ describe("locator", () => {
     const db = privacyWorld();
     const r = await prismaPrincipalLocator(db as unknown as PrivacyDb).locate([{ kind: "email", value: "lalitha@consult.test" }]);
     expect(r.matches.map((m) => m.ref)).toEqual(["c-prospect"]);
+    const viaSearch = await identifierPrincipalLocator(USERS.admin, { db: db as unknown as PrivacyDb, limiter: memoryRateLimiter(), now: () => T0 }).locate([{ kind: "email", value: "lalitha@consult.test" }]);
+    expect(viaSearch).toEqual(r);
+  });
+
+  it("the findByIdentifier adapter gives the same matches, labels and notes as direct lookups, for every kind of identifier", async () => {
+    const cases: Identifier[][] = [
+      [{ kind: "pan", value: PAN_PROP }],
+      [{ kind: "pan", value: PAN_CO }],
+      [{ kind: "email", value: "ZARA@zenith.test" }],
+      [{ kind: "email", value: "priya@indefine.test" }],
+      [{ kind: "phone", value: "+91 98765 43210" }],
+      [{ kind: "pan", value: PAN_PROP }, { kind: "phone", value: "9876543210" }],
+      [{ kind: "email", value: "nobody@nowhere.test" }],
+    ];
+    for (const ids of cases) {
+      const db = privacyWorld();
+      const direct = await prismaPrincipalLocator(db as unknown as PrivacyDb).locate(ids);
+      const adapter = await identifierPrincipalLocator(USERS.admin, { db: db as unknown as PrivacyDb, limiter: memoryRateLimiter(), now: () => T0 }).locate(ids);
+      expect(adapter, JSON.stringify(ids)).toEqual(direct);
+      // Each identifier was one audited, exact search with the privacy purpose; no raw identifier stored.
+      const searches = db.tables.auditEvent.filter((e) => e.action === "identifier-search");
+      expect(searches).toHaveLength(ids.length);
+      for (const s of searches) expect(s.meta).toMatchObject({ purpose: "privacy-request", entityTypes: ["client"] });
+      for (const i of ids) expect(JSON.stringify(db.tables.auditEvent)).not.toContain(i.value);
+    }
+  });
+
+  it("a rate-limited lookup stops the request with a sentence (429) instead of logging it as 'no matching records'", async () => {
+    const db = privacyWorld();
+    const limiter = memoryRateLimiter({ limit: 1, windowMs: 600_000 });
+    const d: PrivacyDeps = { ...deps(db), searchLimiter: limiter };
+    expect((await createRequest(USERS.admin, { kind: "access", identifiers: { pan: PAN_PROP } }, d)).ok).toBe(true);
+    const r = await createRequest(USERS.admin, { kind: "access", identifiers: { email: "zara@zenith.test" } }, d);
+    expect(r).toMatchObject({ ok: false, status: 429 });
+    if (!r.ok) expect(r.error).toMatch(/^You have searched by PAN, GSTIN, phone or email too many times in a short while\. Wait \d+ minutes? and try again/);
+    expect(db.tables.privacyRequest).toHaveLength(1);
+    expect(db.tables.auditEvent.filter((e) => e.action === "identifier-search").map((e) => (e.meta as Row).outcome)).toEqual(["ok", "rate-limited"]);
   });
 });

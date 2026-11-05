@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isAiProcessingRestricted, processingRestrictions, withdrawConsent } from "./consent";
+import { activeRestrictionsOf, isAiProcessingRestricted, isCommsDraftingRestricted, liftRestriction, processingRestrictions, withdrawConsent } from "./consent";
 import { correctForRequest } from "./correction";
 import { createRequest, verifyIdentity, type PrivacyDeps } from "./register";
 import type { PrivacyDb } from "./inventory";
@@ -55,6 +55,78 @@ describe("consent withdrawal", () => {
     const access = await verified(db, "access", { pan: PAN_PROP });
     expect(await withdrawConsent(USERS.admin, access, deps(db))).toMatchObject({ ok: false, status: 409 });
     expect(await withdrawConsent(USERS.staff, access, deps(db))).toMatchObject({ ok: false, status: 403 });
+  });
+});
+
+describe("lifting a restriction (partner only, with a reason)", () => {
+  async function withdrawn(db: MemoryDb) {
+    const id = await verified(db, "consent-withdrawal", { pan: PAN_PROP });
+    const r = await withdrawConsent(USERS.partner, id, deps(db));
+    if (!r.ok) throw new Error(r.error);
+    return id;
+  }
+
+  it("a partner lifts it with a reason: one lift event per record and one on the request; AI processing and drafts resume; nothing removed", async () => {
+    const db = privacyWorld();
+    const id = await withdrawn(db);
+    expect(await activeRestrictionsOf(db as unknown as PrivacyDb, id)).toEqual([
+      { entity: "Client", entityId: "c-prop", keys: ["ai-processing", "comms-drafts", "marketing"], labels: ["No new AI processing", "No new message drafts", "No growth or marketing use"] },
+    ]);
+    const r = await liftRestriction(USERS.partner, id, { reason: "Client gave written consent again on 05 Nov 2026" }, deps(db));
+    expect(r).toEqual({ ok: true, data: { lifted: 1, restrictions: ["No new AI processing", "No new message drafts", "No growth or marketing use"] } });
+    const lifts = db.tables.auditEvent.filter((e) => e.action === "lift-restriction");
+    expect(lifts.map((e) => [e.entity, e.entityId, e.actorId])).toEqual([
+      ["Client", "c-prop", USERS.partner.id],
+      ["PrivacyRequest", id, USERS.partner.id],
+    ]);
+    expect(lifts[0].meta).toMatchObject({ privacyRequestId: id, reason: "Client gave written consent again on 05 Nov 2026" });
+    expect(await isAiProcessingRestricted(db as unknown as PrivacyDb, "fc-prop")).toBe(false);
+    expect(await isCommsDraftingRestricted(db as unknown as PrivacyDb, "fc-prop")).toBe(false);
+    expect(await activeRestrictionsOf(db as unknown as PrivacyDb, id)).toEqual([]);
+    expect(db.tables.auditEvent.filter((e) => e.action === "restrict-processing")).toHaveLength(2); // the record of the restriction stays
+    expect(removalCalls(db.calls)).toEqual([]);
+    // The request's timeline says who lifted it and why.
+    const { getRequest } = await import("./register");
+    const d = await getRequest(db as unknown as PrivacyDb, id, T0);
+    expect(d?.timeline.at(-1)).toMatchObject({ label: "Restriction lifted by a partner", detail: "Reason: Client gave written consent again on 05 Nov 2026" });
+    // Nothing left to lift.
+    expect(await liftRestriction(USERS.partner, id, { reason: "Client gave written consent again" }, deps(db))).toMatchObject({ ok: false, status: 409 });
+  });
+
+  it("admins, managers and staff cannot lift it; a reason is required; only consent withdrawals and erasure holds have one", async () => {
+    const db = privacyWorld();
+    const id = await withdrawn(db);
+    const admin = await liftRestriction(USERS.admin, id, { reason: "Client gave written consent again" }, deps(db));
+    expect(admin).toMatchObject({ ok: false, status: 403 });
+    if (!admin.ok) expect(admin.error).toBe("Only a partner can lift a processing restriction. Ask a partner to review this request.");
+    expect(await liftRestriction(USERS.staff, id, { reason: "Client gave written consent again" }, deps(db))).toMatchObject({ ok: false, status: 403 });
+    expect(await liftRestriction(null, id, { reason: "Client gave written consent again" }, deps(db))).toMatchObject({ ok: false, status: 401 });
+    const short = await liftRestriction(USERS.partner, id, { reason: "ok" }, deps(db));
+    expect(short).toMatchObject({ ok: false, status: 400 });
+    if (!short.ok) expect(short.error).toMatch(/Write why the restriction can be lifted/);
+    expect(await liftRestriction(USERS.partner, "nope", { reason: "Client gave written consent again" }, deps(db))).toMatchObject({ ok: false, status: 404 });
+    const access = await verified(db, "access", { pan: PAN_PROP });
+    expect(await liftRestriction(USERS.partner, access, { reason: "Client gave written consent again" }, deps(db))).toMatchObject({ ok: false, status: 409 });
+    expect(await isAiProcessingRestricted(db as unknown as PrivacyDb, "fc-prop")).toBe(true);
+    expect(db.tables.auditEvent.filter((e) => e.action === "lift-restriction")).toEqual([]);
+  });
+
+  it("a restriction from another request on the same client stays in force when one request's restriction is lifted", async () => {
+    const db = privacyWorld();
+    const first = await withdrawn(db);
+    const second = await withdrawn(db);
+    await liftRestriction(USERS.partner, first, { reason: "Consent given again for the first request" }, deps(db));
+    expect(await processingRestrictions(db as unknown as PrivacyDb, { entity: "Client", entityId: "c-prop" })).toEqual(["ai-processing", "comms-drafts", "marketing"]);
+    await liftRestriction(USERS.partner, second, { reason: "Consent given again for the second request" }, deps(db));
+    expect(await processingRestrictions(db as unknown as PrivacyDb, { entity: "Client", entityId: "c-prop" })).toEqual([]);
+  });
+
+  it("isAiProcessingRestricted takes the LMS client id directly too", async () => {
+    const db = privacyWorld();
+    await withdrawn(db);
+    expect(await isAiProcessingRestricted(db as unknown as PrivacyDb, { lmsClientId: "c-prop" })).toBe(true);
+    expect(await isAiProcessingRestricted(db as unknown as PrivacyDb, { lmsClientId: "c-co" })).toBe(false);
+    expect(await isAiProcessingRestricted(db as unknown as PrivacyDb, "fc-missing")).toBe(false);
   });
 });
 

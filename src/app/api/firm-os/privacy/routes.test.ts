@@ -1,6 +1,8 @@
 // Route handlers under /api/firm-os/privacy/** and /api/firm-os/corrections/**: auth → zod → one
 // lib call → JSON. Signed out is 401, people who may not act get 403, every error is a sentence.
 import { beforeEach, describe, expect, it, vi } from "vitest";
+// These routes sit behind the Firm OS master switch (src/lib/workspace/flag.ts); it is on for these tests.
+beforeEach(() => vi.stubEnv("FIRM_OS_ENABLED", "1"));
 import { activeSession } from "../../../../../tests/unit/routes/harness";
 import { PAN_PROP, USERS, privacyWorld } from "@/lib/privacy/__tests__/fixtures";
 import { removalCalls, type MemoryDb } from "@/lib/privacy/__tests__/memory-db";
@@ -19,6 +21,8 @@ const close = await import("@/app/api/firm-os/privacy/requests/[id]/close/route"
 const consent = await import("@/app/api/firm-os/privacy/requests/[id]/consent-withdrawal/route");
 const nomination = await import("@/app/api/firm-os/privacy/requests/[id]/nomination/route");
 const pcorrection = await import("@/app/api/firm-os/privacy/requests/[id]/correction/route");
+const lift = await import("@/app/api/firm-os/privacy/requests/[id]/lift-restriction/route");
+const resolve = await import("@/app/api/firm-os/privacy/requests/[id]/resolve/route");
 const breaches = await import("@/app/api/firm-os/privacy/breaches/route");
 const breach = await import("@/app/api/firm-os/privacy/breaches/[id]/route");
 const corrections = await import("@/app/api/firm-os/corrections/route");
@@ -111,6 +115,44 @@ describe("privacy request routes", () => {
     expect(fixed.status).toBe(200);
     const notMine = await pcorrection.POST(post({ entity: "JobTask", id: "j-assigned", field: "title", newValue: "X", reason: "Client moved office" }), params(k));
     expect(notMine.status).toBe(400);
+  });
+
+  it("resolve: links a request to one of the records found; staff refused; a record not found refused", async () => {
+    const a = db.tables.client.find((c) => c.id === "c-prop")!;
+    db.seed("client", [{ ...a, id: "c-twin", name: "Twin Stores", folderName: "Twin Stores", pan: "ABCPT1111K", gstin: null }]);
+    const r = await requests.POST(post({ kind: "access", identifiers: { phone: "9876543210" } }));
+    const id = String((await json(r)).id);
+    expect(db.tables.privacyRequest.find((x) => x.id === id)?.principalRef).toBeNull();
+    as(USERS.staff);
+    expect((await resolve.POST(post({ ref: "c-prop" }), params(id))).status).toBe(403);
+    as(admin);
+    expect((await resolve.POST(post({ ref: "c-co" }), params(id))).status).toBe(400);
+    expect((await resolve.POST(post({}), params(id))).status).toBe(400);
+    const ok = await resolve.POST(post({ ref: "c-twin" }), params(id));
+    expect(ok.status).toBe(200);
+    expect(db.tables.privacyRequest.find((x) => x.id === id)?.principalRef).toBe("c-twin");
+  });
+
+  it("lift restriction: partner only, with a reason; admins and staff get a sentence, not a lift", async () => {
+    const c = await logRequest("consent-withdrawal", { pan: PAN_PROP });
+    await verify.POST(post({ method: "Photo ID seen in person" }), params(c));
+    expect((await consent.POST(post({}), params(c))).status).toBe(200);
+    const reason = { reason: "Client gave written consent again on 05 Nov 2026" };
+    const byAdmin = await lift.POST(post(reason), params(c));
+    expect(byAdmin.status).toBe(403);
+    expect(await json(byAdmin)).toEqual({ error: "Only a partner can lift a processing restriction. Ask a partner to review this request." });
+    as(USERS.staff);
+    expect((await lift.POST(post(reason), params(c))).status).toBe(403);
+    as(null);
+    expect((await lift.POST(post(reason), params(c))).status).toBe(401);
+    as(USERS.partner);
+    expect((await lift.POST(post({ reason: "ok" }), params(c))).status).toBe(400);
+    const done = await lift.POST(post(reason), params(c));
+    expect(done.status).toBe(200);
+    expect(await json(done)).toMatchObject({ lifted: 1 });
+    expect(db.tables.auditEvent.filter((e) => e.action === "lift-restriction").map((e) => e.actorId)).toEqual([USERS.partner.id, USERS.partner.id]);
+    expect((await lift.POST(post(reason), params(c))).status).toBe(409); // nothing left to lift
+    expect(removalCalls(db.calls)).toEqual([]);
   });
 });
 

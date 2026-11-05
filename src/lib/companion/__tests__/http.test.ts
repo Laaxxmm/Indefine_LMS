@@ -79,6 +79,19 @@ describe("CORS", () => {
     expect(handlePreflight(new Request("https://x/", { method: "OPTIONS", headers: { origin: EXT } }), []).status).toBe(403);
   });
 
+  // verify:rbac lets this OPTIONS handler skip auth and policy (scripts/lib/rbac-check.ts
+  // PREFLIGHT_ROUTES) only because it never hands out data: no body, ever, even with a valid token.
+  it("preflight returns no body and no task data, for an allowed origin, a refused one, and a request carrying a valid token", async () => {
+    const { t } = setup();
+    const cases: Array<Record<string, string>> = [{ origin: EXT }, { origin: "https://evil.example" }, {}, { origin: EXT, authorization: `Bearer ${t}` }];
+    for (const headers of cases) {
+      const r = handlePreflight(new Request("https://x/api/firm-os/companion/next-task", { method: "OPTIONS", headers }), [EXT]);
+      expect(await r.text(), JSON.stringify(headers)).toBe("");
+      expect(r.headers.get("content-type")).toBeNull();
+      expect(r.headers.get("set-cookie")).toBeNull();
+    }
+  });
+
   it("allows the extension's own fixed id by default; the environment overrides it, strictly", () => {
     expect(allowedExtensionOrigins({})).toEqual([`chrome-extension://${COMPANION_EXTENSION_ID}`]);
     expect(allowedExtensionOrigins({ [COMPANION_ORIGIN_ENV]: "  " })).toEqual([`chrome-extension://${COMPANION_EXTENSION_ID}`]);

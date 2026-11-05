@@ -1,6 +1,8 @@
 // GET/OPTIONS /api/firm-os/companion/next-task through the real route module and its production
 // wiring (Prisma mocked, empty database). The full rules are tested in src/lib/companion/__tests__.
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
+// These routes sit behind the Firm OS master switch (src/lib/workspace/flag.ts); it is on for these tests.
+beforeEach(() => vi.stubEnv("FIRM_OS_ENABLED", "1"));
 
 vi.mock("@/lib/auth", () => ({ auth: vi.fn(), signIn: vi.fn(), signOut: vi.fn(), handlers: {} }));
 vi.mock("@/lib/prisma", async () => ({ prisma: (await import("./harness")).prismaMock }));

@@ -193,6 +193,6 @@ describe("/comms pages", () => {
     expect(html).not.toMatch(/\bSend\b/);
     await expect(DraftPage(ctx("missing"))).rejects.toBeInstanceOf(NotFoundSignal);
     signedIn(activeSession({ id: "u-other" }));
-    expect(clean(await renderHtml(await DraftPage(ctx(d.id))))).toContain("You can open drafts only");
+    expect(clean(await renderHtml(await DraftPage(ctx(d.id))))).toContain("You can open a draft only if you wrote it");
   });
 });

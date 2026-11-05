@@ -3,9 +3,10 @@
 // after values and the plain-English change list the admin confirmed. Nothing is ever removed:
 // "reset to role default" saves nulls (follow the role) on the person's row.
 import { Prisma, type PrismaClient } from "@prisma/client";
-import { isAdmin, type SessionUser } from "@/lib/access";
-import { firmRole, type FirmRole } from "@/lib/rbac/policy";
+import type { SessionUser } from "@/lib/access";
+import { canManageWorkspace, firmRole, type FirmRole } from "@/lib/rbac/policy";
 import { formatDateTimeIst } from "@/lib/agents/core/format";
+import { logAudit } from "@/lib/audit/log";
 import { canAccessModule } from "./access";
 import { followsRole, roleDefaultChanges, userSettingChanges, type RoleDefaultInput, type UserSettingInput } from "./changes";
 import { ALWAYS_ON, FIRM_ROLES, MODULE_KEYS, ROLE_LABELS, isFirmRole, type ModuleKey } from "./registry";
@@ -176,7 +177,7 @@ export function personAccessNotes(p: Pick<PersonDetail, "allowed" | "name" | "ac
 const json = (v: unknown) => v as Prisma.InputJsonValue;
 
 export async function saveRoleDefault(actor: SessionUser, role: string, input: RoleDefaultInput, db: AdminWorkspaceDb): Promise<AdminResult<{ changes: string[] }>> {
-  if (!actor || !isAdmin(actor)) return fail(403, ADMIN_ONLY);
+  if (!actor || !canManageWorkspace(actor)) return fail(403, ADMIN_ONLY);
   if (!isFirmRole(role)) return fail(404, "That role does not exist. Choose Staff, Manager, Partner or Admin.");
   const after: RoleDefaultInput = { modules: parseModuleList(input.modules) ?? [], focusMode: input.focusMode };
   if (ALWAYS_ON[role].some((k) => !after.modules.includes(k))) return fail(400, ADMIN_KEEPS_ADMIN);
@@ -190,15 +191,13 @@ export async function saveRoleDefault(actor: SessionUser, role: string, input: R
       create: { role, modules: json(after.modules), focusMode: after.focusMode, updatedById: actor.id },
       update: { modules: json(after.modules), focusMode: after.focusMode, updatedById: actor.id },
     });
-    await tx.auditEvent.create({
-      data: { actorId: actor.id, action: "workspace-role-default", entity: "RoleWorkspaceDefault", entityId: role, meta: json({ before, after, changes, savedBefore: !!row }) },
-    });
+    await logAudit(tx, { actorId: actor.id, action: "workspace-role-default", entity: "RoleWorkspaceDefault", entityId: role, meta: { before, after, changes, savedBefore: !!row } });
   });
   return { ok: true, data: { changes } };
 }
 
 export async function saveUserSetting(actor: SessionUser, userId: string, input: UserSettingInput, db: AdminWorkspaceDb): Promise<AdminResult<{ changes: string[] }>> {
-  if (!actor || !isAdmin(actor)) return fail(403, ADMIN_ONLY);
+  if (!actor || !canManageWorkspace(actor)) return fail(403, ADMIN_ONLY);
   const u = await db.user.findUnique({ where: { id: userId }, select: USER_SELECT });
   if (!u) return fail(404, "That person was not found. Search again and pick them from the list.");
   const role = firmRole(asSessionUser(u));
@@ -219,9 +218,7 @@ export async function saveUserSetting(actor: SessionUser, userId: string, input:
   };
   await db.$transaction(async (tx) => {
     await tx.workspaceSetting.upsert({ where: { userId }, create: { userId, ...data }, update: data });
-    await tx.auditEvent.create({
-      data: { actorId: actor.id, action: "workspace-user-setting", entity: "WorkspaceSetting", entityId: userId, meta: json({ before, after, changes, role }) },
-    });
+    await logAudit(tx, { actorId: actor.id, action: "workspace-user-setting", entity: "WorkspaceSetting", entityId: userId, meta: { before, after, changes, role } });
   });
   return { ok: true, data: { changes } };
 }

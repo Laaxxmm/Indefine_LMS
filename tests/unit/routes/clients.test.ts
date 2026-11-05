@@ -38,7 +38,8 @@ describe("/clients", () => {
   it("applies the search filter to the client query", async () => {
     await ClientsList({ searchParams: Promise.resolve({ q: "abcde" }) });
     const call = prismaCalls.find((c) => c.model === "client" && c.method === "findMany");
-    expect(JSON.stringify(call?.args)).toContain("ABCDE"); // PAN search is upper-cased
+    expect(JSON.stringify(call?.args)).toContain("ABCDE"); // client-code search is upper-cased
+    expect(JSON.stringify(call?.args)).not.toContain("\"pan\""); // never a partial PAN match (client-pii.test.ts)
   });
 
   it("redirects a signed-out visitor to sign-in (layout and page both guard)", async () => {

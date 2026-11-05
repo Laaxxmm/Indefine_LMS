@@ -2,21 +2,26 @@ import { NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { auth } from "@/lib/auth";
 import { departmentLabel } from "@/lib/ca-firm";
-import { canViewClients, ENTITY_TYPES, GROWTH_GOALS, JOB_STATUSES, TURNOVER_BANDS } from "@/lib/clients/core";
+import { canManageClients, ENTITY_TYPES, GROWTH_GOALS, JOB_STATUSES, TURNOVER_BANDS } from "@/lib/clients/core";
+import { logAudit } from "@/lib/audit/log";
+import { prisma } from "@/lib/prisma";
 import { loadJobRows, parseFilters } from "@/lib/clients/reports";
 import { istDate } from "@/lib/ist";
 import { addSheet, workbookBytes } from "@/lib/office-tools/xlsx";
 
 export const runtime = "nodejs";
 
-// Download the currently filtered job list as Excel.
+// Download the currently filtered job list as Excel: every client's jobs, fees and turnover, so
+// management only (canManageClients: active admins and partners). Each download is audited.
 export async function GET(req: Request) {
   const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!canViewClients(session.user)) return NextResponse.json({ error: "No access" }, { status: 403 });
+  if (!session?.user) return NextResponse.json({ error: "Sign in to download the report." }, { status: 401 });
+  if (!canManageClients(session.user)) return NextResponse.json({ error: "Only admins and partners can download the all-clients report. Ask one of them for a copy." }, { status: 403 });
 
   const sp = Object.fromEntries(new URL(req.url).searchParams);
-  const rows = await loadJobRows(parseFilters(sp));
+  const filters = parseFilters(sp);
+  const rows = await loadJobRows(filters);
+  await logAudit(prisma, { actorId: session.user.id, action: "export", entity: "Client", entityId: null, meta: { report: "client-jobs", rows: rows.length, filters: Object.keys(sp).sort() } });
   const columns = ["Client", "FY", "Month", "Department", "Service", "Handler", "Status", "Due on", "Fees (₹)", "Turnover (₹)", "Turnover band", "Growth goal", "Entity type", "City", "Created on"];
   const wb = new ExcelJS.Workbook();
   addSheet(wb, "Jobs", columns, rows.map((r) => ({

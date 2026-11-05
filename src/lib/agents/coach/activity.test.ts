@@ -136,7 +136,9 @@ describe("dismiss", () => {
     vi.setSystemTime(at(0));
     const e = w.coachEvent.insert({ userId: "u-priya", kind: "break", dedupeKey: "b1", payload: { message: "x" } });
     await dismissEvent("u-priya", String(e.id), deps());
-    expect(w.auditEvent.rows[0].meta).toBeUndefined();
+    // No meta at all (logAudit leaves the column unset, as Prisma stores NULL): the kind is not recorded.
+    expect(w.auditEvent.rows[0].meta ?? null).toBeNull();
+    expect(JSON.stringify(w.auditEvent.rows[0])).not.toContain("break");
   });
 });
 

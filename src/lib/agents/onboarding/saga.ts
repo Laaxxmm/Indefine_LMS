@@ -18,6 +18,7 @@ import type { FirmService } from "@prisma/client";
 import type { TuriaAdapter, TuriaOpResult } from "@/lib/integrations/turia/adapter";
 import { BlockedError } from "@/lib/integrations/sharepoint/errors";
 import type { FyTreeOptions } from "@/lib/integrations/sharepoint/clfolders";
+import { auditDbFromSink, logAudit } from "@/lib/audit/log";
 import type { OnboardingPlan, PlanJob } from "./plan";
 import type { OnboardingSpec, ServiceLine } from "./spec";
 
@@ -297,7 +298,8 @@ export function createSaga(deps: SagaDeps) {
     const blocked = steps.filter((s) => s.status === "blocked");
     const status: RunStatus = blocked.length ? "BLOCKED" : "DONE";
     await save({ status, error: blocked.length ? `Blocked: ${blocked.map((s) => s.label).join(", ")}` : null });
-    await store.audit({
+    // Through logAudit (validated row); the injected store persists it (production: Prisma).
+    await logAudit(auditDbFromSink(store), {
       actorId,
       action: status === "DONE" ? "onboarding.done" : "onboarding.blocked",
       entity: "OnboardingRun",

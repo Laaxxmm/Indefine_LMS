@@ -1,10 +1,12 @@
 import { correctField, defaultCorrectionDeps } from "@/lib/corrections/service";
 import { correctionBodyZ, parse, readJson, signedIn, toJson } from "@/lib/corrections/http";
+import { firmOsEnabled, firmOsOffResponse } from "@/lib/workspace/flag";
 
 // Correct one allow-listed field of a client, job, engagement or comms draft (src/lib/corrections).
 // The service checks who may correct it, validates the value, updates the one column and writes the
 // "correct" AuditEvent in one transaction. Nothing is ever removed.
 export async function POST(req: Request) {
+  if (!firmOsEnabled()) return firmOsOffResponse();
   const s = await signedIn();
   if (!s.ok) return s.res;
   const body = parse(correctionBodyZ, await readJson(req));

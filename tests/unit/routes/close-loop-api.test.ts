@@ -2,6 +2,8 @@
 // auth → zod → one lib call → JSON, over the in-memory close-loop world (real lib code).
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+// These routes sit behind the Firm OS master switch (src/lib/workspace/flag.ts); it is on for these tests.
+beforeEach(() => vi.stubEnv("FIRM_OS_ENABLED", "1"));
 import type { CloseLoopDeps } from "@/lib/close-loop/actions";
 import { ManualBridge } from "@/lib/integrations/turia/manual-bridge";
 import { CloseLoopWorld } from "../../fakes/close-loop-world";

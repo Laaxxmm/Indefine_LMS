@@ -3,7 +3,7 @@ import { Download } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { DEPARTMENTS, departmentLabel } from "@/lib/ca-firm";
-import { GROWTH_GOALS, JOB_STATUSES, TURNOVER_BANDS, canViewClients, fyOptions, keysOf } from "@/lib/clients/core";
+import { GROWTH_GOALS, JOB_STATUSES, TURNOVER_BANDS, canManageClients, canViewClients, fyOptions, keysOf } from "@/lib/clients/core";
 import { listHandlers, listServiceTypes } from "@/lib/clients/services";
 import { GROUP_KEYS, filtersToQuery, groupRows, keyOf, loadJobRows, parseFilters, summarize, type GroupKey } from "@/lib/clients/reports";
 import { RebuildButton } from "./RebuildButton";
@@ -39,7 +39,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
           <p className="text-ink-mute text-[15px] mt-1.5">Filter jobs, then group by year, month, department, service, handler, turnover band or growth goal.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <a href={`/api/clients/reports/export?${filtersToQuery(sp)}`} className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-brand-500 hover:bg-brand-600 text-white text-sm font-bold shadow-pop"><Download className="w-4 h-4" /> Download Excel</a>
+          {canManageClients(session.user) && <a href={`/api/clients/reports/export?${filtersToQuery(sp)}`} className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-brand-500 hover:bg-brand-600 text-white text-sm font-bold shadow-pop"><Download className="w-4 h-4" /> Download Excel</a>}
           <RebuildButton />
         </div>
       </div>
