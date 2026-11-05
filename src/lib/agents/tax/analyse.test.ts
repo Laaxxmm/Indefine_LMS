@@ -257,6 +257,18 @@ describe("missing documents, rule-set guard, 234A", () => {
       // Split: 1,00,000 on the due date, 92,400 the day after → base 92,400 → 924.
       expect(at([{ date: "2026-07-31", amount: "1,00,000" }, { date: "2026-08-01", amount: "92,400" }], "2026-08-10").i234A).toBe(rs(924));
     });
+    it("s.234B(2) on the same case (audit counterexample): 1,92,400 x 1% x 2 (April, May) = 3,848, not x 5 months = 9,620", () => {
+      const x = at([{ date: "2026-05-01", amount: "1,92,400" }], "2026-08-01");
+      expect(x.advance.i234B).toBe(rs(3_848));
+      expect(x.advance.stages234B.map((s) => [s.shortfallPaise, s.months, s.interestPaise])).toEqual([
+        [rs(1_92_400), 2, rs(3_848)],
+        [0, 3, 0],
+      ]);
+      // 234C: Jun 28,860 → 28,800 x 3% = 864; Sep 86,580 → 86,500 x 3% = 2,595; Dec 1,44,300 x 3% = 4,329;
+      // Mar 1,92,400 x 1% = 1,924; total 9,712. Net 1,92,400 + 3,848 + 9,712 + 5,000 (234F) - 1,92,400 = 18,560.
+      expect(x.advance.i234C).toBe(rs(9_712));
+      expect(x.netPayablePaise).toBe(rs(18_560));
+    });
     it("advance tax by 31 March still reduces it; a return filed by the due date has no 234A", () => {
       expect(at([{ date: "2026-03-15", amount: "1,00,000" }], "2026-08-10").i234A).toBe(rs(924));
       expect(at([], "2026-07-31").i234A).toBe(0);

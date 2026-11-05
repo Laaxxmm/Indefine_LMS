@@ -112,6 +112,10 @@ describe("filing rules", () => {
     expect(run("tax.advance-tax-interest", extractOf("trap-senior-citizen-slab", undefined, { matches: [] })).status).toBe("na");
     expect(run("tax.advance-tax-interest", extractOf("clean-firm-audit")).message).toMatch(/paid in time/);
     expect(run("tax.advance-tax-interest", clean()).message).toMatch(/below ₹10,000/);
+    // s.234B(2) stages are listed when tax was paid after 31 March (fixture trap-234b-self-assessment-staging).
+    const staged = run("tax.advance-tax-interest", extractOf("trap-234b-self-assessment-staging", undefined, { matches: [{ aisId: "A1", outcome: "matched", bookId: "B1" }] }));
+    expect(staged.status).toBe("fail");
+    expect(staged.message).toContain("234B ₹3,848.00 (s.234B(2), reduced after tax paid after 31 March: ₹2,40,500.00 × 1 month(s) to 25 Apr 2026, then ₹48,100.00 × 3 month(s) to 28 Jul 2026)");
   });
   it("tax.late-filing: a day late fails", () => {
     expect(run("tax.late-filing", extractOf("clean-salaried-new", (o) => (o.profile.plannedFilingDate = "2026-07-31"))).status).toBe("pass");

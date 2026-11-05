@@ -282,8 +282,17 @@ export type AdvanceTaxInput = {
 
 export type InstalmentRow = { date: string; requiredBp: number; requiredPaise: number; paidPaise: number; shortfallPaise: number; months: number; interestPaise: number };
 
-/** Interest u/s 234C (instalments) and 234B (advance tax < 90% of assessed tax). */
-export function advanceTaxInterest(a: AdvanceTaxInput, rules: TaxRuleSet): { liable: boolean; rows: InstalmentRow[]; i234C: number; i234B: number; paidByMarch: number } {
+/**
+ * One s.234B stage: interest on one shortfall for a run of whole months. `from` is the 1st of the
+ * stage's first month; `to` is the date of the payment that ends the stage (s.234B(2)(i): "up to the
+ * date on which the tax is so paid"), or the filing date for the last stage. `paidPaise` is the
+ * advance tax paid by 31 March plus the tax paid after it (s.140A or otherwise) before the stage
+ * starts; `shortfallPaise` is assessed tax less `paidPaise`, rounded down to ₹100.
+ */
+export type Stage234B = { from: string; to: string; paidPaise: number; shortfallPaise: number; months: number; interestPaise: number };
+
+/** Interest u/s 234C (instalments) and 234B (advance tax < 90% of assessed tax), staged on later payments u/s 234B(2). */
+export function advanceTaxInterest(a: AdvanceTaxInput, rules: TaxRuleSet): { liable: boolean; rows: InstalmentRow[]; i234C: number; i234B: number; stages234B: Stage234B[]; paidByMarch: number } {
   const t = rules.advanceTax;
   const paidBy = (d: string) => a.payments.filter((p) => p.date <= d).reduce((s, p) => s + p.amountPaise, 0);
   const marchEnd = a.instalmentDates[3].slice(0, 8) + "31";
@@ -306,11 +315,44 @@ export function advanceTaxInterest(a: AdvanceTaxInput, rules: TaxRuleSet): { lia
     });
   }
   let i234B = 0;
+  const stages234B: Stage234B[] = [];
   if (liable && paidByMarch < pct(a.assessedTaxPaise, t.s234BThresholdBp)) {
-    const base = roundDown(a.assessedTaxPaise - paidByMarch, t.roundDownToPaise);
-    i234B = pct(base * monthsOrPart(a.aprilFirst, a.filingDate), t.interestBpPerMonth);
+    // s.234B(1) (1961 Act; s.424(1) of the 2025 Act): 1% for every month or part of a month from
+    // 1 April of the AY to the date of determination (the filing date in this draft) on the amount by
+    // which the advance tax paid falls short of the assessed tax. s.234B(2) (s.424(4) of the 2025
+    // Act): where tax is paid under s.140A "or otherwise" before then, (i) interest is calculated as
+    // above up to the date on which the tax is so paid and (ii) thereafter on the amount by which the
+    // tax so paid together with the advance tax falls short of the assessed tax. The period starts on
+    // 1 April, so it runs in calendar months; a month in which tax is paid is a "part of a month" of
+    // the period up to that payment, so it carries the shortfall before the payment, and the reduced
+    // shortfall applies from the 1st of the next month (paid on 1 May or 31 May alike: April and May
+    // on the old shortfall, June onwards on the new). Each month is charged once, on the shortfall
+    // outstanding at its start; each stage's amount is rounded down to ₹100 (rule 269(c) of the 2026
+    // Rules; rule 119A(c) of the 1962 Rules is not in the firm's library). A payment
+    // is applied wholly to tax here — the s.140A(1) Explanation (a payment short of the aggregate tax,
+    // interest and fee goes to fee, then interest, then tax) is not applied: PARTNER TO VERIFY
+    // (verify note "Advance tax and interest").
+    const later = a.payments.filter((p) => p.date > marchEnd && p.date <= a.filingDate).sort((x, y) => (x.date < y.date ? -1 : x.date > y.date ? 1 : 0));
+    const months = monthsOrPart(a.aprilFirst, a.filingDate);
+    let total = 0;
+    for (let k = 0; k < months; k++) {
+      const monthStart = addMonthsClamped(a.aprilFirst, k);
+      const paid = paidByMarch + later.filter((p) => p.date < monthStart).reduce((s, p) => s + p.amountPaise, 0);
+      const shortfall = roundDown(a.assessedTaxPaise - paid, t.roundDownToPaise);
+      total += shortfall;
+      const last = stages234B[stages234B.length - 1];
+      if (last && last.paidPaise === paid) last.months += 1;
+      else stages234B.push({ from: monthStart, to: a.filingDate, paidPaise: paid, shortfallPaise: shortfall, months: 1, interestPaise: 0 });
+    }
+    stages234B.forEach((s, i) => {
+      s.interestPaise = pct(s.shortfallPaise * s.months, t.interestBpPerMonth);
+      const next = stages234B[i + 1];
+      // A stage ends on the last payment made before the next stage's first month.
+      if (next) s.to = later.filter((p) => p.date < next.from).at(-1)?.date ?? s.to;
+    });
+    i234B = pct(total, t.interestBpPerMonth);
   }
-  return { liable, rows, i234C: roundToRupee(i234C), i234B: roundToRupee(i234B), paidByMarch };
+  return { liable, rows, i234C: roundToRupee(i234C), i234B: roundToRupee(i234B), stages234B, paidByMarch };
 }
 
 /** Interest u/s 234A on tax unpaid at the due date, from the day after the due date to filing. */

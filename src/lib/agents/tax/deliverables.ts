@@ -99,6 +99,19 @@ function aisSheet(a: TaxAnalysis): SheetSpec {
 function advanceSheet(a: TaxAnalysis): SheetSpec {
   const rows: RowSpec[] = a.advance.rows.map((i) => ({ date: i.date, required: `${i.requiredBp / 100}%`, due: r(i.requiredPaise), paid: r(i.paidPaise), shortfall: r(i.shortfallPaise), months: String(i.months), interest: r(i.interestPaise) }));
   rows.push({ date: null, required: "234B", due: r(a.advance.assessedTaxPaise), paid: r(a.advance.paidPaise), shortfall: null, months: "", interest: r(a.advance.i234B) });
+  // s.234B(2): one row per stage — the shortfall up to each self-assessment payment, then the reduced shortfall.
+  const stages = a.advance.stages234B;
+  stages.forEach((s, i) =>
+    rows.push({
+      date: s.from,
+      required: `234B ${stages.length > 1 ? `stage ${i + 1} ` : ""}to ${formatDayKey(s.to)}${i < stages.length - 1 ? " (tax paid)" : " (filing)"}`,
+      due: null,
+      paid: r(s.paidPaise),
+      shortfall: r(s.shortfallPaise),
+      months: String(s.months),
+      interest: r(s.interestPaise),
+    }),
+  );
   return {
     name: "Advance tax",
     columns: [
