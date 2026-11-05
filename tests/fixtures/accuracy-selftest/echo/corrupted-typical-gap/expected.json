@@ -1,5 +1,6 @@
 {
   "description": "SELF-TEST ONLY - deliberately corrupted copy of typical-gap-round-weekend: expected flags altered (weekend info replaced by a block duplicate-refs) and totalPaise off by Rs 1 (100 paise). The harness must FAIL on it.",
+  "category": "typical-gap",
   "job": {
     "fy": "2026-27",
     "period": "2026-10"

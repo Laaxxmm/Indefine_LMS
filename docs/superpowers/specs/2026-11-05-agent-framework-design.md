@@ -60,14 +60,23 @@ Graph has no POST upload for file content: simple upload and upload-session chun
 ```
 fixtures/accuracy/{agent}/{fixtureId}/input/…          files read as InputSource "fixture"
 fixtures/accuracy/{agent}/{fixtureId}/recorded.json    { "<router task>": <model output> }
-fixtures/accuracy/{agent}/{fixtureId}/expected.json    { description?, job?: {fy, period, title},
+fixtures/accuracy/{agent}/{fixtureId}/expected.json    { description?, category?: "clean"|"typical-gap"|"trap",
+                                                         job?: {fy, period, title},
                                                          flags: [{ruleId, severity}],
                                                          figures: { name: integer (paise for amounts) },
                                                          deliverables: [{ name, sheets: [name | {name, columns}] }] }
 fixtures/accuracy/{agent}/_mistakes/*.json             approved mistakes { id, pattern?, ruleProposal, example }
 ```
 
-Scoring: flags compared as sets of (severity, ruleId) on run 1; P/R/F1 per severity (micro-averaged); empty = 1.0. Figures exact. Shape = fixed header block + expected sheets and column headers, no extra sheets or files. Every fixture runs 3× and canonical outcomes must be identical. Approved mistakes are promoted into the fixture pack and their examples replayed.
+Scoring: flags compared as sets of (severity, ruleId) on run 1; P/R/F1 per severity (micro-averaged), printed with support (tp/fp/fn) and `n/a` when nothing was expected or raised. Figures exact. Shape = fixed header block + expected sheets and column headers, no extra sheets or files. Every fixture runs 3× and canonical outcomes must be identical. Approved mistakes are promoted into the fixture pack and their examples replayed.
+
+Hardening after the independent audit (a "pass" could be produced without the agent reading its input):
+
+- **Input is parsed by code.** Figures and deterministic rules must derive from a deterministic parse of `input/` (the agent's `inputSchema` / `extract`), never from a recorded model response. Model calls are for genuine judgement (LLM rules) or for extraction that is then grounded; `recorded.json` holds only such outputs. Recorded responses no run asks for are reported as stale (not gated).
+- **Input sensitivity.** `AgentDefinition.probeMutation?(files: InputFile[]): InputFile[]` returns a copy of the files with one material value changed (e.g. one amount + ₹1). For every fixture the harness re-runs the agent on the mutated files with the same recordings; at least one computed figure or raised flag must differ from run 1, the probe run must succeed, and the files must actually change. Agents that are not `internal` must declare it ("input sensitivity: not declared" fails). Own scoreboard row.
+- **Split by rule kind, mode-aware gating.** block / warn P/R are reported for deterministic rules, LLM rules and all rules. In **recorded** mode (today) only the deterministic split is gated on the thresholds; the LLM split must match the recordings exactly (a code-path check — e.g. a verdict the engine rejects for a quote not in the input is a missed flag); the combined row is informational; the determinism row reads "3× identical (code path)". In **live** mode (Phase 2b, `--provider`) the LLM split and the combined row are gated on the thresholds too. The scoreboard names the mode. Info flags get an unthresholded row.
+- **No thin fixture sets** (production agents; `internal` agents exempt): at least `FIXTURE_MINIMUMS[agent]` fixtures (gst / roc / tax 15, books / audit 10, any other 15), every fixture has `category`, at least one fixture per category, at least one expected block and one expected warn flag across the set. Every fixture (all agents) must have non-empty `figures` when compute returns figures. Expected flags for rules the pack does not have fail the run.
+- **Self-tests** (`tests/fixtures/accuracy-selftest/`): the audit's probes are permanent fixtures that must FAIL (input amount + ₹1 with the recording unchanged; a duplicate ref injected only in the input; `_mistakes` removed; an LLM verdict quoting text absent from the input) or document behaviour (a changed stale extraction recording no longer affects figures).
 
 ## UI decisions
 

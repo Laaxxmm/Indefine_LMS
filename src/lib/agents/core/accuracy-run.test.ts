@@ -31,9 +31,18 @@ describe("accuracy harness self-test", () => {
     expect(s.schema.share).toBe(1);
     expect(s.replay).toMatchObject({ caught: 1, total: 1, share: 1 });
     expect(s.determinism).toEqual({ runs: 3, ok: true, failures: [] });
+    expect(s.split.block.deterministic).toMatchObject({ tp: 1, fp: 0, fn: 0 });
+    expect(s.split.warn.deterministic).toMatchObject({ tp: 2, fp: 0, fn: 0 });
+    expect(s.split.warn.llm).toMatchObject({ tp: 1, fp: 0, fn: 0 });
+    expect(s.sensitivity).toEqual({ declared: true, changed: s.fixtures, total: s.fixtures, ok: true, failures: [] });
+    expect(s.support.categories).toEqual({ clean: 2, "typical-gap": 1, trap: 3 });
+    expect(s.notes).toEqual([]); // recorded.json holds only responses the runs asked for
+    expect(s.mode).toBe("recorded");
     expect(s.reasons).toEqual([]);
     expect(s.pass).toBe(true);
-    expect(scoreboardMarkdown([s], new Date("2026-11-05T14:40:00Z"))).toContain("| **echo** | accuracy/echo (6) | **overall** | – | – | all of the above | **pass** |");
+    const md = scoreboardMarkdown([s], new Date("2026-11-05T14:40:00Z"));
+    expect(md).toContain("| **echo** | accuracy/echo (6) | **overall** | – | – | – | all of the above | **pass** |");
+    expect(md).toContain("| echo | accuracy/echo (6) | input sensitivity | – | – | – | 6/6 changed · need all | pass |");
   });
 
   it("corrupted fixture (expected flags altered, a figure off by ₹1) → detected, fail", async () => {
@@ -44,7 +53,7 @@ describe("accuracy harness self-test", () => {
       { fixtureId: "corrupted-typical-gap", missed: [{ ruleId: "echo.duplicate-refs", severity: "block" }], unexpected: [{ ruleId: "echo.weekend-dates", severity: "info" }] },
     ]);
     expect(s.figures.diffs).toEqual([{ fixtureId: "corrupted-typical-gap", diffs: [{ key: "totalPaise", expected: 26682275, actual: 26682175, deltaPaise: -100 }] }]);
-    expect(s.reasons).toEqual(["block recall 0.000 < 0.98", "figures exact on 0/1 fixtures"]);
+    expect(s.reasons).toEqual(["block recall (deterministic rules) 0.000 < 0.98", "figures exact on 0/1 fixtures"]);
   });
 
   it("determinism check catches a nondeterministic model", async () => {
