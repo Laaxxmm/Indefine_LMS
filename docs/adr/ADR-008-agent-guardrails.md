@@ -19,7 +19,9 @@ What already holds before this ADR:
 - Every model output must pass a Zod schema; failures and confidence < 0.75 escalate
   FAST → SMART → HARD, then stop with `needsPartnerReview` (ADR-002).
 - Every pack is a draft; a human reviewer approves; reviewers' corrections become versioned rules
-  only after partner/manager approval (MistakeLog).
+  only after a partner approves them (MistakeLog decisions are partner-only since Phase 11:
+  canDecideMistakes / canApproveSopRuleChange in src/lib/rbac/policy.ts; managers and admins may
+  read the log and propose, not decide).
 - Accuracy gate per agent (block R ≥ 0.98, P ≥ 0.90; figures exact; 3 identical runs), with the
   independent audit's hardening (input must be parsed in code; LLM evidence must quote the input).
 

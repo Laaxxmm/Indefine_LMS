@@ -50,6 +50,28 @@ engagement letter renewal.
 3. **Erasure / withdrawal:** Firm OS never hard-deletes client records (non-negotiable 2). Mark the client inactive, stop new jobs, and clear cached copies (`AgentRun.inputs`, `OnboardingRun.prompt`) by the retention job; statutory records are kept for the period the law requires and the client is told so.
 4. **Grievance:** acknowledged within 7 days by the named partner; record each request as an AuditEvent (`action: "dpdp-request"`).
 
+## Security integration (how a withdrawal is enforced)
+
+A consent withdrawal, or a legal hold during an erasure, records processing restrictions on the
+person's LMS `Client` (`AuditEvent "restrict-processing"`; `src/lib/privacy/consent.ts`). They are
+enforced in code, not just shown: every entry point that would send the client's data to an AI
+model calls `isAiProcessingRestricted()` first and refuses, writing nothing, with the sentence
+"This client has restricted AI processing. Prepare this by hand or ask a partner to lift the
+restriction."
+
+| Entry point | Where | What happens when restricted |
+|---|---|---|
+| Agent runs (all agents) | `runAgent` in `src/lib/agents/core/runner.ts` | Refused before the AgentRun row, the job move or any model call (`AI_RESTRICTED`, 409 from "Run agent") |
+| Re-run / Request changes | `src/lib/agents/service.ts` | Refused before the job moves back to IN_PREP |
+| Onboarding reading | `src/lib/agents/onboarding/service.ts` (start, follow-up sentences) | Refused (409) when the sentence, the spec so far or the run names an existing restricted client (PAN, GSTIN, client code); answers typed into the form never reach a model |
+| Comms drafts | `createDraft` in `src/lib/agents/comms/service.ts` | Refused before drafting or translation; the "no new drafts" restriction is honoured here too |
+
+Restrictions are read by replaying `restrict-processing` and `lift-restriction` events per request,
+so the newest decision wins and a restriction recorded by another request stays in force. Only a
+partner lifts one (`canLiftRestriction`), with a written reason, from the privacy request page; the
+lift is an AuditEvent and the restriction's own record is kept. Tests: `src/lib/agents/privacy-
+restriction.test.ts`, `src/lib/agents/onboarding/service.test.ts`, `src/lib/privacy/consent.test.ts`.
+
 ## Staff notice (before enabling break nudges)
 
 Tell staff, in writing, what the heartbeat collects (a timestamp each few minutes of LMS activity),
