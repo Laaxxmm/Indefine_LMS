@@ -7,12 +7,20 @@
 // Every output is validated deterministically (ledger exists, quote occurs in the text sent,
 // location is the line given, one head per ledger). Invalid items are dropped and the ledger is
 // reported as unmapped; insufficient_evidence becomes a reviewer question — never a default head.
+//
+// These specs ARE the agent's ADR-008 scope (index.ts): the framework prefixes every system prompt
+// with the firm and ROC department preambles, wires `validate` as the router's contradictions
+// (input = RocInput for the mapping task, the documents text for the checklist task), grounds the
+// output and locks each `name@version` in prompts.lock.json.
 import { z } from "zod";
-import { LLM_CHECK_SYSTEM, LlmVerdictOutputSchema } from "@/lib/agents/core/runner";
-import { EvidenceSchema, FIRM_PREAMBLE, INSUFFICIENT, quoteIn, type ModelTaskSpec } from "./grounding";
-import { FIN_HEADS, HEAD_LABELS, type FinHead, type TbLine } from "./parse";
+import { CHECK_TASK_INSTRUCTIONS, type ModelTaskSpec } from "@/lib/agents/core/guardrails/scope";
+import { INSUFFICIENT_EVIDENCE, ScopedVerdictSchema, type ScopedVerdict } from "@/lib/agents/core/guardrails/schema";
+import { EvidenceSchema, INSUFFICIENT, quoteIn } from "@/lib/agents/core/guardrails/shared";
+import { FIN_HEADS, HEAD_LABELS, type FinHead, type RocInput, type TbLine } from "./parse";
 
-export const ROC_PREAMBLE = `${FIRM_PREAMBLE} Department: ROC — Indian company-law compliance under the Companies Act, 2013 and its Rules (MCA filings). Do not answer questions about income tax, GST or anything outside company law.`;
+/** ROC department specifics, at the start of every ROC task prompt (after the framework's firm + department preambles). */
+export const ROC_PREAMBLE =
+  "Department: ROC — Indian company-law compliance under the Companies Act, 2013 and its Rules (MCA filings). Do not answer questions about income tax, GST or anything outside company law.";
 
 export const MAP_HEADS = [...FIN_HEADS, INSUFFICIENT] as const;
 
@@ -86,22 +94,31 @@ export function mapLedgersUserMessage(tb: TbLine[], notes: string | null): strin
   return `${notes ? `Reviewer notes: ${notes}\n\n` : ""}Heads:\n${heads}\n\nLedgers:\n${ledgerPrompt(tb).text}`;
 }
 
-export const ROC_MAP_TASK_SPEC: ModelTaskSpec<LedgerMapping, TbLine[]> = {
+/** The trial balance the mapping task reads (only a TB input has ledgers to map). */
+export const trialBalanceOf = (input: RocInput): TbLine[] => (input.financials.kind === "tb" ? input.financials.trialBalance : []);
+
+export const ROC_MAP_TASK_SPEC: ModelTaskSpec<LedgerMapping, RocInput, "roc"> = {
   name: "roc.map-ledgers",
   version: 1,
   schema: LedgerMappingSchema,
-  system: MAP_SYSTEM,
-  rules: ["roc.financials-tie"],
-  validate: validateLedgerMapping,
+  systemPrompt: MAP_SYSTEM,
+  difficulty: "sop",
+  ruleIds: ["roc.financials-tie"],
+  validate: (out, input) => validateLedgerMapping(out, trialBalanceOf(input)),
 };
 
-export const ROC_AOC2_CHECK_SPEC: ModelTaskSpec<z.infer<typeof LlmVerdictOutputSchema>, string> = {
+/** The AOC-2 verdict must quote the notes to accounts it was shown (abstaining needs no quote). */
+export const validateAoc2Verdict = (out: ScopedVerdict, context: string): string[] =>
+  out.status === INSUFFICIENT_EVIDENCE || !out.evidence ? [] : quoteIn(context, out.evidence.quote) ? [] : ["verdict quote not found in the notes to accounts"];
+
+export const ROC_AOC2_CHECK_SPEC: ModelTaskSpec<ScopedVerdict, string, "roc"> = {
   name: "roc.check:roc.aoc2-related-party",
   version: 1,
-  schema: LlmVerdictOutputSchema,
-  system: LLM_CHECK_SYSTEM,
-  rules: ["roc.aoc2-related-party"],
-  validate: (out, context) => (quoteIn(context, out.evidence.quote) ? [] : ["verdict quote not found in the notes to accounts"]),
+  schema: ScopedVerdictSchema,
+  systemPrompt: [ROC_PREAMBLE, CHECK_TASK_INSTRUCTIONS].join("\n"),
+  difficulty: "judgement",
+  ruleIds: ["roc.aoc2-related-party"],
+  validate: validateAoc2Verdict,
 };
 
 /** Every model task the ROC agent may run. */

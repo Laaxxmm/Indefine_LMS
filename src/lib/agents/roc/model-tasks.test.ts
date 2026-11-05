@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { FIRM_PREAMBLE, looksLikeGstFile, numbersGrounded, numbersIn, quoteIn, wrongDepartment } from "./grounding";
+import { FIRM_PREAMBLE, composeSystemPrompt } from "@/lib/agents/core/guardrails/scope";
+import { looksLikeGstFile, numbersGrounded, numbersIn, quoteIn, wrongDepartment } from "@/lib/agents/core/guardrails/shared";
 import { LedgerMappingSchema, ROC_AOC2_CHECK_SPEC, ROC_MAP_TASK_SPEC, ROC_MODEL_TASKS, ROC_PREAMBLE, acceptedMappings, ledgerPrompt, mapLedgersUserMessage, validateLedgerMapping } from "./model-tasks";
 import type { TbLine } from "./parse";
 import { ROC_CHECKLIST } from "./rules";
@@ -18,13 +19,15 @@ describe("ROC task registry (ADR-008)", () => {
     for (const t of ROC_MODEL_TASKS) {
       expect(t.name.startsWith("roc.")).toBe(true);
       expect(t.version).toBe(1);
-      expect(t.rules.every((r) => ruleIds.has(r))).toBe(true);
+      expect((t.ruleIds ?? []).every((r) => ruleIds.has(r))).toBe(true);
     }
   });
-  it("the mapping prompt carries the firm and department preambles", () => {
-    expect(ROC_MAP_TASK_SPEC.system.startsWith(FIRM_PREAMBLE)).toBe(true);
+  it("the mapping prompt carries the firm and department preambles (framework) and the ROC department note", () => {
+    const system = composeSystemPrompt("ROC", ROC_MAP_TASK_SPEC);
+    expect(system.startsWith(FIRM_PREAMBLE)).toBe(true);
+    expect(system).toContain(ROC_PREAMBLE);
     expect(ROC_PREAMBLE).toMatch(/Companies Act, 2013/);
-    expect(ROC_MAP_TASK_SPEC.system).toMatch(/insufficient_evidence/);
+    expect(ROC_MAP_TASK_SPEC.systemPrompt).toMatch(/insufficient_evidence/);
   });
   it("closed output: heads are an enum with insufficient_evidence; quotes capped at 300", () => {
     expect(LedgerMappingSchema.safeParse({ mappings: [{ ledger: "X", head: "goodwill", evidence: ev(0) }] }).success).toBe(false);
@@ -64,7 +67,8 @@ describe("validateLedgerMapping / acceptedMappings", () => {
     const acc = acceptedMappings(out, TB);
     expect(acc.mappings).toEqual([]);
     expect(acc.dropped).toEqual(["Goodwill", "Share Capital", "HDFC Bank", "Suspense", "Suspense"]);
-    expect(ROC_MAP_TASK_SPEC.validate!(out, TB)).toEqual(issues);
+    expect(ROC_MAP_TASK_SPEC.validate!(out, { financials: { kind: "tb", trialBalance: TB } } as never)).toEqual(issues);
+    expect(ROC_MAP_TASK_SPEC.validate!(out, { financials: { kind: "summary" } } as never)).not.toEqual([]); // no TB: every mapping names a foreign ledger
   });
   it("the AOC-2 verdict quote must come from the notes", () => {
     const v = { status: "fail" as const, evidence: { quote: "rent paid to a relative", location: "notes.txt line 2" } };

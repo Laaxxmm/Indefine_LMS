@@ -131,8 +131,9 @@ describe("classification calls", () => {
     expect(out[3].note).toMatch(/ungrounded/);
     const req = calls[0];
     expect(req).toMatchObject({ task: CLASSIFY_LEDGERS_TASK, privacy: "anonymize-then-cloud", difficulty: "judgement" });
-    expect(req.messages[1].content).toMatch(/^Reviewer notes: check the car/);
-    expect(req.messages[1].content).not.toMatch(/\d{3,}\.\d{2}/); // no amounts sent
+    expect(req.messages.map((m) => m.role)).toEqual(["user"]); // scoped call: the framework adds the system prompt
+    expect(req.messages[0].content).toMatch(/^Reviewer notes: check the car/);
+    expect(req.messages[0].content).not.toMatch(/\d{3,}\.\d{2}/); // no amounts sent
     const issues = await req.contradictions!(req.schema!.parse({ ledgers: [] }) as never);
     expect(issues).toHaveLength(4);
   });

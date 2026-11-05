@@ -1,19 +1,20 @@
 // The model's only jobs in GST Prep (tasks.ts has the registry, prompts and validators):
 //   gst.classify-ledgers  free-text purchase ledger → s.17(5) head / reverse-charge service
 //   gst.read-hsn          an HSN/SAC code written in a messy description → digits
-// Both go through ctx.model() (the ModelRouter: anonymize-then-cloud, schema-validated, the
-// validators as `contradictions`). After the call the validators run again: an answer that is not
-// grounded in the text we sent becomes insufficient_evidence with a note, and every
+// Both go through ctx.model() — a scoped call (ADR-008): the framework supplies the system prompt
+// (firm + GST preambles + the task prompt from tasks.ts), anonymises, validates the schema, runs
+// the call's validators as `contradictions` (escalating on an issue) and drops ungrounded items.
+// After a final validator failure the router still returns its last output (needs review), so
+// the validators are applied per item here: an answer that is not grounded in the text we sent
+// becomes insufficient_evidence with a note, and every
 // insufficient_evidence answer is a reviewer question (rule gst.model-questions) and a client
 // document request — never a silent default. An HSN printed plainly ("HSN 7318") is read by code
 // and never sent to the model. The model never sees or returns an amount.
 import type { ModelCaller } from "@/lib/agents/core/runner";
 import {
   CLASSIFY_LEDGERS_TASK,
-  HSN_SYSTEM,
   HsnReadOutputSchema,
   INSUFFICIENT,
-  LEDGER_SYSTEM,
   LedgerClassOutputSchema,
   READ_HSN_TASK,
   hsnUserMessage,
@@ -69,10 +70,7 @@ export async function classifyLedgers(purchases: PurchaseDoc[], model: ModelCall
     difficulty: "judgement",
     schema: LedgerClassOutputSchema,
     contradictions: (o) => validateLedgers(o, prompts),
-    messages: [
-      { role: "system", content: LEDGER_SYSTEM },
-      { role: "user", content: ledgerUserMessage(prompts, notes) },
-    ],
+    messages: [{ role: "user", content: ledgerUserMessage(prompts, notes) }],
   });
   const byKey = new Map(prompts.map((p) => [p.key, p]));
   const got = new Map<string, LedgerClass>();
@@ -94,10 +92,7 @@ export async function readHsn(sales: SalesDoc[], model: ModelCaller): Promise<Hs
     difficulty: "sop",
     schema: HsnReadOutputSchema,
     contradictions: (o) => validateHsn(o, prompts),
-    messages: [
-      { role: "system", content: HSN_SYSTEM },
-      { role: "user", content: hsnUserMessage(prompts) },
-    ],
+    messages: [{ role: "user", content: hsnUserMessage(prompts) }],
   });
   const byDesc = new Map(prompts.map((p) => [p.description, p]));
   const got = new Map<string, HsnRead>();

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { FIRM_PREAMBLE } from "@/lib/agents/roc/grounding";
+import { FIRM_PREAMBLE, composeSystemPrompt } from "@/lib/agents/core/guardrails/scope";
 import { inputOf } from "./__fixtures__/base";
 import { TAX_RULESETS } from "./data";
-import { AisMatchSchema, TAX_FOREIGN_ASSET_CHECK_SPEC, TAX_MATCH_AIS_SPEC, TAX_MODEL_TASKS, acceptedAisMatches, aisPrompt, matchAisSystem, taxPreamble, validateAisMatches, type AisMatchOutput } from "./model-tasks";
+import { AisMatchSchema, TAX_FOREIGN_ASSET_CHECK_SPEC, TAX_MATCH_AIS_SPEC, TAX_MODEL_TASKS, TAX_PREAMBLE, acceptedAisMatches, aisPrompt, matchAisUserMessage, taxYearLine, validateAisMatches, type AisMatchOutput } from "./model-tasks";
 import { TAX_CHECKLIST } from "./rules";
 
 const i = inputOf("clean-salaried-new");
@@ -17,14 +17,16 @@ describe("Tax task registry (ADR-008)", () => {
     for (const t of TAX_MODEL_TASKS) {
       expect(t.name.startsWith("tax.")).toBe(true);
       expect(t.version).toBe(1);
-      expect(t.rules.every((r) => ids.has(r))).toBe(true);
+      expect((t.ruleIds ?? []).every((r) => ids.has(r))).toBe(true);
     }
   });
-  it("the prompt names the Act version and the abstain option", () => {
-    expect(taxPreamble(TAX_RULESETS["2025-26"])).toMatch(/Income-tax Act, 1961 .* assessment year 2026-27/);
-    expect(TAX_MATCH_AIS_SPEC.system.startsWith(FIRM_PREAMBLE)).toBe(true);
-    expect(matchAisSystem(TAX_RULESETS["2026-27"])).toMatch(/Income-tax Act, 2025/);
-    expect(TAX_MATCH_AIS_SPEC.system).toMatch(/insufficient_evidence/);
+  it("the system prompt is fixed per version (firm + income-tax preambles); the user message names the Act and year", () => {
+    expect(taxYearLine(TAX_RULESETS["2025-26"])).toMatch(/Income-tax Act, 1961 .* assessment year 2026-27/);
+    expect(composeSystemPrompt("IncomeTax", TAX_MATCH_AIS_SPEC).startsWith(FIRM_PREAMBLE)).toBe(true);
+    expect(TAX_MATCH_AIS_SPEC.systemPrompt).toContain(TAX_PREAMBLE);
+    expect(matchAisUserMessage(TAX_RULESETS["2026-27"], ctx, null)).toMatch(/Income-tax Act, 2025/);
+    expect(matchAisUserMessage(TAX_RULESETS["2025-26"], ctx, "see note")).toMatch(/^Reviewer notes: see note/);
+    expect(TAX_MATCH_AIS_SPEC.systemPrompt).toMatch(/insufficient_evidence/);
   });
   it("closed outputs", () => {
     expect(AisMatchSchema.safeParse({ matches: [{ aisId: "A1", outcome: "maybe", bookId: null, evidence: B1 }] }).success).toBe(false);
@@ -66,7 +68,7 @@ describe("validateAisMatches / acceptedAisMatches", () => {
       { aisId: "A1", outcome: "dropped", bookId: null },
       { aisId: "A2", outcome: "dropped", bookId: null },
     ]);
-    expect(TAX_MATCH_AIS_SPEC.validate!(out, ctx).length).toBeGreaterThan(0);
+    expect(TAX_MATCH_AIS_SPEC.validate!(out, i).length).toBeGreaterThan(0); // validate reads the AIS lines and ledgers from the parsed input
   });
   it("evidence must quote the cited line; missing answers are unanswered", () => {
     const out: AisMatchOutput = {

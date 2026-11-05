@@ -43,9 +43,11 @@ describe("extract", () => {
     const router = createRecordedRouter(f.recorded);
     const x = await taxAgent.extract({ input: parseTaxFiles(f.inputFiles), files: f.inputFiles, job: JOB, runId: "r", notes: "check HDFC", model: viaRouter(router) });
     expect(router.calls.map((c) => c.task)).toEqual([TAX_MATCH_TASK]);
+    // Scoped call (ADR-008): the agent sends the user message only; the framework adds the system
+    // prompt and wires the task's validator as contradictions (runner-level tests cover that).
+    expect(router.calls[0].messages.map((m) => m.role)).toEqual(["user"]);
     expect(String(router.calls[0].messages[0].content)).toMatch(/Income-tax Act, 1961/);
-    expect(String(router.calls[0].messages[1].content)).toContain("Reviewer notes: check HDFC");
-    expect(typeof router.calls[0].contradictions).toBe("function");
+    expect(String(router.calls[0].messages[0].content)).toContain("Reviewer notes: check HDFC");
     expect(x.aisMatches.map((m) => m.outcome)).toEqual(["matched", "matched"]);
   });
   it("no AIS income lines: no model call; no books ledgers: not in books without a model call", async () => {

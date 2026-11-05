@@ -6,7 +6,9 @@ import { parseTb } from "@/lib/agents/books/tb";
 import { normalizeAuditExtract } from "./analysis";
 import type { EntityProfile } from "./caro";
 import type { AuditExtract, Population } from "./inputs";
+import { composeSystemPrompt } from "@/lib/agents/core/guardrails/scope";
 import { AUDIT_CHECKLIST, auditLlmContext, auditRegistry, type AuditCheckInput } from "./rules";
+import { AUDIT_CHECK_SYSTEM, AUDIT_MODEL_TASKS, AUDIT_PREAMBLE } from "./tasks";
 
 const JOB: JobContext = { jobTaskId: "j", title: "Audit", service: "Audit", fy: "2025-26", period: "Annual", clientCode: "ACME01", clientName: "Acme", assigneeId: null, reviewerId: null };
 const tb = (csv: string, file = "tb.csv") => parseTb(file, parseCsv(`Ledger,Group,Debit,Credit\n${csv}`)).tb!;
@@ -34,10 +36,12 @@ describe("audit SOP pack", () => {
     }
     expect(AUDIT_CHECKLIST.rules.filter((r) => r.severity === "block").map((r) => r.id)).toEqual(["audit.tb-balanced", "audit.lead-tie"]);
   });
-  it("the related-party question carries the department preamble and the abstain instruction", () => {
+  it("the related-party question carries the abstain instruction; the department preamble is the task's system prompt (ADR-008)", () => {
     const q = AUDIT_CHECKLIST.rules.find((r) => r.kind === "llm")!.check;
-    expect(q).toMatch(/Statutory audit working papers only; never give an audit opinion/);
+    expect(q).not.toMatch(/Statutory audit working papers only/);
     expect(q).toContain('"insufficient_evidence"');
+    expect(AUDIT_CHECK_SYSTEM).toMatch(/Statutory audit working papers only; never give an audit opinion/);
+    expect(composeSystemPrompt("Audit", AUDIT_MODEL_TASKS[0])).toContain(AUDIT_PREAMBLE);
   });
 });
 

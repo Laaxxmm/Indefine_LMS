@@ -9,12 +9,15 @@
 //
 // Model use: only to match AIS income lines to books ledgers by name (tax.match-ais) and for the
 // one LLM rule (foreign assets). All tax, interest, totals and thresholds are deterministic code.
-import type { AgentDefinition, InputFile } from "@/lib/agents/core/runner";
-import { dayNumber, paiseToRupeeString, rupeesToPaise } from "@/lib/agents/roc/util";
+import type { AgentScope } from "@/lib/agents/core/guardrails/scope";
+import { wrongDepartment } from "@/lib/agents/core/guardrails/shared";
+import { bumpAmountText, mutateCsvCell } from "@/lib/agents/core/probes";
+import type { AgentDefinition, InputFile, InputProbe } from "@/lib/agents/core/runner";
+import { dayNumber, paiseToRupeeString, rupeesToPaise } from "@/lib/agents/core/util";
 import { analyseTax, isAisIncome, type AisMatch, type TaxExtract } from "./analyse";
 import { ruleSetFor } from "./data";
 import { taxDeliverables } from "./deliverables";
-import { TAX_MATCH_AIS_SPEC, acceptedAisMatches, aisPrompt, matchAisSystem } from "./model-tasks";
+import { TAX_MATCH_AIS_SPEC, TAX_MODEL_TASKS, acceptedAisMatches, matchAisUserMessage } from "./model-tasks";
 import { taxInputSchema, type TaxInput } from "./parse";
 import { TAX_CHECKLIST, TAX_KEY, taxRegistry } from "./rules";
 
@@ -88,6 +91,31 @@ export function taxFigures(x: TaxExtract): Record<string, number> {
   };
 }
 
+/**
+ * Per-input probes (second audit, M2). organiser.json (required): an income amount + ₹1.
+ * 26as.csv: the first entry's TDS deposited + ₹1. ais.csv: the first income line's amount + ₹1.
+ * capital-gains.csv: the first sale value + ₹1. msme.csv and prior-itr.json have no probe: their
+ * values only change the result in the fixtures built for them (a payment beyond the agreed days,
+ * a loss to carry forward), so a one-value change is not a reliable read test there.
+ */
+export const TAX_INPUT_PROBES: readonly InputProbe[] = Object.freeze([
+  { input: "organiser.json", mutate: taxProbeMutation },
+  { input: "26as.csv", mutate: (files: InputFile[]) => mutateCsvCell(files, "26as.csv", "tds_deposited", (v) => bumpAmountText(v)) },
+  { input: "ais.csv", mutate: (files: InputFile[]) => mutateCsvCell(files, "ais.csv", "amount", (v, row) => (isAisIncome(row.category as never) ? bumpAmountText(v) : null)) },
+  { input: "capital-gains.csv", mutate: (files: InputFile[]) => mutateCsvCell(files, "capital-gains.csv", "sale_value", (v) => bumpAmountText(v)) },
+]);
+
+/** Tax's ADR-008 scope: its task registry, every checklist rule, and the shared ROC / Tax / GST input sniff. */
+export const TAX_SCOPE: AgentScope = {
+  department: "IncomeTax",
+  tasks: [...TAX_MODEL_TASKS],
+  ruleIds: TAX_CHECKLIST.rules.map((r) => r.id),
+  inputSniff(files) {
+    const elsewhere = wrongDepartment(files, "tax");
+    return elsewhere ? { ok: false, reason: elsewhere } : { ok: true };
+  },
+};
+
 export const taxAgent: AgentDefinition<TaxInput, TaxExtract> = {
   key: TAX_KEY,
   title: "Tax Prep",
@@ -98,6 +126,9 @@ export const taxAgent: AgentDefinition<TaxInput, TaxExtract> = {
   defaultChecklist: TAX_CHECKLIST,
   checklistRegistry: taxRegistry,
   probeMutation: taxProbeMutation,
+  inputProbes: TAX_INPUT_PROBES,
+  requiredInputs: ["organiser.json"],
+  scope: TAX_SCOPE,
 
   async extract({ input, job, model, notes }) {
     const rs = ruleSetFor(job.fy);
@@ -111,18 +142,17 @@ export const taxAgent: AgentDefinition<TaxInput, TaxExtract> = {
       aisMatches = incomeLines.map((l) => ({ aisId: l.id, outcome: "not_in_books", bookId: null }));
     } else if (incomeLines.length) {
       const ctx = { ais, books };
+      // Scoped call (ADR-008): the framework supplies the system prompt (firm + income-tax
+      // preambles + task prompt) and runs the task's validator as the router's contradictions.
       const out = await model({
         task: TAX_MATCH_AIS_SPEC.name,
         privacy: "anonymize-then-cloud",
         difficulty: "sop",
         schema: TAX_MATCH_AIS_SPEC.schema,
-        contradictions: (o) => TAX_MATCH_AIS_SPEC.validate!(o, ctx),
-        messages: [
-          { role: "system", content: matchAisSystem(rs.rules) },
-          { role: "user", content: `${notes ? `Reviewer notes: ${notes}\n\n` : ""}${aisPrompt(ctx).text}` },
-        ],
+        messages: [{ role: "user", content: matchAisUserMessage(rs.rules, ctx, notes) }],
       });
-      // The recorded router does not run contradictions: validate here as well.
+      // After a final validator failure the router still returns its last output (needs review):
+      // only validated answers are used; the rest become reviewer questions.
       aisMatches = acceptedAisMatches(out, ctx);
     }
     return {

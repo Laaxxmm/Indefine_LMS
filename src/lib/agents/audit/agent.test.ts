@@ -7,7 +7,7 @@ import { createMemoryStore } from "@/lib/agents/core/memory-store";
 import { staticInputSource } from "@/lib/agents/core/inputs";
 import { previewWorkbook } from "@/lib/agents/core/preview";
 import { createRecordedRouter } from "@/lib/agents/core/recorded-router";
-import { LLM_CHECK_SYSTEM, runAgent, type InputFile, type JobContext } from "@/lib/agents/core/runner";
+import { runAgent, type InputFile, type JobContext } from "@/lib/agents/core/runner";
 import { WrongDepartmentError } from "@/lib/agents/books/department";
 import { getAgent } from "@/lib/agents/registry";
 import { analyzeAudit, plannedSize } from "./analysis";
@@ -17,7 +17,7 @@ import { auditInputSchema, classifyAuditFile, parseAuditFiles, parsePopulation, 
 import { opinionHits } from "./opinion";
 import { AUDIT_PACK_TITLE, OPINION_EXEMPT, auditPack } from "./pack";
 import { auditLlmContext, type AuditCheckInput } from "./rules";
-import { AUDIT_MODEL_TASKS, auditTaskIds, isInsufficient, validateRelatedPartyVerdict } from "./tasks";
+import { AUDIT_CHECK_SYSTEM, AUDIT_MODEL_TASKS, auditTaskIds, isInsufficient, validateRelatedPartyVerdict } from "./tasks";
 import { parseCsv } from "@/lib/agents/books/table";
 
 const ROOT = "fixtures/accuracy";
@@ -48,7 +48,8 @@ describe("audit agent definition", () => {
   });
   it("model-task registry: one versioned task, the framework system prompt, the related-party rule", () => {
     expect(auditTaskIds()).toEqual(["audit.check:audit.related-party-disclosure@1"]);
-    expect(AUDIT_MODEL_TASKS[0]).toMatchObject({ name: AUDIT_RELATED_PARTY_TASK, version: 1, systemPrompt: LLM_CHECK_SYSTEM, rules: ["audit.related-party-disclosure"] });
+    expect(AUDIT_MODEL_TASKS[0]).toMatchObject({ name: AUDIT_RELATED_PARTY_TASK, version: 1, systemPrompt: AUDIT_CHECK_SYSTEM, rules: ["audit.related-party-disclosure"], ruleIds: ["audit.related-party-disclosure"] });
+    expect(auditAgent.scope?.tasks).toEqual([...AUDIT_MODEL_TASKS]);
   });
 });
 

@@ -7,15 +7,25 @@
 // The model sees names and categories only — never amounts: comparing amounts is code's job.
 // Validation is deterministic (ids exist, ledger nature fits the AIS category, quote copied from
 // the cited line); invalid answers are dropped and become reviewer questions, never defaults.
+//
+// These specs ARE the agent's ADR-008 scope (index.ts): the framework prefixes each system prompt
+// with the firm and income-tax department preambles and runs `validate` as the router's
+// contradictions (input = TaxInput for tax.match-ais, the documents text for the checklist task).
+// The prompts are fixed per version; the assessment year of the job goes in the user message.
 import { z } from "zod";
-import { LLM_CHECK_SYSTEM, LlmVerdictOutputSchema } from "@/lib/agents/core/runner";
-import { EvidenceSchema, FIRM_PREAMBLE, INSUFFICIENT, quoteIn, type ModelTaskSpec } from "@/lib/agents/roc/grounding";
+import { CHECK_TASK_INSTRUCTIONS, type ModelTaskSpec } from "@/lib/agents/core/guardrails/scope";
+import { INSUFFICIENT_EVIDENCE, ScopedVerdictSchema, type ScopedVerdict } from "@/lib/agents/core/guardrails/schema";
+import { EvidenceSchema, INSUFFICIENT, quoteIn } from "@/lib/agents/core/guardrails/shared";
 import { AIS_INCOME_CATEGORIES, isAisIncome, type AisMatch } from "./analyse";
-import { TAX_RULESETS, type TaxRuleSet } from "./data";
-import type { AisLine, OtherSource } from "./parse";
+import type { TaxRuleSet } from "./data";
+import type { AisLine, OtherSource, TaxInput } from "./parse";
 
-export function taxPreamble(rules: Pick<TaxRuleSet, "act" | "ay" | "fy">): string {
-  return `${FIRM_PREAMBLE} Department: Indian income tax only — the ${rules.act}, assessment year ${rules.ay} (financial year ${rules.fy}). Do not answer questions about GST, company law or anything outside income tax.`;
+/** Income-tax department specifics, at the start of every Tax task prompt (after the framework's firm + department preambles). */
+export const TAX_PREAMBLE = "Department: Indian income tax only (the Income-tax Act). Do not answer questions about GST, company law or anything outside income tax.";
+
+/** The job's act / assessment year, stated in the user message (the system prompt is fixed per task version). */
+export function taxYearLine(rules: Pick<TaxRuleSet, "act" | "ay" | "fy">): string {
+  return `Law: the ${rules.act}, assessment year ${rules.ay} (financial year ${rules.fy}).`;
 }
 
 export const AIS_OUTCOMES = ["matched", "not_in_books", INSUFFICIENT] as const;
@@ -95,32 +105,43 @@ export function acceptedAisMatches(out: AisMatchOutput, ctx: AisMatchContext): A
   });
 }
 
-export function matchAisSystem(rules: Pick<TaxRuleSet, "act" | "ay" | "fy">): string {
-  return [
-    taxPreamble(rules),
-    "Task: for each AIS income line, name the books ledger (other sources) that records the same income, judging by payer and nature only.",
-    "outcome = matched with bookId and evidence quoting that ledger line; not_in_books when no ledger is that payer's income of that nature, with evidence quoting the AIS line; insufficient_evidence when the names do not let you decide (for example two ledgers could both be it), with evidence quoting the AIS line.",
-    "evidence.location is the line label exactly as given (for example ais.csv row 3 or organiser.json otherSources[1]). Answer every AIS line once.",
-  ].join(" ");
+export const MATCH_AIS_SYSTEM = [
+  TAX_PREAMBLE,
+  "Task: for each AIS income line, name the books ledger (other sources) that records the same income, judging by payer and nature only.",
+  "outcome = matched with bookId and evidence quoting that ledger line; not_in_books when no ledger is that payer's income of that nature, with evidence quoting the AIS line; insufficient_evidence when the names do not let you decide (for example two ledgers could both be it), with evidence quoting the AIS line.",
+  "evidence.location is the line label exactly as given (for example ais.csv row 3 or organiser.json otherSources[1]). Answer every AIS line once.",
+].join(" ");
+
+/** The AIS lines and books ledgers the matching task reads, from the parsed input. */
+export const aisContextOf = (input: TaxInput): AisMatchContext => ({ ais: input.ais ?? [], books: input.organiser.otherSources });
+
+/** User message for tax.match-ais: reviewer notes, the job's law / year, the labelled lines. */
+export function matchAisUserMessage(rules: Pick<TaxRuleSet, "act" | "ay" | "fy">, ctx: AisMatchContext, notes: string | null): string {
+  return `${notes ? `Reviewer notes: ${notes}\n\n` : ""}${taxYearLine(rules)}\n\n${aisPrompt(ctx).text}`;
 }
 
-export const TAX_MATCH_AIS_SPEC: ModelTaskSpec<AisMatchOutput, AisMatchContext> = {
+export const TAX_MATCH_AIS_SPEC: ModelTaskSpec<AisMatchOutput, TaxInput, "tax"> = {
   name: "tax.match-ais",
   version: 1,
   schema: AisMatchSchema,
-  // Registry copy for FY 2025-26 (the only verified rule set); extract() builds it from the job FY rule set.
-  system: matchAisSystem(TAX_RULESETS["2025-26"]),
-  rules: ["tax.ais-not-in-books"],
-  validate: validateAisMatches,
+  systemPrompt: MATCH_AIS_SYSTEM,
+  difficulty: "sop",
+  ruleIds: ["tax.ais-not-in-books"],
+  validate: (out, input) => validateAisMatches(out, aisContextOf(input)),
 };
 
-export const TAX_FOREIGN_ASSET_CHECK_SPEC: ModelTaskSpec<z.infer<typeof LlmVerdictOutputSchema>, string> = {
+/** The foreign-asset verdict must quote the documents it was shown (abstaining needs no quote). */
+export const validateForeignAssetVerdict = (out: ScopedVerdict, context: string): string[] =>
+  out.status === INSUFFICIENT_EVIDENCE || !out.evidence ? [] : quoteIn(context, out.evidence.quote) ? [] : ["verdict quote not found in the documents"];
+
+export const TAX_FOREIGN_ASSET_CHECK_SPEC: ModelTaskSpec<ScopedVerdict, string, "tax"> = {
   name: "tax.check:tax.foreign-asset",
   version: 1,
-  schema: LlmVerdictOutputSchema,
-  system: LLM_CHECK_SYSTEM,
-  rules: ["tax.foreign-asset"],
-  validate: (out, context) => (quoteIn(context, out.evidence.quote) ? [] : ["verdict quote not found in the documents"]),
+  schema: ScopedVerdictSchema,
+  systemPrompt: [TAX_PREAMBLE, CHECK_TASK_INSTRUCTIONS].join("\n"),
+  difficulty: "judgement",
+  ruleIds: ["tax.foreign-asset"],
+  validate: validateForeignAssetVerdict,
 };
 
 /** Every model task the Tax agent may run. */

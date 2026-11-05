@@ -8,8 +8,11 @@
 //     invent a head;
 //   - grounding: every answer carries { quote, location } copied from the line text it was given;
 //     `validateClassification` checks the quote occurs in that line and every number in the quote
-//     is a number of that line (wired as the router's `contradictions`, and re-applied here after
-//     the call: an ungrounded answer is never used — it becomes a reviewer question);
+//     is a number of that line (wired as the router's `contradictions`, and re-applied per answer
+//     here because after a final validator failure the router still returns its last output:
+//     an ungrounded answer is never used — it becomes a reviewer question);
+//   - the call is scoped (ADR-008): the framework supplies the system prompt (firm + Books
+//     preambles + CLASSIFY_SYSTEM) and checks this call's schema has the registry template's shape;
 //   - abstain: "insufficient_evidence" becomes a reviewer question in the pack, never a default.
 // Suggestions are labelled as such and never posted to the books.
 import { z } from "zod";
@@ -138,10 +141,7 @@ export async function suggestClassifications(model: ModelCaller, lines: BankLine
     difficulty: "sop",
     schema,
     contradictions: (o) => validateClassification(o, lines),
-    messages: [
-      { role: "system", content: CLASSIFY_SYSTEM },
-      { role: "user", content: classifyPrompt(lines, heads, notes) },
-    ],
+    messages: [{ role: "user", content: classifyPrompt(lines, heads, notes) }],
   });
   return { suggestions: toSuggestions(out, lines), heads };
 }

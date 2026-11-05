@@ -8,17 +8,50 @@
 //   rules    rules.ts (block / warn / info), thresholds as SOP-pack data with verify notes
 //   pack     pack.ts → "Month-end pack" XLSX
 // The agent never posts entries, never files anything and never computes with the model.
-import type { AgentDefinition } from "@/lib/agents/core/runner";
+import type { AgentScope } from "@/lib/agents/core/guardrails/scope";
+import { bumpCellAmount, mutateXlsxColumn } from "@/lib/agents/core/probes";
+import type { AgentDefinition, InputFile, InputProbe } from "@/lib/agents/core/runner";
 import { cashRows, classificationCandidates, normalizeExtract, suspenseRows, type BooksExtract } from "./analysis";
 import { reconcile } from "./bank";
 import { suggestClassifications } from "./classify";
 import { BANK_MATCH } from "./config";
-import { booksInputSchema, parseBooksFiles, type BooksInput } from "./inputs";
+import { sniffDepartment } from "./department";
+import { booksInputSchema, classifyBooksFile, parseBooksFiles, type BooksInput } from "./inputs";
 import { booksPack } from "./pack";
-import { BOOKS_PROBE_TARGETS, probeCsvAmount } from "./probe";
+import { BOOKS_PROBE_TARGETS, TB_PROBE, probeCsvAmount } from "./probe";
 import { BOOKS_CHECKLIST, BOOKS_KEY, booksRegistry } from "./rules";
 import { gstTieOut, tdsCheck } from "./statutory";
-import { netPaise, tbTotals } from "./tb";
+import { BOOKS_MODEL_TASKS } from "./tasks";
+import { TB_ALIASES, netPaise, tbTotals } from "./tb";
+
+/** Year-/month-end TB workbook (not the prior-period TB), for the XLSX branch of the TB probe. */
+const TB_XLSX = /^(?!.*(prior|previous|prev|last[-_ ]?(month|year))).*(trial[-_ ]?balance|(^|[^a-z])tb([^a-z]|$)).*\.xlsx$/i;
+
+/** +₹1 on the first TB amount: CSV with the parser's aliases, else the TB workbook's first Debit / Credit / Balance cell. */
+export async function probeTbAmount(files: InputFile[]): Promise<InputFile[]> {
+  const csv = probeCsvAmount(files, [TB_PROBE]);
+  if (csv !== files) return csv;
+  return mutateXlsxColumn(files, TB_XLSX, [...TB_ALIASES.debit, ...TB_ALIASES.credit, ...TB_ALIASES.balance], (v) => bumpCellAmount(v, 1));
+}
+
+/**
+ * Per-input probes (second audit, M2): +₹1 on the first amount of each input — trial balance
+ * (required; CSV or XLSX), bank statement, TDS deducted ledger, GST ledger.
+ */
+export const BOOKS_INPUT_PROBES: readonly InputProbe[] = Object.freeze([
+  { input: "trial balance", mutate: probeTbAmount },
+  { input: "bank statement", mutate: (files: InputFile[]) => probeCsvAmount(files, [BOOKS_PROBE_TARGETS[1]]) },
+  { input: "TDS deducted", mutate: (files: InputFile[]) => probeCsvAmount(files, [BOOKS_PROBE_TARGETS[3]]) },
+  { input: "GST ledger", mutate: (files: InputFile[]) => probeCsvAmount(files, [BOOKS_PROBE_TARGETS[4]]) },
+]);
+
+/** Books Close's ADR-008 scope: its task registry, every checklist rule, the shared department sniff. */
+export const BOOKS_SCOPE: AgentScope = {
+  department: "Books",
+  tasks: [...BOOKS_MODEL_TASKS],
+  ruleIds: BOOKS_CHECKLIST.rules.map((r) => r.id),
+  inputSniff: (files) => sniffDepartment(files, "Books Close", (name) => classifyBooksFile(name) === "tb"),
+};
 
 export { BOOKS_CHECKLIST, BOOKS_KEY, booksRegistry } from "./rules";
 export { BOOKS_CLASSIFY_TASK } from "./classify";
@@ -74,6 +107,9 @@ export const booksAgent: AgentDefinition<BooksInput, BooksExtract> = {
   checklistRegistry: booksRegistry,
   /** Accuracy-harness probe: +₹1 on the first TB amount (else bank / TDS / GST CSV). */
   probeMutation: (files) => probeCsvAmount(files, BOOKS_PROBE_TARGETS),
+  inputProbes: BOOKS_INPUT_PROBES,
+  requiredInputs: ["trial balance"],
+  scope: BOOKS_SCOPE,
 
   async extract({ input, notes, model }) {
     const parsed = await parseBooksFiles(input);
