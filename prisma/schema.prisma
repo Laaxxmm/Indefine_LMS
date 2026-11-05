@@ -1031,6 +1031,7 @@ model Client {
   createdBy      User             @relation("ClientCreator", fields: [createdById], references: [id])
   jobs           Job[]
   documents      ClientDocument[]
+  firmClient     FirmClient?
 
   @@index([primaryHandlerId])
   @@index([turnoverBand])
@@ -1430,4 +1431,87 @@ model StatutorySource {
   inRange   Int
   via       String // "server" | "extension"
   checkedAt DateTime
+}
+
+// -------------------- Firm OS: shared spine --------------------
+// Indefine Firm OS (docs/adr/). Additive only: nothing here alters an LMS column.
+// FirmClient ties an LMS Client to its firm/Turia client code and CL-{Code} SharePoint site.
+// ModelCall logs every ModelRouter call (src/lib/ai/router.ts) — prompt hash only, never raw
+// prompts. AuditEvent records every create/approve/close/export/escalation (Phase 11).
+
+model FirmClient {
+  id             String   @id @default(cuid())
+  lmsClientId    String   @unique
+  clientCode     String   @unique // uppercase A–Z0–9, 3–10 chars (docs/folder-contract.md)
+  turiaClientRef String?
+  clSiteUrl      String?
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  client Client @relation(fields: [lmsClientId], references: [id])
+}
+
+enum ModelProviderId {
+  claude
+  grok
+  local
+}
+
+enum ModelTier {
+  FAST
+  SMART
+  HARD
+  LOCAL
+}
+
+enum ModelCallStatus {
+  OK
+  SCHEMA_FAIL
+  LOW_CONFIDENCE
+  PROVIDER_ERROR
+  QUEUED_FOR_HUMAN
+  BUDGET_REFUSED
+}
+
+model ModelCall {
+  id              String           @id @default(cuid())
+  runId           String
+  agent           String? // gst | roc | tax | books | audit | onboarding | comms | coach
+  task            String
+  provider        ModelProviderId?
+  model           String?
+  tier            ModelTier?
+  privacy         String // local-only | anonymize-then-cloud | public
+  difficulty      String // sop | judgement | novel
+  escalated       Boolean          @default(false)
+  escalationLevel Int              @default(0)
+  anonymized      Boolean          @default(false)
+  status          ModelCallStatus
+  confidence      Float?
+  tokensIn        Int              @default(0)
+  tokensOut       Int              @default(0)
+  costInr         Decimal          @default(0) @db.Decimal(12, 4)
+  latencyMs       Int              @default(0)
+  promptHash      String // sha256 of the masked prompt
+  error           String?
+  createdAt       DateTime         @default(now())
+
+  @@index([runId])
+  @@index([createdAt])
+  @@index([agent, createdAt])
+}
+
+model AuditEvent {
+  id        String   @id @default(cuid())
+  actorId   String?
+  action    String // create | approve | close | export | escalate | ...
+  entity    String
+  entityId  String?
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([actorId, createdAt])
+  @@index([createdAt])
 }
