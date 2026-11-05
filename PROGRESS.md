@@ -1,6 +1,6 @@
 # PROGRESS — Indefine Firm OS
 Current phase: 5–8 | Branch: firm-os/phase-0-inventory | Last green: 2026-11-05 21:43 IST
-Tests: unit+integration 2200/2200 (100 files; Firm OS coverage 99.7% lines / 97.4% branches) · e2e 4/4 (smoke, local, no DB) · accuracy (recorded mode, hardened harness): echo pass | GST pass (23) | ROC pass (22) | TAX pass (22) | BOOKS pass (15) | AUDIT pass (15) — independent audit pending
+Tests: unit+integration 2200/2200 (100 files; Firm OS coverage 99.7% lines / 97.4% branches) · e2e 4/4 (smoke, local, no DB) · accuracy (recorded mode, hardened harness): echo pass | GST pass (23) | ROC pass (22) | TAX pass (22) | BOOKS pass (15) | AUDIT pass (15) — independent audit round 2 done (fixes in progress)
 Model mode: CLAUDE_ONLY + LOCAL_STUB(fail-closed) | Turia bridge: MANUAL (ADR-003)
 
 ## Phase checklist (✅ only when QA gate green)
@@ -135,6 +135,17 @@ Shared foundation (commit c61d885): additive Prisma section "Firm OS: shared spi
 | audit | accuracy/audit (15) | det. block 1.000/1.000 (2/0/0) | det. warn 1.000/1.000 (9/0/0); LLM warn 1/0/0 match | 15/15 | 15/15 | 3/3 | 15/15 code path | pass · input sensitivity 15/15 · clean 2 / gap 6 / trap 7 | 05 Nov 2026 21:40 IST |
 | echo (hardened) | accuracy/echo (6) | det. block 1.000/1.000 (1/0/0) | det. warn 1.000/1.000 (2/0/0) | 6/6 | 6/6 | 1/1 | 6/6 code path | pass · input sensitivity 6/6 | 05 Nov 2026 21:17 IST |
 
+**Independent accuracy audit round 2 (fable model, ~21:55 IST, read-only, all six agents):** every gate passes and re-runs byte-identical; C1 resolved for every agent (inputs parsed in code; independent ±₹1 probes on gst and books caught by figures); 31 fixtures recomputed by hand across the five agents — **no figure mismatch** (GST set-off per rule 88A incl. deficits-first, s.50 interest, late fee, rule 37 proportional; BRS; TDS due dates; materiality, CARO para 1(2), MUS interval; AGM/AOC-4/MGT-7 arithmetic, CSR averaging; FY 2025-26 slabs, 87A marginal relief (checked against the Act text), 44AD, 234B/C, 288A/B). Findings:
+- **H1 HIGH** — unverified small-company limits (₹10 cr / ₹100 cr "w.e.f. 1 Dec 2025") applied in ROC and Audit; expected values share the assumption, so the gate cannot catch it. → fix in progress: only partner-verified limits apply (2022: ₹4 cr / ₹40 cr); a warn flag when classification depends on the unverified set; fixtures corrected.
+- **M1** model-dependent rules (gst.rcm-liability, roc.financials-tie, tax.ais-not-in-books …) gated as deterministic → label by provenance via task ruleIds (guardrails agent).
+- **M2** input sensitivity proves only one file is read → per-file probes (guardrails agent).
+- **M3** GST fixtures pin a subset of figures → mandatory core figure set (fix agent).
+- **M4** books.tds-not-deposited blocks before the due date → warn before due, block after (fix agent; partner to confirm SOP).
+- **M5** tax depends on roc helpers → move to core (guardrails agent).
+- **M6** audit MUS fixtures degenerate (all items equal; seed change invisible) → mixed populations, pin first point + fingerprint (fix agent).
+- **Coverage guard gap** — counts/labels pass with little substance → per-rule coverage row: every rule expected to fail in ≥1 and pass in ≥1 fixture (guardrails agent).
+- L1 thin block support (books 3, audit 2) · L2 ADR-008 framework layers not yet enforced (in progress) · L3 GST docs table shows series gaps as "cancelled" · L4 stale recordings housekeeping.
+
 **Independent accuracy audit (fable model, 20:46 IST, read-only):** echo figures recomputed independently 6/6 match; flags hand-derived 6/6 agree; thresholds equal the spec; P/R maths correct; self-test fails as it should; mistake replay genuinely depends on the promoted rule. Findings:
 - **C1 CRITICAL** — scored pipeline never read input/: figures + deterministic rules derived from recorded.json; ₹1 input change and an injected duplicate ref still passed. → harness fix in progress (echo parses input in code; mandatory input-sensitivity probe for production agents). Phases 5–7 agents told to parse input in code.
 - **H1 HIGH** — LLM evidence quote/location not checked against the document (a fabricated quote passed). → engine to require the quote verbatim in the rule's context.
@@ -170,6 +181,7 @@ Shared foundation (commit c61d885): additive Prisma section "Firm OS: shared spi
 - **DB trigger for DONE (ADR-005 backstop)** · reconciler detects, a Postgres trigger would prevent · decide whether to add the proposed additive trigger migration (+ set_config hook in state-db.ts) · 2026-11-05
 - **Close-loop conventions** · partner decisions · who performs the 10% Turia spot checks (no UI yet); confirm "waiting on client" = time after an event note saying "waiting on/for client" · 2026-11-05
 - **Partner verification — GST** (src/lib/agents/gst/config.ts GST_VERIFY_NOTES): B2CL > ₹1,00,000 (N 12/2024); s.50(1) 18% on cash portion; 3B late fee ₹50/day (nil ₹20) + AATO caps (N 19/2021); QRMP 22nd/24th groups (N 82/2020); 2B tolerance ₹1 (firm SOP); rule 37 180 days proportional; RCM list + rates (legal, GTA 5%, security, director, sponsorship, unregistered commercial rent N 09/2024-R); HSN 4/6 digits (N 78/2020); e-invoice > ₹5 cr (N 10/2023); s.34(2) and s.16(4) 30 Nov; 17(5) categories; set-off order per s.49/49A/rule 88A/Circular 98 · 2026-11-05
+- **Small-company limits for FY 2025-26 (decisive)** · audit H1 · confirm whether s.2(85) limits were raised to ₹10 cr paid-up / ₹100 cr turnover w.e.f. 1 Dec 2025 (cite the G.S.R.); until confirmed only ₹4 cr / ₹40 cr (2022) apply · 2026-11-05
 - **Partner verification — ROC/Tax** (data.ts verify notes + "Verify" sheet in each workbook): small company ₹4 cr/₹40 cr → ₹10 cr/₹100 cr from 1 Dec 2025 (confirm G.S.R.); CSR thresholds read on PBT; AGM 6/9/15 months; AOC-4/MGT-7/ADT-1 day counting; fee and additional-fee tables; DIR-3 KYC frequency; rotation classes; tax FY 2025-26 slabs, 87A ₹12L/₹60k with marginal relief, surcharge caps, CG rates 20%/12.5%, 44AD/44ADA limits, 44AB, 43B(h) 15/45 days, advance tax + 234B/C, 234F, ITR-1/4 limits. **Income-tax Act 2025 (tax year 2026-27) rates are stored as unverified and the tax agent refuses that year until a partner publishes verified numbers.** · 2026-11-05
 - **Partner verification — Books/Audit** (config.ts verify notes): bank match windows 5/31 days; unreconciled > 30 days; expense spike > 50% and ≥ ₹50k; TDS deposit 7th / 30 Apr (2025-Act equivalent?); materiality 1% revenue, PM 75%; variance ≥ PM and ≥ 20%; min sample 25, MUS factor 3.0; CARO exemption limits; small company ₹10 cr / ₹100 cr (Dec 2025 amendment — confirm); s.138 thresholds; severities (GST mismatch / negative cash / suspense = warn; TDS not deposited, BRS difference = block) · 2026-11-05
 - **Seed SopPacks** · runner loads the active SopPack from DB · run the seed functions (gst seed.ts; books/audit publish v1.0.0 from defaultChecklist) on staging/prod after partner review · 2026-11-05
@@ -226,3 +238,4 @@ Shared foundation (commit c61d885): additive Prisma section "Firm OS: shared spi
 - 21:40 · 7 · Merged Books Close + Audit Assist; registry conflict resolved (all agents kept); *.snap eol=lf · 1974/1974 · books, audit pass
 - 21:41 · 5/7 · Fable auditor re-run requested for gst, books, audit (+ hardened harness) · –
 - 21:43 · 6 · Merged ROC Prep + Tax Prep (22 + 22 fixtures; 4 real bugs found by hand-checking, fixed); registry conflict resolved · 2200/2200 · all six agents pass · build green
+- 21:55 · 5–7 · Independent audit round 2 (fable): all six pass, 31 fixtures hand-recomputed with no mismatch; H1 + M1–M6 + coverage gap → fix agent started, harness items sent to guardrails agent · –
