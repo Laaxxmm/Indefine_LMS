@@ -39,6 +39,9 @@ export const FIRM_OS_DIRS = [
   "src/app/comms",
   "src/app/admin/firm-os",
   "src/app/api/firm-os",
+  "src/app/api/cron/firm-os",
+  "src/lib/rbac",
+  "src/lib/audit",
 ];
 export const isFirmOs = (p: string) => FIRM_OS_DIRS.some((d) => under(norm(p), d));
 
