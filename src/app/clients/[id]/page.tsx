@@ -10,6 +10,9 @@ import { EditClient } from "./EditClient";
 import { istDate } from "@/lib/ist";
 import { isClPathsEnabled } from "@/lib/integrations/sharepoint/flags";
 import { clientSiteLink, jobFolderLink } from "@/lib/integrations/sharepoint/client-links";
+import { canSeeAllRuns } from "@/lib/agents/access";
+import { listClientJobs, type ClientJobsDb } from "@/lib/agents/client-jobs";
+import { FirmOsJobs } from "./FirmOsJobs";
 
 export const dynamic = "force-dynamic";
 
@@ -32,10 +35,13 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
   if (!client) notFound();
   const [services, handlers] = await Promise.all([listServiceTypes(), listHandlers()]);
   const canManage = canManageClients(session.user);
-  // FIRM_OS_CL_PATHS (default off): folder links resolve to the CL-{Code} site. Off, or no code → legacy, unchanged.
+  // FIRM_OS_CL_PATHS (default off): folder links resolve to the CL-{Code} site, and the client's Firm OS
+  // jobs are listed. Off, or no FirmClient → legacy, unchanged (no FirmClient or JobTask query).
   const clPaths = isClPathsEnabled();
-  const clientCode = clPaths ? (await prisma.firmClient.findUnique({ where: { lmsClientId: id }, select: { clientCode: true } }))?.clientCode ?? null : null;
+  const firmClient = clPaths ? await prisma.firmClient.findUnique({ where: { lmsClientId: id }, select: { clientCode: true } }) : null;
+  const clientCode = firmClient?.clientCode ?? null;
   const siteLink = clientSiteLink({ clPaths, clientCode });
+  const firmJobs = firmClient ? await listClientJobs(prisma as unknown as ClientJobsDb, session.user, id) : null;
 
   const facts: Array<[string, string]> = [
     ["Entity", ENTITY_TYPES[client.entityType]], ["PAN", client.pan ?? "—"], ["GSTIN", client.gstin ?? "—"], ["CIN", client.cin ?? "—"],
@@ -77,6 +83,8 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
       <dl className="grid sm:grid-cols-3 gap-x-6 gap-y-3 rounded-2xl bg-card border border-border shadow-lift p-5 mb-6 text-[13.5px]">
         {facts.map(([k, v]) => <div key={k}><dt className="text-[11px] font-bold text-ink-faint uppercase tracking-wide">{k}</dt><dd className="mt-0.5">{v}</dd></div>)}
       </dl>
+
+      {firmJobs && <FirmOsJobs jobs={firmJobs} seesAll={canSeeAllRuns(session.user)} />}
 
       <ClientPanels
         clientId={client.id}
