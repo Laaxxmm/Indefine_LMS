@@ -9,8 +9,8 @@ import { bumpAmountText, mutateCsvCell } from "@/lib/agents/core/probes";
 import type { AgentDefinition, InputFile, InputProbe } from "@/lib/agents/core/runner";
 import { sniffDepartment, wrongDepartmentMessage } from "@/lib/agents/books/department";
 import { analyzeAudit, normalizeAuditExtract } from "./analysis";
-import { auditDictionaryTerms } from "./dictionary";
-import { auditInputSchema, classifyAuditFile, parseAuditFiles, type AuditExtract, type AuditInput } from "./inputs";
+import { auditDictionaryTerms, parseAuditFilesOnce } from "./dictionary";
+import { auditInputSchema, classifyAuditFile, type AuditExtract, type AuditInput } from "./inputs";
 import { TB_PROBE, probeCsvAmount, type ProbeTarget } from "@/lib/agents/books/probe";
 import { auditPack } from "./pack";
 import { AUDIT_CHECKLIST, AUDIT_KEY, auditLlmContext, auditRegistry } from "./rules";
@@ -109,7 +109,7 @@ export const auditAgent: AgentDefinition<AuditInput, AuditExtract> = {
   scope: AUDIT_SCOPE,
 
   async extract({ input, job }) {
-    return parseAuditFiles(input, job);
+    return parseAuditFilesOnce(input, job); // the same parse the dictionary hook read
   },
 
   dictionaryTerms: (input, { job }) => auditDictionaryTerms(input, job),

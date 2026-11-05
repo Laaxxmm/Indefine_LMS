@@ -11,10 +11,10 @@
 import type { AgentScope } from "@/lib/agents/core/guardrails/scope";
 import type { AgentDefinition } from "@/lib/agents/core/runner";
 import { classify } from "./classify";
-import { gstDictionaryTerms } from "./dictionary";
+import { gstDictionaryTerms, loadGstDataOnce } from "./dictionary";
 import { computeFigures } from "./compute";
 import { gstDeliverables } from "./deliverables";
-import { gstInputSchema, gstInputSniff, loadGstData } from "./input";
+import { gstInputSchema, gstInputSniff } from "./input";
 import { GST_INPUT_PROBES, GST_REQUIRED_INPUTS, gstProbeMutation } from "./probe";
 import { GST_CHECKLIST, GST_KEY, gstRegistry } from "./rules";
 import { GST_MODEL_TASKS } from "./tasks";
@@ -58,7 +58,7 @@ export const gstAgent: AgentDefinition<GstInput, GstExtract> = {
   checklistRegistry: gstRegistry,
 
   async extract({ input, job, model, notes }) {
-    const data = await loadGstData(input, job);
+    const data = await loadGstDataOnce(input, job); // the same parse the dictionary hook read
     return classify(data, model, notes);
   },
 

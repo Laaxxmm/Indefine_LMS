@@ -16,8 +16,8 @@ import { reconcile } from "./bank";
 import { suggestClassifications } from "./classify";
 import { BANK_MATCH } from "./config";
 import { sniffDepartment } from "./department";
-import { booksDictionaryTerms } from "./dictionary";
-import { booksInputSchema, classifyBooksFile, parseBooksFiles, type BooksInput } from "./inputs";
+import { booksDictionaryTerms, parseBooksFilesOnce } from "./dictionary";
+import { booksInputSchema, classifyBooksFile, type BooksInput } from "./inputs";
 import { booksPack } from "./pack";
 import { BOOKS_PROBE_TARGETS, TB_PROBE, probeCsvAmount } from "./probe";
 import { BOOKS_CHECKLIST, BOOKS_KEY, booksRegistry } from "./rules";
@@ -119,7 +119,7 @@ export const booksAgent: AgentDefinition<BooksInput, BooksExtract> = {
   scope: BOOKS_SCOPE,
 
   async extract({ input, notes, model }) {
-    const parsed = await parseBooksFiles(input);
+    const parsed = await parseBooksFilesOnce(input); // the same parse the dictionary hook read
     const candidates = classificationCandidates(parsed.statement, parsed.ledger);
     const { suggestions, heads } = await suggestClassifications(model, candidates, parsed.tb, notes);
     return { ...parsed, suggestions, chartHeads: heads };
