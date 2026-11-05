@@ -19,8 +19,9 @@
 //      or without an "account" label, dates of birth with the label before or after, addresses
 //      with a door number, payee names in bank narrations, and dictionary names with their usual
 //      variants ("Kumar, Rajesh", "R. Kumar", the first name alone).
-//   3. Text that already looks like a token ("⟨PAN_1⟩" typed into a document) is itself masked as
-//      ⟨LITERAL_n⟩, so it can never collide with a real token of the run.
+//   3. Text that already looks like a token ("⟨PAN_1⟩" typed into a document) can never collide
+//      with a real token of the run: the router masks it as ⟨LITERAL_n⟩ (literals: "all"); by
+//      default it is kept as written and its number reserved, so re-masking stored text is stable.
 //
 // detectPii() is an INDEPENDENT, stricter detector (its own patterns and its own dictionary
 // check, run over the masked text): the router uses it as a post-mask leak gate and refuses to
@@ -58,15 +59,22 @@ export interface TokenMap {
   counters: Partial<Record<PiiKind, number>>;
 }
 
-/** Token-looking text already in the input: mask the ones this map did not issue (default), all of them, or none (fixed firm text). */
-export type LiteralMode = "unknown" | "all" | "none";
+/**
+ * Token-looking text already in the input ("⟨PAN_1⟩"):
+ *   "keep" (default)  left as written, and its number is reserved so no new token of this map can
+ *                     ever equal it — re-masking stored masked text is idempotent (#26 safe);
+ *   "all"             masked itself as ⟨LITERAL_n⟩ (the router does this for every client message:
+ *                     the model never sees text that looks like one of the run's tokens);
+ *   "none"            ignored (fixed firm text whose placeholder examples must stay as written).
+ */
+export type LiteralMode = "keep" | "all" | "none";
 
 export interface MaskContext {
   /** Client-master names, companies and addresses (matched case-insensitively, longest first, with name variants). */
   dictionary?: DictionaryEntry[];
   /** Continue an existing map (several messages of one request share one map). */
   map?: TokenMap;
-  /** Token-looking text in the input ("⟨PAN_1⟩"): see LiteralMode. Default "unknown". */
+  /** Token-looking text in the input ("⟨PAN_1⟩"): see LiteralMode. Default "keep" ("none" for structured scope). */
   literals?: LiteralMode;
   /**
    * "full" (default) or "structured": identifiers and dictionary names only — no name heuristics
@@ -661,7 +669,7 @@ function original(text: string, view: View, start: number, end: number): [number
 export function mask(input: string, ctx: MaskContext = {}): MaskResult {
   const map = ctx.map ?? createTokenMap();
   const full = ctx.scope !== "structured";
-  const literals: LiteralMode = ctx.literals ?? (full ? "unknown" : "none");
+  const literals: LiteralMode = ctx.literals ?? (full ? "keep" : "none");
   // Size caps first (audit #12): every masker below then works on bounded, linear input.
   const capped = capLongRuns(input);
   const text = capped.text;
@@ -670,14 +678,18 @@ export function mask(input: string, ctx: MaskContext = {}): MaskResult {
   const work = new Work(view.norm);
 
   if (literals !== "none") {
-    // Decided on the ORIGINAL text: a token this map issued is kept; anything else token-shaped is escaped.
+    // "keep": left as written, its number reserved; "all": escaped as ⟨LITERAL_n⟩ (see LiteralMode).
     const found: Claim[] = [];
     const r = new RegExp(M.LITERAL.source, "g");
     for (let m = r.exec(view.norm); m; m = r.exec(view.norm)) {
-      const [os, oe] = original(text, view, m.index, m.index + m[0].length);
-      const raw = text.slice(os, oe);
-      const known = literals === "unknown" && map.byToken.has(raw);
-      found.push({ start: m.index, end: m.index + m[0].length, kind: known ? null : "LITERAL", addr: known && raw.startsWith("⟨ADDRESS_") });
+      if (literals === "keep") {
+        const shape = /^⟨([A-Za-z]+(?:_[A-Za-z]+)*)_(\d+)⟩$/.exec(m[0]);
+        if (shape) {
+          const kind = shape[1].toUpperCase() as PiiKind;
+          map.counters[kind] = Math.max(map.counters[kind] ?? 0, Number(shape[2]));
+        }
+      }
+      found.push({ start: m.index, end: m.index + m[0].length, kind: literals === "keep" ? null : "LITERAL", addr: literals === "keep" && /^⟨ADDRESS_/i.test(m[0]) });
     }
     work.apply(found);
   }
