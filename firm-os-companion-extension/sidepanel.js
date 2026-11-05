@@ -73,7 +73,7 @@ function renderUnpaired() {
 }
 
 function renderPairing(message) {
-  show(notice("warn", message, companionLink(), el("button", { type: "button", class: "btn btn-sm", onclick: openOptions }, "Paste a new token")));
+  show(notice("warn", message, companionLink(), el("button", { type: "button", class: "btn btn-sm", onclick: openOptions }, "Paste a new pairing code")));
 }
 
 function renderMessage(kind, message) {

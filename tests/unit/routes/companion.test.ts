@@ -57,7 +57,7 @@ describe("/companion page", () => {
     expect(html).toContain("Companion");
     expect(html).toContain("Pair a browser");
     expect(html).toContain('for="companion-label"');
-    expect(html).toContain("Create pairing token");
+    expect(html).toContain("Create pairing code");
     expect(html).toContain("No active pairings");
     expect(html).toContain("How to set it up");
     expect(html).toContain("never files, signs, pays or sends anything");
@@ -99,14 +99,14 @@ describe("/companion page", () => {
     const html = await renderHtml(await CompanionPage());
     expect(html).toContain("Not turned on for you");
     expect(html).toContain(MSG.noAccess.replace("'", "&#x27;"));
-    expect(html).not.toContain("Create pairing token");
+    expect(html).not.toContain("Create pairing code");
     expect(state.fake.calls.some((c) => c.model === "companionToken")).toBe(false);
   });
 
   it("shows the form to staff whose companion setting is on", async () => {
     state.fake.settings["u-staff"] = true;
     signedIn(staff());
-    expect(await page()).toContain("Create pairing token");
+    expect(await page()).toContain("Create pairing code");
   });
 
   it("sends signed-out visitors to sign-in", async () => {

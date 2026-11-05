@@ -34,8 +34,8 @@ The extension's ID is always `emjmdagolmalbajejchchjihgggcnkdb` (fixed by the pu
    available to people whose admin has turned the Companion on for them (admins and partners for
    now).
 2. Give the pairing a name (for example "Office desktop, Chrome") and choose
-   **Create pairing token**. Copy the token — it is shown only once.
-3. In the extension's **Options** page (right-click the toolbar icon → Options), paste the token
+   **Create pairing code**. Copy the code — it is shown only once.
+3. In the extension's **Options** page (right-click the toolbar icon → Options), paste the code
    and choose **Save and test connection**. You should see "Connected".
 4. Click the toolbar icon to open the side panel. It refreshes every minute while it is open, and
    when you choose **Refresh**.

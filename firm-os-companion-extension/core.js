@@ -31,7 +31,7 @@ const MAX_MESSAGE = 300;
 
 /** Every sentence the extension writes itself. Plain words: what is wrong and what to do. */
 export const TEXT = {
-  notPaired: "This panel is not paired with Firm OS yet. Create a pairing token on the Companion page in Firm OS, then paste it on the Options page.",
+  notPaired: "This panel is not paired with Firm OS yet. Create a pairing code on the Companion page in Firm OS, then paste it on the Options page.",
   pairingExpired: "Your pairing has expired. Create a new one on the Companion page in Firm OS.",
   noAccess: "The Companion is not turned on for your account. Ask an admin to turn it on in Firm OS.",
   offline: "You appear to be offline, or Firm OS cannot be reached. The panel will try again in a minute.",
@@ -39,10 +39,10 @@ export const TEXT = {
   busy: "Too many refreshes in a short time. The panel will try again in a minute.",
   caughtUp: "You're all caught up.",
   unexpected: "Firm OS sent an answer this panel does not understand. Update the extension, or ask your admin.",
-  badToken: "That does not look like a whole pairing token. Copy it again from the Companion page in Firm OS.",
-  noToken: "Paste a pairing token first.",
-  noSavedToken: "No pairing token is saved in this browser yet. Paste one above and choose Save and test connection.",
-  forgotten: "This browser is no longer paired. To stop the token working everywhere, revoke it on the Companion page in Firm OS.",
+  badToken: "That does not look like a whole pairing code. Copy it again from the Companion page in Firm OS.",
+  noToken: "Paste a pairing code first.",
+  noSavedToken: "No pairing code is saved in this browser yet. Paste one above and choose Save and test connection.",
+  forgotten: "This browser is no longer paired. To stop the code working everywhere, revoke it on the Companion page in Firm OS.",
 };
 
 export function nextTaskUrl(origin) {

@@ -42,7 +42,7 @@ function CopyButton({ text, what }: { text: string; what: string }) {
       }}
     >
       {state === "copied" ? <Check className="w-3.5 h-3.5" aria-hidden="true" /> : <Copy className="w-3.5 h-3.5" aria-hidden="true" />}
-      {state === "copied" ? "Copied" : state === "blocked" ? "Copy blocked: select the token" : "Copy"}
+      {state === "copied" ? "Copied" : state === "blocked" ? "Copy blocked: select the code" : "Copy"}
     </button>
   );
 }
@@ -132,11 +132,11 @@ function CreateForm({ atLimit, maxActive, ttlDays, onCreated }: { atLimit: boole
       )}
       <ErrorBox text={error} />
       <div aria-live="polite" className="sr-only">
-        {busy ? "Creating the pairing token…" : ""}
+        {busy ? "Creating the pairing code…" : ""}
       </div>
       <div className="mt-4">
         <Button type="submit" variant="primary" busy={busy} busyLabel="Creating…" disabled={atLimit || !name.trim()}>
-          Create pairing token
+          Create pairing code
         </Button>
       </div>
     </form>
@@ -147,14 +147,14 @@ function TokenReveal({ created, ttlDays, onDone }: { created: Created; ttlDays: 
   return (
     <section className={`${card} ${formWidth}`} aria-labelledby="token-title">
       <h2 id="token-title" className={sectionTitle}>
-        Pairing token for {created.pairing.label}
+        Pairing code for {created.pairing.label}
       </h2>
       <p role="status" className="text-[13px] font-semibold">
-        Copy this token now. It is shown only once.
+        Copy this code now. It is shown only once.
       </p>
       <div className="mt-3 flex items-center gap-2 flex-wrap">
         <code className="font-mono font-semibold bg-muted rounded px-2 py-1 break-all text-[13px]">{created.token}</code>
-        <CopyButton text={created.token} what="pairing token" />
+        <CopyButton text={created.token} what="pairing code" />
       </div>
       <p className="text-[12px] text-ink-mute mt-3">
         Paste it on the companion&apos;s Options page. It works for {ttlDays} days, until {created.pairing.expires}, or until you revoke it. Firm OS keeps only a fingerprint of it, so it cannot be shown again; if you lose it, revoke this pairing and create a new one.
@@ -174,7 +174,7 @@ function PairingsTable({ pairings, inactiveCount, onRevoked }: { pairings: Pairi
   return (
     <Section id="pairings-title" title={<>Active pairings ({pairings.length})</>} last>
       {pairings.length === 0 ? (
-        <EmptyState title="No active pairings">Create a pairing token above, then paste it on the companion&apos;s Options page.</EmptyState>
+        <EmptyState title="No active pairings">Create a pairing code above, then paste it on the companion&apos;s Options page.</EmptyState>
       ) : (
         <DataTable
           caption="Your active companion pairings, newest first"
