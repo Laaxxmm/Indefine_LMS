@@ -2,38 +2,60 @@
 // (config.ts LEAD_AREAS, data). Balances are signed: debit positive, credit negative.
 import { nameKey } from "@/lib/agents/books/table";
 import { netPaise, tbTotals, type TbData, type TbRow } from "@/lib/agents/books/tb";
-import { LEAD_AREAS, type LeadArea } from "./config";
+import { LEAD_AREAS, type GroupRule, type LeadArea } from "./config";
 
 export type LeadLine = { ledger: string; group: string; row: number | null; cyPaise: number; pyPaise: number };
 export type LeadSchedule = { wp: string; name: string; side: "dr" | "cr"; cyPaise: number; pyPaise: number; variancePaise: number; lines: LeadLine[] };
 export type Unmapped = { ledger: string; group: string; row: number; year: "CY" | "PY"; netPaise: number };
+/** A group mapped through a pattern that carries a partner note (config.ts GroupRule.verify). */
+export type GroupingNote = { group: string; wp: string; verify: string };
 
 export type LeadResult = {
   schedules: LeadSchedule[];
   unmapped: Unmapped[];
   /** Σ of mapped lead balances vs the TB, per year: both must be equal for the leads to tie. */
   tie: { cyLeadsPaise: number; cyTbNetPaise: number; pyLeadsPaise: number | null; pyTbNetPaise: number | null; cyLeadsDebitPaise: number; cyTbDebitPaise: number };
+  /** One per (group, lead) mapped by a noted pattern, in first-seen order. */
+  groupingNotes: GroupingNote[];
 };
 
-export function areaOf(row: Pick<TbRow, "group" | "ledger">, areas: LeadArea[] = LEAD_AREAS): LeadArea | null {
+type RowLike = Pick<TbRow, "group" | "ledger"> & Partial<Pick<TbRow, "debitPaise" | "creditPaise">>;
+
+/** The area a TB row maps to, and the partner note of the pattern that mapped it (if any). */
+export function matchArea(row: RowLike, areas: LeadArea[] = LEAD_AREAS): { area: LeadArea; rule: GroupRule | null } | null {
   const g = row.group.toLowerCase();
+  // A conditional pattern's sign: debit for a net debit or nil balance, credit for a net credit.
+  const sign = (row.debitPaise ?? 0) - (row.creditPaise ?? 0) < 0 ? "cr" : "dr";
   for (const a of areas) {
-    if (g && a.groups.some((p) => new RegExp(p, "i").test(g))) return a;
-    if (a.ledgers?.some((p) => new RegExp(p, "i").test(row.ledger))) return a;
+    if (g) {
+      for (const p of a.groups) {
+        if (typeof p === "string") {
+          if (new RegExp(p, "i").test(g)) return { area: a, rule: null };
+        } else if (new RegExp(p.pattern, "i").test(g) && (!p.sign || p.sign === sign)) return { area: a, rule: p };
+      }
+    }
+    if (a.ledgers?.some((p) => new RegExp(p, "i").test(row.ledger))) return { area: a, rule: null };
   }
   return null;
+}
+
+export function areaOf(row: RowLike, areas: LeadArea[] = LEAD_AREAS): LeadArea | null {
+  return matchArea(row, areas)?.area ?? null;
 }
 
 export function buildLeads(cy: TbData, py: TbData | null, areas: LeadArea[] = LEAD_AREAS): LeadResult {
   const byArea = new Map<string, LeadSchedule>(areas.map((a) => [a.wp, { wp: a.wp, name: a.name, side: a.side, cyPaise: 0, pyPaise: 0, variancePaise: 0, lines: [] }]));
   const unmapped: Unmapped[] = [];
+  const groupingNotes: GroupingNote[] = [];
   const lineKey = new Map<string, LeadLine>();
   const add = (r: TbRow, year: "CY" | "PY") => {
-    const area = areaOf(r, areas);
-    if (!area) {
+    const hit = matchArea(r, areas);
+    if (!hit) {
       unmapped.push({ ledger: r.ledger, group: r.group, row: r.row, year, netPaise: netPaise(r) });
       return;
     }
+    const area = hit.area;
+    if (hit.rule && !groupingNotes.some((n) => n.wp === area.wp && n.group === r.group)) groupingNotes.push({ group: r.group, wp: area.wp, verify: hit.rule.verify });
     const s = byArea.get(area.wp)!;
     const k = `${area.wp}\u0000${nameKey(r.ledger)}`;
     let line = lineKey.get(k);
@@ -70,6 +92,7 @@ export function buildLeads(cy: TbData, py: TbData | null, areas: LeadArea[] = LE
       cyLeadsDebitPaise,
       cyTbDebitPaise: cyTotals.debitPaise,
     },
+    groupingNotes,
   };
 }
 

@@ -68,29 +68,73 @@ export const INTERNAL_AUDIT = {
 } as const;
 
 /**
+ * A grouping pattern with conditions: `sign` limits it to a debit (net ≥ 0) or credit (net < 0)
+ * balance — a clearing account is an asset or a liability by its balance at the date — and `verify`
+ * is the note for the engagement partner (every mapping added after v1 carries one; the lead-tie
+ * check lists the notes of the mappings a run used).
+ */
+export type GroupRule = { pattern: string; sign?: "dr" | "cr"; verify: string };
+
+/**
  * Lead-schedule grouping map: TB group (Tally primary group / Zoho account type) → lead area.
  * First matching area wins, so the order matters (liabilities before assets, revenue before income).
  * `side` is the natural balance: lead schedules show Dr as positive and Cr as negative.
  */
-export type LeadArea = { wp: string; name: string; side: "dr" | "cr"; groups: string[]; ledgers?: string[] };
+export type LeadArea = { wp: string; name: string; side: "dr" | "cr"; groups: (string | GroupRule)[]; ledgers?: string[] };
+
+const SCHEDULE_III = "partner to confirm Schedule III grouping";
+/** Zoho Books standard account types (anchored: the whole group text), audit round 2. */
+const zoho = (pattern: string, note: string, sign?: "dr" | "cr"): GroupRule => ({ pattern, ...(sign ? { sign } : {}), verify: `${note} — ${SCHEDULE_III}.` });
+
 export const LEAD_AREAS: LeadArea[] = [
   { wp: "L-A", name: "Share capital and reserves", side: "cr", groups: ["capital account", "share capital", "reserves", "surplus", "equity", "partners"] },
   // "^long[- ]term liabilit": Zoho account type "Long Term Liability" (term loans) — before L-D's catch-all "liabilit".
   { wp: "L-B", name: "Borrowings", side: "cr", groups: ["loans \\(liability\\)", "secured loans", "unsecured loans", "borrowings", "bank od", "cash credit", "^long[- ]term liabilit"] },
   { wp: "L-C", name: "Trade payables", side: "cr", groups: ["sundry creditors", "trade payables", "accounts payable"] },
-  { wp: "L-D", name: "Other current liabilities and provisions", side: "cr", groups: ["current liabilities", "provisions", "duties (&|and) taxes", "other liabilit", "liabilit"] },
-  { wp: "L-E", name: "Property, plant and equipment and intangibles", side: "dr", groups: ["fixed assets", "property", "plant", "intangible", "capital work"] },
+  // Deferred tax (Schedule III: non-current, shown net). Before L-D, whose catch-all "liabilit" took "Deferred Tax Liability".
+  { wp: "L-O", name: "Deferred tax assets (net)", side: "dr", groups: [zoho("^deferred tax assets?$", "Zoho \"Deferred Tax Asset\" → Deferred tax assets (net), non-current")] },
+  { wp: "L-P", name: "Deferred tax liabilities (net)", side: "cr", groups: [zoho("^deferred tax liabilit(y|ies)$", "Zoho \"Deferred Tax Liability\" → Deferred tax liabilities (net), non-current (it fell to L-D before)")] },
+  {
+    wp: "L-D",
+    name: "Other current liabilities and provisions",
+    side: "cr",
+    groups: [
+      "current liabilities",
+      "provisions",
+      "duties (&|and) taxes",
+      "other liabilit",
+      "liabilit",
+      zoho("^output tax$", "Zoho \"Output Tax\" (GST payable) → other current liabilities (duties and taxes)"),
+      zoho("^credit card$", "Zoho \"Credit Card\" → other current liabilities (short-term borrowings if the card is a bank credit facility the entity draws on)"),
+      zoho("^payment clearing$", "Zoho \"Payment Clearing\" with a credit balance → other current liabilities (a debit balance goes to L-J)", "cr"),
+    ],
+  },
+  { wp: "L-E", name: "Property, plant and equipment and intangibles", side: "dr", groups: ["fixed assets", "property", "plant", "intangible", "capital work", zoho("^fixed asset$", "Zoho \"Fixed Asset\" (singular) → property, plant and equipment")] },
   { wp: "L-F", name: "Investments", side: "dr", groups: ["investments"] },
-  { wp: "L-G", name: "Inventories", side: "dr", groups: ["stock[- ]in[- ]hand", "inventor", "closing stock"] },
+  { wp: "L-G", name: "Inventories", side: "dr", groups: ["stock[- ]in[- ]hand", "inventor", "closing stock", zoho("^stock$", "Zoho \"Stock\" → inventories")] },
   { wp: "L-H", name: "Trade receivables", side: "dr", groups: ["sundry debtors", "trade receivables", "accounts receivable"] },
   { wp: "L-I", name: "Cash and bank balances", side: "dr", groups: ["cash[- ]in[- ]hand", "bank accounts", "^bank$", "^cash$"] },
   // Tally primary group "Misc. Expenses (ASSET)" (expenditure not written off — an asset, before L-N's "expenses") and
-  // Zoho account type "Other Current Asset" (singular, which "current assets" does not match).
+  // Zoho account type "Other Current Asset" (singular, which "current assets" does not match). L-J also holds the
+  // other non-current assets ("other assets", "non-current assets" already land here).
   {
     wp: "L-J",
     name: "Loans, advances and other assets",
     side: "dr",
-    groups: ["loans (&|and) advances", "deposits \\(asset\\)", "current assets", "other assets", "prepaid", "advances", "^misc(\\.|ellaneous)? expenses \\(asset\\)$", "^other current asset$"],
+    groups: [
+      "loans (&|and) advances",
+      "deposits \\(asset\\)",
+      "current assets",
+      "other assets",
+      "prepaid",
+      "advances",
+      "^misc(\\.|ellaneous)? expenses \\(asset\\)$",
+      "^other current asset$",
+      zoho("^other asset$", "Zoho \"Other Asset\" → other non-current assets (long-term loans and advances where it is a loan or deposit)"),
+      zoho("^non[- ]?current asset$", "Zoho \"Non Current Asset\" → other non-current assets"),
+      zoho("^input tax$", "Zoho \"Input Tax\" (GST input credit) → other current assets (balances with government authorities)"),
+      zoho("^payment clearing$", "Zoho \"Payment Clearing\" with a debit balance → other current assets (a credit balance goes to L-D)", "dr"),
+    ],
   },
   { wp: "L-K", name: "Revenue from operations", side: "cr", groups: ["sales accounts", "revenue", "^sales$", "^direct incomes", "operating income"] },
   { wp: "L-L", name: "Other income", side: "cr", groups: ["indirect incomes", "other income", "^income$"] },
@@ -98,6 +142,11 @@ export const LEAD_AREAS: LeadArea[] = [
   { wp: "L-N", name: "Other expenses", side: "dr", groups: ["indirect expenses", "expenses", "expense"] },
 ];
 export const LEAD_AREAS_VERIFY = "Lead areas follow Schedule III headings mapped from Tally primary groups / Zoho account types. Suspense or custom groups are left unmapped on purpose (they block until mapped). Partner to extend the map for client-specific groups.";
+
+/** Every grouping note in the map (one per conditional pattern), for review. */
+export const LEAD_GROUPING_NOTES: { wp: string; pattern: string; verify: string }[] = LEAD_AREAS.flatMap((a) =>
+  a.groups.filter((g): g is GroupRule => typeof g !== "string").map((g) => ({ wp: a.wp, pattern: g.pattern, verify: g.verify })),
+);
 
 /** SA-aligned working-paper index (data). Lead schedules are inserted under section D. */
 export const WP_INDEX: { ref: string; section: string; sa: string; description: string }[] = [
