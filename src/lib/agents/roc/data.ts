@@ -63,7 +63,8 @@ export const AGM_RULES: Versioned<{ monthsAfterFyEnd: number; firstAgmMonths: nu
   firstAgmMonths: 9,
   maxGapMonths: 15,
   maxExtensionMonths: 3,
-  verify: "Companies Act s.96(1): within six months of the FY end (first AGM nine months), not more than 15 months between AGMs; extension by the Registrar up to three months (not for the first AGM). OPCs need no AGM.",
+  verify:
+    "Companies Act s.96(1): within six months of the FY end (first AGM nine months), not more than 15 months between AGMs; extension by the Registrar up to three months (not for the first AGM), counted from the regular due date — when that is a month-end (30 September) the extension is taken to run to the month-end (31 December, not 30 December): partner to confirm. OPCs need no AGM.",
 };
 
 /** OPC: no AGM; AOC-4 within 180 days of the FY end (s.137(1) proviso); MGT-7A counted from the date the AGM would have been due. */

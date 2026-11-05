@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { baseExtract, CUR } from "./__fixtures__/base";
-import { analyseRoc, columnFromTrialBalance, finTotals, multipleAdditionalFee, normalFeePaise, perDayAdditionalFee } from "./analyse";
+import { addMonthsFromMonthEnd, analyseRoc, columnFromTrialBalance, finTotals, multipleAdditionalFee, normalFeePaise, perDayAdditionalFee } from "./analyse";
 import { inForce, inForceVerified, rocVerifyNotes, SMALL_COMPANY_LIMITS } from "./data";
 
 const CR = 1_00_00_000_00;
@@ -171,9 +171,24 @@ describe("AGM and filing dates", () => {
     expect(a.agm.dueDate).toBe("2026-12-31");
     expect(a.agm.delayDays).toBe(0);
   });
-  it("an extension is capped at three months", () => {
-    expect(analyseRoc(baseExtract({ company: { agmExtendedTo: "2027-03-31" } })).agm.dueDate).toBe("2026-12-30");
+  it("an extension is capped at three months, running to the month-end from the 30 Sep due date (31 Dec, not 30 Dec)", () => {
+    expect(analyseRoc(baseExtract({ company: { agmExtendedTo: "2027-03-31" } })).agm.dueDate).toBe("2026-12-31");
     expect(analyseRoc(baseExtract({ company: { agmExtendedTo: "2026-11-30" } })).agm.dueDate).toBe("2026-11-30");
+  });
+  it("boundary: extension to 31 Dec is allowed in full, 1 Jan is capped to 31 Dec; an AGM on 31 Dec under it is in time", () => {
+    expect(analyseRoc(baseExtract({ company: { agmExtendedTo: "2026-12-31" } })).agm.dueDate).toBe("2026-12-31");
+    expect(analyseRoc(baseExtract({ company: { agmExtendedTo: "2026-12-30" } })).agm.dueDate).toBe("2026-12-30");
+    expect(analyseRoc(baseExtract({ company: { agmExtendedTo: "2027-01-01" } })).agm.dueDate).toBe("2026-12-31");
+    const held = analyseRoc(baseExtract({ company: { agmExtendedTo: "2026-12-31", agmDate: "2026-12-31", previousAgmDate: "2025-12-20" } }));
+    expect(held.agm.delayDays).toBe(0); // the old 30 Dec cap made this one day late
+    expect(analyseRoc(baseExtract({ company: { agmExtendedTo: "2026-12-31", agmDate: "2027-01-01", previousAgmDate: "2025-12-20" } })).agm.delayDays).toBe(1);
+  });
+  it("month-end anchoring helper: a month-end stays a month-end; other days clamp as before", () => {
+    expect(addMonthsFromMonthEnd("2026-09-30", 3)).toBe("2026-12-31");
+    expect(addMonthsFromMonthEnd("2026-11-30", 3)).toBe("2027-02-28");
+    expect(addMonthsFromMonthEnd("2027-12-31", 2)).toBe("2028-02-29");
+    expect(addMonthsFromMonthEnd("2026-09-29", 3)).toBe("2026-12-29");
+    expect(addMonthsFromMonthEnd("2026-11-29", 3)).toBe("2027-02-28");
   });
   it("no AGM held: filing counted from the AGM due date", () => {
     const a = analyseRoc(baseExtract({ company: { agmDate: null } }));
