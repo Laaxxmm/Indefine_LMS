@@ -1,0 +1,147 @@
+{
+  "description": "Typical gap: ₹25,000 parked in Suspense and Cash in Hand showing a ₹6,750 credit balance. TB still balances.",
+  "flags": [
+    {
+      "ruleId": "books.suspense-nonzero",
+      "severity": "warn"
+    },
+    {
+      "ruleId": "books.negative-cash",
+      "severity": "warn"
+    }
+  ],
+  "figures": {
+    "tbDebitPaise": 140335000,
+    "tbCreditPaise": 140335000,
+    "tbDifferencePaise": 0,
+    "tbLedgerCount": 18,
+    "bankMatchedCount": 7,
+    "bankUnmatchedStatementCount": 0,
+    "bankUnmatchedLedgerCount": 1,
+    "balancePerBankPaise": 34675000,
+    "balancePerBooksPaise": 34250000,
+    "bankReconDifferencePaise": 0,
+    "tdsDeductedPaise": 2000000,
+    "tdsDepositedPaise": 2000000,
+    "tdsShortfallPaise": 0,
+    "gstAbsDifferencePaise": 0,
+    "suspensePaise": 2500000,
+    "cashBalancePaise": -675000,
+    "suggestionCount": 0,
+    "parseIssueCount": 0
+  },
+  "deliverables": [
+    {
+      "name": "Month-end pack",
+      "sheets": [
+        {
+          "name": "Summary",
+          "columns": [
+            "Item",
+            "Amount",
+            "Count",
+            "Note"
+          ]
+        },
+        {
+          "name": "Trial balance",
+          "columns": [
+            "Ledger",
+            "Group",
+            "Debit",
+            "Credit"
+          ]
+        },
+        {
+          "name": "Bank reconciliation",
+          "columns": [
+            "Particulars",
+            "Amount",
+            "Note"
+          ]
+        },
+        {
+          "name": "Bank matching",
+          "columns": [
+            "Side",
+            "Line",
+            "Date",
+            "Reference",
+            "Narration",
+            "Amount",
+            "Status",
+            "Matched with",
+            "Note"
+          ]
+        },
+        {
+          "name": "Expense suggestions",
+          "columns": [
+            "Line",
+            "Date",
+            "Narration",
+            "Amount",
+            "Suggested ledger",
+            "Confidence",
+            "Reason",
+            "Status"
+          ]
+        },
+        {
+          "name": "Suspense and unreconciled",
+          "columns": [
+            "Item",
+            "Source",
+            "Date",
+            "Amount",
+            "Age (days)",
+            "Note"
+          ]
+        },
+        {
+          "name": "Accrual-prepaid reminders",
+          "columns": [
+            "Type",
+            "Item",
+            "Ledger",
+            "Amount",
+            "Note"
+          ]
+        },
+        {
+          "name": "TDS check",
+          "columns": [
+            "Section",
+            "Month",
+            "Deducted",
+            "Deposited",
+            "Shortfall",
+            "Due date",
+            "Last deposit",
+            "Status"
+          ]
+        },
+        {
+          "name": "GST tie-out",
+          "columns": [
+            "Head",
+            "Per books",
+            "Per return",
+            "Difference",
+            "Status"
+          ]
+        },
+        {
+          "name": "Checklist",
+          "columns": [
+            "Rule",
+            "Severity",
+            "Status",
+            "Message",
+            "Evidence"
+          ]
+        }
+      ]
+    }
+  ]
+}

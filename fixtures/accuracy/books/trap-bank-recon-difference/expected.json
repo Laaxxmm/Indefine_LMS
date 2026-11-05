@@ -1,0 +1,143 @@
+{
+  "description": "Trap: the ledger opening balance is ₹2,45,000 but the statement opens at ₹2,50,000 (a September item is missing from the books export). Every line still matches, but the BRS leaves an unexplained ₹5,000.",
+  "flags": [
+    {
+      "ruleId": "books.bank-recon-difference",
+      "severity": "block"
+    }
+  ],
+  "figures": {
+    "tbDebitPaise": 139660000,
+    "tbCreditPaise": 139660000,
+    "tbDifferencePaise": 0,
+    "tbLedgerCount": 17,
+    "bankMatchedCount": 7,
+    "bankUnmatchedStatementCount": 0,
+    "bankUnmatchedLedgerCount": 1,
+    "balancePerBankPaise": 34675000,
+    "balancePerBooksPaise": 33750000,
+    "bankReconDifferencePaise": 500000,
+    "tdsDeductedPaise": 2000000,
+    "tdsDepositedPaise": 2000000,
+    "tdsShortfallPaise": 0,
+    "gstAbsDifferencePaise": 0,
+    "suspensePaise": 0,
+    "cashBalancePaise": 1825000,
+    "suggestionCount": 0,
+    "parseIssueCount": 0
+  },
+  "deliverables": [
+    {
+      "name": "Month-end pack",
+      "sheets": [
+        {
+          "name": "Summary",
+          "columns": [
+            "Item",
+            "Amount",
+            "Count",
+            "Note"
+          ]
+        },
+        {
+          "name": "Trial balance",
+          "columns": [
+            "Ledger",
+            "Group",
+            "Debit",
+            "Credit"
+          ]
+        },
+        {
+          "name": "Bank reconciliation",
+          "columns": [
+            "Particulars",
+            "Amount",
+            "Note"
+          ]
+        },
+        {
+          "name": "Bank matching",
+          "columns": [
+            "Side",
+            "Line",
+            "Date",
+            "Reference",
+            "Narration",
+            "Amount",
+            "Status",
+            "Matched with",
+            "Note"
+          ]
+        },
+        {
+          "name": "Expense suggestions",
+          "columns": [
+            "Line",
+            "Date",
+            "Narration",
+            "Amount",
+            "Suggested ledger",
+            "Confidence",
+            "Reason",
+            "Status"
+          ]
+        },
+        {
+          "name": "Suspense and unreconciled",
+          "columns": [
+            "Item",
+            "Source",
+            "Date",
+            "Amount",
+            "Age (days)",
+            "Note"
+          ]
+        },
+        {
+          "name": "Accrual-prepaid reminders",
+          "columns": [
+            "Type",
+            "Item",
+            "Ledger",
+            "Amount",
+            "Note"
+          ]
+        },
+        {
+          "name": "TDS check",
+          "columns": [
+            "Section",
+            "Month",
+            "Deducted",
+            "Deposited",
+            "Shortfall",
+            "Due date",
+            "Last deposit",
+            "Status"
+          ]
+        },
+        {
+          "name": "GST tie-out",
+          "columns": [
+            "Head",
+            "Per books",
+            "Per return",
+            "Difference",
+            "Status"
+          ]
+        },
+        {
+          "name": "Checklist",
+          "columns": [
+            "Rule",
+            "Severity",
+            "Status",
+            "Message",
+            "Evidence"
+          ]
+        }
+      ]
+    }
+  ]
+}

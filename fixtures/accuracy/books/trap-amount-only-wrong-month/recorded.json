@@ -1,0 +1,12 @@
+{
+  "books.classify-expenses": {
+    "suggestions": [
+      {
+        "lineId": "S1",
+        "ledger": "Purchases",
+        "confidence": 0.62,
+        "reason": "Cheque to a trading party; may be a supplier payment from a prior month"
+      }
+    ]
+  }
+}

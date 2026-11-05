@@ -1,0 +1,132 @@
+{
+  "description": "Clean: the TB export uses 'Account Head / Classification / Dr Total / Cr Total' headers, mapped by column-map.json. Only the TB is provided.",
+  "flags": [
+    {
+      "ruleId": "books.inputs-missing",
+      "severity": "info"
+    }
+  ],
+  "figures": {
+    "tbDebitPaise": 23000000,
+    "tbCreditPaise": 23000000,
+    "tbDifferencePaise": 0,
+    "tbLedgerCount": 6,
+    "cashBalancePaise": 449975,
+    "suggestionCount": 0,
+    "parseIssueCount": 0
+  },
+  "deliverables": [
+    {
+      "name": "Month-end pack",
+      "sheets": [
+        {
+          "name": "Summary",
+          "columns": [
+            "Item",
+            "Amount",
+            "Count",
+            "Note"
+          ]
+        },
+        {
+          "name": "Trial balance",
+          "columns": [
+            "Ledger",
+            "Group",
+            "Debit",
+            "Credit"
+          ]
+        },
+        {
+          "name": "Bank reconciliation",
+          "columns": [
+            "Particulars",
+            "Amount",
+            "Note"
+          ]
+        },
+        {
+          "name": "Bank matching",
+          "columns": [
+            "Side",
+            "Line",
+            "Date",
+            "Reference",
+            "Narration",
+            "Amount",
+            "Status",
+            "Matched with",
+            "Note"
+          ]
+        },
+        {
+          "name": "Expense suggestions",
+          "columns": [
+            "Line",
+            "Date",
+            "Narration",
+            "Amount",
+            "Suggested ledger",
+            "Confidence",
+            "Reason",
+            "Status"
+          ]
+        },
+        {
+          "name": "Suspense and unreconciled",
+          "columns": [
+            "Item",
+            "Source",
+            "Date",
+            "Amount",
+            "Age (days)",
+            "Note"
+          ]
+        },
+        {
+          "name": "Accrual-prepaid reminders",
+          "columns": [
+            "Type",
+            "Item",
+            "Ledger",
+            "Amount",
+            "Note"
+          ]
+        },
+        {
+          "name": "TDS check",
+          "columns": [
+            "Section",
+            "Month",
+            "Deducted",
+            "Deposited",
+            "Shortfall",
+            "Due date",
+            "Last deposit",
+            "Status"
+          ]
+        },
+        {
+          "name": "GST tie-out",
+          "columns": [
+            "Head",
+            "Per books",
+            "Per return",
+            "Difference",
+            "Status"
+          ]
+        },
+        {
+          "name": "Checklist",
+          "columns": [
+            "Rule",
+            "Severity",
+            "Status",
+            "Message",
+            "Evidence"
+          ]
+        }
+      ]
+    }
+  ]
+}

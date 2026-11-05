@@ -1,0 +1,24 @@
+{
+  "books.classify-expenses": {
+    "suggestions": [
+      {
+        "lineId": "S8",
+        "ledger": "Courier Charges",
+        "confidence": 0.9,
+        "reason": "UPI payment to a courier company"
+      },
+      {
+        "lineId": "S9",
+        "ledger": "Bank Charges",
+        "confidence": 0.88,
+        "reason": "GST levied on bank charges"
+      },
+      {
+        "lineId": "S99",
+        "ledger": "Rent",
+        "confidence": 0.99,
+        "reason": "unknown line, must be dropped"
+      }
+    ]
+  }
+}
