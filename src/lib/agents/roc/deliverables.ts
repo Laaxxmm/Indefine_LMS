@@ -3,6 +3,7 @@
 // AGM resolutions. Both carry the core header block and the "Draft — not for filing" label; staff
 // key the figures into the MCA forms themselves. Values come from the analysis (code), never the model.
 import type { ChecklistResultItem } from "@/lib/agents/core/checklist";
+import { checklistSheet } from "@/lib/agents/core/checklist-sheet";
 import { formatDayKey, formatInr } from "@/lib/agents/core/format";
 import type { DeliverableDraft } from "@/lib/agents/core/runner";
 import type { RowSpec, SheetSpec } from "@/lib/agents/core/templates";
@@ -147,26 +148,6 @@ function dueSheet(a: RocAnalysis): SheetSpec {
       note: f.note,
     })),
     totals: true,
-  };
-}
-
-export function checklistSheet(results: ChecklistResultItem[]): SheetSpec {
-  return {
-    name: "Checklist",
-    columns: [
-      { key: "rule", header: "Rule", width: 26 },
-      { key: "severity", header: "Severity" },
-      { key: "status", header: "Status" },
-      { key: "message", header: "Finding", width: 70 },
-      { key: "evidence", header: "Evidence", width: 40 },
-    ],
-    rows: results.map((r) => ({
-      rule: r.ruleId,
-      severity: r.severity,
-      status: r.status,
-      message: r.message,
-      evidence: r.evidence ? [r.evidence.quote, r.evidence.location].filter(Boolean).join(" @ ") : "",
-    })),
   };
 }
 

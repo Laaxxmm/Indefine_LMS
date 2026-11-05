@@ -6,7 +6,7 @@ import type { ChecklistResultItem } from "@/lib/agents/core/checklist";
 import { formatDayKey } from "@/lib/agents/core/format";
 import type { DeliverableDraft } from "@/lib/agents/core/runner";
 import type { RowSpec, SheetSpec } from "@/lib/agents/core/templates";
-import { checklistSheet } from "@/lib/agents/roc/deliverables";
+import { checklistSheet } from "@/lib/agents/core/checklist-sheet";
 import { analyseTax, type RegimeResult, type TaxAnalysis, type TaxExtract } from "./analyse";
 import { taxVerifyNotes } from "./data";
 
