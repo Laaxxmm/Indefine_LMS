@@ -20,6 +20,7 @@ import {
 import { formatIst } from "@/lib/ist";
 import { canUseWork } from "@/lib/work/core";
 import { canUseAgents } from "@/lib/agents/access";
+import { canViewClients } from "@/lib/clients/core";
 import {
   Flame,
   Sparkles,
@@ -306,7 +307,10 @@ export default async function Dashboard() {
           <Link href="/checkin" className="px-4 py-2 rounded-full text-ink-mute font-semibold text-[13.5px] hover:text-ink transition">Check-in</Link>
           <Link href="/recap/year" className="px-4 py-2 rounded-full text-ink-mute font-semibold text-[13.5px] hover:text-ink transition">Recap</Link>
           <Link href="/tools" className="px-4 py-2 rounded-full text-ink-mute font-semibold text-[13.5px] hover:text-ink transition">Tools</Link>
-          <Link href="/clients" className="px-4 py-2 rounded-full text-ink-mute font-semibold text-[13.5px] hover:text-ink transition">Clients</Link>
+          {/* Same predicate as the /clients layout guard: inactive users would only be bounced back here. */}
+          {canViewClients(session.user) && (
+            <Link href="/clients" className="px-4 py-2 rounded-full text-ink-mute font-semibold text-[13.5px] hover:text-ink transition">Clients</Link>
+          )}
           {/* Same predicate as the /agents layout guard: the link shows only to people it would let in. */}
           {canUseAgents(session.user) && (
             <Link href="/agents" className="px-4 py-2 rounded-full text-ink-mute font-semibold text-[13.5px] hover:text-ink transition">Agents</Link>
