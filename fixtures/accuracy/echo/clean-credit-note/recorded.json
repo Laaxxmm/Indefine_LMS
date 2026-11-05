@@ -1,0 +1,25 @@
+{
+  "system.echo-extract": {
+    "rows": [
+      {
+        "ref": "INV-50",
+        "party": "Kite Media",
+        "date": "2026-10-21",
+        "amountPaise": 1000000
+      },
+      {
+        "ref": "CN-50",
+        "party": "Kite Media",
+        "date": "2026-10-22",
+        "amountPaise": -200000
+      }
+    ]
+  },
+  "system.check:echo.related-party": {
+    "status": "pass",
+    "evidence": {
+      "quote": "Kite Media",
+      "location": "register.csv row 2"
+    }
+  }
+}

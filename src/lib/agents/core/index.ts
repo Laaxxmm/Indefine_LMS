@@ -137,3 +137,21 @@ export { MissingRecordingError, createRecordedRouter } from "./recorded-router";
 export type { RecordedResponses, RecordedRouter } from "./recorded-router";
 export { UniqueConstraintError, createMemoryDb } from "./memory-db";
 export type { MemoryDb } from "./memory-db";
+export { createMemoryStore } from "./memory-store";
+export type { MemoryStore } from "./memory-store";
+export {
+  ACCURACY_THRESHOLDS,
+  FixtureExpectedSchema,
+  SCOREBOARD_END,
+  SCOREBOARD_START,
+  canonicalOutcome,
+  compareFigures,
+  countFlags,
+  failureDetails,
+  prf,
+  sameEveryRun,
+  scoreAgent,
+  scoreboardMarkdown,
+  upsertScoreboard,
+} from "./accuracy";
+export type { AgentScore, Counts, FigureDiff, FixtureExpected, FixtureOutcome, FixtureRuns, Flag, Prf, ReplayOutcome, Thresholds } from "./accuracy";
