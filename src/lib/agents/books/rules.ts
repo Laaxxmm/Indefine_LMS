@@ -1,12 +1,22 @@
 // Books Close checklist: deterministic rule bodies (registry) and the default SOP pack v1.0.0.
 // Thresholds come from rule params (data in the SOP pack) with the config.ts defaults as fallback;
 // every param block carries a `verify` note for the partner.
+//
+// TDS severity — PARTNER TO CONFIRM SOP: TDS deducted with no (or a short) challan is a WARN
+// reminder (books.tds-due-soon, with the due date) while the pack is prepared BEFORE the due date
+// (7th of the next month; 30 April for March deductions — config.ts TDS_DUE), and a BLOCK
+// (books.tds-not-deposited) when it is prepared ON or after the due date. A pack prepared on the
+// due date itself blocks so it is not approved until the challan is in, although a deposit made
+// that day is still in time. The preparation date is the run's clock (CheckInput.preparedAt, IST
+// day); when it is unknown (e.g. a replayed mistake) an undeposited deduction is treated as overdue.
 import { createRuleRegistry, type ChecklistPack, type CheckOutcome, type DeterministicCheck, type RuleDefinition } from "@/lib/agents/core/checklist";
 import { formatDayKey, formatInr } from "@/lib/agents/core/format";
 import type { CheckInput } from "@/lib/agents/core/runner";
+import { istDayKey } from "@/lib/ist";
 import { analyzeBooks, ensureExtract, expenseSpikes, suspenseRows, type BooksExtract } from "./analysis";
 import { BANK_MATCH, BOOKS_NAMES, BOOKS_THRESHOLDS, TDS_DUE } from "./config";
 import type { BooksInput } from "./inputs";
+import { daysBetween } from "./table";
 import { matchRows, netPaise } from "./tb";
 
 export const BOOKS_KEY = "books";
@@ -20,6 +30,11 @@ const na = (message: string): CheckOutcome => ({ status: "na", message });
 const at = (file: string, row: number) => `${file} row ${row}`;
 
 const analysis = (ci: BooksCheckInput) => analyzeBooks(ci.extracted, ci.job);
+/** IST day the pack is prepared on, or null when the run carries no clock. */
+const preparedOn = (ci: BooksCheckInput): string | null => (ci.preparedAt instanceof Date && !Number.isNaN(ci.preparedAt.getTime()) ? istDayKey(ci.preparedAt) : null);
+
+const TDS_SEVERITY_VERIFY =
+  "Severity (partner to confirm SOP): no challan and prepared before the due date → warn reminder (books.tds-due-soon); prepared on or after the due date → block (books.tds-not-deposited). The due date itself blocks.";
 
 /** Every body sees a complete extract (a replayed MistakeLog example may carry only part of it). */
 const withFullExtract = (entries: Record<string, DeterministicCheck<BooksCheckInput>>) =>
@@ -117,12 +132,30 @@ export const booksRegistry = createRuleRegistry<BooksCheckInput>(withFullExtract
   "books.tds-not-deposited": (ci) => {
     const { tds } = analysis(ci);
     if (!tds) return na("TDS deducted ledger or challan list not provided");
-    const short = tds.filter((l) => l.shortfallPaise > 0);
-    if (!short.length) return pass();
-    const l = short[0];
+    const prep = preparedOn(ci);
+    // Overdue: the pack is prepared on or after the due date (or the preparation date is unknown).
+    const overdue = tds.filter((l) => l.shortfallPaise > 0 && (prep === null || prep >= l.dueDate));
+    if (!overdue.length) return pass();
+    const l = overdue[0];
+    const when = prep === null ? "preparation date unknown — treated as overdue" : prep === l.dueDate ? `prepared ${formatDayKey(prep)}, the due date itself` : `prepared ${formatDayKey(prep)}, ${daysBetween(l.dueDate, prep)} day(s) after the due date`;
     return {
       status: "fail",
-      message: `TDS deducted but not deposited: ${short.length} section/month line(s), ${inr(short.reduce((s, x) => s + x.shortfallPaise, 0))} in all; first: section ${l.section} for ${l.month} short by ${inr(l.shortfallPaise)} (due ${formatDayKey(l.dueDate)})`,
+      message: `TDS deducted but not deposited by the due date: ${overdue.length} section/month line(s), ${inr(overdue.reduce((s, x) => s + x.shortfallPaise, 0))} in all; first: section ${l.section} for ${l.month} short by ${inr(l.shortfallPaise)} (due ${formatDayKey(l.dueDate)}; ${when}). Deposit now; interest u/s 201(1A) to be computed.`,
+      evidence: { quote: `${l.section} ${l.month} deducted ${(l.deductedPaise / 100).toFixed(2)} deposited ${(l.depositedPaise / 100).toFixed(2)}`, location: at(ci.extracted.files.find((f) => f.kind === "tds-deducted")?.name ?? "TDS deducted", l.row) },
+    };
+  },
+
+  "books.tds-due-soon": (ci) => {
+    const { tds } = analysis(ci);
+    if (!tds) return na("TDS deducted ledger or challan list not provided");
+    const prep = preparedOn(ci);
+    if (prep === null) return na("Preparation date unknown: an undeposited deduction is treated as overdue (books.tds-not-deposited)");
+    const due = tds.filter((l) => l.shortfallPaise > 0 && prep < l.dueDate);
+    if (!due.length) return pass();
+    const l = due[0];
+    return {
+      status: "fail",
+      message: `Reminder — TDS deducted, not yet deposited, due date not reached (prepared ${formatDayKey(prep)}): ${due.length} section/month line(s), ${inr(due.reduce((s, x) => s + x.shortfallPaise, 0))} in all; first: section ${l.section} for ${l.month}, ${inr(l.shortfallPaise)} to deposit by ${formatDayKey(l.dueDate)} (${daysBetween(prep, l.dueDate)} day(s) left).`,
       evidence: { quote: `${l.section} ${l.month} deducted ${(l.deductedPaise / 100).toFixed(2)} deposited ${(l.depositedPaise / 100).toFixed(2)}`, location: at(ci.extracted.files.find((f) => f.kind === "tds-deducted")?.name ?? "TDS deducted", l.row) },
     };
   },
@@ -294,7 +327,24 @@ export const BOOKS_CHECKLIST: ChecklistPack = {
       evidence: "suspense ledger, balance and TB row",
       params: { patterns: [...BOOKS_NAMES.suspense], verify: BOOKS_NAMES.verify },
     }),
-    rule({ id: "books.tds-not-deposited", title: "TDS deducted has been deposited", severity: "block", kind: "deterministic", check: "books.tds-not-deposited", evidence: "section, month, deducted and deposited amounts", params: { verify: TDS_DUE.verify } }),
+    rule({
+      id: "books.tds-not-deposited",
+      title: "TDS deducted has been deposited by the due date",
+      severity: "block",
+      kind: "deterministic",
+      check: "books.tds-not-deposited",
+      evidence: "section, month, deducted and deposited amounts, due date",
+      params: { dayOfNextMonth: TDS_DUE.dayOfNextMonth, marchDue: "30 April", verify: `${TDS_DUE.verify} ${TDS_SEVERITY_VERIFY}` },
+    }),
+    rule({
+      id: "books.tds-due-soon",
+      title: "TDS deducted, deposit due after the preparation date (reminder)",
+      severity: "warn",
+      kind: "deterministic",
+      check: "books.tds-due-soon",
+      evidence: "section, month, amount to deposit and due date",
+      params: { dayOfNextMonth: TDS_DUE.dayOfNextMonth, marchDue: "30 April", verify: `${TDS_DUE.verify} ${TDS_SEVERITY_VERIFY}` },
+    }),
     rule({
       id: "books.tds-late",
       title: "TDS deposited by the due date",

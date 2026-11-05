@@ -1,10 +1,10 @@
 {
-  "description": "Typical gap: October 194C TDS ₹2,500 deducted on a contractor bill but no challan; 194I and 192 paid on time.",
+  "description": "Typical gap: October 194C TDS ₹2,500 deducted on a contractor bill (25 Oct 2026) but no challan; the pack is prepared on 05 Nov 2026 and October TDS is due by 07 Nov 2026 (rule 30(2): 7th of the next month), so the deposit is not yet late -> warn reminder books.tds-due-soon with the due date (2 days left), no block. 194I ₹6,000 and 192 ₹14,000 deposited (challans dated 06 Nov 2026, before the due date). Deducted 6,000 + 14,000 + 2,500 = 22,500 (2250000 paise); deposited 20,000 (2000000); shortfall 2,500 (250000).",
   "category": "typical-gap",
   "flags": [
     {
-      "ruleId": "books.tds-not-deposited",
-      "severity": "block"
+      "ruleId": "books.tds-due-soon",
+      "severity": "warn"
     }
   ],
   "figures": {
