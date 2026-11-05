@@ -33,6 +33,18 @@ describe("grouping map", () => {
     ["Purchase Accounts", "L-M"],
     ["Direct Expenses", "L-M"],
     ["Indirect Expenses", "L-N"],
+    // Audit round 3: Tally "Misc. Expenses (ASSET)" is an asset; Zoho "Other Current Asset" and "Long Term Liability".
+    ["Misc. Expenses (ASSET)", "L-J"],
+    ["Miscellaneous Expenses (Asset)", "L-J"],
+    ["Misc Expenses (ASSET)", "L-J"],
+    ["Other Current Asset", "L-J"],
+    ["Long Term Liability", "L-B"],
+    ["Long-term Liabilities", "L-B"],
+    // Neighbours unchanged by the new patterns.
+    ["Misc. Expenses", "L-N"],
+    ["Other Current Liability", "L-D"],
+    ["Other Liability", "L-D"],
+    ["Expense", "L-N"],
   ])("%s → %s", (group, wp) => expect(areaOf({ group, ledger: "x" })?.wp).toBe(wp));
   it("suspense / blank groups stay unmapped; a ledger pattern can map", () => {
     expect(areaOf({ group: "Suspense A/c", ledger: "Suspense" })).toBeNull();
