@@ -17,6 +17,7 @@ import { RevealPii } from "./RevealPii";
 import { canRevealClientPii } from "@/lib/rbac/policy";
 import { maskClientPii, type PiiField } from "@/lib/clients/pii";
 import { ClientHistory } from "./ClientHistory";
+import { auditClientView } from "@/lib/audit/reads";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +45,9 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
   const clPaths = isClPathsEnabled();
   const firmClient = clPaths ? await prisma.firmClient.findUnique({ where: { lmsClientId: id }, select: { clientCode: true } }) : null;
   const clientCode = firmClient?.clientCode ?? null;
+  // Read audit (breach runbook §2 "who accessed client X"): one "view" per person per client per
+  // hour, ids and code only; never blocks the page.
+  await auditClientView(session.user, client.id, { clientCode });
   const siteLink = clientSiteLink({ clPaths, clientCode });
   const firmJobs = firmClient ? await listClientJobs(prisma as unknown as ClientJobsDb, session.user, id) : null;
 

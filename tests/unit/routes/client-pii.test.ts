@@ -76,7 +76,11 @@ describe("/clients/[id] identifiers", () => {
     expect(dl).toContain("Kiran Kumar");
     for (const full of [CLIENT.pan, CLIENT.gstin, CLIENT.contactPhone, CLIENT.contactEmail]) expect(html).not.toContain(full);
     expect(dl).not.toMatch(/>Show</);
-    expect(audits).toEqual([]); // opening the page records nothing
+    // Opening the page is a read audit: one "view" (ids and code only, no identifier), at most once an hour.
+    expect(audits).toEqual([{ actorId: "u-staff", action: "view", entity: "Client", entityId: CLIENT.id, meta: { clientCode: null } }]);
+    await render();
+    expect(audits).toHaveLength(1);
+    expect(JSON.stringify(audits)).not.toMatch(/ABCPK|9876543210|kiran@/);
   });
 
   it("managers (not management) see masked values too; admins and partners see them masked with a Show per value", async () => {
