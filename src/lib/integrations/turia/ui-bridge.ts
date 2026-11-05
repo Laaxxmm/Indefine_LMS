@@ -9,10 +9,7 @@
 //
 // Today every method throws TuriaBlockedError with the human action, so the onboarding saga
 // records a BLOCKED step instead of silently passing. No automation code exists here.
-import {
-  type TuriaAdapter, type TuriaClientInput, type TuriaCloseContext, type TuriaLookup, type TuriaOpResult,
-  type TuriaServiceInput, type TuriaTaskInput,
-} from "./adapter";
+import type { TuriaAdapter, TuriaLookup, TuriaOpResult } from "./adapter";
 import { TuriaBlockedError, UI_BRIDGE_DISABLED_ACTION, UI_BRIDGE_NOT_BUILT_ACTION, UI_BRIDGE_PARTNER_ONLY_ACTION } from "./errors";
 
 type Env = Record<string, string | undefined>;
@@ -47,19 +44,19 @@ export class UiAutomationBridge implements TuriaAdapter {
     throw new TuriaBlockedError(UI_BRIDGE_NOT_BUILT_ACTION);
   }
 
-  async createClient(_input: TuriaClientInput): Promise<TuriaOpResult> {
+  async createClient(): Promise<TuriaOpResult> {
     return this.guard();
   }
-  async addService(_input: TuriaServiceInput): Promise<TuriaOpResult> {
+  async addService(): Promise<TuriaOpResult> {
     return this.guard();
   }
-  async createTask(_input: TuriaTaskInput): Promise<TuriaOpResult> {
+  async createTask(): Promise<TuriaOpResult> {
     return this.guard();
   }
-  async closeTask(_taskRef: string, _minutes: number, _ctx?: TuriaCloseContext): Promise<TuriaOpResult> {
+  async closeTask(): Promise<TuriaOpResult> {
     return this.guard();
   }
-  async findClientByCode(_code: string): Promise<TuriaLookup> {
+  async findClientByCode(): Promise<TuriaLookup> {
     return this.guard();
   }
 }

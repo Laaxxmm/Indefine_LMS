@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { TuriaSync } from "@prisma/client";
 import { FakeTuriaRepo } from "../../../../tests/fakes/fake-turia-repo";
 import { BlockedError } from "../sharepoint/errors";
-import { TURIA_ADAPTER_METHODS, type TuriaClientInput, type TuriaServiceInput, type TuriaTaskInput } from "./adapter";
+import { TURIA_ADAPTER_METHODS, type TuriaAdapter, type TuriaClientInput, type TuriaServiceInput, type TuriaTaskInput } from "./adapter";
 import { ApiBridge } from "./api-bridge";
 import { listTuriaSyncs, prismaTuriaSyncRepo, toRecord } from "./db";
 import { NO_TURIA_API_ACTION, TuriaBlockedError, TuriaConfirmError, UI_BRIDGE_DISABLED_ACTION, UI_BRIDGE_NOT_BUILT_ACTION, UI_BRIDGE_PARTNER_ONLY_ACTION } from "./errors";
@@ -190,7 +190,7 @@ describe("ManualBridge", () => {
 });
 
 describe("UiAutomationBridge (stub)", () => {
-  const call = (b: UiAutomationBridge) => [
+  const call = (b: TuriaAdapter) => [
     () => b.createClient(CLIENT),
     () => b.addService(SERVICE),
     () => b.createTask(TASK),
@@ -212,7 +212,7 @@ describe("UiAutomationBridge (stub)", () => {
 
   it("enabled: partner-only, and still not built", async () => {
     const env = { FIRM_OS_TURIA_UI: "true" };
-    await expect(new UiAutomationBridge({ env }).createClient(CLIENT)).rejects.toMatchObject({ action: UI_BRIDGE_PARTNER_ONLY_ACTION });
+    await expect((new UiAutomationBridge({ env }) as TuriaAdapter).createClient(CLIENT)).rejects.toMatchObject({ action: UI_BRIDGE_PARTNER_ONLY_ACTION });
     const b = new UiAutomationBridge({ env, actorIsPartner: true, dryRun: false });
     expect(b.dryRun).toBe(false);
     for (const fn of call(b)) await expect(fn()).rejects.toMatchObject({ action: UI_BRIDGE_NOT_BUILT_ACTION });
@@ -227,7 +227,7 @@ describe("UiAutomationBridge (stub)", () => {
 
 describe("ApiBridge", () => {
   it("is not available: every method is BLOCKED (no documented Turia API)", async () => {
-    const b = new ApiBridge();
+    const b: TuriaAdapter = new ApiBridge();
     expect(b.mode).toBe("API");
     for (const fn of [() => b.createClient(CLIENT), () => b.addService(SERVICE), () => b.createTask(TASK), () => b.closeTask("T", 1), () => b.findClientByCode("X")]) {
       await expect(fn()).rejects.toMatchObject({ name: "TuriaBlockedError", action: NO_TURIA_API_ACTION });

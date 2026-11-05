@@ -3,7 +3,7 @@
 // them. Every method throws TuriaBlockedError naming the human action. If Turia ever supplies
 // documented endpoints and credentials, implement them here and nowhere else.
 import type {
-  TuriaAdapter, TuriaClientInput, TuriaCloseContext, TuriaLookup, TuriaOpResult, TuriaServiceInput, TuriaTaskInput,
+  TuriaAdapter, TuriaLookup, TuriaOpResult,
 } from "./adapter";
 import { NO_TURIA_API_ACTION, TuriaBlockedError } from "./errors";
 
@@ -14,19 +14,19 @@ export class ApiBridge implements TuriaAdapter {
     throw new TuriaBlockedError(NO_TURIA_API_ACTION);
   }
 
-  async createClient(_input: TuriaClientInput): Promise<TuriaOpResult> {
+  async createClient(): Promise<TuriaOpResult> {
     return this.unavailable();
   }
-  async addService(_input: TuriaServiceInput): Promise<TuriaOpResult> {
+  async addService(): Promise<TuriaOpResult> {
     return this.unavailable();
   }
-  async createTask(_input: TuriaTaskInput): Promise<TuriaOpResult> {
+  async createTask(): Promise<TuriaOpResult> {
     return this.unavailable();
   }
-  async closeTask(_taskRef: string, _minutes: number, _ctx?: TuriaCloseContext): Promise<TuriaOpResult> {
+  async closeTask(): Promise<TuriaOpResult> {
     return this.unavailable();
   }
-  async findClientByCode(_code: string): Promise<TuriaLookup> {
+  async findClientByCode(): Promise<TuriaLookup> {
     return this.unavailable();
   }
 }
