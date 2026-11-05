@@ -13,8 +13,9 @@ const btn = "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border bo
 const primary = "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-brand-500 hover:bg-brand-600 text-white text-sm font-bold transition disabled:opacity-50";
 const input = "w-full px-3 py-2 rounded-lg border border-border bg-card text-sm";
 
-// Progress along the approval flow; index = how many steps are done.
-const STEPS = ["Draft PDF", "Sent for approval", "Approved", "Signed", "Signed letter sent", "Client signed"];
+// Progress along the approval flow; index = how many steps are done. The emails are Outlook drafts
+// the staff member sends from Outlook; the app never sends them.
+const STEPS = ["Draft PDF", "Emailed for approval", "Approved", "Signed", "Signed letter emailed", "Client signed"];
 const DONE: Record<EngagementLetterStatus, number> = {
   DRAFT: 0, DRAFT_UPLOADED: 1, SENT_FOR_APPROVAL: 2, APPROVED: 3, SIGNED: 4, SENT: 5, CLIENT_SIGNED: 6,
 };
@@ -25,7 +26,7 @@ export function LetterActions({ id, status, mails }: { id: string; status: Engag
   const fileRef = useRef<HTMLInputElement>(null);
   const [kind, setKind] = useState<Kind>("draft");
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ text: string; link?: string } | null>(null);
+  const [msg, setMsg] = useState<{ text: string; link?: string; open?: string } | null>(null);
   const [draft, setDraft] = useState<(Draft & { kind: "draft" | "signed" }) | null>(null);
   const [note, setNote] = useState<string | null>(null);
 
@@ -36,7 +37,7 @@ export function LetterActions({ id, status, mails }: { id: string; status: Engag
     const j = await res?.json().catch(() => ({}));
     setBusy(false);
     if (res?.ok) {
-      setMsg({ text: ok });
+      setMsg({ text: ok, open: typeof j?.webLink === "string" ? j.webLink : undefined });
       setDraft(null);
       setNote(null);
       router.refresh();
@@ -80,7 +81,7 @@ export function LetterActions({ id, status, mails }: { id: string; status: Engag
         )}
         {show("sendDraft") && (
           <button type="button" className={status === "DRAFT_UPLOADED" ? primary : btn} disabled={busy} onClick={() => setDraft({ ...mails.draft, kind: "draft" })}>
-            <Mail className="w-3.5 h-3.5" /> {status === "SENT_FOR_APPROVAL" ? "Resend draft" : "Email draft for approval"}
+            <Mail className="w-3.5 h-3.5" /> {status === "SENT_FOR_APPROVAL" ? "Prepare approval email again" : "Prepare approval email"}
           </button>
         )}
         {show("approve") && (
@@ -95,7 +96,7 @@ export function LetterActions({ id, status, mails }: { id: string; status: Engag
         )}
         {show("sendSigned") && (
           <button type="button" className={status === "SIGNED" ? primary : btn} disabled={busy} onClick={() => setDraft({ ...mails.signed, kind: "signed" })}>
-            <Mail className="w-3.5 h-3.5" /> {status === "SENT" ? "Resend signed letter" : "Email signed letter"}
+            <Mail className="w-3.5 h-3.5" /> {status === "SENT" ? "Prepare signed-letter email again" : "Prepare signed-letter email"}
           </button>
         )}
         {show("uploadClient") && (
@@ -107,6 +108,7 @@ export function LetterActions({ id, status, mails }: { id: string; status: Engag
           <span className="text-[13px] text-ink-mute">
             {msg.text}{" "}
             {msg.link && <a href={msg.link} className="font-semibold text-brand-600 hover:underline">Connect mailbox</a>}
+            {msg.open && <a href={msg.open} target="_blank" rel="noopener noreferrer" className="font-semibold text-brand-600 hover:underline">Open in Outlook</a>}
           </span>
         )}
       </div>
@@ -143,11 +145,12 @@ export function LetterActions({ id, status, mails }: { id: string; status: Engag
             <textarea className={`${input} font-sans`} rows={14} value={draft.text} onChange={(e) => setDraft({ ...draft, text: e.target.value })} />
           </label>
           <p className="text-[12px] text-ink-faint">
-            The {draft.kind === "draft" ? "unsigned draft" : "signed"} PDF is attached. Sent from your own Microsoft 365 mailbox.
+            The {draft.kind === "draft" ? "unsigned draft" : "signed"} PDF is attached. This puts the email in the Drafts folder of your own Outlook mailbox;
+            open it in Outlook, check it and send it yourself. The LMS does not send it.
           </p>
           <div className="flex gap-2">
-            <button type="button" disabled={busy} className={primary} onClick={() => call(`/api/tools/engagement-letters/${id}/send`, json(draft), "Email sent. A copy is in your Sent Items.")}>
-              {busy ? "Sending…" : "Send"}
+            <button type="button" disabled={busy} className={primary} onClick={() => call(`/api/tools/engagement-letters/${id}/outlook-draft`, json(draft), "Outlook draft created in your Drafts folder. Check it and send it from Outlook.")}>
+              {busy ? "Creating draft…" : "Create Outlook draft"}
             </button>
             <button type="button" onClick={() => setDraft(null)} className={btn}>Cancel</button>
           </div>
