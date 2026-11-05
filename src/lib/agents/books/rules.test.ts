@@ -74,6 +74,31 @@ describe("books.tb-balanced (block)", () => {
   it("fails without any TB file at all", () => expect(run("books.tb-balanced", extract({})).evidence?.location).toBe("trial balance"));
 });
 
+describe("books.prior-tb-balanced (warn)", () => {
+  it("is a warning, not a block (owner-approved 2026-11-05)", () => expect(ruleOf("books.prior-tb-balanced")).toMatchObject({ severity: "warn", params: { tolerancePaise: 0 } }));
+  it("passes when the prior-month TB balances; na when none is supplied", () => {
+    expect(run("books.prior-tb-balanced", extract({ tb: TB_OK, priorTb: TB_OK })).status).toBe("pass");
+    expect(run("books.prior-tb-balanced", extract({ tb: TB_OK })).status).toBe("na");
+  });
+  it("fails when the prior-month TB is off by ₹1, even though the current TB balances", () => {
+    // Debits 100 + 901 = 1,001 vs credits 1,000.
+    const e = extract({ tb: TB_OK, priorTb: TB_OK.replace("900.00", "901.00") });
+    const r = run("books.prior-tb-balanced", e);
+    expect(r).toMatchObject({ status: "fail", evidence: { quote: "Total debits 1001.00 / total credits 1000.00", location: "tb-prior.csv (3 ledgers)" } });
+    expect(r.message).toContain("difference ₹1.00");
+    expect(run("books.tb-balanced", e).status).toBe("pass");
+  });
+  it("boundary: one paisa off fails; the tolerance param is honoured", () => {
+    const e = extract({ tb: TB_OK, priorTb: TB_OK.replace("1000.00", "999.99") });
+    expect(run("books.prior-tb-balanced", e).status).toBe("fail");
+    expect(run("books.prior-tb-balanced", e, { params: { tolerancePaise: 1 } }).status).toBe("pass");
+  });
+  it("fails when a prior-month TB was supplied but cannot be read", () => {
+    const r = run("books.prior-tb-balanced", extract({ tb: TB_OK }, { files: [{ name: "tb.csv", kind: "tb" }, { name: "prior-tb.csv", kind: "tb-prior" }] }));
+    expect(r).toMatchObject({ status: "fail", evidence: { location: "prior-tb.csv" } });
+  });
+});
+
 describe("books.parse-issues (warn)", () => {
   it("pass / fail", () => {
     expect(run("books.parse-issues", extract({ tb: TB_OK })).status).toBe("pass");
