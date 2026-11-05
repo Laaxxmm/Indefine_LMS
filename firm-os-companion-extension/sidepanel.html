@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en-IN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Firm OS Companion</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="bar">
+    <div class="brand">
+      <svg class="brand-mark" width="28" height="28" viewBox="0 0 40 40" fill="none" aria-hidden="true" focusable="false"><defs><linearGradient id="brand-grad" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse"><stop stop-color="#6D5BF0"></stop><stop offset="1" stop-color="#4B37D8"></stop></linearGradient></defs><rect width="40" height="40" rx="12" fill="url(#brand-grad)"></rect><path d="M10 27 L17.5 18.5 L23 23 L30 12" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="30" cy="12" r="3.2" fill="#FF3B30"></circle></svg>
+      <div>
+        <p class="brand-name">indefine</p>
+        <p class="brand-sub">Firm OS Companion</p>
+      </div>
+    </div>
+    <button type="button" id="refresh" class="btn btn-sm">Refresh</button>
+  </header>
+  <p id="status" class="status" role="status" aria-live="polite"></p>
+  <main id="view" class="wrap" aria-busy="true">
+    <p class="fine">Loading your current task…</p>
+  </main>
+  <p id="announce" class="sr-only" aria-live="polite"></p>
+  <footer class="foot">
+    <p class="fine">Read-only. This panel never reads, fills or submits any page. You file, sign and pay yourself.</p>
+    <p class="fine"><button type="button" id="open-options" class="btn btn-sm">Options</button></p>
+  </footer>
+  <script type="module" src="sidepanel.js"></script>
+</body>
+</html>
