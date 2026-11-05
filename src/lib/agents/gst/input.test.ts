@@ -97,7 +97,7 @@ describe("loadGstData", () => {
   it("fails closed on another department's file before any model call, and on bad JSON / profile / 2B", async () => {
     const tb = f("sales-register.csv", "Particulars,Group,Opening Balance,Debit,Credit,Closing Balance\nCash,Assets,0,10,0,10");
     await expect(load([BASE[0], tb, BASE[2], BASE[3]])).rejects.toThrow(/looks like a trial balance or ledger.*Books Close/);
-    await expect(load([f("profile.json", "{not json"), ...BASE.slice(1)])).rejects.toThrow(/profile\.json: not valid JSON/);
+    await expect(load([f("profile.json", "{not json"), ...BASE.slice(1)])).rejects.toThrow(/profile\.json: not a valid \.json file/);
     await expect(load([f("profile.json", JSON.stringify({ aatoInr: 1 })), ...BASE.slice(1)])).rejects.toThrow(/profile\.json: gstin/);
     await expect(load([...BASE.slice(0, 3), f("gstr2b.json", "{}")])).rejects.toThrow(/not a GSTR-2B JSON/);
     await expect(load([...BASE, f("prev.json", JSON.stringify({ period: "2026-09" }))])).rejects.toThrow(/prev\.json: gstr1Liability/);

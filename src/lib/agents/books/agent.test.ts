@@ -57,7 +57,7 @@ describe("books agent definition", () => {
     ];
     const p = await parseBooksFiles({ files });
     expect(p.tb!.rows.map((r) => r.ledger)).toEqual(["X", "Y"]);
-    expect(p.issues.map((i) => i.message)).toEqual(["column-map.json is not valid JSON; ignored", "a second tb file; only the first is used"]);
+    expect(p.issues.map((i) => i.message)).toEqual(["column-map.json is not a valid .json file; ignored", "a second tb file; only the first is used"]);
     const shape = await parseBooksFiles({ files: [{ name: "column-map.json", kind: "column-map", bytes: Buffer.from('{"tb": 5}') }] });
     expect(shape.issues[0].message).toContain("ignored");
   });

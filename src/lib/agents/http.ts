@@ -5,21 +5,22 @@ import type { ZodSchema } from "zod";
 import { auth } from "@/lib/auth";
 import { canUseAgents } from "@/lib/agents/access";
 import type { ServiceResult } from "@/lib/agents/service";
+import { USER_MESSAGES, validationMessage } from "@/lib/errors";
 
 export type Guarded = { user: Session["user"]; res?: undefined } | { user?: undefined; res: NextResponse };
 
 /** Signed in and active, or a 401 / 403 response. */
 export async function requireAgentUser(): Promise<Guarded> {
   const session = await auth();
-  if (!session?.user) return { res: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
-  if (!canUseAgents(session.user)) return { res: NextResponse.json({ error: "No access" }, { status: 403 }) };
+  if (!session?.user) return { res: NextResponse.json({ error: USER_MESSAGES.signIn() }, { status: 401 }) };
+  if (!canUseAgents(session.user)) return { res: NextResponse.json({ error: USER_MESSAGES.noAgentAccess() }, { status: 403 }) };
   return { user: session.user };
 }
 
 export async function parseJson<T>(schema: ZodSchema<T>, req: Request): Promise<{ data: T; res?: undefined } | { data?: undefined; res: NextResponse }> {
   const parsed = schema.safeParse(await req.json().catch(() => null));
   if (parsed.success) return { data: parsed.data };
-  return { res: NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid request" }, { status: 400 }) };
+  return { res: NextResponse.json({ error: validationMessage(parsed.error) }, { status: 400 }) };
 }
 
 export function toJson<T>(r: ServiceResult<T>, okStatus = 200): NextResponse {

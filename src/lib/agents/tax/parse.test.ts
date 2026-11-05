@@ -56,7 +56,7 @@ describe("organiser validation", () => {
     expect(() => parseOrganiser(org({ profile: { ...P, businessKind: "business" } }))).toThrow(/business: required/);
   });
   it("bad JSON, unknown keys, bad amounts", () => {
-    expect(() => parseOrganiser(file("organiser.json", "{"))).toThrow(/not valid JSON/);
+    expect(() => parseOrganiser(file("organiser.json", "{"))).toThrow(/not a valid \.json file/);
     expect(() => parseOrganiser(org({ profile: P, extra: 1 }))).toThrow(/Unrecognized key/);
     expect(() => parseOrganiser(org({ profile: P, otherSources: [{ id: "B1", nature: "savings-interest", payer: "X", amount: "1.234" }] }))).toThrow(/otherSources\[0\]\.amount/);
   });

@@ -236,7 +236,7 @@ describe("wrong-department input stops the run before any model call", () => {
   });
   it("a sniff that throws or rejects fails closed; an async sniff is awaited", async () => {
     const boom = await runAgent({ ...echoAgent, scope: { ...ECHO_SCOPE, inputSniff: () => { throw new Error("cannot read"); } } }, "job-1", echoWorld().deps);
-    expect(!boom.ok && boom.reason).toMatch(/inputSniff could not read the files \(cannot read\)/);
+    expect(!boom.ok && boom.reason).toMatch(/The documents could not be checked before the run\. Cannot read\. Check the files and run the agent again\./);
     const w = echoWorld();
     const later = await runAgent({ ...echoAgent, scope: { ...ECHO_SCOPE, inputSniff: async () => ({ ok: false as const, reason: "a trial balance", suggestAgent: "books" }) } }, "job-1", w.deps);
     expect(!later.ok && later.reason).toMatch(/a trial balance\. Run the books agent/);

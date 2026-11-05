@@ -122,7 +122,7 @@ export function decideRoute(input: RouteInput): RouteDecision {
   }
   const provider: ProviderId | null = available.claude ? "claude" : available.grok ? "grok" : null;
   if (!provider) {
-    return { kind: "unavailable", reason: "Claude is unavailable and Grok is not configured (XAI_API_KEY empty)." };
+    return { kind: "unavailable", reason: "Claude is unavailable and no backup AI service (Grok) is set up." };
   }
   return { kind: "call", provider, tier, anonymize: privacy !== "public", needsPartnerReview, canEscalate };
 }

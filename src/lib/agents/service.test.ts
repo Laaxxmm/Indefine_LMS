@@ -164,7 +164,7 @@ describe("comments, mistakes and files", () => {
     const id = (r as { data: { id: string } }).data.id;
     expect(await decideMistakeFor(user("ravi"), id, "approve", w.deps)).toMatchObject({ ok: false, status: 403 });
     expect(await decideMistakeFor(user("admin"), id, "approve", w.deps)).toMatchObject({ ok: false, status: 403 });
-    expect(await decideMistakeFor(user("meera"), id, "approve", w.deps)).toMatchObject({ ok: false, status: 403, error: "Only a partner may decide mistake rules" });
+    expect(await decideMistakeFor(user("meera"), id, "approve", w.deps)).toMatchObject({ ok: false, status: 403, error: "Only a partner can approve or reject a proposed rule. Ask a partner to decide it." });
     expect(await decideMistakeFor(user("partner"), "nope", "approve", w.deps)).toMatchObject({ ok: false, status: 404 });
     expect(await decideMistakeFor(user("partner"), id, "approve", w.deps)).toEqual({ ok: true, data: { status: "APPROVED", promotedToVersion: "1.1.0" } });
     expect(await decideMistakeFor(user("partner"), id, "reject", w.deps)).toMatchObject({ ok: false, status: 409 });

@@ -9,6 +9,7 @@
 // Approved MistakeLog proposals become rules with source "mistake" (nothing auto-promotes).
 // Pure apart from the injected llmCheck: no Prisma, no fetch, no clock.
 import { z } from "zod";
+import { causeSentence } from "@/lib/errors";
 
 // ------------------------------------------------------------------ types
 
@@ -229,7 +230,11 @@ function defaultMessage(rule: RuleDefinition, status: CheckStatus): string {
   return rule.failMessage ?? `${rule.title}: failed`;
 }
 
-const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
+/** " The cause." after a row's sentence, when one can be said plainly (src/lib/errors). */
+const cause = (e: unknown) => {
+  const s = causeSentence(e);
+  return s ? ` ${s}` : "";
+};
 
 function item(rule: RuleDefinition, status: CheckStatus, message: string | undefined, evidence: Evidence | undefined | null, flags: ResultFlag[] = []): ChecklistResultItem {
   return {
@@ -246,24 +251,24 @@ function item(rule: RuleDefinition, status: CheckStatus, message: string | undef
 
 function runDeterministic<I>(rule: RuleDefinition, input: I, registry: RuleRegistry<I>): ChecklistResultItem {
   const impl = registry.get(rule.check);
-  if (!impl) return item(rule, "fail", `${rule.title}: no implementation registered ("${rule.check}"); treat as unchecked`, null, ["missing-implementation"]);
+  if (!impl) return item(rule, "fail", `${rule.title}: this check is not available yet, so treat it as not checked and check it by hand.`, null, ["missing-implementation"]);
   try {
     const out = impl(input, rule);
     return item(rule, out.status, out.message, out.evidence);
   } catch (e) {
-    return item(rule, "fail", `${rule.title}: check could not run (${errText(e)}); treat as unchecked`, null, ["check-error"]);
+    return item(rule, "fail", `${rule.title}: this check could not run, so treat it as not checked and check it by hand.${cause(e)}`, null, ["check-error"]);
   }
 }
 
 async function runLlm<I>(rule: RuleDefinition, input: I, llmCheck: LlmCheck<I> | undefined, llmContext: LlmContextFn<I> | undefined): Promise<ChecklistResultItem> {
-  if (!llmCheck) return item(rule, "na", `${rule.title}: needs a model check; none available, review manually`, null, ["llm-unavailable"]);
+  if (!llmCheck) return item(rule, "na", `${rule.title}: this needs the AI to check it, which is not available here. Check it by hand.`, null, ["llm-unavailable"]);
   let raw: unknown;
   let context: string;
   try {
     context = llmContext ? llmContext(rule, input) : defaultLlmContext(input);
     raw = await llmCheck(rule, input, context);
   } catch (e) {
-    return item(rule, "na", `${rule.title}: model check failed (${errText(e)}); review manually`, null, ["llm-error"]);
+    return item(rule, "na", `${rule.title}: the AI could not check this, so check it by hand.${cause(e)}`, null, ["llm-error"]);
   }
   if (isGuardrailOutcome(raw)) return item(rule, "na", raw.message, raw.evidence ?? null, [raw.guardrail]);
   if ((raw as { status?: unknown } | null)?.status === ABSTAIN_STATUS) {

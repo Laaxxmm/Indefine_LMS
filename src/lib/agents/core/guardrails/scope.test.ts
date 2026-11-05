@@ -115,8 +115,8 @@ describe("sniffInputs (fails closed)", () => {
     expect(await sniffInputs(scope(() => ({ ok: true })), files)).toEqual({ ok: true });
     expect(await sniffInputs(scope(async () => ({ ok: false, reason: "a TB", suggestAgent: "books" })), files)).toEqual({ ok: false, reason: "a TB", suggestAgent: "books" });
     expect(await sniffInputs(scope(() => ({ ok: false, reason: "" })), files)).toEqual({ ok: false, reason: "inputs are not this department's documents", suggestAgent: undefined });
-    expect(await sniffInputs(scope(() => Promise.reject(new Error("unreadable"))), files)).toEqual({ ok: false, reason: "inputSniff could not read the files (unreadable)" });
-    expect(await sniffInputs(scope(() => undefined as never), files)).toEqual({ ok: false, reason: "inputSniff returned no verdict" });
+    expect(await sniffInputs(scope(() => Promise.reject(new Error("unreadable"))), files)).toEqual({ ok: false, reason: "The documents could not be checked before the run. Unreadable. Check the files and run the agent again." });
+    expect(await sniffInputs(scope(() => undefined as never), files)).toEqual({ ok: false, reason: "The documents could not be checked before the run. Run the agent again; if it keeps happening, tell IT." });
     expect(wrongInputMessage({ title: "GST Prep", service: "GST" }, { ok: false, reason: "tb.csv is a trial balance" })).toBe("Wrong input for GST Prep (GST (Goods and Services Tax)): tb.csv is a trial balance");
   });
 });

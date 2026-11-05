@@ -20,7 +20,7 @@ export const MAX_INPUT_BYTES = 25 * 1024 * 1024;
 
 export class InputTooLargeError extends Error {
   constructor(total: number, max: number) {
-    super(`Inputs total ${total} bytes, above the ${max}-byte limit; split the documents`);
+    super(`The documents for this run add up to ${(total / 1048576).toFixed(1)} MB, above the ${(max / 1048576).toFixed(1)} MB limit for one run. Split them across runs, or remove files the agent does not need.`);
     this.name = "InputTooLargeError";
   }
 }

@@ -71,8 +71,8 @@ export async function readXlsx(bytes: Buffer): Promise<XlsxSheet[]> {
   const wb = new ExcelJS.Workbook();
   try {
     await wb.xlsx.load(bytes as unknown as ArrayBuffer);
-  } catch (e) {
-    throw new GstParseError(`not a readable XLSX file (${e instanceof Error ? e.message : String(e)})`);
+  } catch {
+    throw new GstParseError("not a readable XLSX file. Open it in Excel, save it again as .xlsx and upload it.");
   }
   const out: XlsxSheet[] = [];
   wb.eachSheet((ws) => {

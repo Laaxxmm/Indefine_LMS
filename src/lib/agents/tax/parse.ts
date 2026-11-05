@@ -14,6 +14,7 @@ import { z } from "zod";
 import type { InputFile } from "@/lib/agents/core/runner";
 import { wrongDepartment } from "@/lib/agents/core/guardrails/shared";
 import { isDayKey, optPaise, parseCsv, rupeesToPaise, yes } from "@/lib/agents/core/util";
+import { causeSentence } from "@/lib/errors";
 
 const Day = z.string().refine(isDayKey, "date must be YYYY-MM-DD");
 const Amount = z.union([z.string(), z.number()]);
@@ -134,7 +135,7 @@ function json(file: InputFile): unknown {
   try {
     return JSON.parse(file.bytes.toString("utf8"));
   } catch {
-    throw new Error(`${file.name} is not valid JSON`);
+    throw new Error(`${file.name} is not a valid .json file. Export it again and upload it.`);
   }
 }
 
@@ -293,7 +294,7 @@ export const taxInputSchema = z.array(InputFileZ).transform((files, ctx): TaxInp
   try {
     return parseTaxFiles(files as InputFile[]);
   } catch (e) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: (e as Error).message });
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: causeSentence(e) ?? "The income tax documents could not be read. Check the files and upload them again." });
     return z.NEVER;
   }
 }) as unknown as z.ZodType<TaxInput, z.ZodTypeDef, InputFile[]>;

@@ -114,7 +114,7 @@ describe("all 81 (from, to) pairs", () => {
     const d = canTransition("NOPE" as JobTaskState, "DONE", ctx());
     expect(d).toMatchObject({ ok: false, code: "UNKNOWN_STATE" });
     const d2 = canTransition("DRAFT", "LATER" as JobTaskState, ctx());
-    expect(d2).toMatchObject({ ok: false, code: "UNKNOWN_STATE", reason: "Unknown state LATER" });
+    expect(d2).toMatchObject({ ok: false, code: "UNKNOWN_STATE", reason: "That job stage isn't one Firm OS knows. Reload the page and try again." });
   });
 });
 
@@ -233,7 +233,7 @@ describe("DONE gate", () => {
   it("a token for another job is rejected", () => {
     const token = mint({ jobTaskId: "job-2", now: NOW, evidence: {} });
     expect(gateTokenProblem(token, "job-1", NOW)).toBe("WRONG_JOB");
-    expect(canTransition("CLOSING", "DONE", closeCtx(token))).toMatchObject({ ok: false, reason: expect.stringContaining("wrong_job") });
+    expect(canTransition("CLOSING", "DONE", closeCtx(token))).toMatchObject({ ok: false, reason: expect.stringContaining("for a different job") });
   });
 
   it("a token expires after the TTL and is not valid before minting", () => {

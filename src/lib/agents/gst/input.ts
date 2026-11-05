@@ -103,7 +103,7 @@ const MoneyZ = z.union([z.number(), z.string()]).transform((v, ctx) => {
   try {
     return parseAmount(v) ?? 0;
   } catch (e) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: (e as Error).message });
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: e instanceof GstParseError ? e.message : "not a readable amount" });
     return z.NEVER;
   }
 });
@@ -143,8 +143,8 @@ export const PrevReturnZ = z.object({
 function parseJson(f: RoleFile): unknown {
   try {
     return JSON.parse((f.text ?? "").replace(/^ï»¿/, ""));
-  } catch (e) {
-    throw new GstParseError(`${f.name}: not valid JSON (${(e as Error).message})`);
+  } catch {
+    throw new GstParseError(`${f.name}: not a valid .json file. Export it again and upload it.`);
   }
 }
 

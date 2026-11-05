@@ -8,6 +8,7 @@ import { btnGhost, call, card, errorText, field, focusRing, labelText, pageBleed
 import type { CommentView, DeliverableView, RunReview } from "@/lib/agents/views";
 import type { CloseLoopAction, CloseLoopView } from "@/lib/close-loop/review";
 import { Alert, Button, Section, Spinner, StateChip } from "@/components/firm-os";
+import { DEFAULT_MESSAGE } from "@/lib/errors";
 
 type Preview = { sheets: { name: string; rows: string[][]; truncated: boolean }[] };
 
@@ -176,7 +177,7 @@ export function MistakeForm({ runId, checks }: { runId: string; checks: string[]
       try {
         params = JSON.parse(f.params) as Record<string, unknown>;
       } catch {
-        return setError("Parameters must be JSON, for example {\"limitPaise\": 2000000}");
+        return setError("The settings could not be read. Write each one as a name in quotes and a value, inside braces — for example {\"limit\": 2000000}.");
       }
     }
     setBusy(true);
@@ -216,7 +217,7 @@ export function MistakeForm({ runId, checks }: { runId: string; checks: string[]
             </label>
             <div className="grid sm:grid-cols-2 gap-3">
               <label className={lbl}>
-                Rule id
+                Rule code
                 <input value={f.ruleId} onChange={set("ruleId")} placeholder="e.g. gst.itc-blocked-motor" className={`${field} ${focusRing}`} />
               </label>
               <label className={lbl}>
@@ -300,10 +301,10 @@ export type TuriaCloseBody = { turiaTaskRef: string; minutes: number };
 /** "" → null (when optional); a whole number 1..6000 → that number; anything else → the error to show. */
 export function parseMinutes(value: string, required: boolean): { ok: true; minutes: number | null } | Fail {
   const s = value.trim();
-  if (!s) return required ? { ok: false, error: "Enter the minutes logged in Turia" } : { ok: true, minutes: null };
+  if (!s) return required ? { ok: false, error: "Enter the minutes logged in Turia." } : { ok: true, minutes: null };
   const n = Number(s);
-  if (!Number.isInteger(n) || n < 1) return { ok: false, error: "Minutes must be a whole number more than 0" };
-  if (n > 6000) return { ok: false, error: "Minutes must be at most 6,000" };
+  if (!Number.isInteger(n) || n < 1) return { ok: false, error: "Enter the minutes as a whole number more than 0." };
+  if (n > 6000) return { ok: false, error: "Enter at most 6,000 minutes." };
   return { ok: true, minutes: n };
 }
 
@@ -319,7 +320,7 @@ export function filedBody(ack: CloseLoopView["ack"], f: FilingForm): { ok: true;
 /** Body for "Record Turia close": both the task ref and minutes (> 0) are required. */
 export function turiaCloseBody(f: Pick<FilingForm, "turiaTaskRef" | "minutes">): { ok: true; body: TuriaCloseBody } | Fail {
   const turiaTaskRef = f.turiaTaskRef.trim();
-  if (!turiaTaskRef) return { ok: false, error: "Enter the Turia task ref" };
+  if (!turiaTaskRef) return { ok: false, error: "Enter the Turia task reference." };
   const m = parseMinutes(f.minutes, true);
   if (!m.ok) return m;
   return { ok: true, body: { turiaTaskRef, minutes: m.minutes! } };
@@ -332,7 +333,7 @@ export async function recordFiling(jobId: string, ack: CloseLoopView["ack"], f: 
   const b = filedBody(ack, f);
   if (!b.ok) return b;
   const r = await send(jobUrl(jobId, "filed"), b.body);
-  if (!r.ok) return { ok: false, error: r.error ?? "Something went wrong" };
+  if (!r.ok) return { ok: false, error: r.error ?? DEFAULT_MESSAGE };
   return { ok: true, state: String(r.data.state ?? "") };
 }
 
@@ -343,7 +344,7 @@ export async function recordTuriaClose(jobId: string, f: Pick<FilingForm, "turia
   const b = turiaCloseBody(f);
   if (!b.ok) return b;
   const r = await send(jobUrl(jobId, "turia-close"), b.body);
-  if (!r.ok) return { ok: false, error: r.error ?? "Something went wrong" };
+  if (!r.ok) return { ok: false, error: r.error ?? DEFAULT_MESSAGE };
   const close = (r.data.close ?? {}) as { ok?: boolean; reasons?: unknown };
   if (close.ok) return { ok: true, done: true };
   return { ok: true, done: false, reasons: Array.isArray(close.reasons) ? close.reasons.map(String) : [] };
@@ -366,7 +367,7 @@ export async function retractFiling(jobId: string, from: RetractFrom, note: stri
   const n = note.trim();
   if (!n) return { ok: false, error: "Say why the filing is being retracted" };
   const r = await send(jobUrl(jobId, "state"), { to: "APPROVED", expectedState: from, note: n });
-  if (!r.ok) return { ok: false, error: r.error ?? "Something went wrong" };
+  if (!r.ok) return { ok: false, error: r.error ?? DEFAULT_MESSAGE };
   return { ok: true, state: String(r.data.state ?? "") };
 }
 
@@ -440,7 +441,7 @@ export function CloseLoopActions({ view }: { view: CloseLoopView }) {
     if (!r.ok) return setError(r.error);
     setRetracting(false);
     setNote("");
-    setNotice("Filing retracted. The job is APPROVED again; mark it filed with the right details.");
+    setNotice("Filing confirmation taken back. The job is approved again — mark it filed with the right details.");
     router.refresh();
   }
 
@@ -461,7 +462,7 @@ export function CloseLoopActions({ view }: { view: CloseLoopView }) {
     const r = await recordTuriaClose(view.jobId, input);
     setBusy(null);
     if (!r.ok) return setError(r.error);
-    if (!r.done) setNotice("Turia close recorded. The job stays CLOSING until the close gate passes; what is missing is listed under Filing and close.");
+    if (!r.done) setNotice("Turia close recorded. The job stays in closing until every closing check passes; what is still missing is listed under Filing and close.");
     router.refresh();
   }
 
@@ -641,7 +642,7 @@ export async function requestRerun(runId: string, note: string, send: Send = cal
   const b = rerunBody(note);
   if (!b.ok) return b;
   const r = await send(`/api/firm-os/agents/runs/${encodeURIComponent(runId)}/rerun`, b.body);
-  if (!r.ok) return { ok: false, error: r.error ?? "Something went wrong" };
+  if (!r.ok) return { ok: false, error: r.error ?? DEFAULT_MESSAGE };
   return { ok: true, runId: String(r.data.runId ?? "") };
 }
 

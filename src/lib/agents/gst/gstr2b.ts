@@ -157,7 +157,7 @@ export function parse2bSheets(sheets: XlsxSheet[], file: string): { docs: B2bDoc
         try {
           return parseAmount(get(row, f)) ?? 0;
         } catch (e) {
-          throw new GstParseError(`${loc}: ${f} ${(e as Error).message}`);
+          throw new GstParseError(`${loc}: ${f} ${e instanceof GstParseError ? e.message : "is not a readable amount"}`);
         }
       };
       const tax = { igst: money("igst"), cgst: money("cgst"), sgst: money("sgst"), cess: money("cess") };

@@ -184,7 +184,7 @@ export function periodInfo(period: string, fy: string): PeriodInfo {
     const last = new Date(Date.UTC(y, endMonth, 0)).getUTCDate();
     return { period, kind: "quarterly", start: `${y}-${pad(startMonth)}-01`, end: `${y}-${pad(endMonth)}-${pad(last)}`, fy };
   }
-  throw new GstParseError(`GST Prep needs a monthly (YYYY-MM) or quarterly (Q1–Q4) period, got "${period}"`);
+  throw new GstParseError(`The job's period "${period}" is not a month (like 2026-10) or a quarter (Q1 to Q4). Correct the period on the job, then run the agent again.`);
 }
 
 /** The given day of the month after `end` ("2026-10-31", 20 → "2026-11-20"). */

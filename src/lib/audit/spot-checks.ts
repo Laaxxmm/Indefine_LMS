@@ -38,7 +38,7 @@ export type SpotCheckList = { pending: SpotCheckRow[]; checked: SpotCheckRow[] }
 export type SpotCheckResult<T> = { ok: true; data: T } | { ok: false; status: 400 | 403 | 404 | 409; error: string };
 
 const fail = (status: 400 | 403 | 404 | 409, error: string) => ({ ok: false as const, status, error });
-const NOT_PARTNER = "Only a partner can see and record Turia spot checks";
+const NOT_PARTNER = "Only a partner can see and record Turia spot checks. Ask a partner.";
 
 /** Selected manual closes: still to check (oldest selection first) and recently checked (newest first). */
 export async function listSpotChecks(db: SpotCheckDb, user: SessionUser): Promise<SpotCheckResult<SpotCheckList>> {
@@ -102,16 +102,16 @@ export async function markSpotChecked(
 ): Promise<SpotCheckResult<{ syncId: string; checkedAt: string }>> {
   if (!user || !canSpotCheck(user)) return fail(403, NOT_PARTNER);
   const text = note?.trim() || null;
-  if (text && text.length > SPOT_CHECK_NOTE_MAX) return fail(400, `Keep the note under ${SPOT_CHECK_NOTE_MAX} characters`);
+  if (text && text.length > SPOT_CHECK_NOTE_MAX) return fail(400, `Keep the note under ${SPOT_CHECK_NOTE_MAX.toLocaleString("en-IN")} characters.`);
   const selection = await db.auditEvent.findFirst({ where: { action: SPOT_CHECK_SELECTED, entity: "TuriaSync", entityId: syncId }, select: { meta: true } });
-  if (!selection) return fail(404, "This Turia close was not selected for a spot check");
+  if (!selection) return fail(404, "This Turia close was not picked for a spot check, so there is nothing to record. Reload the spot-check list.");
   const r = await db.turiaSync.updateMany({
     where: { id: syncId, spotChecked: false },
     data: { spotChecked: true, spotCheckedById: user.id, spotCheckedAt: now, spotCheckNote: text },
   });
   if (r.count !== 1) {
     const exists = await db.turiaSync.findUnique({ where: { id: syncId }, select: { id: true } });
-    return exists ? fail(409, "Already checked; the first check stands") : fail(404, "Turia close not found");
+    return exists ? fail(409, "Someone already recorded this spot check, and the first record stands. Reload the list to see it.") : fail(404, "That Turia close wasn't found. Reload the spot-check list.");
   }
   const jobTaskId = (selection.meta as { jobTaskId?: unknown } | null)?.jobTaskId;
   await logAudit(db, { actorId: user.id, action: SPOT_CHECK_ACTION, entity: "TuriaSync", entityId: syncId, meta: { jobTaskId: typeof jobTaskId === "string" ? jobTaskId : null, hasNote: !!text } });

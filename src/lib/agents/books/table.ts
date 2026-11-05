@@ -13,6 +13,7 @@
 import type ExcelJS from "exceljs";
 import type { InputFile } from "@/lib/agents/core/runner";
 import { readWorkbookGrid, type GridOptions } from "@/lib/hardening/xlsx-guard";
+import { causeSentence } from "@/lib/errors";
 
 export type Cells = string[][];
 export type RawTable = { file: string; rows: Cells };
@@ -109,7 +110,7 @@ export async function readTable(file: Pick<InputFile, "name" | "bytes">): Promis
     const rows = isXlsx(file) ? await parseXlsx(file.bytes) : parseCsv(file.bytes.toString("utf8"));
     return { table: { file: file.name, rows }, issues: [] };
   } catch (e) {
-    return { table: { file: file.name, rows: [] }, issues: [{ file: file.name, row: 0, message: `could not read the file: ${(e as Error).message}` }] };
+    return { table: { file: file.name, rows: [] }, issues: [{ file: file.name, row: 0, message: `could not read the file: ${causeSentence(e) ?? "it is not a readable spreadsheet or CSV file."}` }] };
   }
 }
 

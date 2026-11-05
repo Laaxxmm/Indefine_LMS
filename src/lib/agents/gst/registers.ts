@@ -61,7 +61,7 @@ function amount(c: Cell, field: string, loc: string): number {
   try {
     return parseAmount(c) ?? 0;
   } catch (e) {
-    throw new GstParseError(`${loc}: ${field} ${(e as Error).message}`);
+    throw new GstParseError(`${loc}: ${field} ${e instanceof GstParseError ? e.message : "is not a readable amount"}`);
   }
 }
 
@@ -69,7 +69,7 @@ function day(c: Cell, field: string, loc: string): string | null {
   try {
     return parseDay(c);
   } catch (e) {
-    throw new GstParseError(`${loc}: ${field} ${(e as Error).message}`);
+    throw new GstParseError(`${loc}: ${field} ${e instanceof GstParseError ? e.message : "is not a readable date"}`);
   }
 }
 

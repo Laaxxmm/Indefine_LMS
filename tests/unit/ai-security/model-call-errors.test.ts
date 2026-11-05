@@ -137,7 +137,8 @@ describe("AgentRun.error and ChecklistResult.message keep a classification, neve
     w.deps.router = { run: async () => ({ status: "needs-review", output: null, issues, needsPartnerReview: true }) as never };
     expect((await runAgent(echoAgent, "job-1", w.deps)).ok).toBe(true);
     const llm = rows(w.db, "checklistResult").find((r) => r.ruleId === ECHO_RELATED_PARTY_TASK.replace("echo.check:", "")) as { message: string };
-    expect(llm.message).toMatch(/Model output not usable \(validator: ungrounded quote; schema: invalid at pan\)/);
+    // The row says what to do in plain words; the classification stays on the AgentRun / ModelCall rows.
+    expect(llm.message).toMatch(/the AI could not check this, so check it by hand\. The AI answer could not be used\./);
     expect(llm.message).not.toContain("RAJESH");
   });
 

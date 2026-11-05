@@ -47,14 +47,27 @@ export const MistakeExampleSchema = z
   .refine((e) => e.extracted !== undefined, { message: "example.extracted is required" });
 export type MistakeExample = z.infer<typeof MistakeExampleSchema>;
 
+const NO_AGENT = "The agent this finding belongs to is no longer available. Reject the proposal, or tell IT.";
+const DECIDED_MEANWHILE = "Someone else decided this proposal a moment ago. Reload the mistake log to see their decision.";
+/** The proposal's fields in the words of the form (src/app/agents/[agent]/runs/[id]/ReviewPanels.tsx). */
+const PROPOSAL_FIELDS: Record<string, string> = {
+  id: "rule code (letters, digits, dots and dashes)",
+  title: "rule title",
+  severity: "severity",
+  kind: "choice under Checked by",
+  check: "check or question",
+  evidence: "description of the evidence",
+  params: "set of settings",
+};
+
 /** SOP rule changes are partner decisions (src/lib/rbac/policy.ts canApproveSopRuleChange). */
 const canDecide = (by: HumanActor) => by.roles.includes("partner");
 
 function validateProposal(def: AnyAgent, proposal: unknown): { ok: true; rule: Omit<RuleDefinition, "origin"> } | { ok: false; reason: string } {
   const p = MistakeRuleProposalSchema.safeParse(proposal);
-  if (!p.success) return { ok: false, reason: `Rule proposal is not valid: ${p.error.issues.map((i) => `${i.path.join(".") || "rule"}: ${i.message}`).join("; ")}` };
+  if (!p.success) return { ok: false, reason: `The proposed rule needs a valid ${PROPOSAL_FIELDS[String(p.error.issues[0]?.path[0] ?? "")] ?? "set of details"}. Check that box and try again.` };
   if (p.data.kind === "deterministic" && !def.checklistRegistry.has(p.data.check)) {
-    return { ok: false, reason: `No ${def.key} check is registered as "${p.data.check}"; choose one of: ${[...def.checklistRegistry.keys()].join(", ")}` };
+    return { ok: false, reason: `"${p.data.check}" is not one of the ${def.title} checks. Pick a check from the list.` };
   }
   return { ok: true, rule: p.data };
 }
@@ -76,25 +89,25 @@ export async function proposeMistake(
     where: { id: runId },
     select: { id: true, agent: true, inputs: true, jobTask: { select: { id: true, title: true, service: true, fy: true, period: true } } },
   });
-  if (!run) return { ok: false, code: "NOT_FOUND", reason: `Run ${runId} not found` };
+  if (!run) return { ok: false, code: "NOT_FOUND", reason: "That run wasn't found. Reload the page and try again." };
   const def = deps.agent(run.agent);
-  if (!def) return { ok: false, code: "INVALID", reason: `Unknown agent ${run.agent}` };
+  if (!def) return { ok: false, code: "INVALID", reason: NO_AGENT };
   const pattern = finding.trim();
-  if (!pattern) return { ok: false, code: "INVALID", reason: "Describe what the agent missed or got wrong" };
+  if (!pattern) return { ok: false, code: "INVALID", reason: "Describe what the agent missed or got wrong." };
   const v = validateProposal(def, ruleProposal);
   if (!v.ok) return { ok: false, code: "INVALID", reason: v.reason };
 
   const pack = await latestPack(deps.db, def.sopPackKey);
   const packRules = ((pack?.checklist as { rules?: { id: string }[] } | null)?.rules ?? []).map((r) => r.id);
-  if (packRules.includes(v.rule.id)) return { ok: false, code: "CONFLICT", reason: `Rule ${v.rule.id} already exists in ${def.sopPackKey} ${pack?.version}` };
+  if (packRules.includes(v.rule.id)) return { ok: false, code: "CONFLICT", reason: `The ${def.title} checklist already has a rule with the code ${v.rule.id}. Give the new rule a different code.` };
   const pending = await deps.db.mistakeLog.findMany({ where: { agent: def.key, status: "PROPOSED" }, select: { ruleProposal: true } });
-  if (pending.some((p) => (p.ruleProposal as { id?: unknown } | null)?.id === v.rule.id)) return { ok: false, code: "CONFLICT", reason: `A proposal for rule ${v.rule.id} is already waiting for a decision` };
+  if (pending.some((p) => (p.ruleProposal as { id?: unknown } | null)?.id === v.rule.id)) return { ok: false, code: "CONFLICT", reason: `A rule with the code ${v.rule.id} is already waiting for a partner's decision. Wait for that decision, or use a different code.` };
 
   // Example: as given, or the run's own cached extraction.
   const cached = run.inputs as { extracted?: unknown } | null;
   const exampleValue = example ?? (cached?.extracted !== undefined ? { runId, job: run.jobTask, extracted: cached.extracted } : undefined);
   const ex = MistakeExampleSchema.safeParse(exampleValue);
-  if (!ex.success) return { ok: false, code: "INVALID", reason: "An example is needed (the run's cached inputs have expired; attach the extracted data)" };
+  if (!ex.success) return { ok: false, code: "INVALID", reason: "This run's saved documents have expired, so the rule can't be tested on them. Log the finding on a newer run of the job." };
 
   const created = await deps.db.mistakeLog.create({
     data: {
@@ -119,34 +132,35 @@ export async function decideMistake(
   decision: Decision,
   by: HumanActor,
 ): Promise<MistakeResult<{ status: "APPROVED" | "REJECTED"; promotedToVersion: string | null }>> {
-  if (!canDecide(by)) return { ok: false, code: "FORBIDDEN", reason: "Only a partner may approve or reject a mistake rule" };
+  if (!canDecide(by)) return { ok: false, code: "FORBIDDEN", reason: "Only a partner can approve or reject a proposed rule. Ask a partner to decide it." };
   const now = deps.now();
   try {
     return await deps.db.$transaction(async (tx) => {
       const m = await tx.mistakeLog.findUnique({ where: { id } });
-      if (!m) return { ok: false, code: "NOT_FOUND", reason: `Mistake ${id} not found` } as const;
-      if (m.status !== "PROPOSED") return { ok: false, code: "CONFLICT", reason: `Already ${m.status.toLowerCase()}` } as const;
+      if (!m) return { ok: false, code: "NOT_FOUND", reason: "That proposed rule wasn't found. Reload the mistake log." } as const;
+      if (m.status !== "PROPOSED") return { ok: false, code: "CONFLICT", reason: `This proposal was already ${m.status === "APPROVED" ? "approved" : "rejected"}. Reload the mistake log to see it.` } as const;
 
       if (decision === "reject") {
         const r = await tx.mistakeLog.updateMany({ where: { id, status: "PROPOSED" }, data: { status: "REJECTED", decidedById: by.userId, decidedAt: now } });
-        if (r.count !== 1) return { ok: false, code: "CONFLICT", reason: "Decided by someone else meanwhile; reload" } as const;
+        if (r.count !== 1) return { ok: false, code: "CONFLICT", reason: DECIDED_MEANWHILE } as const;
         await logAudit(tx, { actorId: by.userId, action: "reject", entity: "MistakeLog", entityId: id, meta: { agent: m.agent } });
         return { ok: true, data: { status: "REJECTED" as const, promotedToVersion: null } };
       }
 
       const def = deps.agent(m.agent);
-      if (!def) return { ok: false, code: "INVALID", reason: `Unknown agent ${m.agent}` } as const;
+      if (!def) return { ok: false, code: "INVALID", reason: NO_AGENT } as const;
       const v = validateProposal(def, m.ruleProposal);
       if (!v.ok) return { ok: false, code: "INVALID", reason: v.reason } as const;
       const row = await tx.sopPack.findFirst({ ...latestPackQuery(def.sopPackKey) });
-      if (!row) return { ok: false, code: "INVALID", reason: `No active SOP pack "${def.sopPackKey}" to promote into` } as const;
+      if (!row) return { ok: false, code: "INVALID", reason: `${def.title} has no published checklist (SOP pack) to add the rule to. Publish the SOP pack first, then decide the proposal.` } as const;
       const base = ChecklistPackSchema.safeParse(row.checklist);
-      if (!base.success) return { ok: false, code: "INVALID", reason: `SOP pack ${row.key} ${row.version} has no valid checklist` } as const;
+      if (!base.success) return { ok: false, code: "INVALID", reason: `The published ${def.title} checklist could not be read, so the rule was not added. Nothing was changed — tell IT.` } as const;
       let next: ChecklistPack;
       try {
         next = withPromotedRule(base.data, v.rule, id);
       } catch (e) {
-        return { ok: false, code: "CONFLICT", reason: (e as Error).message } as const;
+        console.warn(`[mistakes] rule ${v.rule.id} could not be added: ${(e as Error).message}`);
+        return { ok: false, code: "CONFLICT", reason: `The ${def.title} checklist already has a rule with the code ${v.rule.id}. Reject this proposal, or ask for it again with a different code.` } as const;
       }
       const [major, minor, patch] = next.version.split(".").map(Number);
       await tx.sopPack.create({
@@ -170,13 +184,14 @@ export async function decideMistake(
         where: { id, status: "PROPOSED" },
         data: { status: "APPROVED", decidedById: by.userId, decidedAt: now, promotedToVersion: next.version },
       });
-      if (r.count !== 1) throw new Error("Decided by someone else meanwhile; reload");
+      if (r.count !== 1) throw new Error(DECIDED_MEANWHILE);
       await logAudit(tx, { actorId: by.userId, action: "approve", entity: "MistakeLog", entityId: id, meta: { agent: m.agent, ruleId: v.rule.id, promotedToVersion: next.version } });
       return { ok: true, data: { status: "APPROVED" as const, promotedToVersion: next.version } };
     });
   } catch (e) {
     // Unique (key, version): another promotion created the same version first.
-    return { ok: false, code: "CONFLICT", reason: `Could not promote: ${(e as Error).message}` };
+    console.warn(`[mistakes] promoting ${id} failed: ${(e as Error).message}`);
+    return { ok: false, code: "CONFLICT", reason: DECIDED_MEANWHILE };
   }
 }
 

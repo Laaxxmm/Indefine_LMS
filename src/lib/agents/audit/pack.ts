@@ -147,7 +147,7 @@ export function auditPack(ctx: { extracted: AuditExtract; figures: Figures; job:
   for (const m of a.caro.missing) pending.push({ item: `CARO applicability: ${m}`, reason: "Needed to decide whether CARO 2020 applies", from: "Client" });
   for (const v of a.variances.filter((x) => !x.explanation)) pending.push({ item: `Explanation for the variance in ${v.schedule.wp} ${v.schedule.name}`, reason: "Material variance vs prior year (SA 520)", from: "Client management" });
   for (const t of a.ties.filter((x) => x.differencePaise !== 0)) pending.push({ item: `Complete ledger detail for ${t.population}`, reason: "Population does not agree to the trial balance", from: "Client accounts team" });
-  for (const r of results.filter(isInsufficient)) pending.push({ item: `${r.title}: documents insufficient`, reason: "The model could not tell from the documents (insufficient_evidence) — obtain the related-party list and the disclosure note", from: "Client / engagement team" });
+  for (const r of results.filter(isInsufficient)) pending.push({ item: `${r.title}: documents insufficient`, reason: "The AI could not tell from the documents — obtain the related-party list and the disclosure note", from: "Client / engagement team" });
   for (const c of a.clauses.filter((x) => x.applicability === "To determine" && x.information)) pending.push({ item: `CARO ${c.clause}: ${c.information}`, reason: c.basis, from: "Client" });
   sheets.push({ name: AUDIT_SHEETS.pending.name, columns: cols("pending"), rows: pending.map((p, i) => ({ no: i + 1, ...p })) });
 

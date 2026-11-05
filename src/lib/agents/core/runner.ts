@@ -49,6 +49,7 @@ import {
   type RuleRegistry,
 } from "./checklist";
 import { transitionJobTask } from "./state-db";
+import { STATE_WORDS } from "./state";
 import { logAudit } from "@/lib/audit/log";
 import { AI_RESTRICTED_MESSAGE, isAiProcessingRestricted } from "@/lib/privacy/consent";
 import { clientDictionary, scrubFreeText } from "@/lib/corrections/mask";
@@ -338,14 +339,14 @@ export async function runAgent<I, E>(def: AgentDefinition<I, E>, jobTaskId: stri
   const scopeProblems = def.scope ? validateScope(def) : [];
   if (scopeProblems.length) return { ok: false, code: "INVALID_SCOPE", reason: scopeProblems.join("; ") };
   const row = await db.jobTask.findUnique({ where: { id: jobTaskId }, select: JOB_SELECT });
-  if (!row) return { ok: false, code: "NOT_FOUND", reason: `JobTask ${jobTaskId} not found` };
-  if (row.service !== def.service) return { ok: false, code: "WRONG_SERVICE", reason: `${def.title} prepares ${def.service} jobs; this job is ${row.service}` };
-  if (!RUNNABLE.includes(row.state)) return { ok: false, code: "NOT_READY", reason: `The agent runs on ASSIGNED or IN_PREP jobs; this job is ${row.state}` };
+  if (!row) return { ok: false, code: "NOT_FOUND", reason: "That job wasn't found. Go back to the agent's job list and open it again." };
+  if (row.service !== def.service) return { ok: false, code: "WRONG_SERVICE", reason: `${def.title} prepares a different kind of job. Open this job from its own agent page.` };
+  if (!RUNNABLE.includes(row.state)) return { ok: false, code: "NOT_READY", reason: `The agent can only run on a job that is assigned or in preparation; this job is ${STATE_WORDS[row.state].toLowerCase()}.` };
   // DPDP (src/lib/privacy/consent.ts): a client who withdrew consent, or is under an erasure hold,
   // gets no AI processing. Checked before any write or model call, so a refused run leaves nothing.
   if (await isAiProcessingRestricted(db, { lmsClientId: row.firmClient.lmsClientId })) return { ok: false, code: "AI_RESTRICTED", reason: AI_RESTRICTED_MESSAGE };
   const pack = await db.sopPack.findFirst({ ...latestPackQuery(def.sopPackKey), select: { version: true, checklist: true } });
-  if (!pack) return { ok: false, code: "NO_SOP_PACK", reason: `No active SOP pack "${def.sopPackKey}"; publish one in /admin/firm-os first` };
+  if (!pack) return { ok: false, code: "NO_SOP_PACK", reason: `${def.title} has no published checklist (SOP pack) yet. Ask a partner to publish it in Firm OS admin.` };
 
   const job: JobContext = {
     jobTaskId,
@@ -394,7 +395,7 @@ export async function runAgent<I, E>(def: AgentDefinition<I, E>, jobTaskId: stri
 
   if (row.state === "ASSIGNED") {
     const t = await transitionJobTask(db, jobTaskId, "IN_PREP", agentActor, { expectedState: "ASSIGNED", now: deps.now() });
-    if (!t.ok) return fail(`Could not start preparation: ${t.reason}`);
+    if (!t.ok) return fail(`The agent could not start: ${t.reason}`);
   }
 
   try {
@@ -551,7 +552,7 @@ export async function runAgent<I, E>(def: AgentDefinition<I, E>, jobTaskId: stri
     guardRecorded = session !== null;
 
     const moved = await transitionJobTask(db, jobTaskId, "AGENT_DONE", agentActor, { expectedState: "IN_PREP", now: deps.now() });
-    if (!moved.ok) return fail(`Pack prepared but the job could not move to AGENT_DONE: ${moved.reason}`);
+    if (!moved.ok) return fail(`The pack was prepared, but the job could not be marked ready: ${moved.reason}`);
     await db.agentRun.update({ where: { id: runId }, data: { status: "AGENT_DONE", finishedAt: deps.now() } });
 
     return {

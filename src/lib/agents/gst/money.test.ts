@@ -132,7 +132,7 @@ describe("dates", () => {
     expect(periodInfo("2028-02", "2027-28").end).toBe("2028-02-29");
     expect(periodInfo("Q3", "2026-27")).toMatchObject({ kind: "quarterly", start: "2026-10-01", end: "2026-12-31" });
     expect(periodInfo("Q4", "2026-27")).toMatchObject({ start: "2027-01-01", end: "2027-03-31" });
-    expect(() => periodInfo("Annual", "2026-27")).toThrow(/monthly/);
+    expect(() => periodInfo("Annual", "2026-27")).toThrow(/is not a month \(like 2026-10\) or a quarter/);
     expect(() => periodInfo("2026-13", "2026-27")).toThrow(GstParseError);
   });
 

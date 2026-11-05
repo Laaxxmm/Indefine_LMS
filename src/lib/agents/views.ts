@@ -13,6 +13,7 @@ import { latestPackQuery, type AnyAgent, type FirmDb } from "@/lib/agents/core/r
 import { getAgent } from "@/lib/agents/registry";
 import { httpsLink } from "@/lib/hardening/net";
 import { auditRead } from "@/lib/audit/reads";
+import { runFailureMessage } from "@/lib/errors";
 
 export type RunRow = {
   id: string;
@@ -319,7 +320,7 @@ export async function loadRunReview(db: FirmDb, user: SessionUser, runId: string
       sopPackVersion: run.sopPackVersion,
       startedAt: istTime(run.startedAt),
       finishedAt: istTime(run.finishedAt),
-      error: run.error,
+      error: run.error ? runFailureMessage(run.error) : null,
       reviewNotes: run.reviewNotes,
       needsPartnerReview: run.needsPartnerReview,
     },

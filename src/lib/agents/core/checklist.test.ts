@@ -131,10 +131,10 @@ describe("runChecklist", () => {
 
   it("a throwing deterministic check is recorded as fail (fail-safe) with a flag", async () => {
     const [r] = await runChecklist(ok(loadRuleSet({ ...pack, rules: [pack.rules[2]] }, registry)), { ...cleanInput, boom: true }, { registry });
-    expect(r).toMatchObject({ status: "fail", flags: ["check-error"], message: expect.stringContaining("register unreadable") });
+    expect(r).toMatchObject({ status: "fail", flags: ["check-error"], message: expect.stringContaining("this check could not run, so treat it as not checked and check it by hand. Register unreadable.") });
     const thrower: RuleDefinition = { ...pack.rules[2], id: "x.throws", check: "throws-string" };
     const [s] = await runChecklist({ key: "x", version: "1.0.0", rules: [thrower] }, cleanInput, { registry });
-    expect(s.message).toContain("plain string");
+    expect(s.message).toContain("Plain string");
   });
 
   it("a deterministic rule with no implementation at run time is a flagged fail", async () => {
@@ -154,7 +154,7 @@ describe("runChecklist", () => {
       throw new Error("timeout");
     });
     const results = await runChecklist(ok(loadRuleSet(pack, registry)), cleanInput, { registry, llmCheck: llm });
-    expect(results[2]).toMatchObject({ status: "na", flags: ["llm-error"], message: expect.stringContaining("timeout") });
+    expect(results[2]).toMatchObject({ status: "na", flags: ["llm-error"], message: expect.stringContaining("the AI could not check this, so check it by hand. It took too long and was stopped.") });
     expect(llm).toHaveBeenCalledWith(expect.objectContaining({ id: "gst.rcm-liability" }), cleanInput, JSON.stringify(cleanInput, null, 2));
   });
 
@@ -242,7 +242,7 @@ describe("runChecklist", () => {
       const r = await run(goodVerdict, () => {
         throw new Error("register unreadable");
       });
-      expect(r).toMatchObject({ status: "na", flags: ["llm-error"], message: expect.stringContaining("register unreadable") });
+      expect(r).toMatchObject({ status: "na", flags: ["llm-error"], message: expect.stringContaining("Register unreadable.") });
     });
 
     it("quoteInContext / normalizeEvidenceText", () => {

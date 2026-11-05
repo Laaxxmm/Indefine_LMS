@@ -59,7 +59,7 @@ describe("parseRocFiles failures", () => {
     expect(parseRocFiles(replace(files, "notes.txt", "  \n")).notes).toBeNull();
   });
   it("rejects bad JSON and bad fields", () => {
-    expect(() => parseRocFiles(replace(files, "company.json", "{"))).toThrow(/company\.json is not valid JSON/);
+    expect(() => parseRocFiles(replace(files, "company.json", "{"))).toThrow(/company\.json is not a valid \.json file/);
     expect(() => parseRocFiles(replace(files, "auditor.json", JSON.stringify({ name: "X", type: "llp", termStartFy: "2022-23" })))).toThrow(/auditor\.json: type/);
   });
   it("the zod schema reports the problem as an issue", () => {
