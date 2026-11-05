@@ -116,7 +116,7 @@ export const INJECTION_PATTERNS: readonly InjectionPattern[] = Object.freeze([
       String.raw`<\|\s*(?:im_start|im_end|system|assistant|user|endoftext|eot_id|start_header_id|end_header_id)\s*\|>`,
       String.raw`\[\/?(?:INST|SYS)\]|<<\/?SYS>>`,
       String.raw`<\/?\s*(?:system|assistant|instructions?|prompt|tool_call|function_call)\s*>`,
-      String.raw`(?:^|\n)\s*#{2,}\s*(?:system|instructions?)\b`,
+      String.raw`#{2,}\s*(?:system|instructions?)\b`,
     ],
   },
   {

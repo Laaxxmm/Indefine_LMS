@@ -240,7 +240,8 @@ describe("scoreAgent", () => {
   });
 
   describe("thin fixture sets (production agents)", () => {
-    const PROD: ScoreContext = { internal: false, probeDeclared: true, scopeDeclared: true, probeInputs: ["input"], requiredInputs: ["input"] };
+    // Red-team gating (ADR-009) has its own tests in accuracy-guardrails.test.ts.
+    const PROD: ScoreContext = { internal: false, probeDeclared: true, scopeDeclared: true, probeInputs: ["input"], requiredInputs: ["input"], minimumRedTeam: 0 };
     const full = (n: number) =>
       Array.from({ length: n }, (_, i) => {
         const category = (["clean", "typical-gap", "trap"] as const)[i % 3];

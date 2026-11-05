@@ -19,6 +19,10 @@
 // AuditEvent) are collected per run; the agent's scope and task schemas are checked statically.
 // `<task>#2` recordings answer the agreement re-ask; without one the single answer is reused and
 // noted. A fixture whose expected.json names an `error` must fail with it and is not probed.
+//
+// ADR-009 red team: the locations the injection screen withheld (the run's AuditEvent
+// `injectionLocations`) are compared with `guardrails.injections`; a fixture naming a `baseline`
+// gets that fixture's expected figures to compare against (the injection must move no number).
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { FirmService } from "@prisma/client";
@@ -40,7 +44,9 @@ import {
 import { MistakeRuleProposalSchema, withPromotedRule, type ChecklistPack, type ResultFlag, type RuleDefinition, type RuleKind } from "./checklist";
 import { taskLabel, validateScope } from "./guardrails/scope";
 import { hasAbstainOption, unboundedStrings } from "./guardrails/schema";
+import { TRUNCATION_RULE_ID } from "./guardrails/limits";
 import { GUARDRAIL_RUN_ACTION, type GuardrailStats } from "./guardrails/session";
+import { INJECTION_RULE_ID } from "./guardrails/untrusted";
 import { staticInputSource } from "./inputs";
 import { createMemoryDb } from "./memory-db";
 import { createMemoryStore } from "./memory-store";
@@ -176,6 +182,7 @@ function guardrailOutcome(db: ReturnType<typeof createMemoryDb>, runId: string):
   const results = (db.tables.checklistResult as { agentRunId: string; ruleId: string; evidence: unknown }[]).filter((r) => r.agentRunId === runId);
   if (!stats && !results.length) return undefined;
   const withFlag = (flag: ResultFlag) => results.filter((r) => ((r.evidence as { flags?: string[] } | null)?.flags ?? []).includes(flag)).map((r) => r.ruleId).sort();
+  const withheld = (stats as { injectionLocations?: unknown } | null)?.injectionLocations;
   return {
     insufficientEvidence: withFlag("insufficient-evidence"),
     disagreements: withFlag("model-disagreement"),
@@ -184,8 +191,12 @@ function guardrailOutcome(db: ReturnType<typeof createMemoryDb>, runId: string):
     scopeViolations: stats?.scopeViolations ?? 0,
     agreementChecks: stats?.agreementChecks ?? 0,
     wrongInput: stats?.wrongInput ?? 0,
+    injections: Array.isArray(withheld) ? withheld.filter((l): l is string => typeof l === "string").sort() : [],
   };
 }
+
+/** Rows the framework adds outside the pack (ADR-009): fixtures may expect them; not part of per-rule coverage. */
+export const FRAMEWORK_RULES: readonly string[] = Object.freeze([INJECTION_RULE_ID, TRUNCATION_RULE_ID]);
 
 /** Static ADR-008 checks of an agent's scope and task schemas (no runs needed). */
 export function staticGuardrailChecks(def: AnyAgent): { scopeDeclared: boolean; scopeProblems: string[]; modelTasks: number; unbounded: string[]; notAbstainable: string[] } {
@@ -230,10 +241,13 @@ export async function runAgentAccuracy(def: AnyAgent, opts: AccuracyOptions = {}
   const mistakes = loadApprovedMistakes(root, def.key);
   const pack = packWithMistakes(def, mistakes);
   const results: FixtureRuns[] = [];
-  for (const fx of loadFixtures(root, def.key)) {
+  const all = loadFixtures(root, def.key);
+  for (const fx of all) {
     const outcomes: FixtureOutcome[] = [];
     for (let i = 0; i < runs; i++) outcomes.push(await runFixtureOnce(def, fx, pack, opts.routerFor?.(fx, i)));
     const result: FixtureRuns = { id: fx.id, expected: fx.expected, runs: outcomes };
+    // ADR-009 red team: the baseline fixture's expected figures (the injection must not move any).
+    if (fx.expected.baseline !== undefined) result.baselineFigures = all.find((b) => b.id === fx.expected.baseline)?.expected.figures ?? null;
     if (def.inputProbes?.length && !fx.expected.error) {
       // One probe per input file kind: same recordings, one value in THAT file changed.
       result.probes = [];
@@ -278,5 +292,6 @@ export async function runAgentAccuracy(def: AnyAgent, opts: AccuracyOptions = {}
     probeInputs: (def.inputProbes ?? []).map((p) => p.input),
     requiredInputs: def.requiredInputs ?? [],
     coverageExemptions: def.coverageExemptions,
+    frameworkRules: def.scope ? FRAMEWORK_RULES : [],
   });
 }
