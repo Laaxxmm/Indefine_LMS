@@ -15,6 +15,8 @@ export default defineConfig({
       "tests/unit/**/*.test.ts",
       "tests/unit/**/*.test.tsx",
       "tests/integration/**/*.test.ts",
+      "tests/chaos/**/*.test.ts",
+      "tests/regression/**/*.test.ts",
       "scripts/**/*.test.ts",
     ],
     exclude: ["node_modules/**", ".next/**", "tests/e2e/**"],
