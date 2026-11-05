@@ -264,7 +264,7 @@ describe("record rules", () => {
     const db = world();
     const done = await correctField(USERS.partner, { entity: "JobTask", id: "j-done", field: "title", newValue: "AOC-4 XBRL", reason: REASON }, deps(db));
     expect(done).toMatchObject({ ok: false, status: 409 });
-    if (!done.ok) expect(done.error).toMatch(/This job is DONE/);
+    if (!done.ok) expect(done.error).toMatch(/This job is done, so its details are closed/);
     const opened = await correctField(USERS.staff, { entity: "CommsDraft", id: "d-opened", field: "body", newValue: "Updated", reason: REASON }, deps(db));
     expect(opened).toMatchObject({ ok: false, status: 409 });
     if (!opened.ok) expect(opened.error).toMatch(/already been opened in Outlook, so correct it in Outlook/);

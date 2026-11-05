@@ -31,7 +31,7 @@ export function toJson<T>(r: ServiceResult<T>, okStatus = 200): NextResponse {
   return r.ok ? NextResponse.json(r.data, { status: okStatus }) : NextResponse.json({ error: r.error }, { status: r.status });
 }
 
-export const idZ = z.string().trim().min(1, "Open the record again; its id is missing.").max(64).regex(/^[A-Za-z0-9_-]+$/, "Open the record again; its id is not valid.");
+export const idZ = z.string().trim().min(1, "Open the record again from its page; the link to it is incomplete.").max(64).regex(/^[A-Za-z0-9_-]+$/, "Open the record again from its page; the link to it is not valid.");
 
 export const correctionBodyZ = z.object({
   entity: z.string().trim().min(1, "Choose what kind of record to correct.").max(40),
