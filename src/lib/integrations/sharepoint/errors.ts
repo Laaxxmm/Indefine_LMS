@@ -38,3 +38,17 @@ export class NotProvisionedError extends Error {
 export const GRAPH_BLOCKED_ACTION =
   "Set MS_TENANT_ID, MS_CLIENT_ID and MS_CLIENT_SECRET (the LMS app-only Graph app) in .env.local (dev) / Railway variables (prod), " +
   "and grant that app Microsoft Graph application permissions Sites.ReadWrite.All and Group.Read.All with tenant admin consent.";
+
+/**
+ * A file already exists where an upload was asked to create one. Uploads always use
+ * conflictBehavior "fail", so nothing is ever overwritten; the caller picks a new name
+ * (deliverable-store.ts bumps the `_v{n}` suffix).
+ */
+export class ConflictError extends Error {
+  readonly path: string;
+  constructor(path: string) {
+    super(`A file already exists at ${path}; uploads never overwrite`);
+    this.name = "ConflictError";
+    this.path = path;
+  }
+}
