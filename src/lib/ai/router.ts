@@ -8,9 +8,15 @@
 // [0, 1]; below ROUTER_MIN_CONF (default 0.75) the router escalates exactly as for a schema
 // failure. Each attempt is one ModelCall row with the sha256 of the MASKED prompt — never raw
 // prompt text. The anonymizer token map lives only inside one run() call.
+//
+// Response cache (optional dependency, on in the default wiring; src/lib/ai/cache.ts): a request
+// identical to one already answered "ok" in the same scope — the run's JobTask (one client), else
+// the run — reuses that answer after re-validating it against the schema and validators. A reuse
+// makes no provider call, so it writes no ModelCall row, costs nothing and needs no budget check.
 import { createHash } from "node:crypto";
 import type { ZodTypeAny } from "zod";
 import { createTokenMap, mask, unmaskDeep, type TokenMap } from "./anonymizer";
+import { createResponseCache, responseCacheKey, type ResponseCache } from "./cache";
 import { loadRouterConfig, type RouterConfig } from "./config";
 import {
   BudgetExceededError,
@@ -145,6 +151,11 @@ export interface ModelCallRepo {
   /** Sum of costInr for calls created at or after `since`. */
   costInrSince(since: Date): Promise<number>;
   costInrForRun(runId: string): Promise<number>;
+  /**
+   * Response-cache scope of a run: "job:<JobTask id>" when the run is an AgentRun, else null (the
+   * run alone). Optional: without it the cache is per run.
+   */
+  cacheScopeOf?(runId: string): Promise<string | null>;
 }
 
 interface Totals {
@@ -170,7 +181,12 @@ export interface RouterDeps {
   repo: ModelCallRepo;
   config: RouterConfig;
   now?: () => Date;
+  /** Response cache (src/lib/ai/cache.ts). Absent = every request calls a provider. */
+  cache?: ResponseCache;
 }
+
+/** Most recent runs whose cache scope the router remembers (one lookup per run). */
+const SCOPE_MEMO_MAX = 1000;
 
 /** Appended to the system prompt of every call. */
 export const ROUTER_INSTRUCTIONS = [
@@ -207,8 +223,37 @@ export interface Router {
 }
 
 export function createRouter(deps: RouterDeps): Router {
-  const { providers, repo, config } = deps;
+  const { providers, repo, config, cache } = deps;
   const now = deps.now ?? (() => new Date());
+  const scopes = new Map<string, string>();
+
+  /** The client scope a run's cached answers live in: its JobTask when it has one, else the run. */
+  async function scopeFor(runId: string): Promise<string> {
+    const known = scopes.get(runId);
+    if (known) return known;
+    let scope = `run:${runId}`;
+    try {
+      scope = (await repo.cacheScopeOf?.(runId)) ?? scope;
+    } catch {
+      // A failed lookup only narrows the scope to this run.
+    }
+    scopes.set(runId, scope);
+    if (scopes.size > SCOPE_MEMO_MAX) scopes.delete(scopes.keys().next().value as string);
+    return scope;
+  }
+
+  /** A cached output, still valid for this request's schema and validators, or null. */
+  async function revalidate<T>(req: ModelRequest<T>, value: unknown): Promise<T | null> {
+    let output: T;
+    if (req.schema) {
+      const parsed = req.schema.safeParse(value);
+      if (!parsed.success) return null;
+      output = parsed.data;
+    } else if (typeof value === "string") output = value as T;
+    else return null;
+    if (req.contradictions && (await req.contradictions(output)).length > 0) return null;
+    return output;
+  }
 
   async function checkBudget(req: Pick<ModelRequest, "runId" | "maxCostInr">, estimateInr: number): Promise<BudgetExceededError | null> {
     if (req.maxCostInr !== undefined) {
@@ -236,6 +281,31 @@ export function createRouter(deps: RouterDeps): Router {
     const jsonSchema = routerOutputJsonSchema(req.schema as ZodTypeAny | undefined);
     const maxTokens = req.maxTokens ?? config.defaultMaxTokens;
     const priceCtx = { usdInr: config.usdInr, grokPriceUsdPerMTok: config.grokPriceUsdPerMTok };
+
+    // Response cache: the same request already answered "ok" in this client scope.
+    let cacheKey: string | null = null;
+    if (cache) {
+      cacheKey = responseCacheKey({
+        scope: await scopeFor(req.runId),
+        task: modelCallTask(req),
+        forceTier: req.forceTier ?? null,
+        privacy: req.privacy,
+        difficulty: req.difficulty,
+        maxTokens,
+        jsonSchema,
+        maskedMessages,
+        rawMessages: req.messages,
+      });
+      const hit = cache.get(cacheKey);
+      if (hit) {
+        const output = await revalidate(req, hit.output);
+        if (output !== null) {
+          const { provider, model, confidence, escalated, anonymized, needsPartnerReview } = hit;
+          return { status: "ok", output, needsPartnerReview, provider, model, confidence, escalated, anonymized, tokensIn: 0, tokensOut: 0, costInr: 0, attempts: 0 };
+        }
+        cache.delete(cacheKey);
+      }
+    }
 
     const totals: Totals = { tokensIn: 0, tokensOut: 0, costInr: 0 };
     let level = 0;
@@ -377,6 +447,9 @@ export function createRouter(deps: RouterDeps): Router {
         attempts,
       };
       if (status === "OK" && output !== null) {
+        if (cache && cacheKey) {
+          cache.set(cacheKey, { output, provider: d.provider, model: usage.model, confidence, escalated: level > 0, anonymized: d.anonymize, needsPartnerReview: d.needsPartnerReview });
+        }
         return { status: "ok", output, needsPartnerReview: d.needsPartnerReview, ...common };
       }
       if (!d.canEscalate || level >= MAX_ESCALATIONS) {
@@ -399,7 +472,8 @@ export async function run<T>(req: ModelRequest<T>): Promise<RouterResult<T>> {
   if (!defaultRouter) {
     const { prismaModelCallRepo } = await import("./db");
     const config = loadRouterConfig();
-    defaultRouter = createRouter({ providers: createProviders(config), repo: prismaModelCallRepo(), config });
+    const cache = config.responseCacheMax ? createResponseCache({ maxEntries: config.responseCacheMax, ttlMs: config.responseCacheTtlMs }) : undefined;
+    defaultRouter = createRouter({ providers: createProviders(config), repo: prismaModelCallRepo(), config, cache });
   }
   return defaultRouter.run(req);
 }
