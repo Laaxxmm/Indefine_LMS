@@ -2,11 +2,11 @@
 import type { PrismaClient } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
-import { ECHO_EXTRACT_TASK, echoAgent } from "@/lib/agents/echo";
+import { echoAgent } from "@/lib/agents/echo";
 import { createRecordedRouter } from "./recorded-router";
 import { INPUTS_RETENTION_DAYS, jobFolder, runAgent, type FirmDb } from "./runner";
 import { staticInputSource } from "./inputs";
-import { CLEAN_EXTRACT, GAP_EXTRACT, NOW, PASS_VERDICT, RELATED_TASK, WORKING, echoWorld, rows } from "../../../../tests/fakes/agent-world";
+import { CLEAN_EXTRACT, GAP_REGISTER_CSV, NOW, REGISTER_CSV, PASS_VERDICT, RELATED_TASK, WORKING, echoWorld, rows } from "../../../../tests/fakes/agent-world";
 
 // Compile-time: the real Prisma client satisfies the runner's database type.
 export const _prismaFits = (p: PrismaClient): FirmDb => p;
@@ -59,17 +59,16 @@ describe("runAgent — happy path", () => {
     expect(d.sizeBytes).toBe(file.length);
     expect(w.fake.violations).toEqual([]);
 
-    expect(w.router.calls.map((c) => [c.task, c.runId, c.privacy])).toEqual([
-      [ECHO_EXTRACT_TASK, "run-1", "anonymize-then-cloud"],
-      [RELATED_TASK, "run-1", "anonymize-then-cloud"],
-    ]);
-    expect(w.router.calls[1].messages[1].content).toContain("register.csv row 2: INV-1 | Acme Traders | 2026-10-05 | 15000.00");
+    // The register is parsed by code: the only model call is the related-party LLM rule.
+    expect(w.router.calls.map((c) => [c.task, c.runId, c.privacy])).toEqual([[RELATED_TASK, "run-1", "anonymize-then-cloud"]]);
+    expect(w.router.calls[0].messages[1].content).toContain("register.csv row 2: INV-1 | Acme Traders | 2026-10-05 | 15000.00");
   });
 
   it("raises block / warn / info failures and still finishes (approval is gated later)", async () => {
-    const w = echoWorld({ responses: { [ECHO_EXTRACT_TASK]: GAP_EXTRACT, [RELATED_TASK]: PASS_VERDICT } });
+    const w = echoWorld({ register: GAP_REGISTER_CSV });
     const out = await runAgent(echoAgent, "job-1", w.deps);
     expect(out.ok && out.summary.blockingFailures).toBe(1);
+    expect(out.ok && out.figures).toEqual({ rowCount: 2, totalPaise: 21500000, largestPaise: 20000000 });
     const failed = rows(w.db, "checklistResult").filter((r) => r.status === "fail").map((r) => [r.ruleId, r.severity]);
     expect(failed).toEqual([
       ["echo.duplicate-refs", "block"],
@@ -91,8 +90,8 @@ describe("runAgent — happy path", () => {
     w.deps.router = {
       async run(req) {
         const base = { provider: "claude", model: "m", confidence: 0.5, escalated: true, anonymized: true, tokensIn: 1, tokensOut: 1, costInr: 0, attempts: 3, needsPartnerReview: true } as const;
-        if (req.task === ECHO_EXTRACT_TASK) return { ...base, status: "needs-review", output: CLEAN_EXTRACT as never, issues: ["low confidence"] };
-        return { ...base, status: "ok", output: PASS_VERDICT as never };
+        if (req.task === RELATED_TASK) return { ...base, status: "needs-review", output: PASS_VERDICT as never, issues: ["low confidence"] };
+        throw new Error(`unexpected task ${req.task}`);
       },
     };
     const out = await runAgent(echoAgent, "job-1", w.deps);
@@ -101,7 +100,7 @@ describe("runAgent — happy path", () => {
   });
 
   it("an LLM rule without a usable answer is recorded n/a for manual review; the run still completes", async () => {
-    const w = echoWorld({ responses: { [ECHO_EXTRACT_TASK]: CLEAN_EXTRACT } });
+    const w = echoWorld({ responses: {} });
     const out = await runAgent(echoAgent, "job-1", w.deps);
     expect(out.ok).toBe(true);
     const llm = rows(w.db, "checklistResult").find((r) => r.ruleId === "echo.related-party")!;
@@ -117,7 +116,6 @@ describe("runAgent — happy path", () => {
     expect(out.ok && out.attempt).toBe(2);
     expect(out.ok && out.deliverables[0].name).toBe("ACME01_Echo-register_2026-10_v3.xlsx");
     expect(rows(w.db, "agentRun")[1].reviewNotes).toBe("check INV-2 amount");
-    expect(w.router.calls[0].messages[1].content).toContain("Reviewer notes: check INV-2 amount");
   });
 });
 
@@ -151,16 +149,18 @@ describe("runAgent — failure path (run FAILED, job stays IN_PREP)", () => {
     return run;
   }
 
-  it("model has no answer for extraction", async () => {
-    await expectFailed(echoWorld({ responses: {} }), /No recorded model response for task "system.echo-extract"/);
+  it("register row that code cannot parse (named with its row)", async () => {
+    const csv = ["ref,party,date,amount", "INV-1,Acme Traders,2026-10-05,15000.00", "INV-2,Bright,2026-02-30,12ab"].join("\n");
+    await expectFailed(echoWorld({ register: csv }), /register.csv row 3: date "2026-02-30" is not a YYYY-MM-DD calendar date; amount "12ab" is not a rupee amount/);
   });
-  it("model call queued for a human (local-only)", async () => {
-    const w = echoWorld();
-    w.deps.router = { run: async () => ({ status: "queued", reason: "local model down", needsPartnerReview: true, runId: "run-1", attempts: 0 }) };
-    await expectFailed(w, /queued for a human: local model down/);
+  it("register with the wrong header", async () => {
+    await expectFailed(echoWorld({ register: "invoice,customer,amount\nINV-1,Acme,10" }), /header must be ref,party,date,amount/);
   });
-  it("model output that fails the schema", async () => {
-    await expectFailed(echoWorld({ responses: { [ECHO_EXTRACT_TASK]: { rows: [{ ref: "A" }] } } }), /Model output not usable/);
+  it("register with blank cells", async () => {
+    await expectFailed(echoWorld({ register: "ref,party,date,amount\n , ,2026-10-05,1.00" }), /register.csv row 2: ref is blank; party is blank/);
+  });
+  it("register with a header and no entries", async () => {
+    await expectFailed(echoWorld({ register: "ref,party,date,amount\n" }), /has a header but no entries/);
   });
   it("input file missing from ClientDocs", async () => {
     await expectFailed(echoWorld({ register: null }), /register.csv is missing/);
@@ -180,7 +180,7 @@ describe("runAgent — failure path (run FAILED, job stays IN_PREP)", () => {
   });
   it("client Compliance library not provisioned", async () => {
     const w = echoWorld();
-    w.deps.inputs = staticInputSource([{ name: "register.csv", source: "fixture", bytes: Buffer.from("x") }]);
+    w.deps.inputs = staticInputSource([{ name: "register.csv", source: "fixture", bytes: Buffer.from(REGISTER_CSV) }]);
     w.fake.sites.clear();
     await expectFailed(w, /does not exist yet/);
   });
@@ -197,6 +197,37 @@ describe("runAgent — failure path (run FAILED, job stays IN_PREP)", () => {
     expect(out).toMatchObject({ ok: false, code: "FAILED" });
     expect(!out.ok && out.reason).toMatch(/could not move to AGENT_DONE/);
     expect(rows(w.db, "agentRun")[0].status).toBe("FAILED");
+  });
+});
+
+describe("runAgent — LLM evidence is checked against the documents the model was shown", () => {
+  it("a verdict quoting text that is not in the register is rejected: na + llm-evidence-missing", async () => {
+    const fabricated = { status: "fail", message: "Acme is the director's firm", evidence: { quote: "Acme Traders (director's firm)", location: "register.csv row 2" } };
+    const w = echoWorld({ responses: { [RELATED_TASK]: fabricated } });
+    const out = await runAgent(echoAgent, "job-1", w.deps);
+    expect(out.ok).toBe(true);
+    const llm = rows(w.db, "checklistResult").find((r) => r.ruleId === "echo.related-party")!;
+    expect(llm).toMatchObject({ status: "na", evidence: { flags: ["llm-evidence-missing"] } });
+  });
+  it("a verdict quoting the register (any case / spacing) is accepted", async () => {
+    const w = echoWorld({ responses: { [RELATED_TASK]: { status: "fail", evidence: { quote: "acme   TRADERS", location: "register.csv row 2" } } } });
+    await runAgent(echoAgent, "job-1", w.deps);
+    expect(rows(w.db, "checklistResult").find((r) => r.ruleId === "echo.related-party")).toMatchObject({ status: "fail" });
+  });
+});
+
+describe("runAgent — model trouble on the LLM rule is not a run failure", () => {
+  it.each([
+    ["queued for a human (local-only)", { status: "queued", reason: "local model down", needsPartnerReview: true, runId: "run-1", attempts: 0 }, /queued for a human: local model down/],
+    ["output that fails the schema", { status: "needs-review", output: null, issues: ["status: Invalid enum value"], needsPartnerReview: true }, /Model output not usable/],
+  ] as const)("%s → related-party is na + llm-error, the run completes", async (_n, answer, message) => {
+    const w = echoWorld();
+    w.deps.router = { run: async () => answer as never };
+    const out = await runAgent(echoAgent, "job-1", w.deps);
+    expect(out.ok).toBe(true);
+    const llm = rows(w.db, "checklistResult").find((r) => r.ruleId === "echo.related-party")!;
+    expect(llm).toMatchObject({ status: "na", evidence: { flags: ["llm-error"] } });
+    expect(llm.message).toMatch(message);
   });
 });
 

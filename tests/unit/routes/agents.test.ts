@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Session } from "next-auth";
 import { NotFoundSignal, redirectTarget, renderHtml as renderRaw } from "./harness";
 import { echoWorld, user, type World } from "../../fakes/agent-world";
-import { ECHO_EXTRACT_TASK } from "@/lib/agents/echo";
 import { approvePack, logMistake, requestChanges, startAgentRun, submitForReview } from "@/lib/agents/service";
 
 const state = vi.hoisted(() => ({ world: null as unknown as World }));
@@ -124,7 +123,7 @@ describe("/agents/[agent]/runs/[id] review screen", () => {
   });
 
   it("reviewer on IN_REVIEW: Approve pack (primary) + Request changes; block findings shown in red", async () => {
-    state.world = echoWorld({ responses: { [ECHO_EXTRACT_TASK]: { rows: [{ ref: "A", party: "P", date: "2026-10-05", amountPaise: 100 }, { ref: "A", party: "P", date: "2026-10-06", amountPaise: 100 }] } } });
+    state.world = echoWorld({ register: ["ref,party,date,amount", "A,P,2026-10-05,1.00", "A,P,2026-10-06,1.00"].join("\n"), responses: {} });
     await startAgentRun(user("priya"), "echo", "job-1", state.world.deps);
     await submitForReview(user("priya"), "run-1", state.world.deps);
     as(user("partner"));
