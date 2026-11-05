@@ -166,7 +166,7 @@ describe("the model sees the firm + department preambles; ModelCall records task
       ["echo.check:echo.related-party@2", "HARD", "OK", true],
       ["echo.check:echo.related-party@2#2", "HARD", "OK", false],
     ]);
-    expect(p.logged[0].error).toMatch(/contradiction: location "register.csv row 99" is not a register row shown/);
+    expect(p.logged[0].error).toBe("validator: bad evidence location"); // a classification, never the quoted wording (#18)
     expect(related(w)).toMatchObject({ status: "pass" });
   });
 });

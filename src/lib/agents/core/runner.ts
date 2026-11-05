@@ -28,6 +28,7 @@
 import type { FirmService, JobTaskState, PrismaClient } from "@prisma/client";
 import { z, type ZodType, type ZodTypeDef } from "zod";
 import type { AgentName, AgentTask, DictionaryEntry, ModelRequest, RouterResult } from "@/lib/ai/router";
+import { issueSummary } from "@/lib/ai/call-errors";
 import { dedupeDictionary, partyEntry, type NameDirectory } from "@/lib/ai/names";
 import { validateScope, type AgentScope } from "./guardrails/scope";
 import { createGuardrailSession, type GuardrailSession, type ModelCallRequest } from "./guardrails/session";
@@ -402,7 +403,8 @@ export async function runAgent<I, E>(def: AgentDefinition<I, E>, jobTaskId: stri
         needsPartnerReview = true;
         return res.output;
       }
-      throw new AgentRunError(res.status === "queued" ? `Model call queued for a human: ${res.reason}` : `Model output not usable: ${res.issues.join("; ")}`);
+      // AgentRun.error keeps a classification of the issues, never their wording (it can quote client data, #18).
+      throw new AgentRunError(res.status === "queued" ? `Model call queued for a human: ${res.reason}` : `Model output not usable (${issueSummary(res.issues)})`);
     };
     const route = <T>(req: Omit<ModelRequest<T>, "runId">) => deps.router.run<T>({ ...req, runId } as ModelRequest<T>);
     guard = def.scope ? createGuardrailSession({ agent: def, scope: def.scope, route, unwrap, requireDictionary: !def.internal }) : null;

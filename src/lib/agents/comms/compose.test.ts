@@ -81,7 +81,9 @@ describe("draftMessage — English", () => {
       ["SMART", "LOW_CONFIDENCE"],
       ["HARD", "LOW_CONFIDENCE"],
     ]);
-    expect(r.rows[0].error).toMatch(/"25 Nov 2026" is a new date/);
+    // A classification, never the quoted wording (#18).
+    expect(r.rows[0].error).toContain("validator: invented fact");
+    expect(r.rows[0].error).not.toContain("25 Nov 2026");
     // The feedback to the model is masked too.
     expect(sentText(r.calls)).not.toContain("Acme Traders");
   });

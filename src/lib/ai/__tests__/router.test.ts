@@ -200,7 +200,7 @@ describe("run(): spec Phase 2 task 4 cases", () => {
     const res = await t.router.run({ ...base(), schema: Total, contradictions });
     expect(res).toMatchObject({ status: "ok", output: { total: 6 }, escalated: true });
     expect(t.rows[0]).toMatchObject({ status: "LOW_CONFIDENCE" });
-    expect(t.rows[0].error).toMatch(/contradiction: total does not match/);
+    expect(t.rows[0].error).toBe("validator: does not tie"); // a classification, never the validator wording (#18)
   });
 
   it("novel → HARD tier, anonymized, needsPartnerReview", async () => {

@@ -16,6 +16,7 @@
 import { createHash } from "node:crypto";
 import type { ZodTypeAny } from "zod";
 import { createTokenMap, detectPii, mask, unmaskDeep, type PiiKind, type TokenMap } from "./anonymizer";
+import { providerErrorCode, storedError, validatorCode, zodCodes } from "./call-errors";
 import { loadRouterConfig, type RouterConfig } from "./config";
 import {
   BudgetExceededError,
@@ -341,19 +342,25 @@ export function createRouter(deps: RouterDeps): Router {
       const started = now().getTime();
       let raw: { output?: unknown; confidence?: unknown } | null = null;
       let issues: string[] = [];
+      /** What ModelCall.error stores (#18): fixed classifications, never the issue wording. */
+      const codes: string[] = [];
       let usage = { tokensIn: 0, tokensOut: 0, model, latencyMs: 0 };
       try {
         const res = await provider.complete<{ output?: unknown; confidence?: unknown }>(preq);
         raw = res.output && typeof res.output === "object" ? res.output : null;
         usage = { tokensIn: res.tokensIn, tokensOut: res.tokensOut, model: res.model, latencyMs: res.latencyMs };
-        if (!raw) issues = ["response was not a JSON object"];
+        if (!raw) {
+          issues = ["response was not a JSON object"];
+          codes.push("provider: response was not a JSON object");
+        }
       } catch (err) {
         const latencyMs = now().getTime() - started;
         if (err instanceof ProviderOutputError) {
           usage = { tokensIn: err.tokensIn, tokensOut: err.tokensOut, model, latencyMs };
           issues = [err.message];
+          codes.push("provider: output was not valid JSON or was cut off");
         } else {
-          await record({ ...callRow, status: "PROVIDER_ERROR", latencyMs, error: err instanceof Error ? err.message : String(err) });
+          await record({ ...callRow, status: "PROVIDER_ERROR", latencyMs, error: providerErrorCode(d.provider, err) });
           if (err instanceof ProviderUnavailableError || (err instanceof ProviderError && err.failoverable)) {
             // Fail closed for this provider and re-route: local → cloud (or queue), Claude → Grok.
             available[d.provider] = false;
@@ -376,28 +383,41 @@ export function createRouter(deps: RouterDeps): Router {
       if (raw) {
         const value = d.anonymize ? unmaskDeep(raw.output, map) : raw.output;
         if (typeof raw.confidence === "number" && raw.confidence >= 0 && raw.confidence <= 1) confidence = raw.confidence;
-        else issues.push("confidence: must be a number between 0 and 1");
+        else {
+          issues.push("confidence: must be a number between 0 and 1");
+          codes.push("confidence: missing or out of range");
+        }
         if (req.schema) {
           const parsed = req.schema.safeParse(value);
           if (parsed.success) {
             output = parsed.data;
             schemaOk = true;
-          } else issues.push(...zodIssues(parsed.error));
+          } else {
+            issues.push(...zodIssues(parsed.error));
+            codes.push(...zodCodes(parsed.error));
+          }
         } else if (typeof value === "string") {
           output = value as T;
           schemaOk = true;
-        } else issues.push("output: expected a string");
+        } else {
+          issues.push("output: expected a string");
+          codes.push("schema: expected a string");
+        }
       }
       let status: ModelCallStatus = "OK";
       if (!schemaOk || !raw) status = "SCHEMA_FAIL";
       else if (issues.length > 0 || confidence < config.minConfidence) {
         status = "LOW_CONFIDENCE";
-        if (confidence < config.minConfidence) issues.push(`confidence ${confidence} is below ROUTER_MIN_CONF ${config.minConfidence}`);
+        if (confidence < config.minConfidence) {
+          issues.push(`confidence ${confidence} is below ROUTER_MIN_CONF ${config.minConfidence}`);
+          codes.push("confidence: below threshold");
+        }
       } else if (req.contradictions && output !== null) {
         const found = await req.contradictions(output);
         if (found.length > 0) {
           status = "LOW_CONFIDENCE";
           issues.push(...found.map((f) => `contradiction: ${f}`));
+          codes.push(...found.map(validatorCode));
         }
       }
 
@@ -410,7 +430,7 @@ export function createRouter(deps: RouterDeps): Router {
         tokensOut: usage.tokensOut,
         costInr: cost,
         latencyMs: usage.latencyMs,
-        error: issues.length ? maskText(issues.join("; ")).slice(0, 1000) : null, // masked even for local/public
+        error: storedError(codes), // a classification only (#18): validator / model / provider wording can quote client data
       });
 
       const common = {
