@@ -1,0 +1,177 @@
+/* Firm OS Companion — the LMS brand (tailwind.config.ts / globals.css) as plain CSS.
+   Calm and readable at side-panel width. Text pairs are AA on their surfaces:
+   ink #15132b and ink-mute #6c6a82 on white / page; white on brand #5b4be6; -800 tones on -50 fills.
+   System fonts only: the extension loads nothing from the network but Firm OS itself. */
+:root {
+  --page: #f5f5fb;
+  --card: #ffffff;
+  --muted: #f1f0f7;
+  --border: #ececf3;
+  --ink: #15132b;
+  --ink-soft: #3a3852;
+  --ink-mute: #6c6a82;
+  --brand: #5b4be6;
+  --brand-ink: #4b37d8;
+  --brand-soft: #eeebff;
+  --brand-line: #c7befb;
+  --ok-bg: #ecfdf5;
+  --ok-ink: #065f46;
+  --warn-bg: #fffbeb;
+  --warn-line: #fde68a;
+  --warn-ink: #92400e;
+  --bad-bg: #fff1f2;
+  --bad-line: #fecdd3;
+  --bad-ink: #be123c;
+  --radius: 12px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font: 14px/1.5 "Plus Jakarta Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+a { color: var(--brand-ink); font-weight: 600; }
+a:hover { color: var(--brand); }
+
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.wrap { max-width: 640px; margin: 0 auto; padding: 16px; }
+
+/* ---------------------------------------------------------------- header */
+.bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 12px 16px; background: var(--card); border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 1;
+}
+.brand { display: flex; align-items: center; gap: 8px; }
+.brand-mark {
+  width: 28px; height: 28px; border-radius: 8px; flex: none;
+  background: linear-gradient(135deg, #6d5bf0, var(--brand-ink));
+}
+.brand-name { margin: 0; font-weight: 800; font-size: 14px; letter-spacing: -0.01em; }
+.brand-sub { margin: 0; font-size: 10px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-mute); }
+
+.status { margin: 0; padding: 8px 16px 0; font-size: 12px; color: var(--ink-mute); min-height: 26px; }
+.status.warn { color: var(--warn-ink); }
+
+/* ---------------------------------------------------------------- buttons */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 32px; padding: 6px 12px; border-radius: 8px;
+  font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer;
+  border: 1px solid var(--border); background: var(--card); color: var(--ink-soft);
+  text-decoration: none;
+}
+.btn:hover { background: var(--muted); color: var(--ink); }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.btn-primary { background: var(--brand); border-color: var(--brand); color: #ffffff; }
+.btn-primary:hover { background: var(--brand-ink); color: #ffffff; }
+.btn-sm { min-height: 28px; padding: 4px 10px; font-size: 12px; }
+.btn-block { width: 100%; }
+
+/* ---------------------------------------------------------------- cards and sections */
+.card {
+  background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+  padding: 16px; margin-bottom: 16px;
+  box-shadow: 0 10px 30px -18px rgb(20 19 43 / 0.25);
+}
+.eyebrow, .section-title {
+  margin: 0 0 8px; font-size: 10.5px; font-weight: 800; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--ink-mute);
+}
+.title { margin: 0; font-size: 18px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.3; }
+.client { margin: 4px 0 0; font-weight: 600; }
+.meta { margin: 4px 0 0; font-size: 12.5px; color: var(--ink-mute); }
+.why { margin: 12px 0 0; color: var(--ink-soft); font-size: 13px; }
+.next { margin: 8px 0 12px; font-weight: 700; }
+.message { margin: 0 0 12px; }
+.fine { margin: 0; font-size: 12px; color: var(--ink-mute); }
+
+.chip {
+  display: inline-block; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--border);
+  font-size: 10.5px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
+  background: var(--muted); color: var(--ink-soft); vertical-align: middle;
+}
+.chip-overdue { background: var(--bad-bg); border-color: var(--bad-line); color: var(--bad-ink); }
+
+.notice { border-radius: var(--radius); padding: 12px; margin-bottom: 16px; font-size: 13px; }
+.notice-warn { background: var(--warn-bg); border: 1px solid var(--warn-line); color: var(--warn-ink); }
+.notice-bad { background: var(--bad-bg); border: 1px solid var(--bad-line); color: var(--bad-ink); }
+.notice-ok { background: var(--ok-bg); border: 1px solid #a7f3d0; color: var(--ok-ink); }
+.notice p { margin: 0 0 8px; }
+.notice p:last-child { margin: 0; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* ---------------------------------------------------------------- steps */
+.steps { list-style: none; margin: 0; padding: 0; }
+.step {
+  display: grid; grid-template-columns: 24px 1fr; gap: 8px;
+  padding: 10px 8px; border-radius: 10px; border: 1px solid transparent;
+}
+.step + .step { margin-top: 4px; }
+.step-n { font-weight: 800; color: var(--ink-mute); text-align: right; font-variant-numeric: tabular-nums; }
+.step-text { margin: 0; }
+.step-where { margin: 2px 0 0; font-size: 11.5px; color: var(--ink-mute); font-weight: 600; }
+.step-where.portal { color: var(--warn-ink); }
+.step-done .step-text { color: var(--ink-mute); }
+.step-current { background: var(--brand-soft); border-color: var(--brand-line); }
+.step-current .step-n { color: var(--brand-ink); }
+/* ink-mute on brand-soft is ~4.4:1, under AA for small text: the current step uses ink-soft. */
+.step-current .step-where:not(.portal) { color: var(--ink-soft); }
+.step-badge { font-size: 11px; font-weight: 800; color: var(--brand-ink); margin: 0 0 2px; text-transform: uppercase; letter-spacing: 0.06em; }
+.tick { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12px; color: var(--ink-soft); cursor: pointer; }
+.tick input { width: 16px; height: 16px; accent-color: var(--brand); margin: 0; }
+
+/* ---------------------------------------------------------------- checklist */
+.checklist { margin: 0; padding-left: 18px; }
+.checklist li + li { margin-top: 4px; }
+
+/* ---------------------------------------------------------------- values */
+.values { margin: 0; }
+.value { padding: 8px 0; border-top: 1px solid var(--border); }
+.value:first-child { border-top: 0; padding-top: 0; }
+.value dt { font-size: 11.5px; font-weight: 700; color: var(--ink-mute); }
+.value dd { margin: 2px 0 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.value code {
+  font: 600 13px/1.4 ui-monospace, "Cascadia Mono", Consolas, monospace;
+  background: var(--muted); border-radius: 6px; padding: 2px 6px; word-break: break-all;
+  font-variant-numeric: tabular-nums;
+}
+.value .note { flex-basis: 100%; font-size: 11.5px; color: var(--ink-mute); }
+
+/* ---------------------------------------------------------------- later */
+details summary { cursor: pointer; font-weight: 700; }
+.later { list-style: none; margin: 8px 0 0; padding: 0; }
+.later li { padding: 8px 0; border-top: 1px solid var(--border); font-size: 13px; }
+.later .meta { margin: 0; }
+
+/* ---------------------------------------------------------------- options page */
+.field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.field label { font-size: 11.5px; font-weight: 700; color: var(--ink-mute); }
+.field input {
+  font: 600 13px/1.4 ui-monospace, "Cascadia Mono", Consolas, monospace;
+  padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--ink);
+}
+.field input:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+.help { font-size: 12px; color: var(--ink-mute); margin: 0; }
+h1 { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; margin: 4px 0 8px; }
+ul.plain { margin: 0; padding-left: 18px; }
+ul.plain li + li { margin-top: 4px; }
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+footer.foot { padding: 0 16px 16px; }
+footer.foot .fine + .fine { margin-top: 8px; }
+.mt-12 { margin-top: 12px; }
+.mt-16 { margin-top: 16px; }
