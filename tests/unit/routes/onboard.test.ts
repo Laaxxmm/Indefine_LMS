@@ -30,6 +30,7 @@ describe("/onboard", () => {
     expect(html).toContain('href="/dashboard"');
     expect(html).toContain('href="/agents"'); // where the new jobs are worked on
     expect(html).toContain('href="/clients"');
+    expect(html).not.toContain("text-ink-faint"); // ~2:1 on white, below AA: Firm OS text uses ink-mute
     expect(html).not.toMatch(/submit to portal/i);
   });
 

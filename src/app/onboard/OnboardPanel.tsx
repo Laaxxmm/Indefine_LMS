@@ -7,8 +7,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Check, Copy, Loader2 } from "lucide-react";
-import { btnGhost, btnPrimary, btnSm, call, card, errorText, field, h2 } from "@/components/ui";
-import { istLabel } from "@/lib/ist";
+import { btnGhost, btnPrimary, btnSm, call, card, errorText, field } from "@/components/ui";
+import { formatDate } from "@/lib/agents/core/format";
 import type { Question } from "@/lib/agents/onboarding/clarify";
 import { summarizeJobs, type OnboardingPlan } from "@/lib/agents/onboarding/plan";
 import type { SagaStep, StepStatus } from "@/lib/agents/onboarding/saga";
@@ -23,9 +23,11 @@ const label = "text-[11px] font-bold text-ink-mute";
 const primary = `${btnPrimary} ${focusBtn} inline-flex items-center gap-2`;
 const ghost = `${btnGhost} ${focusBtn} inline-flex items-center gap-1.5`;
 const summaryLink = `underline font-semibold text-ink ${focusBtn} rounded`;
+/** Section title: ui.ts h2 with ink-mute instead of ink-faint (~2:1 on white, below AA), as on /agents. */
+const h2 = "text-[10.5px] font-extrabold tracking-[0.12em] text-ink-mute uppercase mb-3";
 
-/** DD MMM YYYY in IST. */
-const day = (iso: string | null | undefined) => (iso ? istLabel(new Date(iso), { day: "2-digit", month: "short", year: "numeric" }) : null);
+/** DD MMM YYYY in IST, with fixed month names (en-IN locale data writes September as "Sept"). */
+const day = (iso: string | null | undefined) => (iso ? formatDate(new Date(iso)) : null);
 
 type Answers = Record<string, string | string[]>;
 /** The action in flight (its button shows the spinner) and the last failure (shown beside the action that failed). */
@@ -328,7 +330,7 @@ function PlanPreview({ plan, busy, error, onCreate, onEdit }: { plan: Onboarding
           <p className="text-ink-mute mb-2">{plan.plannerSource}.{plan.datesPending > 0 && ` ${plan.datesPending} without a date yet.`}</p>
           <div className="overflow-x-auto">
             <table className="w-full text-[13px] tabular-nums">
-              <thead className="text-[11px] uppercase tracking-wide text-ink-faint text-left">
+              <thead className="text-[11px] uppercase tracking-wide text-ink-mute text-left">
                 <tr>
                   <th scope="col" className="py-2 pr-3">Job</th>
                   <th scope="col" className="py-2 pr-3">Periods</th>

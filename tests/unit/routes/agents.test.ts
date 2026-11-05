@@ -149,7 +149,7 @@ describe("/agents", () => {
     as(user("partner"));
     const html = await renderHtml(await RunsPage());
     expect(html).toContain("Agent runs");
-    expect(html).toContain("AGENT DONE");
+    expect(html).toContain(">AGENT_DONE<"); // the exact state name, not "AGENT DONE"
     expect(html).toContain("05 Nov 2026");
     expect(html).toContain("IST");
   });

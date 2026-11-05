@@ -34,7 +34,7 @@ export default async function AgentPage({ params }: { params: Promise<{ agent: s
           Jobs ready for the agent
         </h2>
         {jobs.length === 0 ? (
-          <EmptyState title="Nothing to run">{`${def.service} jobs assigned to you appear here when they are ASSIGNED or IN PREP.`}</EmptyState>
+          <EmptyState title="Nothing to run">{`${def.service} jobs assigned to you appear here when they are ASSIGNED or IN_PREP.`}</EmptyState>
         ) : (
           <div className={tableWrap}>
             <table className="w-full text-[13.5px]">

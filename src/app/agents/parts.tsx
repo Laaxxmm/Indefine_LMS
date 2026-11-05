@@ -50,11 +50,11 @@ const STATE_TONE: Record<JobTaskState, string> = {
   DONE: "border-ink-soft bg-ink text-white",
 };
 
-/** JobTask state, shown by its state-machine name. */
+/** JobTask state, shown by its exact state-machine name (IN_PREP, AGENT_DONE, …), as DESIGN asks. */
 export function StateChip({ state }: { state: JobTaskState }) {
   return (
     <span className={`${chip} ${STATE_TONE[state]}`} title={`Job state: ${state}`}>
-      {state.replace(/_/g, " ")}
+      {state}
     </span>
   );
 }

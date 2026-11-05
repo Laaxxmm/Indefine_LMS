@@ -34,6 +34,13 @@ describe("/admin/firm-os/cycle-time", () => {
     expect([from.toISOString(), to.toISOString()]).toEqual(["2026-09-30T18:30:00.000Z", "2026-10-31T18:30:00.000Z"]);
   });
 
+  it("September is 'Sep' (DD MMM YYYY), not the en-IN locale's 'Sept'", async () => {
+    const html = await renderHtml(await CycleTimePage(params({ from: "2026-09-01", to: "2026-09-30" })));
+    expect(html).toContain("01 Sep 2026");
+    expect(html).toContain("30 Sep 2026");
+    expect(html).not.toContain("Sept");
+  });
+
   it("shows median, p90 and the bottleneck per service, person and client", async () => {
     loadCycleJobs.mockResolvedValue({
       capped: true,
