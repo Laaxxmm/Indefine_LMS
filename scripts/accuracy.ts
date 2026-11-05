@@ -7,8 +7,12 @@
 //
 // --write-progress --out=<file> puts the block into <file>: it replaces a previous scoreboard
 // block or the body of a "## Accuracy scoreboard" section and leaves the rest of the file alone.
+// The block keeps its start / end markers, so the next write replaces it in place.
 // --provider is reserved for Phase 2b (live local / Claude runs); today only the recorded
-// fixtures are used and any other value exits 2.
+// fixtures are used ("recorded" mode: LLM flags gated as code path only, labelled on the
+// scoreboard) and any other value exits 2. The gating itself is mode-aware (accuracy.ts).
+// Every fixture is also re-run on agent.probeMutation(input) (input sensitivity), and production
+// agents must have a non-thin fixture set (count, categories, block / warn support).
 // Exit codes: 0 all pass · 1 below threshold · 2 usage error / blocked.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { failureDetails, scoreboardMarkdown, upsertScoreboard, type AgentScore } from "@/lib/agents/core/accuracy";
@@ -65,7 +69,7 @@ async function main(): Promise<number> {
       console.error(`accuracy: unknown agent "${key}" (known: ${Object.keys(AGENTS).join(", ")})`);
       return 2;
     }
-    scores.push(await runAgentAccuracy(def, { root: args.fixtures, runs: args.runs }));
+    scores.push(await runAgentAccuracy(def, { root: args.fixtures, runs: args.runs, mode: "recorded" }));
   }
 
   const block = scoreboardMarkdown(scores, new Date());
@@ -73,6 +77,10 @@ async function main(): Promise<number> {
   for (const s of scores.filter((x) => !x.pass)) {
     console.log(`\n${s.agent} (${s.fixtureSet}) is below threshold:`);
     for (const line of failureDetails(s)) console.log(line);
+  }
+  for (const s of scores.filter((x) => x.notes.length)) {
+    console.log(`\n${s.agent} (${s.fixtureSet}) notes (not gated):`);
+    for (const note of s.notes) console.log(`- ${note}`);
   }
   if (args.writeProgress && args.out) {
     const existing = existsSync(args.out) ? readFileSync(args.out, "utf8") : null;

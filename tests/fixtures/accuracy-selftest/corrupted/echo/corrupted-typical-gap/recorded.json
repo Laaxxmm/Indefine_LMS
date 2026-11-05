@@ -1,0 +1,9 @@
+{
+  "system.check:echo.related-party": {
+    "status": "pass",
+    "evidence": {
+      "quote": "Eastern Freight",
+      "location": "register.csv row 3"
+    }
+  }
+}

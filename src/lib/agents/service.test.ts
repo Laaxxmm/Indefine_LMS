@@ -1,7 +1,7 @@
 // Review flow through the service layer: run → submit → request changes (re-run with notes) →
 // approve (Working → Final with version suffix), plus access denial and the Final-copy retry.
 import { describe, expect, it } from "vitest";
-import { ECHO_EXTRACT_TASK } from "@/lib/agents/echo";
+import { parseEchoRegister } from "@/lib/agents/echo";
 import {
   addComment,
   approvePack,
@@ -15,7 +15,7 @@ import {
   startAgentRun,
   submitForReview,
 } from "./service";
-import { CLEAN_EXTRACT, FINAL, GAP_EXTRACT, PASS_VERDICT, RELATED_TASK, WORKING, echoWorld, rows, user } from "../../../tests/fakes/agent-world";
+import { CLEAN_EXTRACT, FINAL, GAP_REGISTER_CSV, PASS_VERDICT, REGISTER_CSV, RELATED_TASK, WORKING, echoWorld, rows, user } from "../../../tests/fakes/agent-world";
 
 const job = (w: ReturnType<typeof echoWorld>) => rows(w.db, "jobTask")[0];
 
@@ -77,7 +77,8 @@ describe("review flow", () => {
     const [r1, r2] = rows(w.db, "agentRun");
     expect(r1).toMatchObject({ status: "CHANGES_REQUESTED", reviewNotes: "INV-2 looks doubled" });
     expect(r2).toMatchObject({ attempt: 2, status: "AGENT_DONE", reviewNotes: "INV-2 looks doubled", startedById: "u-ravi" });
-    expect(w.router.calls.at(-2)!.messages[1].content).toContain("Reviewer notes: INV-2 looks doubled");
+    // Echo makes no extraction call (the register is parsed by code); the notes ride on the run.
+    expect(w.router.calls.map((c) => c.runId)).toEqual(["run-1", "run-2"]);
     expect(w.fake.filesIn(w.drive, WORKING)).toEqual(["ACME01_Echo-register_2026-10_v1.xlsx", "ACME01_Echo-register_2026-10_v2.xlsx"]);
     expect(job(w).state).toBe("AGENT_DONE");
     expect(rows(w.db, "jobTaskEvent").map((e) => e.toState)).toEqual(["IN_PREP", "AGENT_DONE", "IN_REVIEW", "IN_PREP", "AGENT_DONE"]);
@@ -105,7 +106,7 @@ describe("review flow", () => {
   });
 
   it("block failures: the reviewer cannot approve; a partner needs a note", async () => {
-    const w = echoWorld({ responses: { [ECHO_EXTRACT_TASK]: GAP_EXTRACT, [RELATED_TASK]: PASS_VERDICT } });
+    const w = echoWorld({ register: GAP_REGISTER_CSV, responses: { [RELATED_TASK]: PASS_VERDICT } });
     await toReview(w);
     expect(await approvePack(user("ravi"), "run-1", null, w.deps)).toMatchObject({ ok: false, status: 403 });
     expect(await approvePack(user("partner"), "run-1", null, w.deps)).toMatchObject({ ok: false, status: 400 });
@@ -201,7 +202,7 @@ describe("comments, mistakes and files", () => {
   });
 
   it("CLEAN_EXTRACT fixture is consistent with the register", () => {
-    expect(CLEAN_EXTRACT.rows).toHaveLength(3);
+    expect(parseEchoRegister(REGISTER_CSV)).toEqual({ rows: CLEAN_EXTRACT.rows, errors: [] });
   });
 });
 

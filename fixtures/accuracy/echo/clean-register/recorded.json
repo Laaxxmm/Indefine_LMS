@@ -1,26 +1,4 @@
 {
-  "system.echo-extract": {
-    "rows": [
-      {
-        "ref": "INV-1",
-        "party": "Acme Traders",
-        "date": "2026-10-05",
-        "amountPaise": 1500000
-      },
-      {
-        "ref": "INV-2",
-        "party": "Bright Supplies",
-        "date": "2026-10-06",
-        "amountPaise": 2345650
-      },
-      {
-        "ref": "INV-3",
-        "party": "City Logistics",
-        "date": "2026-10-07",
-        "amountPaise": 899999
-      }
-    ]
-  },
   "system.check:echo.related-party": {
     "status": "pass",
     "evidence": {
