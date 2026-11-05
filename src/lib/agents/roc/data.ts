@@ -130,7 +130,7 @@ export const AUDITOR_RULES: Versioned<{
     borrowingsPaise: 50 * CRORE,
   },
   verify:
-    "Companies Act s.139(1)-(2) and rule 5: a term of five consecutive years (first AGM to sixth AGM); rotation for listed companies, unlisted public companies with paid-up ≥ ₹10 crore, private companies with paid-up ≥ ₹50 crore, and companies with borrowings ≥ ₹50 crore — individual one term (5 years), firm two terms (10 years). Borrowings here are all long + short-term borrowings in the balance sheet; verify the 'public borrowings' reading.",
+    "Companies Act s.139(1)-(2) and rule 5: a term of five consecutive years (first AGM to sixth AGM); rotation for listed companies, unlisted public companies with paid-up ≥ ₹10 crore, private companies with paid-up ≥ ₹50 crore, and companies with borrowings ≥ ₹50 crore — individual one term (5 years), firm two terms (10 years); One Person Companies and small companies (on the verified small-company limits) are excluded from every class. Borrowings here are all long + short-term borrowings in the balance sheet; verify the 'public borrowings' reading.",
 };
 
 /** MSME-1: half-yearly return of amounts due to micro / small suppliers outstanding more than 45 days. */

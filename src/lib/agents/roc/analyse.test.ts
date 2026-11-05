@@ -240,10 +240,23 @@ describe("directors, auditor, MSME-1, DPT-3", () => {
     expect(firm.auditor).toMatchObject({ rotationClass: true, consecutiveYears: 10, rotationBreached: false });
     const firmOver = analyseRoc(baseExtract({ company: { listed: true }, auditor: { termStartFy: "2021-22", consecutiveYearsBeforeTerm: 6 } }));
     expect(firmOver.auditor.rotationBreached).toBe(true);
-    const borrowings = analyseRoc(baseExtract({ current: { longTermBorrowings: 50 * CR }, auditor: { type: "individual", termStartFy: "2021-22", reappointedAtThisAgm: true } }));
+    const borrowings = analyseRoc(baseExtract({ company: { companyClass: "public" }, current: { longTermBorrowings: 50 * CR }, auditor: { type: "individual", termStartFy: "2021-22", reappointedAtThisAgm: true } }));
     expect(borrowings.auditor).toMatchObject({ rotationClass: true, rotationBreached: true });
     const below = analyseRoc(baseExtract({ company: { companyClass: "public", paidUpCapitalPaise: 10 * CR - 1 }, auditor: { type: "individual", termStartFy: "2021-22", reappointedAtThisAgm: true } }));
     expect(below.auditor.rotationClass).toBe(false);
+  });
+  it("rotation never applies to a small company or an OPC, even with borrowings ≥ ₹50 crore (rule 5 exclusion)", () => {
+    const reappointed = { type: "individual" as const, termStartFy: "2021-22", reappointedAtThisAgm: true };
+    // Base company is small on the verified limits (paid-up ₹10 lakh, preceding-year turnover ₹2 crore).
+    const small = analyseRoc(baseExtract({ current: { longTermBorrowings: 50 * CR }, auditor: reappointed }));
+    expect(small.small.isSmall).toBe(true);
+    expect(small.auditor).toMatchObject({ rotationClass: false, rotationBreached: false });
+    const opc = analyseRoc(baseExtract({ company: { companyClass: "opc", agmDate: null }, current: { longTermBorrowings: 60 * CR }, auditor: reappointed }));
+    expect(opc.auditor).toMatchObject({ rotationClass: false, rotationBreached: false });
+    // Same private company one paisa over the verified turnover limit: not small → the borrowings class applies.
+    const notSmall = analyseRoc(baseExtract({ previous: { revenueFromOperations: 40 * CR + 1 }, current: { longTermBorrowings: 50 * CR }, auditor: reappointed }));
+    expect(notSmall.small.isSmall).toBe(false);
+    expect(notSmall.auditor).toMatchObject({ rotationClass: true, rotationBreached: true });
   });
   it("MSME-1: 45 days is fine, 46 is not; zero amounts ignored", () => {
     expect(analyseRoc(baseExtract({ msme: [{ vendor: "V", halfYear: "H1", amountPaise: 100, daysOutstanding: 45 }] })).msme1.applicable).toBe(false);

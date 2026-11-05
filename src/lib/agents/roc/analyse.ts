@@ -274,11 +274,17 @@ function analyse(x: RocExtract): RocAnalysis {
   const termYear = fyStart(x.fy) - fyStart(au.termStartFy) + 1;
   const consecutiveYears = au.consecutiveYearsBeforeTerm + termYear;
   const r = AUDITOR_RULES.rotation;
+  // Rule 5 of the Companies (Audit and Auditors) Rules, 2014: the rotation classes exclude One
+  // Person Companies and small companies (classified on the verified limits above). A listed
+  // company is a public company — never small or an OPC — so it stays in the class whatever the
+  // other fields say.
   const rotationClass =
     co.listed ||
-    (co.companyClass === "public" && co.paidUpCapitalPaise >= r.unlistedPublicPaidUpPaise) ||
-    (co.companyClass !== "public" && co.paidUpCapitalPaise >= r.privatePaidUpPaise) ||
-    current.borrowings >= r.borrowingsPaise;
+    (!opc &&
+      !isSmall &&
+      ((co.companyClass === "public" && co.paidUpCapitalPaise >= r.unlistedPublicPaidUpPaise) ||
+        (co.companyClass !== "public" && co.paidUpCapitalPaise >= r.privatePaidUpPaise) ||
+        current.borrowings >= r.borrowingsPaise));
   const rotationLimit = au.type === "individual" ? r.individualMaxYears : r.firmMaxYears;
   const rotationBreached = rotationClass && (consecutiveYears > rotationLimit || (au.reappointedAtThisAgm && consecutiveYears + au.termYears > rotationLimit));
   const termEndsAtThisAgm = termYear === au.termYears;
