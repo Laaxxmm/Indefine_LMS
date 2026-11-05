@@ -124,6 +124,14 @@ export function moduleDef(key: ModuleKey): ModuleDef {
 
 export const moduleLabel = (key: ModuleKey) => moduleDef(key).label;
 
+/**
+ * The Firm OS modules: closed for everyone while the master switch FIRM_OS_ENABLED is off
+ * (src/lib/workspace/flag.ts). The rest are the LMS the firm uses today, which the switch never touches.
+ */
+export const FIRM_OS_MODULES: readonly ModuleKey[] = ["onboard", "agents", "coach", "comms", "search"];
+export const LMS_MODULES: readonly ModuleKey[] = MODULE_KEYS.filter((k) => !FIRM_OS_MODULES.includes(k));
+export const isFirmOsModule = (key: ModuleKey) => FIRM_OS_MODULES.includes(key);
+
 /** Known keys only, no repeats, in registry order. */
 export function sortModules(keys: Iterable<string>): ModuleKey[] {
   const want = new Set([...keys].filter(isModuleKey));

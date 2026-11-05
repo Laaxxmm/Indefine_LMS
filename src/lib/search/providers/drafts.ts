@@ -66,7 +66,7 @@ export const draftsProvider: SearchProvider = defineProvider({
     const byId = new Map(clients.map((c) => [c.id, c]));
     const hits = rows.map((d): SearchHit | null => {
       const fc = byId.get(d.firmClientId);
-      if (!fc) return null; // no client to open it from
+      if (!fc) return null; // no client to describe it by
       const kind = DRAFT_KIND_LABELS[d.kind] ?? "Message";
       const rank = rankMatch(q, { ids: [d.id], codes: [fc.clientCode], text: [d.subject, fc.client?.name, kind] });
       if (rank === null) return null;
@@ -75,7 +75,7 @@ export const draftsProvider: SearchProvider = defineProvider({
         id: d.id,
         label: maskText(d.subject),
         context: line(kind, LANGUAGE_LABELS[d.language] ?? "Other language", fc.clientCode, `drafted ${day(d.createdAt)}`, d.outlookDraftId && "Saved to Outlook drafts"),
-        ...draftLink(fc.lmsClientId),
+        ...draftLink(d.id),
         rank,
         at: d.createdAt.toISOString(),
       };

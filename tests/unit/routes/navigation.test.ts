@@ -1,9 +1,17 @@
 // Header navigation: which link marks the current section, and the admin menu (sidebar on large
 // screens, "Admin menu" disclosure below lg) with the Firm OS pages grouped under their heading.
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { activeSession, redirectTarget, renderHtml } from "./harness";
 import { isCurrentSection } from "@/components/NavLink";
 import { isAdminNavActive } from "@/app/admin/AdminNav";
+
+// Firm OS switched on for these tests (FIRM_OS_ENABLED defaults off: src/lib/workspace/flag.ts).
+beforeEach(() => {
+  vi.stubEnv("FIRM_OS_ENABLED", "1");
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 vi.mock("@/lib/auth", () => ({ auth: vi.fn(), signIn: vi.fn(), signOut: vi.fn(), handlers: {} }));
 vi.mock("next/navigation", async () => (await import("./harness")).navigationMock);

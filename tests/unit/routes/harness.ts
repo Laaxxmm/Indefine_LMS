@@ -88,6 +88,36 @@ export const prismaMock: Record<string, unknown> = new Proxy(
   },
 );
 
+// ------------------------------------------------------------------ workspace settings
+
+export type WorkspaceRows = { setting?: () => unknown; role?: () => unknown };
+
+/**
+ * A test's own database plus the two workspace-settings reads every module layout makes
+ * (src/lib/workspace/settings.ts). No rows (the default) = the built-in role defaults. Everything
+ * else is the test's database, unchanged (functions stay bound to it).
+ */
+export function withWorkspace<T extends object>(db: T, rows: WorkspaceRows = {}): T {
+  const extra: Record<string, unknown> = {
+    workspaceSetting: { findUnique: async () => rows.setting?.() ?? null },
+    roleWorkspaceDefault: { findUnique: async () => rows.role?.() ?? null },
+  };
+  return new Proxy(db, {
+    get: (t, k) => {
+      if (typeof k === "string" && k in extra) return extra[k];
+      const v = Reflect.get(t, k, t);
+      return typeof v === "function" ? v.bind(t) : v;
+    },
+  });
+}
+
+/** A person's own workspace row: these modules on (focus mode and companion as given). */
+export const workspaceRow = (modules: string[] | null, over: { focusMode?: boolean | null; companionEnabled?: boolean } = {}) => ({
+  modules,
+  focusMode: over.focusMode ?? null,
+  companionEnabled: over.companionEnabled ?? false,
+});
+
 // ------------------------------------------------------------------ sessions
 
 export const TEST_EMAIL = "smoke.user@indefine.test";

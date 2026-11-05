@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { LogoMark } from "@/components/Logo";
 import { actorFrom } from "@/lib/work/actor";
+import { requireModule } from "@/lib/workspace/guard";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,7 @@ export default async function WorkLayout({ children }: { children: React.ReactNo
   const session = await auth();
   if (!session?.user) redirect("/");
   if (!actorFrom(session)) notFound();
+  await requireModule(session.user, "work");
 
   return (
     <div className="min-h-screen">

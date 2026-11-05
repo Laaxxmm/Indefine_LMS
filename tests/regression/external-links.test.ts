@@ -19,7 +19,10 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-11-04T04:30:00Z"));
 });
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllEnvs();
+});
 
 describe("greytHR and Turia links", () => {
   it("the dashboard links greytHR and Turia exactly as before, for staff and partners alike", async () => {
@@ -57,8 +60,10 @@ describe("Tools grid", () => {
     ]);
   });
 
-  it("partners also see Neo Centra and Firm OS onboarding", async () => {
+  it("partners also see Neo Centra, and Firm OS onboarding once Firm OS is switched on (FIRM_OS_ENABLED)", async () => {
     signedIn(PEOPLE.partner);
+    expect(await toolsHrefs()).not.toContain("/onboard"); // the default: Firm OS off
+    vi.stubEnv("FIRM_OS_ENABLED", "1");
     expect(await toolsHrefs()).toEqual([
       "/onboard",
       "/tools/certificate-generator",
