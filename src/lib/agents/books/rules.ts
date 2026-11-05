@@ -9,6 +9,11 @@
 // due date itself blocks so it is not approved until the challan is in, although a deposit made
 // that day is still in time. The preparation date is the run's clock (CheckInput.preparedAt, IST
 // day); when it is unknown (e.g. a replayed mistake) an undeposited deduction is treated as overdue.
+//
+// Trial balances (owner-approved 2026-11-05): the month-end TB must balance to the paisa or the pack
+// BLOCKS (books.tb-balanced). When a prior-month (opening) TB is supplied it must balance too, but
+// that is a WARN (books.prior-tb-balanced): the comparison base and the opening balances it hands on
+// carry a difference to explain; it fails as well when the file cannot be read, and is na without one.
 import { createRuleRegistry, type ChecklistPack, type CheckOutcome, type DeterministicCheck, type RuleDefinition } from "@/lib/agents/core/checklist";
 import { formatDayKey, formatInr } from "@/lib/agents/core/format";
 import type { CheckInput } from "@/lib/agents/core/runner";

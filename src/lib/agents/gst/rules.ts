@@ -12,6 +12,16 @@
 //           claimed) but a person must follow up or confirm a judgement (2B mismatches, blocked
 //           credits, rule 37, series gaps, credit-note linkage, lateness, free supplies).
 //   info  — classification the reviewer should glance at (B2CL invoices).
+//
+// Conventions for the draft figures (owner-approved 2026-11-05; compute.ts carries the detail):
+//   - A time-barred credit note (dated after the s.34(2) limit, GST_CONFIG.creditNoteDeadlineMonthDay
+//     after the FY of its original invoice) does NOT reduce outward liability: it is excluded from
+//     Table 3.1 and the GSTR-1 CDNR / B2CS / HSN figures. gst.credit-note-time-limit still blocks and
+//     lists it as "time-barred credit note excluded: <no>, ₹<value>".
+//   - ITC on a purchase bill whose ledger the model answered insufficient_evidence on (blocked credit
+//     or reverse charge) is HELD BACK — not claimed in Table 4(A) — until answered: figure
+//     itcHeldBackPaise, raised by gst.model-questions and the client document requests with the
+//     amount, and shown under Open questions on the review screen.
 import { createRuleRegistry, type ChecklistPack, type CheckOutcome, type RuleDefinition } from "@/lib/agents/core/checklist";
 import type { CheckInput } from "@/lib/agents/core/runner";
 import { validateGstin } from "@/lib/agents/onboarding/validators";
