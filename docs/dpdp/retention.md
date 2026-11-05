@@ -51,8 +51,9 @@ Idempotent: a second run the same night changes nothing and records that it ran.
 The windows are constants in `retention.ts` (`AGENT_RUN_INPUTS_DAYS = 30`, `ONBOARDING_COPY_DAYS = 30`,
 `HEARTBEAT_DAYS = 7`, `RATE_LIMIT_BUCKET_GRACE_DAYS = 1`). Changing one is a threshold change: partner approval and an ADR (orchestrator
 FAILURE RULES). **The 30-day onboarding window is new on 2026-11-06** (consent-purpose.md promised the
-clearing without a period; the inventory's open item proposed 30 days): a partner confirms it and
-ADR-006's retention table gains the line.
+clearing without a period; the inventory's open item proposed 30 days). ADR-006 records it, with the
+nightly masking of `ModelCall.error` / typed `AuditEvent` notes and the `RateLimitBucket` purge, in its
+owner-approved amendment of 2026-11-06; the legal confirmation of the periods is still open.
 
 ## Checks
 
