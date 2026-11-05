@@ -1,0 +1,46 @@
+{
+  "description": "Typical gaps: a large round amount (warn) and a Saturday entry (info).",
+  "job": {
+    "fy": "2026-27",
+    "period": "2026-10"
+  },
+  "flags": [
+    {
+      "ruleId": "echo.round-amounts",
+      "severity": "warn"
+    },
+    {
+      "ruleId": "echo.weekend-dates",
+      "severity": "info"
+    }
+  ],
+  "figures": {
+    "rowCount": 3,
+    "totalPaise": 26682175,
+    "largestPaise": 25000000
+  },
+  "deliverables": [
+    {
+      "name": "Echo register",
+      "sheets": [
+        {
+          "name": "Register",
+          "columns": [
+            "Ref",
+            "Party",
+            "Date",
+            "Amount"
+          ]
+        },
+        {
+          "name": "Summary",
+          "columns": [
+            "Figure",
+            "Amount",
+            "Count"
+          ]
+        }
+      ]
+    }
+  ]
+}

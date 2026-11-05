@@ -1,0 +1,26 @@
+{
+  "system.echo-extract": {
+    "rows": [
+      {
+        "ref": "INV-30",
+        "party": "Iris Consulting",
+        "date": "2026-10-15",
+        "amountPaise": 4500000
+      },
+      {
+        "ref": "INV-31",
+        "party": "Mehta Holdings (director's company)",
+        "date": "2026-10-16",
+        "amountPaise": 10050000
+      }
+    ]
+  },
+  "system.check:echo.related-party": {
+    "status": "fail",
+    "message": "Mehta Holdings is described as the director's company",
+    "evidence": {
+      "quote": "Mehta Holdings (director's company)",
+      "location": "register.csv row 3"
+    }
+  }
+}

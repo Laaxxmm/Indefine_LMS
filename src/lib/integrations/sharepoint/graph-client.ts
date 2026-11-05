@@ -1,10 +1,15 @@
 // Thin, injectable Graph + SharePoint REST client for Path A. Read and create/ensure
 // operations only: there is deliberately no delete, move, rename or update method, and the
 // internal request helper accepts only GET and POST (Never-delete rule, ORCHESTRATOR #2).
+// File bytes are the one exception Graph forces: content upload is an HTTP PUT. It lives in a
+// single helper (putContent) that is only ever given a `:/content?...conflictBehavior=fail` URL
+// or the URL of an upload session created with conflictBehavior "fail", so an existing file is
+// never overwritten (409 -> ConflictError). no-destructive.test.ts pins this down.
 // Transport and token providers are injected so tests run against an in-memory fake.
 // Throttling (429) and server errors (5xx) are retried a bounded number of times,
 // honouring Retry-After.
-import { BlockedError, GRAPH_BLOCKED_ACTION, GraphError } from "./errors";
+import { createHash } from "node:crypto";
+import { BlockedError, ConflictError, GRAPH_BLOCKED_ACTION, GraphError } from "./errors";
 import type { FetchLike } from "./sp-auth";
 
 export type { FetchLike } from "./sp-auth";
@@ -14,7 +19,25 @@ export const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
 export interface GraphSite { id: string; webUrl: string; displayName?: string; name?: string }
 export interface GraphDrive { id: string; name: string; webUrl?: string; driveType?: string }
 export interface GraphList { id: string; displayName: string; name?: string; webUrl?: string; list?: { template?: string } }
-export interface GraphItem { id: string; name: string; webUrl?: string; folder?: { childCount?: number }; size?: number }
+/** Content hashes Graph reports. SharePoint libraries give quickXorHash only; sha1/sha256 appear on some drives. */
+export interface GraphFileHashes { quickXorHash?: string; sha1Hash?: string; sha256Hash?: string }
+export interface GraphItem {
+  id: string;
+  name: string;
+  webUrl?: string;
+  folder?: { childCount?: number };
+  file?: { mimeType?: string; hashes?: GraphFileHashes };
+  size?: number;
+}
+
+/** Uploads never overwrite: "fail" is the only conflict behaviour the client accepts. */
+export interface UploadOptions { conflict: "fail" }
+export interface CopyResult { item: GraphItem; sha256: string; sizeBytes: number }
+
+/** Files up to this size go in one request; larger files use an upload session. */
+export const SIMPLE_UPLOAD_MAX_BYTES = 4 * 1024 * 1024;
+/** Upload-session chunk: a multiple of 320 KiB, as Graph requires. */
+export const UPLOAD_CHUNK_BYTES = 320 * 1024 * 10;
 export interface GraphGroup { id: string; displayName: string }
 
 export type ColumnDefinition =
@@ -53,6 +76,12 @@ export interface SharePointClient {
   getList(siteId: string, displayName: string): Promise<GraphList | null>;
   getItemByPath(driveId: string, path: string): Promise<GraphItem | null>;
   listChildren(driveId: string, path: string): Promise<GraphItem[]>;
+  /** File bytes, or null when there is no item at `path`. */
+  downloadFile(driveId: string, path: string): Promise<Buffer | null>;
+  // ---- Graph: file content (create-only, conflict "fail": never overwrites) ----
+  uploadFile(driveId: string, path: string, content: Uint8Array, opts: UploadOptions): Promise<GraphItem>;
+  /** Download + upload (so the copy's sha256 is known). Throws ConflictError if `toPath` exists. */
+  copyItem(driveId: string, fromPath: string, toPath: string, opts: UploadOptions): Promise<CopyResult>;
   // ---- Graph: create (idempotent on conflict) ----
   createFolder(driveId: string, parentPath: string, name: string): Promise<{ item: GraphItem; created: boolean }>;
   createList(siteId: string, def: ListDefinition): Promise<{ list: GraphList; created: boolean }>;
@@ -85,6 +114,8 @@ export interface ClientOptions {
 }
 
 type Method = "GET" | "POST";
+/** Graph's verb for file bytes. Used by putContent only (see the header comment). */
+const UPLOAD_VERB = "PUT" as const;
 type Auth = { kind: "graph" } | { kind: "sp"; host: string };
 
 const defaultGraphToken = async () => (await import("@/lib/graph")).getAppOnlyToken();
@@ -138,16 +169,23 @@ export function createSharePointClient(opts: ClientOptions = {}): SharePointClie
         ? { Authorization: `Bearer ${token}`, Accept: "application/json" }
         : { Authorization: `Bearer ${token}`, Accept: "application/json;odata=nometadata" };
     if (body !== undefined) headers["Content-Type"] = auth.kind === "graph" ? "application/json" : "application/json;odata=nometadata";
+    return withRetries(() =>
+      doFetch(url, {
+        method,
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body),
+        cache: "no-store",
+        signal: AbortSignal.timeout(timeoutMs),
+      }),
+    );
+  }
+
+  /** Bounded retries around one HTTP exchange: network errors, 429 and 5xx (Retry-After honoured). */
+  async function withRetries(exchange: () => Promise<Response>): Promise<Response> {
     for (let attempt = 0; ; attempt++) {
       let res: Response;
       try {
-        res = await doFetch(url, {
-          method,
-          headers,
-          body: body === undefined ? undefined : JSON.stringify(body),
-          cache: "no-store",
-          signal: AbortSignal.timeout(timeoutMs),
-        });
+        res = await exchange();
       } catch (e) {
         if (attempt >= maxRetries) throw e;
         await sleep(Math.min(baseDelay * 2 ** attempt, maxDelay));
@@ -157,6 +195,19 @@ export function createSharePointClient(opts: ClientOptions = {}): SharePointClie
       const ra = parseRetryAfter(res.headers.get("Retry-After"), now());
       await sleep(Math.min(ra ?? baseDelay * 2 ** attempt, maxDelay));
     }
+  }
+
+  /**
+   * File bytes. Only two kinds of URL ever reach here: a simple-upload URL from uploadUrlFor()
+   * (always `?@microsoft.graph.conflictBehavior=fail`) or the uploadUrl of a session created with
+   * conflictBehavior "fail". Session URLs are pre-authenticated, so no bearer token is sent to them.
+   */
+  async function putContent(url: string, bytes: Uint8Array, extraHeaders: Record<string, string>, withBearer: boolean): Promise<Response> {
+    const headers: Record<string, string> = { "Content-Type": "application/octet-stream", ...extraHeaders };
+    if (withBearer) headers.Authorization = `Bearer ${await bearer({ kind: "graph" })}`;
+    return withRetries(() =>
+      doFetch(url, { method: UPLOAD_VERB, headers, body: bytes as unknown as BodyInit, cache: "no-store", signal: AbortSignal.timeout(timeoutMs) }),
+    );
   }
 
   async function json<T>(method: Method, url: string, auth: Auth, body?: unknown): Promise<T> {
@@ -192,6 +243,8 @@ export function createSharePointClient(opts: ClientOptions = {}): SharePointClie
     const p = encPath(path);
     return p ? `${graphBase}/drives/${driveId}/root:/${p}` : `${graphBase}/drives/${driveId}/root`;
   };
+  /** Simple-upload target. conflictBehavior=fail is part of the URL, never a parameter. */
+  const uploadUrlFor = (driveId: string, path: string) => `${itemUrl(driveId, path)}:/content?@microsoft.graph.conflictBehavior=fail`;
   const childrenUrl = (driveId: string, path: string) => {
     const p = encPath(path);
     return p ? `${graphBase}/drives/${driveId}/root:/${p}:/children` : `${graphBase}/drives/${driveId}/root/children`;
@@ -225,7 +278,46 @@ export function createSharePointClient(opts: ClientOptions = {}): SharePointClie
       return getOrNull<GraphItem>(itemUrl(driveId, path), G);
     },
     listChildren(driveId, path) {
-      return getAll<GraphItem>(`${childrenUrl(driveId, path)}?$select=id,name,webUrl,folder,size&$top=200`);
+      return getAll<GraphItem>(`${childrenUrl(driveId, path)}?$select=id,name,webUrl,folder,file,size&$top=200`);
+    },
+    async downloadFile(driveId, path) {
+      const url = `${itemUrl(driveId, path)}:/content`;
+      const res = await send("GET", url, G);
+      if (res.status === 404) return null;
+      if (!res.ok) throw new GraphError(res.status, "GET", url, await res.text());
+      return Buffer.from(await res.arrayBuffer());
+    },
+    async uploadFile(driveId, path, content, opts) {
+      if (opts?.conflict !== "fail") throw new Error("uploadFile only supports conflict 'fail' (files are never overwritten)");
+      if (!encPath(path) || path.endsWith("/")) throw new Error(`uploadFile needs a file path, got "${path}"`);
+      if (content.byteLength <= SIMPLE_UPLOAD_MAX_BYTES) {
+        const url = uploadUrlFor(driveId, path);
+        const res = await putContent(url, content, {}, true);
+        if (res.status === 409) throw new ConflictError(path);
+        if (!res.ok) throw new GraphError(res.status, UPLOAD_VERB, url, await res.text());
+        return (await res.json()) as GraphItem;
+      }
+      const sessionUrl = `${itemUrl(driveId, path)}:/createUploadSession`;
+      const created = await send("POST", sessionUrl, G, { item: { "@microsoft.graph.conflictBehavior": "fail" } });
+      if (created.status === 409) throw new ConflictError(path);
+      if (!created.ok) throw new GraphError(created.status, "POST", sessionUrl, await created.text());
+      const { uploadUrl } = (await created.json()) as { uploadUrl: string };
+      const total = content.byteLength;
+      let last: Response | null = null;
+      for (let start = 0; start < total; start += UPLOAD_CHUNK_BYTES) {
+        const end = Math.min(start + UPLOAD_CHUNK_BYTES, total) - 1;
+        last = await putContent(uploadUrl, content.subarray(start, end + 1), { "Content-Range": `bytes ${start}-${end}/${total}` }, false);
+        if (last.status === 409) throw new ConflictError(path);
+        // The session URL carries its own credential: never put it in an error message.
+        if (!last.ok) throw new GraphError(last.status, UPLOAD_VERB, `upload session for ${path}`, await last.text());
+      }
+      return (await (last as Response).json()) as GraphItem;
+    },
+    async copyItem(driveId, fromPath, toPath, opts) {
+      const bytes = await client.downloadFile(driveId, fromPath);
+      if (!bytes) throw new GraphError(404, "GET", fromPath, "copy source not found");
+      const item = await client.uploadFile(driveId, toPath, bytes, opts);
+      return { item, sha256: createHash("sha256").update(bytes).digest("hex"), sizeBytes: bytes.length };
     },
     async createFolder(driveId, parentPath, name) {
       const url = childrenUrl(driveId, parentPath);

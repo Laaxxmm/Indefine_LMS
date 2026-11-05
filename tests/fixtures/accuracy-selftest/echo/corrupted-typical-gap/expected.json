@@ -1,0 +1,46 @@
+{
+  "description": "SELF-TEST ONLY - deliberately corrupted copy of typical-gap-round-weekend: expected flags altered (weekend info replaced by a block duplicate-refs) and totalPaise off by Rs 1 (100 paise). The harness must FAIL on it.",
+  "job": {
+    "fy": "2026-27",
+    "period": "2026-10"
+  },
+  "flags": [
+    {
+      "ruleId": "echo.round-amounts",
+      "severity": "warn"
+    },
+    {
+      "ruleId": "echo.duplicate-refs",
+      "severity": "block"
+    }
+  ],
+  "figures": {
+    "rowCount": 3,
+    "totalPaise": 26682275,
+    "largestPaise": 25000000
+  },
+  "deliverables": [
+    {
+      "name": "Echo register",
+      "sheets": [
+        {
+          "name": "Register",
+          "columns": [
+            "Ref",
+            "Party",
+            "Date",
+            "Amount"
+          ]
+        },
+        {
+          "name": "Summary",
+          "columns": [
+            "Figure",
+            "Amount",
+            "Count"
+          ]
+        }
+      ]
+    }
+  ]
+}
