@@ -38,7 +38,7 @@ export function SopStepsList({ steps, headingId }: { steps: Steps; headingId: st
                   {s.title}
                   {current && <span className="ml-2 text-[11px] font-bold uppercase tracking-wide text-brand-700" aria-hidden="true">Now</span>}
                 </span>
-                {(current || !done) && <span className="block text-[12.5px] text-ink-mute mt-0.5">{s.detail}</span>}
+                {(current || !done) && <span className={`block text-[12.5px] mt-0.5 ${current ? "text-ink-soft" : "text-ink-mute"}`}>{s.detail}</span>}
               </span>
             </li>
           );

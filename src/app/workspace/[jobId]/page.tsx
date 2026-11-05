@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ExternalLink } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { card } from "@/components/ui";
-import { BackLink, EmptyState, RunStatusChip, StateChip, chip, eyebrow, linkText, sectionTitle } from "@/app/agents/parts";
+import { BackLink, RunStatusChip, StateChip, chip, eyebrow, linkText, pageTitle, sectionTitle } from "@/app/agents/parts";
 import { DeliverablesPanel } from "@/app/agents/[agent]/runs/[id]/ReviewPanels";
 import { DOC_TYPES } from "@/lib/clients/core";
 import { loadWorkspaceView, type WorkspaceView, type WorkspaceViewDb } from "@/lib/workspace/view";
@@ -66,7 +66,14 @@ function ClientDocsPanel({ docs }: { docs: WorkspaceView["clientDocs"] }) {
 
 function SopPackPanel({ pack, service }: { pack: WorkspaceView["sopPack"]; service: string }) {
   if (!pack) {
-    return <EmptyState title={`No SOP pack for ${service} yet`}>There is no agent for this service yet, so there is no SOP pack to show. Follow the steps on the left.</EmptyState>;
+    return (
+      <section aria-labelledby="sop-pack" className={card}>
+        <h2 id="sop-pack" className={sectionTitle}>
+          SOP pack
+        </h2>
+        <p className="text-[13px] text-ink-mute">No SOP pack for {service} yet: there is no agent for this service, so there are no checks to show. Follow the SOP steps on this page.</p>
+      </section>
+    );
   }
   return (
     <section aria-labelledby="sop-pack" className={card}>
@@ -84,7 +91,7 @@ function SopPackPanel({ pack, service }: { pack: WorkspaceView["sopPack"]; servi
               <span className={`${chip} ${SEV_TONE[r.severity]}`}>{SEV_LABEL[r.severity]}</span>
               <span className="min-w-0">{r.title}</span>
             </p>
-            <p className="text-[12px] text-ink-mute mt-1">
+            <p className="text-[11.5px] text-ink-mute mt-0.5">
               Evidence: {r.evidence} · {r.kind === "llm" ? "model check, quoted from the documents" : "rule in code"} · <span className="font-mono">{r.id}</span>
             </p>
           </li>
@@ -103,8 +110,28 @@ export default async function WorkspacePage({ params }: { params: Promise<{ jobI
   const { job, action } = view;
   const context = `${job.title} for ${job.clientCode}`;
 
+  const run = view.latestRun;
+  const deliverables = run ? (
+    <>
+      <DeliverablesPanel deliverables={view.deliverables} />
+      <p className="text-[11.5px] text-ink-mute mt-3 tabular-nums">
+        From attempt {run.attempt}, started {run.started}.{" "}
+        <Link href={`/agents/${run.agent}/runs/${run.id}`} className={linkText}>
+          Open the pack review screen
+        </Link>
+      </p>
+    </>
+  ) : (
+    <section aria-labelledby="no-deliverables" className={card}>
+      <h2 id="no-deliverables" className={sectionTitle}>
+        Deliverables
+      </h2>
+      <p className="text-[13px] text-ink-mute">No agent run yet. The draft pack&apos;s files appear here after the agent runs.</p>
+    </section>
+  );
+
   const tabs = [
-    { id: "deliverables", label: "Deliverables", count: view.deliverables.length, content: <DeliverablesPanel deliverables={view.deliverables} /> },
+    { id: "deliverables", label: "Deliverables", count: view.deliverables.length, content: deliverables },
     { id: "documents", label: "Client documents", count: view.clientDocs.files.length, content: <ClientDocsPanel docs={view.clientDocs} /> },
     { id: "sop", label: "SOP pack", content: <SopPackPanel pack={view.sopPack} service={job.service} /> },
   ];
@@ -113,13 +140,14 @@ export default async function WorkspacePage({ params }: { params: Promise<{ jobI
     <div>
       <BackLink href="/focus">Next task</BackLink>
       <div className="grid grid-cols-1 gap-6 items-start lg:grid-cols-[minmax(0,400px)_minmax(0,1fr)]">
-        <aside aria-label="Job, steps and next action" className="space-y-4 lg:sticky lg:top-20 lg:self-start lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
+        {/* Not an <aside>: it holds the page's title and its one primary action. The padding keeps the cards' shadow inside the scroll box. */}
+        <div data-panel="job" className="space-y-6 lg:sticky lg:top-20 lg:self-start lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:px-3 lg:-mx-3 lg:pb-6">
           <section aria-labelledby="job" className={card}>
             <p className={eyebrow}>Guided workspace</p>
-            <h1 id="job" className="font-display font-extrabold text-2xl tracking-[-0.03em] mt-1">
+            <h1 id="job" className={pageTitle}>
               {job.title}
             </h1>
-            <p className="text-ink-mute text-[13.5px] mt-1">
+            <p className="text-ink-mute text-[13.5px] mt-1.5">
               {job.clientName ? `${job.clientName} (${job.clientCode})` : job.clientCode} · {job.service} · <span className="tabular-nums">{job.period} · FY {job.fy}</span>
             </p>
             <div className="flex items-center gap-2 flex-wrap mt-3">
@@ -156,18 +184,10 @@ export default async function WorkspacePage({ params }: { params: Promise<{ jobI
               <OpenQuestionsList questions={view.openQuestions} headingId="ws-questions" />
             </section>
           )}
-        </aside>
+        </div>
 
         <div className="min-w-0">
           <WorkspaceTabs label="Job documents" tabs={tabs} initial={view.deliverables.length ? "deliverables" : "documents"} />
-          {view.latestRun && (
-            <p className="text-[12px] text-ink-mute mt-3 tabular-nums">
-              Deliverables from attempt {view.latestRun.attempt}, started {view.latestRun.started}.{" "}
-              <Link href={`/agents/${view.latestRun.agent}/runs/${view.latestRun.id}`} className={linkText}>
-                Open the pack review screen
-              </Link>
-            </p>
-          )}
         </div>
       </div>
     </div>

@@ -70,7 +70,7 @@ function ModuleToggles({
 function ConfirmChanges({ changes, busy, onBack, onConfirm, who }: { changes: string[]; busy: boolean; onBack: () => void; onConfirm: () => void; who: string }) {
   const id = useId();
   return (
-    <div role="group" aria-labelledby={`${id}-h`} className="rounded-xl border border-brand-200 bg-brand-50/60 px-4 py-3.5 mt-5">
+    <div role="group" aria-labelledby={`${id}-h`} className="rounded-xl border border-brand-200 bg-brand-50 px-4 py-3 mt-5">
       <p id={`${id}-h`} className="text-[13.5px] font-semibold">
         Check before saving. This changes {who}:
       </p>
@@ -79,10 +79,10 @@ function ConfirmChanges({ changes, busy, onBack, onConfirm, who }: { changes: st
           <li key={c}>{c}</li>
         ))}
       </ul>
-      <p className="text-[12px] text-ink-mute mt-2">It applies the next time they open a page. The change is recorded in the audit log.</p>
+      <p className="text-[12px] text-ink-soft mt-2">It applies the next time they open a page. The change is recorded in the audit log.</p>
       <div className="flex items-center gap-2 justify-end mt-3 flex-wrap">
-        <button type="button" disabled={busy} onClick={onBack} className={`${btnGhost} ${focusRing}`}>
-          Back to editing
+        <button type="button" disabled={busy} onClick={onBack} className={`${btnGhost} bg-card ${focusRing}`}>
+          Cancel
         </button>
         <button type="button" disabled={busy} onClick={onConfirm} className={`${btnPrimary} ${focusRing} inline-flex items-center gap-1.5`}>
           {busy && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />}

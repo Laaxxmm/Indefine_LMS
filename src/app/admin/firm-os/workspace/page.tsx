@@ -4,7 +4,7 @@ import Link from "next/link";
 import { isAdmin } from "@/lib/access";
 import { prisma } from "@/lib/prisma";
 import { btnGhost, card, field } from "@/components/ui";
-import { eyebrow, focusRing, sectionTitle } from "@/app/agents/parts";
+import { eyebrow, focusRing, sectionTitle, tableWrap } from "@/app/agents/parts";
 import {
   loadPerson,
   loadRoleDefaults,
@@ -29,9 +29,10 @@ const pill = `shrink-0 whitespace-nowrap px-3.5 py-2 rounded-full text-sm font-s
 // exported from a "use client" module is a client reference inside a server component.
 const navActive = "bg-brand-50 text-brand-600 hover:bg-brand-50 hover:text-brand-600";
 
-function Pill({ href, current, children }: { href: string; current: boolean; children: React.ReactNode }) {
+/** `current`: "page" for the view the person is on; "true" for the selected role inside it. */
+function Pill({ href, current, children }: { href: string; current: false | "page" | "true"; children: React.ReactNode }) {
   return (
-    <Link href={href} aria-current={current ? "page" : undefined} className={current ? `${pill} ${navActive}` : pill}>
+    <Link href={href} aria-current={current || undefined} className={current ? `${pill} ${navActive}` : pill}>
       {children}
     </Link>
   );
@@ -44,11 +45,15 @@ const peopleHref = (q: string, user?: string) => {
   return `/admin/firm-os/workspace?${sp.toString()}`;
 };
 
-function PeopleList({ rows, q, selected, caption }: { rows: PersonRow[]; q: string; selected: string | undefined; caption: string }) {
+function PeopleList({ rows, q, selected, caption, title }: { rows: PersonRow[]; q: string; selected: string | undefined; caption: string; title?: string }) {
+  // The heading sits above the list's container, as the section titles over tables on /agents do.
   return (
-    <ul aria-label={caption} className={`${card} !p-0 divide-y divide-border mb-6`}>
+    <section aria-label={title ? undefined : caption} className="mb-6">
+      {title && <h2 className={sectionTitle}>{title}</h2>}
+      <div className={tableWrap}>
+      <ul aria-label={caption} className="divide-y divide-border">
       {rows.map((p) => (
-        <li key={p.id} className={`px-5 py-3 flex items-center justify-between gap-4 flex-wrap ${p.id === selected ? "bg-brand-50/50" : ""}`}>
+        <li key={p.id} className={`px-5 py-3 flex items-center justify-between gap-4 flex-wrap ${p.id === selected ? "bg-muted/60" : ""}`}>
           <div className="min-w-0">
             <p className="text-[13.5px] font-semibold">
               {p.name}
@@ -59,12 +64,19 @@ function PeopleList({ rows, q, selected, caption }: { rows: PersonRow[]; q: stri
               {p.companionEnabled ? " · companion allowed" : ""}
             </p>
           </div>
-          <Link href={peopleHref(q, p.id)} aria-current={p.id === selected ? "true" : undefined} aria-label={`Edit workspace for ${p.name}`} className={`${btnGhost} ${focusRing}`}>
+          <Link
+            href={peopleHref(q, p.id)}
+            aria-current={p.id === selected ? "true" : undefined}
+            aria-label={`${p.id === selected ? "Editing" : "Edit"} workspace for ${p.name}`}
+            className={`${btnGhost} ${focusRing}`}
+          >
             {p.id === selected ? "Editing" : "Edit"}
           </Link>
         </li>
       ))}
-    </ul>
+      </ul>
+      </div>
+    </section>
   );
 }
 
@@ -87,7 +99,7 @@ export default async function WorkspaceSettingsPage({ searchParams }: { searchPa
       <>
         <nav aria-label="Roles" className="flex items-center gap-1 mb-4 max-w-full overflow-x-auto">
           {FIRM_ROLES.map((x) => (
-            <Pill key={x} href={`/admin/firm-os/workspace?role=${x}`} current={x === role}>
+            <Pill key={x} href={`/admin/firm-os/workspace?role=${x}`} current={x === role && "true"}>
               {ROLE_LABELS[x]}
             </Pill>
           ))}
@@ -122,13 +134,13 @@ export default async function WorkspaceSettingsPage({ searchParams }: { searchPa
     ]);
     body = (
       <>
-        <form method="GET" className={`${card} mb-6 flex flex-wrap items-end gap-3`}>
+        <form method="GET" className={`${card} mb-6 flex flex-wrap items-end gap-4`}>
           <input type="hidden" name="view" value="people" />
-          <label htmlFor="ws-q" className="text-sm flex-1 min-w-[220px]">
+          <label htmlFor="ws-q" className="text-sm flex-1 min-w-56">
             <span className="block text-ink-mute mb-1">Search people by name or email</span>
             <input id="ws-q" type="search" name="q" defaultValue={q} maxLength={100} autoComplete="off" className={`${field} ${focusRing}`} />
           </label>
-          <button type="submit" className={`${btnGhost} ${focusRing} !py-2`}>
+          <button type="submit" className={`${btnGhost} ${focusRing}`}>
             Search
           </button>
         </form>
@@ -142,10 +154,7 @@ export default async function WorkspaceSettingsPage({ searchParams }: { searchPa
             </p>
           )
         ) : custom.length ? (
-          <>
-            <h2 className={sectionTitle}>People with their own settings</h2>
-            <PeopleList rows={custom} q={q} selected={sp.user} caption="People with their own settings" />
-          </>
+          <PeopleList rows={custom} q={q} selected={sp.user} caption="People with their own settings" title="People with their own settings" />
         ) : (
           <p className="text-[13px] text-ink-mute mb-6">Everyone follows their role default. Search for a person to give them their own settings.</p>
         )}
@@ -200,10 +209,10 @@ export default async function WorkspaceSettingsPage({ searchParams }: { searchPa
       </div>
 
       <nav aria-label="Workspace settings" className="flex items-center gap-1 mb-6 max-w-full overflow-x-auto">
-        <Pill href="/admin/firm-os/workspace" current={view === "roles"}>
+        <Pill href="/admin/firm-os/workspace" current={view === "roles" && "page"}>
           Role defaults
         </Pill>
-        <Pill href="/admin/firm-os/workspace?view=people" current={view === "people"}>
+        <Pill href="/admin/firm-os/workspace?view=people" current={view === "people" && "page"}>
           People
         </Pill>
       </nav>

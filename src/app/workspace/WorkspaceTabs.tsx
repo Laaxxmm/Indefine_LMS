@@ -54,7 +54,7 @@ export function WorkspaceTabs({ tabs, initial, label }: { tabs: WorkspaceTab[]; 
         })}
       </div>
       {tabs.map((t) => (
-        <div key={t.id} role="tabpanel" id={`${base}-panel-${t.id}`} aria-labelledby={`${base}-tab-${t.id}`} hidden={t.id !== active} tabIndex={0} className="rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+        <div key={t.id} role="tabpanel" id={`${base}-panel-${t.id}`} aria-labelledby={`${base}-tab-${t.id}`} hidden={t.id !== active} tabIndex={0} className={`rounded-2xl ${focusRing}`}>
           {t.content}
         </div>
       ))}

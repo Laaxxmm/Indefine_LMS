@@ -38,7 +38,8 @@ describe("page", () => {
     expect(html).toContain(">Workspace settings</h1>");
     expect(html).toContain("Admin · Firm OS");
     expect(html).toMatch(/aria-current="page"[^>]*href="\/admin\/firm-os\/workspace">Role defaults/);
-    expect(html).toMatch(/aria-current="page"[^>]*href="\/admin\/firm-os\/workspace\?role=staff">Staff</);
+    expect(html).toMatch(/aria-current="true"[^>]*href="\/admin\/firm-os\/workspace\?role=staff">Staff</); // the selected role, inside the current page
+    expect(html.match(/aria-current="page"/g)?.length).toBe(1);
     expect(html).toContain("Applies to everyone in the Staff role who has no setting of their own.");
     expect(html).toContain("Staff default");
     expect(html).toContain("Built-in default; nothing saved for this role yet.");

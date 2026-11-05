@@ -12,7 +12,8 @@ export const dynamic = "force-dynamic";
 const link = `shrink-0 whitespace-nowrap px-3.5 py-2 rounded-full text-sm font-semibold text-ink-mute hover:text-ink hover:bg-muted transition ${focusRing}`;
 
 // Focus mode: one task at a time. The header carries only the logo and one way back; nothing else
-// competes with the task. Same access as /agents, and only while the Agents module is on.
+// competes with the task. One narrow column (calm, generous whitespace); the header matches its
+// width so the edges line up. Same access as /agents, and only while the Agents module is on.
 export default async function FocusLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
   if (!session?.user) redirect("/");
@@ -22,7 +23,7 @@ export default async function FocusLayout({ children }: { children: React.ReactN
   return (
     <div className="min-h-screen">
       <header className="border-b border-border bg-card/80 backdrop-blur sticky top-0 z-30">
-        <div className="max-w-[1280px] mx-auto px-5 sm:px-8 py-3 min-h-16 flex items-center justify-between gap-4">
+        <div className="max-w-3xl mx-auto px-5 sm:px-8 py-3 min-h-16 flex items-center justify-between gap-4">
           <Link href="/focus" className={`flex items-center gap-2.5 rounded-lg shrink-0 ${focusRing}`}>
             <LogoMark size={34} />
             <div className="leading-tight">
@@ -35,7 +36,7 @@ export default async function FocusLayout({ children }: { children: React.ReactN
           </Link>
         </div>
       </header>
-      <main className="max-w-3xl mx-auto px-5 sm:px-8 py-10">{children}</main>
+      <main className="max-w-3xl mx-auto px-5 sm:px-8 py-8">{children}</main>
     </div>
   );
 }

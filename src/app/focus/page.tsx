@@ -44,7 +44,7 @@ export default async function FocusPage({ searchParams }: { searchParams: Promis
       <div>
         <p className={eyebrow}>Your next task</p>
         <h1 className={pageTitle}>{job.title}</h1>
-        <p className="text-ink-mute text-[15px] mt-1.5">
+        <p className="text-ink-mute text-[13.5px] mt-1.5">
           {job.clientName ? `${job.clientName} (${job.clientCode})` : job.clientCode} · {job.service} · <span className="tabular-nums">{job.period} · FY {job.fy}</span>
         </p>
         <div className="flex items-center gap-2 flex-wrap mt-3">
@@ -63,7 +63,7 @@ export default async function FocusPage({ searchParams }: { searchParams: Promis
         <h2 id="why" className={sectionTitle}>
           Why this is next
         </h2>
-        <p className="text-[15px] leading-relaxed">{task.why}</p>
+        <p className="text-[13.5px]">{task.why}</p>
         <div className="mt-2">
           <DueLine internalDue={job.internalDue} statutoryDue={job.statutoryDue} overdue={job.overdue} />
         </div>

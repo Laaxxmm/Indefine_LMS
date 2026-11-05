@@ -92,12 +92,14 @@ describe("split view", () => {
     expect(html).toContain("Before you move on");
     // Phone: one column, the panel first (above the viewer); large screens: two columns, panel sticky.
     expect(html).toContain('class="grid grid-cols-1 gap-6 items-start lg:grid-cols-[minmax(0,400px)_minmax(0,1fr)]"');
-    expect(html).toMatch(/<aside aria-label="Job, steps and next action" class="[^"]*lg:sticky lg:top-20 lg:self-start/);
-    expect(html.indexOf("<aside")).toBeLessThan(html.indexOf('role="tablist"'));
+    expect(html).toMatch(/<div data-panel="job" class="space-y-6 lg:sticky lg:top-20 lg:self-start/);
+    expect(html.indexOf(`data-panel="job"`)).toBeLessThan(html.indexOf(`role="tablist"`));
+    expect(html).not.toContain("<aside");
     // Tabs: three, the client documents selected when there are no deliverables.
     expect(html.match(/role="tab"/g)?.length).toBe(3);
     expect(html).toMatch(/aria-selected="true"[^>]*>Client documents/);
     expect(html.match(/role="tabpanel"/g)?.length).toBe(3);
+    expect(html).toContain("No agent run yet. The draft pack&#x27;s files appear here after the agent runs.");
     expect(html).toContain('href="/focus"'); // back link
   });
 
@@ -124,7 +126,7 @@ describe("split view", () => {
     expect(html).toContain('href="/api/firm-os/agents/deliverables/d1"');
     expect(html).toContain('href="/agents/echo/runs/run-1"');
     expect(html).toContain("Open pack to submit");
-    expect(html).toContain("Deliverables from attempt 1, started 05 Nov 2026 12:00 IST.");
+    expect(html).toContain("From attempt 1, started 05 Nov 2026 12:00 IST.");
   });
 
   it("the SOP pack text: the active published pack's checks by severity", async () => {
