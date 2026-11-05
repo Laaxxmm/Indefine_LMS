@@ -77,7 +77,7 @@ export async function autoQuizFromVideo(
 ): Promise<AutoQuizResult> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    return { ok: false, videoId, skipped: "no-key", error: "GEMINI_API_KEY is not set on the server." };
+    return { ok: false, videoId, skipped: "no-key", error: "The AI service for quizzes is not set up on the server. Ask IT to add the Gemini key." };
   }
 
   const video = await prisma.video.findUnique({
@@ -131,7 +131,7 @@ export async function autoQuizFromVideo(
     }
     let token = await getAppOnlyToken();
     if (!token && opts.fallbackUserId) token = await getUserGraphToken(opts.fallbackUserId);
-    if (!token) return { ok: false, videoId, error: "No Microsoft Graph token available to fetch the video." };
+    if (!token) return { ok: false, videoId, error: "The connection to OneDrive is not set up on the server, so the video could not be read. Tell IT." };
 
     const downloadUrl = await getStreamUrl(video.graphDriveId, video.graphItemId, token);
     if (!downloadUrl) return { ok: false, videoId, error: "Could not resolve a download URL for the video." };

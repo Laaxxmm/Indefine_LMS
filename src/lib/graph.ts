@@ -27,8 +27,12 @@ export { ELEVATED_SCOPES, LEAD_SCOPES, SIGNIN_SCOPES } from "@/lib/graph-scopes"
 
 const TOKEN_KEY_ENV = "GRAPH_TOKEN_KEY";
 const GRAPH_TOKEN_LABEL = "Microsoft Graph token";
-export const GRAPH_TOKEN_KEY_MISSING_MESSAGE =
+/** For the server log (IT): the setting by name and how to make one. */
+const GRAPH_TOKEN_KEY_LOG =
   "GRAPH_TOKEN_KEY is not set, so Microsoft 365 sign-in tokens are not being saved. Ask the admin to set GRAPH_TOKEN_KEY on the server (a 64-character key from `openssl rand -hex 32`) and redeploy; until then, features that work in Microsoft 365 as you (calendar, Outlook drafts, connected files) are off. Sign-in itself still works.";
+/** For an admin page: the same problem in plain words. */
+export const GRAPH_TOKEN_KEY_MISSING_MESSAGE =
+  "Microsoft 365 connections can't be saved on the server yet, so features that work in Microsoft 365 as you (calendar, Outlook drafts, connected files) are off. Ask IT to add the key that protects saved Microsoft 365 connections, then redeploy. Sign-in itself still works.";
 const isProduction = () => process.env.NODE_ENV === "production";
 let warnedNoKey = false;
 
@@ -50,7 +54,7 @@ export function sealGraphToken(value: string | null | undefined): string | null 
   if (isProduction()) {
     if (!warnedNoKey) {
       warnedNoKey = true;
-      console.error(`[graph] ${GRAPH_TOKEN_KEY_MISSING_MESSAGE}`);
+      console.error(`[graph] ${GRAPH_TOKEN_KEY_LOG}`);
     }
     return null;
   }

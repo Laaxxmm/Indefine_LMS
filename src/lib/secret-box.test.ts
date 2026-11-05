@@ -72,7 +72,7 @@ describe("Graph tokens (src/lib/graph.ts, PoC #16)", () => {
     expect(err).toHaveBeenCalledTimes(1);
     expect(err).toHaveBeenCalledWith(expect.stringMatching(/GRAPH_TOKEN_KEY is not set, so Microsoft 365 sign-in tokens are not being saved\. Ask the admin to set GRAPH_TOKEN_KEY/));
     expect(err).not.toHaveBeenCalledWith(expect.stringContaining("stored unencrypted"));
-    expect(graphTokenStorageStatus()).toEqual({ ok: false, message: expect.stringMatching(/^GRAPH_TOKEN_KEY is not set/) });
+    expect(graphTokenStorageStatus()).toEqual({ ok: false, message: expect.stringMatching(/^Microsoft 365 connections can't be saved on the server yet/) });
   });
 
   it("production without the key: a stored plaintext token is not used (no Graph call)", async () => {

@@ -35,9 +35,9 @@ export default function VideoPlayer({
       .then((d) => {
         if (cancelled) return;
         if (d.url) setSrc(d.url);
-        else setError(d.error ?? "Could not load video");
+        else setError(d.error ?? "The video could not be loaded. Reload the page and try again.");
       })
-      .catch(() => !cancelled && setError("Network error loading video"));
+      .catch(() => !cancelled && setError("The video could not be loaded. Check your internet connection, then reload the page."));
     return () => {
       cancelled = true;
     };
@@ -97,14 +97,14 @@ export default function VideoPlayer({
           if (!res.ok) {
             const detail = await res.text().catch(() => "");
             console.warn(`Video progress save failed (HTTP ${res.status}): ${detail}`);
-            setSaveError(`Progress isn't saving (server error ${res.status}). Tell your admin.`);
+            setSaveError("Your progress isn't being saved right now. Keep watching; if this message stays, tell your admin.");
             return;
           }
           setSaveError(null);
         })
         .catch((e) => {
           console.warn("Video progress network error:", e);
-          setSaveError("Progress isn't saving — request never reached the server. Try a different network.");
+          setSaveError("Your progress isn't being saved because the server can't be reached. Check your internet connection.");
         });
     }
 

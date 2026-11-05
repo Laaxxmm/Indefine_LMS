@@ -37,6 +37,7 @@ import ScheduleLiveForm from "./ScheduleLiveForm";
 import AddPastSessionForm from "./AddPastSessionForm";
 import { AutoIngest } from "./AutoIngest";
 import { isAdmin } from "@/lib/access";
+import { failureSentence } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 
@@ -107,7 +108,7 @@ async function scheduleSession(formData: FormData) {
       Number.isFinite(occurrences) ? occurrences : 1
     );
   } catch (e) {
-    errMsg = (e as Error).message;
+    errMsg = failureSentence(e, "The session could not be scheduled.", "Check the details and try again.");
   }
 
   if (errMsg) {
@@ -139,7 +140,7 @@ async function editSession(formData: FormData) {
       durationMin: Number.isFinite(durationMin) ? durationMin : 60,
     });
   } catch (e) {
-    errMsg = (e as Error).message;
+    errMsg = failureSentence(e, "The session could not be changed.", "Check the details and try again.");
   }
   if (errMsg) {
     redirect(`/admin/live?tab=sessions&error=${encodeURIComponent(errMsg)}`);
@@ -160,7 +161,7 @@ async function moveFolderAction(formData: FormData) {
   try {
     await moveSessionFolder(id, folderParent);
   } catch (e) {
-    errMsg = (e as Error).message;
+    errMsg = failureSentence(e, "The recording folder could not be moved.", "Try again in a minute.");
   }
   revalidatePath("/admin/live");
   redirect(
@@ -271,7 +272,7 @@ async function addPastSession(formData: FormData) {
       select: { id: true },
     });
   } catch (e) {
-    back((e as Error).message || "Could not create the session.");
+    back(failureSentence(e, "The past session could not be added.", "Check the details and try again."));
   }
 
   // Copy the recording in and run the normal pipeline (video + allotment).

@@ -17,6 +17,7 @@ import { resolveGeminiModel, isThinkingModel } from "@/lib/gemini";
 import { normalise } from "@/lib/quiz-gen";
 import { LegacyGateError, gateForGemini } from "@/lib/ai/legacy-gate";
 import type { DictionaryEntry } from "@/lib/ai/types";
+import { failureSentence } from "@/lib/errors";
 
 const MAX_TRANSCRIPT_INPUT_CHARS = 200_000; // ~2.5h of speech, fits flash context
 const MAX_NOTES_CHARS = 28_000; // stays under generateQuiz's source ceiling
@@ -127,7 +128,7 @@ export async function distillTranscript(input: {
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch (e) {
-    return { ok: false, error: `Distillation call failed: ${(e as Error).message}` };
+    return { ok: false, error: failureSentence(e, "The AI service could not summarise the transcript.", "Try again in a few minutes.") };
   }
   if (!res.ok) {
     return { ok: false, error: `Gemini distillation error ${res.status}.` };
@@ -147,11 +148,11 @@ export async function distillTranscript(input: {
       text.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim()
     );
   } catch {
-    return { ok: false, error: "Distillation output was not valid JSON." };
+    return { ok: false, error: "The AI summary of the transcript could not be read. Try again." };
   }
   const shape = payloadSchema.safeParse(parsed);
   if (!shape.success) {
-    return { ok: false, error: "Distillation output didn't match the schema." };
+    return { ok: false, error: "The AI summary of the transcript was not in the expected form. Try again." };
   }
 
   // Verify every key point against the raw transcript — same grounding rule

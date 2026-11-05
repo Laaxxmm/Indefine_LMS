@@ -408,7 +408,7 @@ export async function ingestFromRecapLink(
     return {
       status: "error",
       message:
-        "Couldn't read driveId/driveItemId from that link — paste the Teams 'meetingrecap' share link for the recording.",
+        "That link doesn't point to a Teams recording. Paste the Teams 'meetingrecap' share link for the recording.",
     };
   }
 
@@ -419,7 +419,7 @@ export async function ingestFromRecapLink(
     await Promise.all([getAppOnlyToken(), getUserGraphToken(s.scheduledById)])
   ).filter((t): t is string => !!t);
   if (tokens.length === 0) {
-    return { status: "error", message: "No Microsoft Graph token available for the copy." };
+    return { status: "error", message: "The connection to OneDrive is not set up on the server, so the recording could not be copied. Tell IT." };
   }
 
   let monitor: string | null = null;
