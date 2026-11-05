@@ -1,6 +1,6 @@
 # PROGRESS — Indefine Firm OS
-Current phase: 9 · 10 · 11 · 12-prep (parallel) | Branch: firm-os/phase-0-inventory | Last green: 2026-11-05 23:10 IST
-Tests: unit+integration 2397/2397 (114 files; Firm OS coverage 99.7% lines / 97.4% branches) · e2e 4/4 (smoke, local, no DB) · accuracy (recorded mode, hardened harness): echo pass | GST pass (26) | ROC pass (24) | TAX pass (22) | BOOKS pass (21) | AUDIT pass (22) · ADR-008 guardrails enforced — audit round 2 data fixes merged; harness items with guardrails work
+Current phase: 9 · 10 · 11 · 12-prep (parallel) | Branch: firm-os/phase-0-inventory | Last green: 2026-11-05 23:45 IST
+Tests: unit+integration 2411/2411 (114 files; Firm OS coverage 99.7% lines / 97.4% branches) · e2e 4/4 (smoke, local, no DB) · accuracy (recorded mode, hardened harness): echo pass | GST pass (26) | ROC pass (24) | TAX pass (22) | BOOKS pass (22) | AUDIT pass (22) · ADR-008 guardrails enforced — audit round 2 data fixes merged; harness items with guardrails work
 Model mode: CLAUDE_ONLY + LOCAL_STUB(fail-closed) | Turia bridge: MANUAL (ADR-003)
 
 ## Phase checklist (✅ only when QA gate green)
@@ -17,7 +17,7 @@ Model mode: CLAUDE_ONLY + LOCAL_STUB(fail-closed) | Turia bridge: MANUAL (ADR-00
 - [ ] 10 Client Comms drafts
 - [ ] 11 Hardening
 - [ ] 12 Foolproof QA (STOP for human go-live)
-- [ ] 13 Plain-language errors (owner request) — wave B, after current merges
+- [ ] 13 Plain-language errors (owner request) — wave B, after current merges. Include: GST messages print amounts ungrouped (₹10800.00) → formatInr; register roc/tax abstention rules in views.ts ABSTENTION_RULES so their insufficient_evidence questions show on the review screen
 - [ ] 14 AI guardrails to industry standards — OWASP LLM Top 10 (2025) + NIST AI RMF (ADR-009)
 - [ ] 15 Search & retrieval · corrections with history · DPDP data-principal rights + breach register
 - [ ] 16 Admin workspace settings (modules per user/role) · focus mode · guided workspace
@@ -259,3 +259,4 @@ UI audit (owner request: every button, navigation, flow, breadcrumb) — merged 
 - 23:05 · guardrails · Merged ADR-008 enforcement across all six agents; verify:prompts + accuracy:canary scripts · 2397/2397 · all six pass
 - 23:10 · 9/10/11/12 · Agents started in parallel: Daily Coach; Client comms drafts (+ engagement-letter → Outlook draft); Hardening (+ DONE trigger, dedupe, spot-checks); Phase 12 QA prep; owner-decision fixes (GST conservative drafts, books prior TB, open questions on review screen). Phase 2b not startable (LOCAL_LLM_BASE_URL empty) · –
 - 23:20 · 13–17 · Owner requests: industry-standard guardrails, plain-language errors, DPDP security, search/retrieval, corrections, admin per-user settings, focus mode, guided workspace/side panel. Schema (PrivacyRequest, BreachIncident, WorkspaceSetting, RoleWorkspaceDefault, CompanionToken) additive (fe87d3d); guard scope extended. Wave A agents started: guardrail standards, search, corrections + DPDP rights, workspace/focus, companion extension. GitHub push stopped at owner's request · –
+- 23:45 · decisions · Merged owner-decision fixes: GST time-barred credit notes excluded from draft figures, ITC on abstained bills held back (itcHeldBackPaise), books.prior-tb-balanced (warn), Open questions card on the review screen · 2411/2411 · gst 26, books 22 pass
