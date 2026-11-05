@@ -1,16 +1,16 @@
-﻿// Income-tax rates, thresholds and limits â€” DATA ONLY, versioned by financial year. Amounts are
+// Income-tax rates, thresholds and limits — DATA ONLY, versioned by financial year. Amounts are
 // integer paise; rates are basis points (1% = 100 bp) so all arithmetic stays in integers.
 // Every rule set and every entry carries a `verify` note for the partner.
 //
 // Implemented: FY 2025-26 = AY 2026-27 under the Income-tax Act, 1961 as amended by the Finance
 // Act, 2025 (and Act No. 4 of 2026 for s.87A). The Income-tax Act, 2025 applies from tax year
 // 2026-27: its rule set is present but marked "unverified", and the agent refuses to compute
-// with an unverified set â€” a partner publishes the verified numbers as a new entry.
+// with an unverified set — a partner publishes the verified numbers as a new entry.
 // ITR and advance-tax DATES are not here: they come from the shared statutory calendar
 // (src/lib/agents/core/calendar-defaults.ts, rules "itr" and "advance-tax").
 
-const L = 1_00_000_00; // â‚¹1 lakh in paise
-const CR = 1_00_00_000_00; // â‚¹1 crore in paise
+const L = 1_00_000_00; // ₹1 lakh in paise
+const CR = 1_00_00_000_00; // ₹1 crore in paise
 
 export type Slab = { uptoPaise: number | null; bp: number };
 export type SurchargeStep = { abovePaise: number; bp: number };
@@ -120,9 +120,9 @@ const FY_2025_26: TaxRuleSet = {
     newMaxPaise: 60_000_00,
     oldIncomeLimitPaise: 5 * L,
     oldMaxPaise: 12_500_00,
-    verify: "s.87A: old regime TI â‰¤ â‚¹5,00,000 â†’ up to â‚¹12,500 (not against s.112A tax); new regime TI â‰¤ â‚¹12,00,000 â†’ up to â‚¹60,000 with marginal relief above, limited to tax at s.115BAC(1A) slab rates (no rebate on special-rate income) â€” Finance Act 2025, Act 4 of 2026.",
+    verify: "s.87A: old regime TI ≤ ₹5,00,000 → up to ₹12,500 (not against s.112A tax); new regime TI ≤ ₹12,00,000 → up to ₹60,000 with marginal relief above, limited to tax at s.115BAC(1A) slab rates (no rebate on special-rate income) — Finance Act 2025, Act 4 of 2026.",
   },
-  standardDeduction: { newPaise: 75_000_00, oldPaise: 50_000_00, verify: "s.16(ia): â‚¹75,000 new regime, â‚¹50,000 old regime." },
+  standardDeduction: { newPaise: 75_000_00, oldPaise: 50_000_00, verify: "s.16(ia): ₹75,000 new regime, ₹50,000 old regime." },
   surchargeIndividual: {
     steps: [
       { abovePaise: 50 * L, bp: 1000 },
@@ -132,7 +132,7 @@ const FY_2025_26: TaxRuleSet = {
     ],
     newRegimeCapBp: 2500,
     specialIncomeCapBp: 1500,
-    verify: "Finance Act 2025, First Schedule Part I/III: 10% > â‚¹50 lakh, 15% > â‚¹1 crore, 25% > â‚¹2 crore, 37% > â‚¹5 crore (new regime capped at 25%); 15% cap on tax under ss.111A/112/112A. The 15% cap on dividend income is NOT modelled â€” verify where total income exceeds â‚¹2 crore and dividends are included. Marginal relief applied.",
+    verify: "Finance Act 2025, First Schedule Part I/III: 10% > ₹50 lakh, 15% > ₹1 crore, 25% > ₹2 crore, 37% > ₹5 crore (new regime capped at 25%); 15% cap on tax under ss.111A/112/112A. The 15% cap on dividend income is NOT modelled — verify where total income exceeds ₹2 crore and dividends are included. Marginal relief applied.",
   },
   capitalGains: {
     stcg111ABp: 2000,
@@ -141,10 +141,10 @@ const FY_2025_26: TaxRuleSet = {
     ltcg112Bp: 1250,
     equityLongTermMonths: 12,
     otherLongTermMonths: 24,
-    verify: "ss.111A (20%), 112A (12.5% above â‚¹1,25,000), 112 (12.5%, no indexation) for transfers on or after 23 Jul 2024; s.2(42A) holding periods 12 months (listed securities) / 24 months (other). Grandfathering, indexation option for land/building acquired before 23 Jul 2024 and s.54-series exemptions are NOT modelled.",
+    verify: "ss.111A (20%), 112A (12.5% above ₹1,25,000), 112 (12.5%, no indexation) for transfers on or after 23 Jul 2024; s.2(42A) holding periods 12 months (listed securities) / 24 months (other). Grandfathering, indexation option for land/building acquired before 23 Jul 2024 and s.54-series exemptions are NOT modelled.",
   },
   cessBp: 400,
-  firm: { bp: 3000, surcharge: [{ abovePaise: 1 * CR, bp: 1200 }], verify: "Firms / LLPs: 30%, surcharge 12% above â‚¹1 crore with marginal relief, cess 4%. Partner remuneration / interest limits (s.40(b)) are taken as already applied in the books profit." },
+  firm: { bp: 3000, surcharge: [{ abovePaise: 1 * CR, bp: 1200 }], verify: "Firms / LLPs: 30%, surcharge 12% above ₹1 crore with marginal relief, cess 4%. Partner remuneration / interest limits (s.40(b)) are taken as already applied in the books profit." },
   company: {
     s115BAABp: 2200,
     s115BAASurchargeBp: 1000,
@@ -155,7 +155,7 @@ const FY_2025_26: TaxRuleSet = {
       { abovePaise: 1 * CR, bp: 700 },
       { abovePaise: 10 * CR, bp: 1200 },
     ],
-    verify: "Domestic company: s.115BAA 22% + 10% surcharge + 4% cess; otherwise 25% where turnover of the second preceding year â‰¤ â‚¹400 crore, else 30%, surcharge 7% > â‚¹1 crore / 12% > â‚¹10 crore. MAT (s.115JB) is NOT computed.",
+    verify: "Domestic company: s.115BAA 22% + 10% surcharge + 4% cess; otherwise 25% where turnover of the second preceding year ≤ ₹400 crore, else 30%, surcharge 7% > ₹1 crore / 12% > ₹10 crore. MAT (s.115JB) is NOT computed.",
   },
   deductions: {
     s80CPaise: 1.5 * L,
@@ -170,7 +170,7 @@ const FY_2025_26: TaxRuleSet = {
     employerNpsNewBp: 1400,
     employerNpsOldBp: 1000,
     verify:
-      "80C â‚¹1,50,000 (80C + 80CCC + 80CCD(1)); 80CCD(1B) â‚¹50,000; 80D â‚¹25,000 / â‚¹50,000 senior for self-family and parents each; 80TTA â‚¹10,000 (non-senior, savings interest); 80TTB â‚¹50,000 (senior, deposit interest); s.24(b) self-occupied interest â‚¹2,00,000; 80CCD(2) 14% (new) / 10% (old) of basic + DA. 80G is taken as the qualifying amount staff computed. New regime allows only 80CCD(2) and 80CCH (s.115BAC(2)).",
+      "80C ₹1,50,000 (80C + 80CCC + 80CCD(1)); 80CCD(1B) ₹50,000; 80D ₹25,000 / ₹50,000 senior for self-family and parents each; 80TTA ₹10,000 (non-senior, savings interest); 80TTB ₹50,000 (senior, deposit interest); s.24(b) self-occupied interest ₹2,00,000; 80CCD(2) 14% (new) / 10% (old) of basic + DA. 80G is taken as the qualifying amount staff computed. New regime allows only 80CCD(2) and 80CCH (s.115BAC(2)).",
   },
   presumptive: {
     s44ADLimitPaise: 2 * CR,
@@ -182,16 +182,16 @@ const FY_2025_26: TaxRuleSet = {
     s44ADOtherBp: 800,
     s44ADABp: 5000,
     verify:
-      "s.44AD: resident individual / HUF / firm (not LLP), turnover â‰¤ â‚¹2 crore or â‚¹3 crore if cash receipts â‰¤ 5% (a cheque or draft that is not account payee counts as cash); 6% on banking-channel receipts received by the s.139(1) due date, 8% on the rest; s.44AD(4) five-year lock. An income declared BELOW the deemed income (s.44AD or s.44ADA) is used as declared; the profit is then not declared under sub-section (1), so ITR-3, the regular advance-tax instalments, and a tax audit u/s 44AB(d) (s.44ADA(4)) or u/s 44AB(e) (s.44AD(4)-(5)) when total income exceeds the basic exemption (new-regime limit) - for s.44AD the agent assumes s.44AD(4) applies (profit declared under s.44AD in one of the five preceding years): PARTNER TO CONFIRM from the prior returns. s.44ADA: resident, specified profession, receipts â‰¤ â‚¹50 lakh or â‚¹75 lakh if cash â‰¤ 5%; 50%.",
+      "s.44AD: resident individual / HUF / firm (not LLP), turnover ≤ ₹2 crore or ₹3 crore if cash receipts ≤ 5% (a cheque or draft that is not account payee counts as cash); 6% on banking-channel receipts received by the s.139(1) due date, 8% on the rest; s.44AD(4) five-year lock. An income declared BELOW the deemed income (s.44AD or s.44ADA) is used as declared; the profit is then not declared under sub-section (1), so ITR-3, the regular advance-tax instalments, and a tax audit u/s 44AB(d) (s.44ADA(4)) or u/s 44AB(e) (s.44AD(4)-(5)) when total income exceeds the basic exemption (new-regime limit) - for s.44AD the agent assumes s.44AD(4) applies (profit declared under s.44AD in one of the five preceding years): PARTNER TO CONFIRM from the prior returns. s.44ADA: resident, specified profession, receipts ≤ ₹50 lakh or ₹75 lakh if cash ≤ 5%; 50%.",
   },
   audit44AB: {
     businessLimitPaise: 1 * CR,
     businessHigherLimitPaise: 10 * CR,
     professionLimitPaise: 50 * L,
     cashShareMaxBp: 500,
-    verify: "s.44AB: business turnover > â‚¹1 crore (â‚¹10 crore where cash receipts and cash payments are each â‰¤ 5%); profession receipts > â‚¹50 lakh; s.44AB(d)/(e) for presumptive cases declaring less, or within the s.44AD(4) lock, when income exceeds the basic exemption.",
+    verify: "s.44AB: business turnover > ₹1 crore (₹10 crore where cash receipts and cash payments are each ≤ 5%); profession receipts > ₹50 lakh; s.44AB(d)/(e) for presumptive cases declaring less, or within the s.44AD(4) lock, when income exceeds the basic exemption.",
   },
-  msme43Bh: { maxAgreementDays: 45, noAgreementDays: 15, verify: "s.43B(h) with MSMED Act s.15: pay a micro / small enterprise within the agreed days (â‰¤ 45) or 15 days without a written agreement; otherwise deduction only in the year of payment. Medium enterprises and traders are outside s.43B(h). The s.43B proviso (payment before the return due date) does not apply to clause (h)." },
+  msme43Bh: { maxAgreementDays: 45, noAgreementDays: 15, verify: "s.43B(h) with MSMED Act s.15: pay a micro / small enterprise within the agreed days (≤ 45) or 15 days without a written agreement; otherwise deduction only in the year of payment. Medium enterprises and traders are outside s.43B(h). The s.43B proviso (payment before the return due date) does not apply to clause (h)." },
   advanceTax: {
     minLiabilityPaise: 10_000_00,
     instalmentsBp: [1500, 4500, 7500, 10000],
@@ -201,11 +201,11 @@ const FY_2025_26: TaxRuleSet = {
     interestBpPerMonth: 100,
     roundDownToPaise: 100_00,
     verify:
-      "ss.208-211, 234B, 234C, 234A: no advance tax below â‚¹10,000; resident seniors without business income exempt (s.207(2)); 15/45/75/100% (12%/36% relief) and presumptive 100% by 15 Mar; 1% per month or part, amounts rounded down to â‚¹100 (rule 119A). The 234C proviso for capital gains / dividends arising after an instalment date is NOT modelled. s.234A: the base is assessed tax less tax paid on or before the s.139(1) due date (advance tax and self-assessment tax u/s 140A; later payments do not reduce it) - s.234A(1) lists advance tax, TDS/TCS and reliefs but does not name self-assessment tax: PARTNER TO CONFIRM FIRM PRACTICE. s.234B(2) (s.424(4) of the 2025 Act): tax paid after 31 March (self-assessment u/s 140A or otherwise) is not advance tax for the 90% test, but it reduces the shortfall from the 1st of the month after the month of payment - the month of payment is a part of a month of the period up to the payment, so it carries the old shortfall (paid 1 May or 31 May alike: April and May on the full shortfall, June onwards on the reduced one); several payments in one month take effect together the next month; each payment is applied wholly to tax (the s.140A(1) Explanation order fee - interest - tax for a payment short of the aggregate is NOT applied): PARTNER TO VERIFY both conventions. Month or part of a month (rule 269(b) of the 2026 Rules / rule 119A(b) of the 1962 Rules: a fraction counts as a full month): the n-th month begins on the start's day-of-month n - 1 months later, or on the 1st of the following month when that month has no such day (31 Jan to 28 Feb = 1 month, to 1 Mar = 2). Periods starting on the 1st (234A after a month-end due date, 234B from 1 April) count calendar months under any reading; PARTNER TO CONFIRM the convention for a mid-month start (an extended due date).",
+      "ss.208-211, 234B, 234C, 234A: no advance tax below ₹10,000; resident seniors without business income exempt (s.207(2)); 15/45/75/100% (12%/36% relief) and presumptive 100% by 15 Mar; 1% per month or part, amounts rounded down to ₹100 (rule 119A). The 234C proviso for capital gains / dividends arising after an instalment date is NOT modelled. s.234A: the base is assessed tax less tax paid on or before the s.139(1) due date (advance tax and self-assessment tax u/s 140A; later payments do not reduce it) - s.234A(1) lists advance tax, TDS/TCS and reliefs but does not name self-assessment tax: PARTNER TO CONFIRM FIRM PRACTICE. s.234B(2) (s.424(4) of the 2025 Act): tax paid after 31 March (self-assessment u/s 140A or otherwise) is not advance tax for the 90% test, but it reduces the shortfall from the 1st of the month after the month of payment - the month of payment is a part of a month of the period up to the payment, so it carries the old shortfall (paid 1 May or 31 May alike: April and May on the full shortfall, June onwards on the reduced one); several payments in one month take effect together the next month; each payment is applied wholly to tax (the s.140A(1) Explanation order fee - interest - tax for a payment short of the aggregate is NOT applied): PARTNER TO VERIFY both conventions. Month or part of a month (rule 269(b) of the 2026 Rules / rule 119A(b) of the 1962 Rules: a fraction counts as a full month): the n-th month begins on the start's day-of-month n - 1 months later, or on the 1st of the following month when that month has no such day (31 Jan to 28 Feb = 1 month, to 1 Mar = 2). Periods starting on the 1st (234A after a month-end due date, 234B from 1 April) count calendar months under any reading; PARTNER TO CONFIRM the convention for a mid-month start (an extended due date).",
   },
-  lateFee234F: { feePaise: 5_000_00, smallIncomeFeePaise: 1_000_00, smallIncomeLimitPaise: 5 * L, verify: "s.234F: â‚¹5,000 for a return after the s.139(1) due date; â‚¹1,000 where total income â‰¤ â‚¹5,00,000." },
+  lateFee234F: { feePaise: 5_000_00, smallIncomeFeePaise: 1_000_00, smallIncomeLimitPaise: 5 * L, verify: "s.234F: ₹5,000 for a return after the s.139(1) due date; ₹1,000 where total income ≤ ₹5,00,000." },
   lossCarryForwardYears: 8,
-  itr: { itr1IncomeLimitPaise: 50 * L, itr1Ltcg112ALimitPaise: 1.25 * L, verify: "ITR-1 / ITR-4 for AY 2026-27: resident individuals (ITR-4 also HUF / firm other than LLP) with total income â‰¤ â‚¹50 lakh; LTCG u/s 112A up to â‚¹1,25,000 allowed; no brought-forward or carried-forward loss; no director / unlisted shares (ITR-1). Re-check the CBDT notification of the forms." },
+  itr: { itr1IncomeLimitPaise: 50 * L, itr1Ltcg112ALimitPaise: 1.25 * L, verify: "ITR-1 / ITR-4 for AY 2026-27: resident individuals (ITR-4 also HUF / firm other than LLP) with total income ≤ ₹50 lakh; LTCG u/s 112A up to ₹1,25,000 allowed; no brought-forward or carried-forward loss; no director / unlisted shares (ITR-1). Re-check the CBDT notification of the forms." },
 };
 
 const TY_2026_27: TaxRuleSet = {
@@ -230,7 +230,7 @@ export function ruleSetFor(fy: string): { ok: true; rules: TaxRuleSet } | { ok: 
 /** Every verify note of a rule set, for the deliverable and the report. */
 export function taxVerifyNotes(r: TaxRuleSet): { item: string; verify: string }[] {
   return [
-    { item: `Rule set FY ${r.fy} / AY ${r.ay} â€” ${r.act}`, verify: r.verify },
+    { item: `Rule set FY ${r.fy} / AY ${r.ay} — ${r.act}`, verify: r.verify },
     { item: "Rebate u/s 87A", verify: r.rebate87A.verify },
     { item: "Standard deduction", verify: r.standardDeduction.verify },
     { item: "Surcharge (individual / HUF)", verify: r.surchargeIndividual.verify },
