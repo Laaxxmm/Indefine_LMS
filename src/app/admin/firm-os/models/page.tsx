@@ -6,6 +6,7 @@ import { card } from "@/components/ui";
 import { eyebrow, focusRing, sectionTitle } from "@/app/agents/parts";
 import { formatDayKey as formatDayKeyStrict } from "@/lib/agents/core/format";
 import { loadModelCalls } from "@/lib/ai/db";
+import { getAgent } from "@/lib/agents/registry";
 import { formatCount, formatInr, parseUsageRange, summariseUsage, type UsageBucket } from "@/lib/ai/usage";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +21,7 @@ const formatDayKey = (key: string) => (/^\d{4}-\d{2}-\d{2}$/.test(key) ? formatD
 
 function UsageTable({ title, label, rows, keyLabel }: { title: string; label: string; rows: UsageBucket[]; keyLabel?: (k: string) => string }) {
   return (
-    <section className={card}>
+    <section className={`${card} min-w-0`}>
       <h2 className={sectionTitle}>{title}</h2>
       {rows.length === 0 ? (
         <p className="text-sm text-ink-mute">No model calls in this range.</p>
@@ -105,7 +106,7 @@ export default async function ModelUsagePage({ searchParams }: { searchParams: P
         </button>
       </form>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {stats.map((s) => (
           <div key={s.label} className={card}>
             <p className={sectionTitle}>{s.label}</p>
@@ -122,7 +123,7 @@ export default async function ModelUsagePage({ searchParams }: { searchParams: P
       <div className="space-y-6">
         <UsageTable title="By day" label="Day" rows={summary.byDay} keyLabel={formatDayKey} />
         <div className="grid lg:grid-cols-2 gap-6">
-          <UsageTable title="By agent" label="Agent" rows={summary.byAgent} />
+          <UsageTable title="By agent" label="Agent" rows={summary.byAgent} keyLabel={(k) => getAgent(k)?.title ?? (k === "unassigned" ? "Not tied to an agent" : k)} />
           <UsageTable title="By provider" label="Provider" rows={summary.byProvider} keyLabel={(k) => PROVIDER_LABEL[k] ?? k} />
         </div>
       </div>

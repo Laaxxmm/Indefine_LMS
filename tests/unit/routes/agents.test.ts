@@ -104,6 +104,8 @@ describe("/agents", () => {
     expect(html).toContain(">Preparer<");
     expect(html).toContain("Run agent");
     expect(html).toContain('aria-label="Run agent on Echo register for ACME01"');
+    // The table's scroll box is `relative`, so its sr-only cells cannot escape and widen the page on a phone.
+    expect(html).toContain('class="relative overflow-x-auto');
     // The reviewer has nothing to do until the pack is submitted; outsiders and partners not on the job see nothing.
     for (const who of ["ravi", "outsider", "partner"] as const) {
       as(user(who));
@@ -202,8 +204,9 @@ describe("/agents/[agent]/runs/[id] review screen", () => {
       "Approving moves the job to APPROVED. It copies the file to Final as a new version (nothing is overwritten). A person then files it on the portal; Firm OS never files anything.",
     );
     expect(approveConsequence(0)).toContain("no files to copy");
-    // The bar keeps its own place at the end of the page (sticky), so nothing is hidden under it.
-    expect(html).toMatch(/class="sticky bottom-0[^"]*"[^>]*aria-label="Review actions"/);
+    // The bar keeps its own place at the end of the page (sticky; in flow on a phone), so nothing is hidden under it.
+    expect(html).toMatch(/class="sticky max-sm:static bottom-0[^"]*"[^>]*aria-label="Review actions"/);
+    expect(html).not.toMatch(/class="fixed[^"]*"[^>]*aria-label="Review actions"/);
 
     // A reviewer who is not a partner cannot approve over block findings, and the bar says why.
     as(user("ravi"));

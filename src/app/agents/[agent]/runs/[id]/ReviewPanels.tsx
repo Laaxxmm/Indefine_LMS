@@ -84,7 +84,7 @@ export function DeliverablesPanel({ deliverables }: { deliverables: DeliverableV
               ))}
             </div>
           )}
-          <div className="overflow-auto max-h-[480px] rounded-lg border border-border" role="region" tabIndex={0} aria-label={`Preview of sheet ${current.name}`}>
+          <div className={`relative overflow-auto max-h-[480px] rounded-lg border border-border ${focusRing}`} role="region" tabIndex={0} aria-label={`Preview of sheet ${current.name}`}>
             <table className="text-[12px] tabular-nums">
               <caption className="sr-only">Sheet {current.name}, read-only</caption>
               <tbody>
@@ -681,10 +681,11 @@ export function ActionBar({
   }
 
   // Sticky, not fixed: the bar sticks to the bottom of the window while the page scrolls but keeps
-  // its own place at the end, so a tall bar (the Mark filed form on a phone) never hides the last
-  // panels. It bleeds to the edges of the layout's padding, and scrolls itself if taller than 70vh.
+  // its own place at the end, so a tall bar never hides the last panels. On a phone it is not sticky
+  // at all (the Mark filed form would cover most of the screen); it sits at the end of the page.
+  // It bleeds to the edges of the layout's padding, and scrolls itself if taller than 70vh.
   return (
-    <div className="sticky bottom-0 z-20 -mx-5 sm:-mx-8 -mb-8 mt-8 max-h-[70vh] overflow-y-auto border-t border-border bg-card/95 backdrop-blur" role="region" aria-label="Review actions">
+    <div className="sticky max-sm:static bottom-0 z-20 -mx-5 sm:-mx-8 -mb-8 mt-8 max-h-[70vh] max-sm:max-h-none overflow-y-auto border-t border-border bg-card/95 backdrop-blur" role="region" aria-label="Review actions">
       <div className="px-5 sm:px-8 py-3 flex items-end gap-3 flex-wrap">
         {content}
         {error && (

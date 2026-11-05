@@ -30,7 +30,9 @@ export const pageTitle = "font-display font-extrabold text-3xl tracking-[-0.03em
 
 /** Section title: ui.ts h2 with ink-mute instead of ink-faint (AA contrast on white). */
 export const sectionTitle = "text-[10.5px] font-extrabold tracking-[0.12em] text-ink-mute uppercase mb-3";
-export const tableWrap = "overflow-x-auto rounded-2xl bg-card border border-border shadow-lift";
+// `relative` keeps sr-only cells (position: absolute) inside the scroll box; without it they
+// escape to the page and widen it (756px on a 390px phone, a sideways-scrolling page).
+export const tableWrap = "relative overflow-x-auto rounded-2xl bg-card border border-border shadow-lift";
 export const thead = "text-[11px] uppercase tracking-wide text-ink-mute text-left";
 export const th = "px-4 py-3 font-bold";
 export const td = "px-4 py-3";
