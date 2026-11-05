@@ -7,8 +7,26 @@
 export const TOKEN_PATTERN = /^fosc_[A-Za-z0-9_-]{43}$/;
 /** How often the panel refreshes while it is visible. */
 export const POLL_MS = 60_000;
+/** The longest wait between refreshes while the same task stays on screen. */
+export const MAX_POLL_MS = 5 * 60_000;
 /** A refresh when the panel becomes visible again is skipped if the last one is this recent. */
 export const FRESH_MS = 15_000;
+
+/**
+ * Delay before the next automatic refresh. Every minute, except while the panel keeps getting the
+ * same task back: each unchanged answer doubles the wait, up to 5 minutes. Any change, an error,
+ * the "nothing waiting" view (its text promises a check every minute), Refresh, a new token, or
+ * the panel coming back into view starts again at one minute. No refresh runs while it is hidden.
+ */
+export function nextPollDelay(view, unchanged) {
+  if (view !== "task") return POLL_MS;
+  return Math.min(POLL_MS * 2 ** Math.max(0, Math.floor(unchanged || 0)), MAX_POLL_MS);
+}
+
+/** What identifies the task on screen (the server's timestamp aside), to tell "unchanged" answers. */
+export function taskKey(data) {
+  return data ? JSON.stringify([data.task ?? null, data.later ?? null, data.counts ?? null]) : "";
+}
 const MAX_MESSAGE = 300;
 
 /** Every sentence the extension writes itself. Plain words: what is wrong and what to do. */
