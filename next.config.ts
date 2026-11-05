@@ -6,10 +6,12 @@ const nextConfig: NextConfig = {
   // worker/canvas internals — it runs in the Node runtime on the tax-tool routes.
   serverExternalPackages: ["pdf-parse", "pdfjs-dist"],
   experimental: {
-    // Course handouts (zipped working papers, formats, PDF sets) go up through a
-    // server action, so the cap has to clear a realistic attachment. Anything
-    // over this is refused with a message rather than crashing the page.
-    serverActions: { bodySizeLimit: "60mb" },
+    // The largest legitimate server-action body is a course handout or live-session material
+    // (/admin/video/[id], /admin/live: "up to 50 MB per file"), so the ceiling is 50 MB + framing.
+    // Every other path is held far lower BEFORE Next decodes the body: src/middleware.ts refuses
+    // by Content-Length (64 KB anonymous, 2 MB signed in; src/lib/hardening/body-limits.ts).
+    // Move those two uploads to route handlers (readUploadForm) and this can drop to "2mb".
+    serverActions: { bodySizeLimit: "51mb" },
   },
   // Security headers on every path, CSP included (Phase 11). The policy and the reason for each
   // directive live in src/lib/hardening/security-headers.ts (tested there). Scripts still allow

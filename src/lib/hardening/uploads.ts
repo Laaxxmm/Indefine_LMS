@@ -2,8 +2,11 @@
 // 25 MB per file, a content sniff so a renamed file is caught, and a virus-scan hook.
 //
 // Where it applies
-//   - readUploadForm(): for any Firm OS route that accepts a file (none exists yet; the agent
-//     "uploads" input source and Phase 10 attachments plug in here). Rejections are 413 / 415 / 422.
+//   - readUploadForm(): for any route that accepts a file (the agent "uploads" input source and
+//     Phase 10 attachments plug in here). Rejections are 413 / 415 / 422. It never buffers more
+//     than the limit: precheckContentLength() refuses by the declared length before the body is
+//     read, and readFormDataCapped() counts bytes as they arrive (chunked bodies, lying headers).
+//     A route that must keep its own form handling calls those two directly, first thing.
 //   - Agent inputs (src/lib/agents/core/inputs.ts): files a run reads from the job's ClientDocs
 //     folder on SharePoint are screened with screenUpload() in "warn" mode for type (the ROC agent
 //     reads an optional notes.txt), and strictly for size and the scan verdict; the staff "uploads"
@@ -182,21 +185,72 @@ export function uploadErrorResponse(r: Extract<ScreenResult, { ok: false }>): Ne
 
 export type UploadedFile = { name: string; type: string; bytes: Uint8Array; warning: string | null };
 
+// ------------------------------------------------------------------ body size (before the body is read)
+
+/** Multipart framing (boundaries, part headers, small text fields) allowed on top of the file limit. */
+export const MULTIPART_FRAMING_BYTES = 64 * 1024;
+
+const tooLarge = (size: number, max: number) => uploadErrorResponse({ ok: false, status: 413, code: "size", reason: `The upload is ${mb(size)}; the limit is ${mb(max)}` });
+
+/**
+ * Content-Length pre-check for an upload route: call it FIRST, before req.formData() / req.json().
+ * Returns the 413 to send when the declared length is over `maxBytes` (+ multipart framing), else
+ * null. A body with no Content-Length (chunked) passes here; read it with readFormDataCapped(),
+ * which counts the bytes as they arrive. src/middleware.ts applies the same idea per route earlier.
+ */
+export function precheckContentLength(req: Request, maxBytes: number = UPLOAD_MAX_BYTES, framing = MULTIPART_FRAMING_BYTES): NextResponse | null {
+  const raw = req.headers.get("content-length");
+  if (raw === null || raw.trim() === "") return null;
+  const declared = Number(raw);
+  if (!Number.isFinite(declared) || declared < 0) return NextResponse.json({ error: "The Content-Length header is not a number", code: "size" }, { status: 400 });
+  return declared > maxBytes + framing ? tooLarge(declared, maxBytes) : null;
+}
+
+class BodyTooLargeError extends Error {}
+
+/**
+ * req.formData(), but it stops reading once more than `maxBytes` (+ framing) has arrived, whatever
+ * the headers say — covers chunked bodies and a Content-Length that lies. 413 when over, 400 when
+ * the body is not form data.
+ */
+export async function readFormDataCapped(
+  req: Request,
+  maxBytes: number = UPLOAD_MAX_BYTES,
+  framing = MULTIPART_FRAMING_BYTES,
+): Promise<{ ok: true; form: FormData } | { ok: false; res: NextResponse }> {
+  const pre = precheckContentLength(req, maxBytes, framing);
+  if (pre) return { ok: false, res: pre };
+  const limit = maxBytes + framing;
+  const badForm = () => ({ ok: false as const, res: NextResponse.json({ error: "Send the file as multipart/form-data", code: "name" }, { status: 400 }) });
+  if (!req.body) return badForm();
+  let seen = 0;
+  const counted = req.body.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, ctl) {
+        seen += chunk.byteLength;
+        if (seen > limit) ctl.error(new BodyTooLargeError());
+        else ctl.enqueue(chunk);
+      },
+    }),
+  );
+  try {
+    const form = await new Response(counted, { headers: { "content-type": req.headers.get("content-type") ?? "" } }).formData();
+    return { ok: true, form };
+  } catch {
+    return seen > limit ? { ok: false, res: tooLarge(seen, maxBytes) } : badForm();
+  }
+}
+
 /**
  * For a route that accepts a multipart upload: refuses by Content-Length before reading the body,
- * then reads the one file field and screens it. Returns the file, or the error response to send.
+ * reads it with a running byte cap, then reads the one file field and screens it. Returns the file,
+ * or the error response to send.
  */
 export async function readUploadForm(req: Request, opts: ScreenOptions & { field?: string } = {}): Promise<{ ok: true; file: UploadedFile } | { ok: false; res: NextResponse }> {
   const max = opts.maxBytes ?? UPLOAD_MAX_BYTES;
-  const declared = Number(req.headers.get("content-length") ?? "0");
-  // Multipart framing adds a little; anything far above the limit is refused unread.
-  if (declared > max + 64 * 1024) return { ok: false, res: uploadErrorResponse({ ok: false, status: 413, code: "size", reason: `The upload is ${mb(declared)}; the limit is ${mb(max)}` }) };
-  let form: FormData;
-  try {
-    form = await req.formData();
-  } catch {
-    return { ok: false, res: NextResponse.json({ error: "Send the file as multipart/form-data", code: "name" }, { status: 400 }) };
-  }
+  const read = await readFormDataCapped(req, max);
+  if (!read.ok) return read;
+  const form = read.form;
   const value = form.get(opts.field ?? "file");
   if (!value || typeof value === "string") return { ok: false, res: NextResponse.json({ error: "Attach a file", code: "empty" }, { status: 400 }) };
   const file = value as File;
