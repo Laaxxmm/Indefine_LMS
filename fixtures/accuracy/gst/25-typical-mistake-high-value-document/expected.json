@@ -1,5 +1,5 @@
 {
-  "description": "Typical gap (promoted mistake gst.mistake-high-value-documents): 01-clean-tally-csv with invoice INV/26/101 at taxable value Rs 60,00,000 (CGST and SGST Rs 5,40,000 each), above the Rs 50 lakh SOP threshold for supporting papers. Outward taxable Rs 60,70,000 (+59,00,000), CGST / SGST Rs 5,41,800 each, B2B taxable Rs 60,50,000; ITC unchanged, so cash CGST / SGST Rs 5,34,150 each and cash tax Rs 10,75,500.",
+  "description": "Typical gap (promoted mistake gst.mistake-high-value-documents): 01-clean-tally-csv with invoice INV/26/101 at taxable value Rs 60,00,000 (CGST and SGST Rs 5,40,000 each), above the Rs 50 lakh SOP threshold for supporting papers. Outward taxable Rs 60,70,000 (+59,00,000), CGST / SGST Rs 5,41,800 each, B2B taxable Rs 60,50,000; ITC unchanged, so cash CGST / SGST Rs 5,34,150 each and cash tax Rs 10,75,500; outward tax Rs 10,92,600 (+10,62,000).",
   "category": "typical-gap",
   "job": {
     "fy": "2026-27",
@@ -33,7 +33,14 @@
     "docsCancelledCount": 0,
     "reconMatchedCount": 3,
     "interestPaise": 0,
-    "lateFeePaise": 0
+    "lateFeePaise": 0,
+    "outwardCessPaise": 0,
+    "outwardTaxPaise": 109260000,
+    "itcBlockedPaise": 0,
+    "itcOtherReversalPaise": 0,
+    "cashCessPaise": 0,
+    "daysLate": 0,
+    "docsGapCount": 0
   },
   "deliverables": [
     {
@@ -131,7 +138,9 @@
             "Sr. No. To",
             "Total Number",
             "Cancelled",
-            "Net Issued"
+            "Net Issued",
+            "Gaps — to be explained",
+            "Missing numbers (cancelled or not in the register?)"
           ]
         }
       ]
