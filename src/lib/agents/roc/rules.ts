@@ -83,6 +83,13 @@ export const rocRegistry = createRuleRegistry<RocCheckInput>({
   },
   "roc.financials-tie": ({ extracted: x }) => {
     const a = analyseRoc(x);
+    const questions = x.financials.ledgerQuestions ?? [];
+    if (questions.length)
+      return fail(
+        `Reviewer question (insufficient evidence): the Schedule III head of ${questions.length} ledger(s) cannot be told from the name — ${questions.join(", ")}. Classify them before the AOC-4 sheet is used.`,
+        questions[0],
+        "financials.json trialBalance",
+      );
     if (x.financials.unmappedLedgers.length)
       return fail(`${x.financials.unmappedLedgers.length} trial-balance ledger(s) were not mapped to a Schedule III head: ${x.financials.unmappedLedgers.join(", ")}`, x.financials.unmappedLedgers[0], "financials.json trialBalance");
     if (a.balanceSheetDiffPaise !== 0)

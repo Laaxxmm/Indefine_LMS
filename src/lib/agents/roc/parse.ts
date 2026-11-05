@@ -13,6 +13,7 @@
 import ExcelJS from "exceljs";
 import { z } from "zod";
 import type { InputFile } from "@/lib/agents/core/runner";
+import { wrongDepartment } from "./grounding";
 import { isDayKey, optPaise, parseCsv, rupeesToPaise, yes } from "./util";
 
 // ------------------------------------------------------------------ financial heads
@@ -280,6 +281,9 @@ const byName = (files: InputFile[], name: string) => files.find((f) => f.name.to
 
 /** Gathered files → RocInput. Throws one message listing what is missing or unreadable. */
 export function parseRocFiles(files: InputFile[]): RocInput {
+  // Wrong-department input fails closed before any model call (ADR-008).
+  const elsewhere = wrongDepartment(files, "roc");
+  if (elsewhere) throw new Error(elsewhere);
   const problems: string[] = [];
   const need = (name: string) => {
     const f = byName(files, name);

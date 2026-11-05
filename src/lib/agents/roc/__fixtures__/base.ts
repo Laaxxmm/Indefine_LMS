@@ -51,6 +51,7 @@ type Over = {
   previous?: Partial<FinColumn>;
   msme?: RocExtract["msme"];
   unmapped?: string[];
+  questions?: string[];
   notes?: string | null;
   fy?: string;
 };
@@ -99,7 +100,7 @@ export function baseExtract(o: Over = {}): RocExtract {
       casualVacancy: false,
       ...o.auditor,
     },
-    financials: { source: "summary", current: { ...CUR, ...o.current }, previous: { ...PREV, ...o.previous }, unmappedLedgers: o.unmapped ?? [] },
+    financials: { source: "summary", current: { ...CUR, ...o.current }, previous: { ...PREV, ...o.previous }, unmappedLedgers: o.unmapped ?? [], ledgerQuestions: o.questions ?? [] },
     msme: o.msme ?? [],
     notes: o.notes === undefined ? null : o.notes,
   };

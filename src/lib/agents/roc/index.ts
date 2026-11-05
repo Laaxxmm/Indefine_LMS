@@ -6,53 +6,49 @@
 // Model use: only to map trial-balance ledger names to Schedule III heads (when staff give a TB
 // instead of a summary) and for the one LLM rule (related-party contracts → AOC-2). Every total,
 // threshold, date and fee is deterministic TypeScript in integer paise (analyse.ts, data.ts).
-import { z } from "zod";
 import type { AgentDefinition } from "@/lib/agents/core/runner";
 import { analyseRoc, columnFromTrialBalance, type RocExtract, type RocFinancials } from "./analyse";
 import { rocDeliverables } from "./deliverables";
-import { FIN_HEADS, HEAD_LABELS, parseFinancialsXlsx, rocInputSchema, type RocInput } from "./parse";
+import { ROC_MAP_TASK_SPEC, acceptedMappings, mapLedgersUserMessage } from "./model-tasks";
+import { parseFinancialsXlsx, rocInputSchema, type RocInput } from "./parse";
 import { ROC_CHECKLIST, ROC_KEY, rocRegistry } from "./rules";
 import { dayNumber } from "./util";
 
 export { ROC_CHECKLIST, ROC_KEY, rocRegistry } from "./rules";
+export { ROC_MODEL_TASKS, LedgerMappingSchema } from "./model-tasks";
 export { analyseRoc } from "./analyse";
 export type { RocExtract } from "./analyse";
 export type { RocInput } from "./parse";
 
-export const ROC_MAP_TASK = "roc.map-ledgers" as const;
+export const ROC_MAP_TASK = ROC_MAP_TASK_SPEC.name;
 
-export const LedgerMappingSchema = z.object({
-  mappings: z.array(z.object({ ledger: z.string().min(1), head: z.enum(FIN_HEADS) })).max(5000),
-});
+type ModelFn = Parameters<AgentDefinition<RocInput, RocExtract>["extract"]>[0]["model"];
 
-const MAP_SYSTEM = [
-  "Map each trial-balance ledger of an Indian company to exactly one Schedule III head from the list.",
-  "Copy each ledger name exactly as written. Use the head keys given, nothing else.",
-  "Closing stock goes to inventories; GST / TDS receivable to otherAssets; provisions and statutory dues to otherLiabilities; opening profit and loss balance to reservesSurplus.",
-  "Do not add up, total or change any amount.",
-].join(" ");
-
-async function financialsFrom(input: RocInput, model: Parameters<AgentDefinition<RocInput, RocExtract>["extract"]>[0]["model"], notes: string | null): Promise<RocFinancials> {
+async function financialsFrom(input: RocInput, model: ModelFn, notes: string | null): Promise<RocFinancials> {
   const f = input.financials;
-  if (f.kind === "summary") return { source: "summary", current: f.current, previous: f.previous, unmappedLedgers: [] };
+  if (f.kind === "summary") return { source: "summary", current: f.current, previous: f.previous, unmappedLedgers: [], ledgerQuestions: [] };
   if (f.kind === "xlsx") {
     const cols = await parseFinancialsXlsx(f.fileName, f.bytes);
-    return { source: "xlsx", ...cols, unmappedLedgers: [] };
+    return { source: "xlsx", ...cols, unmappedLedgers: [], ledgerQuestions: [] };
   }
-  const heads = FIN_HEADS.map((h) => `${h}: ${HEAD_LABELS[h]}`).join("\n");
-  const ledgers = f.trialBalance.map((l) => `- ${l.ledger}`).join("\n");
+  const tb = f.trialBalance;
   const out = await model({
-    task: ROC_MAP_TASK,
+    task: ROC_MAP_TASK_SPEC.name,
     privacy: "anonymize-then-cloud",
     difficulty: "sop",
-    schema: LedgerMappingSchema,
+    schema: ROC_MAP_TASK_SPEC.schema,
+    contradictions: (o) => ROC_MAP_TASK_SPEC.validate!(o, tb),
     messages: [
-      { role: "system", content: MAP_SYSTEM },
-      { role: "user", content: `${notes ? `Reviewer notes: ${notes}\n\n` : ""}Heads:\n${heads}\n\nLedgers:\n${ledgers}` },
+      { role: "system", content: ROC_MAP_TASK_SPEC.system },
+      { role: "user", content: mapLedgersUserMessage(tb, notes) },
     ],
   });
-  const { column, unmapped } = columnFromTrialBalance(f.trialBalance, out.mappings);
-  return { source: "tb", current: column, previous: f.previous, unmappedLedgers: unmapped };
+  // The recorded router does not run contradictions, so validation is applied here too: only
+  // grounded, decided mappings are used; abstentions become reviewer questions.
+  const { mappings, questions } = acceptedMappings(out, tb);
+  const { column, unmapped } = columnFromTrialBalance(tb, mappings);
+  const asked = new Set(questions.map((q) => q.trim().toLowerCase()));
+  return { source: "tb", current: column, previous: f.previous, unmappedLedgers: unmapped.filter((l) => !asked.has(l.trim().toLowerCase())), ledgerQuestions: unmapped.filter((l) => asked.has(l.trim().toLowerCase())) };
 }
 
 /** Integer figures for the run (paise for amounts; dates as YYYYMMDD; flags 0/1). */

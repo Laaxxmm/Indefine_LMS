@@ -2,6 +2,7 @@ import { cpSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import type { ModelRequest } from "@/lib/ai/router";
 import { loadFixtures, runAgentAccuracy, runFixtureOnce } from "@/lib/agents/core/accuracy-run";
 import { createRecordedRouter } from "@/lib/agents/core/recorded-router";
 import { getAgent } from "@/lib/agents/registry";
@@ -11,6 +12,15 @@ import { ROC_CHECKLIST, ROC_MAP_TASK, rocAgent, rocFigures } from "./index";
 import { parseRocFiles } from "./parse";
 
 const ROOT = "fixtures/accuracy";
+
+/** ExtractContext.model backed by a recorded router (as the runner wires it). */
+const viaRouter =
+  (router: ReturnType<typeof createRecordedRouter>) =>
+  async <T,>(req: Omit<ModelRequest<T>, "runId">): Promise<T> => {
+    const r = await router.run<T>({ ...req, runId: "r" } as ModelRequest<T>);
+    if (r.status !== "ok") throw new Error(`model call not ok: ${r.status}`);
+    return r.output;
+  };
 
 describe("rocAgent definition", () => {
   it("is registered and visible", () => {
@@ -39,7 +49,7 @@ describe("extract", () => {
     const fx = files("clean-trial-balance");
     const router = createRecordedRouter(fx.recorded);
     const input = parseRocFiles(fx.inputFiles);
-    const x = await rocAgent.extract({ input, files: fx.inputFiles, job: JOB, runId: "r1", notes: "check GST input", model: async (req) => (await router.run({ ...req, runId: "r1" } as never)).output as never });
+    const x = await rocAgent.extract({ input, files: fx.inputFiles, job: JOB, runId: "r1", notes: "check GST input", model: viaRouter(router) });
     expect(router.calls.map((c) => c.task)).toEqual([ROC_MAP_TASK]);
     expect(router.calls[0].privacy).toBe("anonymize-then-cloud");
     expect(JSON.stringify(router.calls[0].messages)).toContain("Reviewer notes: check GST input");
@@ -51,7 +61,7 @@ describe("extract", () => {
     for (const id of ["clean-small-private", "clean-xlsx-financials"]) {
       const fx = files(id);
       const router = createRecordedRouter({});
-      const x = await rocAgent.extract({ input: parseRocFiles(fx.inputFiles), files: fx.inputFiles, job: JOB, runId: "r", notes: null, model: async (req) => (await router.run({ ...req, runId: "r" } as never)).output as never });
+      const x = await rocAgent.extract({ input: parseRocFiles(fx.inputFiles), files: fx.inputFiles, job: JOB, runId: "r", notes: null, model: viaRouter(router) });
       expect(router.calls).toHaveLength(0);
       expect(x.financials.current.revenueFromOperations).toBe(2_40_00_000_00);
     }

@@ -23,7 +23,7 @@ import { addDays, addMonthsClamped, addYears, daysBetween, divRoundHalfUp, fyEnd
 
 // ------------------------------------------------------------------ extracted shape
 
-export type RocFinancials = { source: "summary" | "tb" | "xlsx"; current: FinColumn; previous: FinColumn; unmappedLedgers: string[] };
+export type RocFinancials = { source: "summary" | "tb" | "xlsx"; current: FinColumn; previous: FinColumn; unmappedLedgers: string[]; ledgerQuestions: string[] };
 
 /** What extract() returns and what rules / compute / replay read. */
 export type RocExtract = {
