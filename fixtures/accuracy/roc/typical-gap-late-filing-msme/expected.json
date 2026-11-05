@@ -1,0 +1,139 @@
+{
+  "description": "Typical gaps: planned filing 10-11-2026. AOC-4 due 24-10-2026 -> 17 days late (24 Oct to 10 Nov) x Rs100 = Rs1,700 (170000 paise). MGT-7 due 23-11-2026 -> not late. DIR-3 KYC all done -> no KYC fee. Total additional fee Rs1,700 (warn roc.filing-delay-fee). MSME supplier outstanding 50 days in H2 (> 45) -> MSME-1 for Oct-Mar (warn roc.msme1-applicability).",
+  "job": {
+    "fy": "2025-26",
+    "period": "Annual",
+    "title": "ROC annual filing"
+  },
+  "flags": [
+    {
+      "ruleId": "roc.filing-delay-fee",
+      "severity": "warn"
+    },
+    {
+      "ruleId": "roc.msme1-applicability",
+      "severity": "warn"
+    }
+  ],
+  "figures": {
+    "paidUpCapitalPaise": 100000000,
+    "shareholdingTotalPaise": 100000000,
+    "shareholdingDiffPaise": 0,
+    "sharesTotal": 100000,
+    "turnoverPaise": 2400000000,
+    "turnoverPreviousPaise": 2000000000,
+    "netWorthPaise": 450000000,
+    "profitBeforeTaxPaise": 120000000,
+    "totalAssetsPaise": 650000000,
+    "balanceSheetDiffPaise": 0,
+    "smallCompany": 1,
+    "mgt7a": 1,
+    "csrApplicable": 0,
+    "csrObligationPaise": 0,
+    "agmDueDate": 20260930,
+    "agmDelayDays": 0,
+    "aoc4DueDate": 20261024,
+    "mgt7DueDate": 20261123,
+    "adt1DueDate": 0,
+    "dir3KycDueDate": 20260930,
+    "aoc4DelayDays": 17,
+    "mgt7DelayDays": 0,
+    "directorsKycPending": 0,
+    "auditorTermYear": 4,
+    "adt1Required": 0,
+    "msme1Applicable": 1,
+    "dpt3Applicable": 1,
+    "normalFeePaise": 50000,
+    "aoc4AdditionalFeePaise": 170000,
+    "mgt7AdditionalFeePaise": 0,
+    "adt1AdditionalFeePaise": 0,
+    "dirKycLateFeePaise": 0,
+    "additionalFeeTotalPaise": 170000
+  },
+  "deliverables": [
+    {
+      "name": "ROC data sheets",
+      "sheets": [
+        {
+          "name": "AOC-4",
+          "columns": [
+            "Item",
+            "FY 2025-26",
+            "Previous year"
+          ]
+        },
+        {
+          "name": "MGT-7",
+          "columns": [
+            "Item",
+            "Value"
+          ]
+        },
+        {
+          "name": "Shareholding",
+          "columns": [
+            "Folio",
+            "Holder",
+            "Class",
+            "Shares",
+            "Paid up per share",
+            "Paid-up amount"
+          ]
+        },
+        {
+          "name": "DIR-3 KYC",
+          "columns": [
+            "DIN",
+            "Director",
+            "Designation",
+            "DIN status",
+            "KYC completed on",
+            "Action"
+          ]
+        },
+        {
+          "name": "ADT-1 check",
+          "columns": [
+            "Check",
+            "Result"
+          ]
+        },
+        {
+          "name": "Due dates and fees",
+          "columns": [
+            "Form",
+            "Applicable",
+            "Basis",
+            "Statutory due",
+            "Planned filing",
+            "Days late",
+            "Normal fee",
+            "Additional fee",
+            "Note"
+          ]
+        },
+        {
+          "name": "Checklist",
+          "columns": [
+            "Rule",
+            "Severity",
+            "Status",
+            "Finding",
+            "Evidence"
+          ]
+        },
+        {
+          "name": "Verify",
+          "columns": [
+            "Rate / threshold / date",
+            "Partner to verify"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Board and AGM resolutions",
+      "sheets": []
+    }
+  ]
+}

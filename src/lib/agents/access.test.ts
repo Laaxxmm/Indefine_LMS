@@ -89,8 +89,9 @@ describe("registry and flags", () => {
   it("echo is hidden unless FIRM_OS_ECHO_AGENT is on", () => {
     expect(isEchoAgentEnabled({})).toBe(false);
     expect(isEchoAgentEnabled({ FIRM_OS_ECHO_AGENT: "Yes" })).toBe(true);
-    expect(visibleAgents({}).map((a) => a.key)).toEqual([]);
-    expect(visibleAgents({ FIRM_OS_ECHO_AGENT: "1" }).map((a) => a.key)).toEqual(["echo"]);
+    // Real task agents (gst, roc, tax, ...) are always visible; only internal agents are flag-gated.
+    expect(visibleAgents({}).filter((a) => a.internal).map((a) => a.key)).toEqual([]);
+    expect(visibleAgents({ FIRM_OS_ECHO_AGENT: "1" }).filter((a) => a.internal).map((a) => a.key)).toEqual(["echo"]);
     expect(getAgent("echo")?.key).toBe("echo");
     expect(getAgent("toString")).toBeUndefined();
   });

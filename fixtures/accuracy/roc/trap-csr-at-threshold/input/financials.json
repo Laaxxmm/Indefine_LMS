@@ -1,0 +1,38 @@
+{
+  "current": {
+    "shareCapital": "10,00,000",
+    "reservesSurplus": "9,45,00,000",
+    "longTermBorrowings": "0",
+    "shortTermBorrowings": "5,00,000",
+    "tradePayables": "12,00,000",
+    "otherLiabilities": "3,00,000",
+    "fixedAssets": "4,00,00,000",
+    "investments": "0",
+    "inventories": "2,00,00,000",
+    "tradeReceivables": "3,00,00,000",
+    "cashAndBank": "65,00,000",
+    "otherAssets": "10,00,000",
+    "revenueFromOperations": "70,00,00,000",
+    "otherIncome": "0",
+    "totalExpenses": "64,00,00,000",
+    "taxExpense": "1,50,00,000"
+  },
+  "previous": {
+    "shareCapital": "10,00,000",
+    "reservesSurplus": "4,90,00,000",
+    "longTermBorrowings": "0",
+    "shortTermBorrowings": "4,00,000",
+    "tradePayables": "10,00,000",
+    "otherLiabilities": "2,00,000",
+    "fixedAssets": "2,40,00,000",
+    "investments": "0",
+    "inventories": "1,50,00,000",
+    "tradeReceivables": "1,00,00,000",
+    "cashAndBank": "26,00,000",
+    "otherAssets": "0",
+    "revenueFromOperations": "60,00,00,000",
+    "otherIncome": "0",
+    "totalExpenses": "55,00,00,000",
+    "taxExpense": "1,26,00,000"
+  }
+}

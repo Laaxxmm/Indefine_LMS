@@ -1,0 +1,130 @@
+{
+  "description": "Clean small private company: AGM in time, shareholding ties, KYC done, auditor mid-term, DPT-3 filed. No flags. Working: paid-up 1,00,000 shares x Rs10 = Rs10,00,000 (1e8 paise) = company paidUpCapital. Current BS: equity 10L+35L=45L; liabilities 0+5L+12L+3L=20L; total 65L; assets 20L+0+15L+18L+7L+5L=65L, diff 0. PBT = 2,40,00,000+2,00,000-2,30,00,000 = 12,00,000. Small company (limits in force on 31-03-2026: paid-up <= 10 cr, preceding-year turnover <= 100 cr): 10L and 2 cr -> small -> MGT-7A. CSR: preceding-year PBT 2,00,00,000+1,00,000-1,92,00,000 = 9,00,000 < 5 cr; net worth 36L; turnover 2 cr -> not applicable. AGM due 31-03-2026 + 6 months = 30-09-2026; held 25-09-2026. AOC-4 = AGM + 30 days counting AGM day = 25-09 + 29 = 24-10-2026; MGT-7 = 25-09 + 59 = 23-11-2026. Planned filing 15-10-2026 -> no delay, no additional fee. Normal fee: authorised Rs50,00,000 in 25L-1cr slab -> Rs500. Auditor term began FY 2022-23 -> FY 2025-26 is year 4 of 5. DPT-3: loan Rs5,00,000 outstanding -> applicable, filed 25-06-2026. DIR-3 KYC due 30-09-2026, both done in Aug 2026.",
+  "job": {
+    "fy": "2025-26",
+    "period": "Annual",
+    "title": "ROC annual filing"
+  },
+  "flags": [],
+  "figures": {
+    "paidUpCapitalPaise": 100000000,
+    "shareholdingTotalPaise": 100000000,
+    "shareholdingDiffPaise": 0,
+    "sharesTotal": 100000,
+    "turnoverPaise": 2400000000,
+    "turnoverPreviousPaise": 2000000000,
+    "netWorthPaise": 450000000,
+    "profitBeforeTaxPaise": 120000000,
+    "totalAssetsPaise": 650000000,
+    "balanceSheetDiffPaise": 0,
+    "smallCompany": 1,
+    "mgt7a": 1,
+    "csrApplicable": 0,
+    "csrObligationPaise": 0,
+    "agmDueDate": 20260930,
+    "agmDelayDays": 0,
+    "aoc4DueDate": 20261024,
+    "mgt7DueDate": 20261123,
+    "adt1DueDate": 0,
+    "dir3KycDueDate": 20260930,
+    "aoc4DelayDays": 0,
+    "mgt7DelayDays": 0,
+    "directorsKycPending": 0,
+    "auditorTermYear": 4,
+    "adt1Required": 0,
+    "msme1Applicable": 0,
+    "dpt3Applicable": 1,
+    "normalFeePaise": 50000,
+    "aoc4AdditionalFeePaise": 0,
+    "mgt7AdditionalFeePaise": 0,
+    "adt1AdditionalFeePaise": 0,
+    "dirKycLateFeePaise": 0,
+    "additionalFeeTotalPaise": 0
+  },
+  "deliverables": [
+    {
+      "name": "ROC data sheets",
+      "sheets": [
+        {
+          "name": "AOC-4",
+          "columns": [
+            "Item",
+            "FY 2025-26",
+            "Previous year"
+          ]
+        },
+        {
+          "name": "MGT-7",
+          "columns": [
+            "Item",
+            "Value"
+          ]
+        },
+        {
+          "name": "Shareholding",
+          "columns": [
+            "Folio",
+            "Holder",
+            "Class",
+            "Shares",
+            "Paid up per share",
+            "Paid-up amount"
+          ]
+        },
+        {
+          "name": "DIR-3 KYC",
+          "columns": [
+            "DIN",
+            "Director",
+            "Designation",
+            "DIN status",
+            "KYC completed on",
+            "Action"
+          ]
+        },
+        {
+          "name": "ADT-1 check",
+          "columns": [
+            "Check",
+            "Result"
+          ]
+        },
+        {
+          "name": "Due dates and fees",
+          "columns": [
+            "Form",
+            "Applicable",
+            "Basis",
+            "Statutory due",
+            "Planned filing",
+            "Days late",
+            "Normal fee",
+            "Additional fee",
+            "Note"
+          ]
+        },
+        {
+          "name": "Checklist",
+          "columns": [
+            "Rule",
+            "Severity",
+            "Status",
+            "Finding",
+            "Evidence"
+          ]
+        },
+        {
+          "name": "Verify",
+          "columns": [
+            "Rate / threshold / date",
+            "Partner to verify"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Board and AGM resolutions",
+      "sheets": []
+    }
+  ]
+}

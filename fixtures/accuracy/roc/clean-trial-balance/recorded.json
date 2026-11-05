@@ -1,0 +1,73 @@
+{
+  "roc.check:roc.aoc2-related-party": {
+    "status": "pass",
+    "evidence": {
+      "quote": "No other contracts or arrangements with related parties were entered into during the year.",
+      "location": "notes.txt line 4"
+    }
+  },
+  "roc.map-ledgers": {
+    "mappings": [
+      {
+        "ledger": "Share Capital",
+        "head": "shareCapital"
+      },
+      {
+        "ledger": "Profit and Loss Account (opening)",
+        "head": "reservesSurplus"
+      },
+      {
+        "ledger": "Loan from Director",
+        "head": "shortTermBorrowings"
+      },
+      {
+        "ledger": "Sundry Creditors",
+        "head": "tradePayables"
+      },
+      {
+        "ledger": "Provision for Tax",
+        "head": "otherLiabilities"
+      },
+      {
+        "ledger": "Plant and Machinery",
+        "head": "fixedAssets"
+      },
+      {
+        "ledger": "Closing Stock",
+        "head": "inventories"
+      },
+      {
+        "ledger": "Sundry Debtors",
+        "head": "tradeReceivables"
+      },
+      {
+        "ledger": "HDFC Bank Current Account",
+        "head": "cashAndBank"
+      },
+      {
+        "ledger": "GST Input Credit",
+        "head": "otherAssets"
+      },
+      {
+        "ledger": "Sales",
+        "head": "revenueFromOperations"
+      },
+      {
+        "ledger": "Interest Received",
+        "head": "otherIncome"
+      },
+      {
+        "ledger": "Purchases (net of stock change)",
+        "head": "totalExpenses"
+      },
+      {
+        "ledger": "Salaries and Wages",
+        "head": "totalExpenses"
+      },
+      {
+        "ledger": "Income Tax Expense",
+        "head": "taxExpense"
+      }
+    ]
+  }
+}
