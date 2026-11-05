@@ -153,7 +153,7 @@ describe("comments, mistakes and files", () => {
     expect(rows(w.db, "auditEvent").find((e) => e.action === "comment")).toMatchObject({ actorId: "u-ravi", action: "comment", entity: "AgentRun", entityId: "run-1", meta: { text: "Check INV-3" } });
   });
 
-  it("logs a mistake and lets only a partner / manager decide it", async () => {
+  it("logs a mistake and lets only a partner decide it", async () => {
     const w = echoWorld();
     await startAgentRun(user("priya"), "echo", "job-1", w.deps);
     const proposal = { id: "echo.big-invoice", title: "Invoices above ₹20,000", severity: "warn", kind: "deterministic", check: "echo.amount-over", evidence: "row", params: { limitPaise: 2000000 } };
@@ -164,8 +164,9 @@ describe("comments, mistakes and files", () => {
     const id = (r as { data: { id: string } }).data.id;
     expect(await decideMistakeFor(user("ravi"), id, "approve", w.deps)).toMatchObject({ ok: false, status: 403 });
     expect(await decideMistakeFor(user("admin"), id, "approve", w.deps)).toMatchObject({ ok: false, status: 403 });
-    expect(await decideMistakeFor(user("meera"), "nope", "approve", w.deps)).toMatchObject({ ok: false, status: 404 });
-    expect(await decideMistakeFor(user("meera"), id, "approve", w.deps)).toEqual({ ok: true, data: { status: "APPROVED", promotedToVersion: "1.1.0" } });
+    expect(await decideMistakeFor(user("meera"), id, "approve", w.deps)).toMatchObject({ ok: false, status: 403, error: "Only a partner may decide mistake rules" });
+    expect(await decideMistakeFor(user("partner"), "nope", "approve", w.deps)).toMatchObject({ ok: false, status: 404 });
+    expect(await decideMistakeFor(user("partner"), id, "approve", w.deps)).toEqual({ ok: true, data: { status: "APPROVED", promotedToVersion: "1.1.0" } });
     expect(await decideMistakeFor(user("partner"), id, "reject", w.deps)).toMatchObject({ ok: false, status: 409 });
     expect(await logMistake(user("outsider"), "run-1", { finding: "x", ruleProposal: proposal }, w.deps)).toMatchObject({ ok: false, status: 404 });
   });
@@ -211,7 +212,7 @@ describe("defaultAgentDeps", () => {
   // The first call cold-imports the whole production wiring (Prisma client, router, SharePoint,
   // every registered agent). Alone it takes ~1.6 s; under full-suite load it exceeded the 5 s
   // default once. There is no race to fix — only import time — so this test gets 30 s.
-  it("builds production wiring lazily and caches it", { timeout: 30_000 }, async () => {
+  it("builds production wiring lazily and caches it", { timeout: 60_000 }, async () => {
     const a = await defaultAgentDeps();
     expect(await defaultAgentDeps()).toBe(a);
     expect(typeof a.router.run).toBe("function");

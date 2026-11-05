@@ -1,5 +1,5 @@
 {
-  "description": "Trap: the same supplier bill keyed twice with different spacing; ITC must not be taken twice. Core 3B figures (hand): outward 2,00,000; CGST 18,000, SGST 18,000. ITC: SS/7007 matched once 9,000 + 9,000 = 18,000; the re-keyed \"SS / 7007\" finds no unused 2B document -> missing in 2B, deferred 18,000, not claimed. Cash CGST 9,000, SGST 9,000 = 18,000; no expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee.",
+  "description": "Trap: the same supplier bill keyed twice with different spacing; ITC must not be taken twice. Core 3B figures (hand): outward 2,00,000; CGST 18,000, SGST 18,000. ITC: SS/7007 matched once 9,000 + 9,000 = 18,000; the re-keyed \"SS / 7007\" finds no unused 2B document -> missing in 2B, deferred 18,000, not claimed. Cash CGST 9,000, SGST 9,000 = 18,000; no expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee. ITC held back 0: no purchase ledger the model answered insufficient_evidence on.",
   "category": "trap",
   "job": {
     "fy": "2026-27",
@@ -33,6 +33,7 @@
     "itcBlockedPaise": 0,
     "itcOtherReversalPaise": 0,
     "itcNetPaise": 1800000,
+    "itcHeldBackPaise": 0,
     "cashIgstPaise": 0,
     "cashCessPaise": 0,
     "daysLate": 0,

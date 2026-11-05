@@ -9,6 +9,11 @@
 // due date itself blocks so it is not approved until the challan is in, although a deposit made
 // that day is still in time. The preparation date is the run's clock (CheckInput.preparedAt, IST
 // day); when it is unknown (e.g. a replayed mistake) an undeposited deduction is treated as overdue.
+//
+// Trial balances (owner-approved 2026-11-05): the month-end TB must balance to the paisa or the pack
+// BLOCKS (books.tb-balanced). When a prior-month (opening) TB is supplied it must balance too, but
+// that is a WARN (books.prior-tb-balanced): the comparison base and the opening balances it hands on
+// carry a difference to explain; it fails as well when the file cannot be read, and is na without one.
 import { createRuleRegistry, type ChecklistPack, type CheckOutcome, type DeterministicCheck, type RuleDefinition } from "@/lib/agents/core/checklist";
 import { formatDayKey, formatInr } from "@/lib/agents/core/format";
 import type { CheckInput } from "@/lib/agents/core/runner";
@@ -50,6 +55,25 @@ export const booksRegistry = createRuleRegistry<BooksCheckInput>(withFullExtract
       status: "fail",
       message: `Trial balance does not balance: debits ${inr(a.tb.debitPaise)}, credits ${inr(a.tb.creditPaise)}, difference ${inr(Math.abs(a.tb.differencePaise))}`,
       evidence: { quote: `Total debits ${(a.tb.debitPaise / 100).toFixed(2)} / total credits ${(a.tb.creditPaise / 100).toFixed(2)}`, location: `${tb.file} (${tb.rows.length} ledgers)` },
+    };
+  },
+
+  // Prior-month (opening) TB balances (owner-approved 2026-11-05): warn only. Only the current
+  // month's TB imbalance blocks (books.tb-balanced); this one tells the reviewer the comparison
+  // base — and the opening balances it hands on — carries a difference.
+  "books.prior-tb-balanced": (ci, rule) => {
+    const { priorTb } = ci.extracted;
+    if (!priorTb) {
+      const file = ci.extracted.files.find((f) => f.kind === "tb-prior");
+      if (!file) return na("Prior-month trial balance not provided");
+      return { status: "fail", message: "The prior-month (opening) trial balance could not be read, so its debits = credits cannot be proved", evidence: { location: file.name } };
+    }
+    const t = analysis(ci).priorTb!;
+    if (Math.abs(t.differencePaise) <= num(rule.params?.tolerancePaise, 0)) return pass();
+    return {
+      status: "fail",
+      message: `Prior-month (opening) trial balance does not balance: debits ${inr(t.debitPaise)}, credits ${inr(t.creditPaise)}, difference ${inr(Math.abs(t.differencePaise))}. The opening balances may carry the difference into this month; correct or explain it before relying on the month-on-month comparison.`,
+      evidence: { quote: `Total debits ${(t.debitPaise / 100).toFixed(2)} / total credits ${(t.creditPaise / 100).toFixed(2)}`, location: `${priorTb.file} (${priorTb.rows.length} ledgers)` },
     };
   },
 
@@ -297,6 +321,15 @@ export const BOOKS_CHECKLIST: ChecklistPack = {
   version: "1.0.0",
   rules: [
     rule({ id: "books.tb-balanced", title: "Trial balance: debits = credits", severity: "block", kind: "deterministic", check: "books.tb-balanced", evidence: "total debits, total credits and the TB file", params: { tolerancePaise: 0, verify: "Exact to the paisa; no tolerance." } }),
+    rule({
+      id: "books.prior-tb-balanced",
+      title: "Prior-month (opening) trial balance: debits = credits",
+      severity: "warn",
+      kind: "deterministic",
+      check: "books.prior-tb-balanced",
+      evidence: "total debits, total credits and the prior-month TB file",
+      params: { tolerancePaise: 0, verify: "Exact to the paisa; warn only (owner-approved 2026-11-05). Only the current month's TB imbalance blocks (books.tb-balanced)." },
+    }),
     rule({ id: "books.parse-issues", title: "Every input row could be read", severity: "warn", kind: "deterministic", check: "books.parse-issues", evidence: "file and row that could not be read" }),
     rule({ id: "books.bank-recon-difference", title: "Bank reconciliation ties (no unexplained difference)", severity: "block", kind: "deterministic", check: "books.bank-recon-difference", evidence: "balance per bank and adjusted balance per books" }),
     rule({

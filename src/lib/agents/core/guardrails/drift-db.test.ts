@@ -63,6 +63,7 @@ describe("recordGuardrailBreaches", () => {
           entityId: "gst:2026-11-05",
           meta: { agent: "gst", day: "2026-11-05", breaches: [{ metric: "abstain", rate: 0.4568, count: 5, threshold: 0.3, sample: 11 }], injections: 1 },
         },
+        select: { id: true }, // written through logAudit (src/lib/audit/log.ts)
       },
     ]);
   });

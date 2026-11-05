@@ -41,6 +41,7 @@ import {
   type RuleRegistry,
 } from "./checklist";
 import { transitionJobTask } from "./state-db";
+import { logAudit } from "@/lib/audit/log";
 import { buildDocx, buildWorkbook, type BuiltDeliverable, type DocBlock, type SheetSpec } from "./templates";
 
 // ------------------------------------------------------------------ dependencies
@@ -323,7 +324,7 @@ export async function runAgent<I, E>(def: AgentDefinition<I, E>, jobTaskId: stri
     if (guard && !guardRecorded) {
       guardRecorded = true;
       try {
-        await db.auditEvent.create(guard.auditEvent(runId, "failed"));
+        await logAudit(db, guard.auditEvent(runId, "failed").data);
       } catch {
         // The run is already FAILED with its reason; a lost guardrail record must not hide that.
       }
@@ -458,7 +459,7 @@ export async function runAgent<I, E>(def: AgentDefinition<I, E>, jobTaskId: stri
         },
       });
       if (results.length) await tx.checklistResult.createMany({ data: toChecklistResultRows(runId, results) });
-      if (session) await tx.auditEvent.create(session.auditEvent(runId, "ok"));
+      if (session) await logAudit(tx, session.auditEvent(runId, "ok").data);
       for (const s of stored) {
         await tx.deliverable.create({
           data: {

@@ -36,7 +36,7 @@ export const BOOKS_FILE_PATTERNS: [BooksFileKind, RegExp][] = [
 ];
 
 export const OPTIONAL_INPUTS: { kinds: BooksFileKind[]; label: string }[] = [
-  { kinds: ["tb-prior"], label: "Prior-month trial balance (expense spike check)" },
+  { kinds: ["tb-prior"], label: "Prior-month trial balance (expense spike and opening-balance checks)" },
   { kinds: ["bank-statement", "bank-ledger"], label: "Bank statement and bank ledger (bank reconciliation)" },
   { kinds: ["tds-deducted", "tds-challans"], label: "TDS deducted ledger and TDS challan list" },
   { kinds: ["gst-ledger", "gst-return"], label: "GST ledger balances and filed return summary" },

@@ -2,9 +2,12 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { ActivityPing } from "@/components/ActivityPing";
 import { LogoMark } from "@/components/Logo";
 import { NavLink } from "@/components/NavLink";
 import { canSeeMistakeLog, canSeeAllRuns, canUseAgents } from "@/lib/agents/access";
+import { isBreakNudgeEnabled } from "@/lib/agents/coach/flags";
+import { canSpotCheck } from "@/lib/rbac/policy";
 import { visibleAgents } from "@/lib/agents/registry";
 import { focusRing, runsListLabel } from "./parts";
 
@@ -46,6 +49,14 @@ export default async function AgentsLayout({ children }: { children: React.React
                 Mistake log
               </NavLink>
             )}
+            <Link href="/coach" className={link}>
+              My day
+            </Link>
+            {canSpotCheck(session.user) && (
+              <NavLink href="/agents/spot-checks" className={link}>
+                Spot checks
+              </NavLink>
+            )}
             <Link href="/dashboard" className={`${link} flex items-center gap-2`}>
               <ArrowLeft className="w-4 h-4" aria-hidden="true" /> Dashboard
             </Link>
@@ -53,6 +64,7 @@ export default async function AgentsLayout({ children }: { children: React.React
         </div>
       </header>
       <main className="max-w-[1280px] mx-auto px-5 sm:px-8 py-8">{children}</main>
+      <ActivityPing enabled={isBreakNudgeEnabled()} />
     </div>
   );
 }

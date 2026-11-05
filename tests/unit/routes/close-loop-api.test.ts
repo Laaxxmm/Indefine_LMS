@@ -174,5 +174,8 @@ describe("/api/cron/firm-os/close-loop", () => {
     const r2 = await cron(cronReq("Bearer s3cret-value"));
     expect(await r2.json()).toMatchObject({ closed: [], reminders: 0, escalations: 0 });
     expect(w.coach).toHaveLength(1);
+    // One summary AuditEvent for the run that changed something; none for the quiet second run.
+    const summaries = w.audits.filter((a) => a.action === "reconcile");
+    expect(summaries).toEqual([expect.objectContaining({ actorId: "system:close-loop-reconciler", entity: "JobTask", meta: expect.objectContaining({ closed: [job.id], reminders: 1 }) })]);
   });
 });

@@ -1,0 +1,121 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { PrismaClient } from "@prisma/client";
+import {
+  DEFAULT_LIMITS,
+  checkRateLimit,
+  enforceRateLimit,
+  envName,
+  memoryRateLimitStore,
+  parseRule,
+  prismaRateLimitStore,
+  ruleFor,
+  type RawQueryDb,
+  type RateLimitStore,
+} from "./rate-limit";
+
+// Compile-time: the Prisma client has the raw-query method the bucket store uses.
+export const _prismaFits = (p: PrismaClient): RawQueryDb => p;
+
+const T0 = new Date("2026-11-05T04:30:00.000Z"); // 10:00 IST
+const MIN = 60_000;
+const rule = { limit: 3, windowMs: 10 * MIN };
+
+describe("configuration", () => {
+  it("parses <requests>/<window> with s, m or h", () => {
+    expect(parseRule("30/1h")).toEqual({ limit: 30, windowMs: 3_600_000 });
+    expect(parseRule(" 5 / 90s ")).toEqual({ limit: 5, windowMs: 90_000 });
+    expect(parseRule("10/15M")).toEqual({ limit: 10, windowMs: 900_000 });
+    for (const bad of ["", "30", "30/h", "0/1h", "x/1h", "30/0s", "30/1d", "-1/1h", undefined, null]) expect(parseRule(bad), String(bad)).toBeNull();
+  });
+
+  it("uses the env override when well formed, else the default (with a warning for a bad value)", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(envName("agent-run")).toBe("RATE_LIMIT_AGENT_RUN");
+    expect(ruleFor("onboard", {})).toEqual(DEFAULT_LIMITS.onboard);
+    expect(ruleFor("onboard", { RATE_LIMIT_ONBOARD: "" })).toEqual(DEFAULT_LIMITS.onboard);
+    expect(ruleFor("agent-run", { RATE_LIMIT_AGENT_RUN: "5/10m" })).toEqual({ limit: 5, windowMs: 600_000 });
+    expect(ruleFor("comms-draft", { RATE_LIMIT_COMMS_DRAFT: "lots" })).toEqual(DEFAULT_LIMITS["comms-draft"]);
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/RATE_LIMIT_COMMS_DRAFT="lots" is not/));
+  });
+
+  it("ships limits for /onboard, agent runs and comms drafting", () => {
+    expect(DEFAULT_LIMITS).toEqual({ onboard: { limit: 30, windowMs: 3_600_000 }, "agent-run": { limit: 20, windowMs: 3_600_000 }, "comms-draft": { limit: 30, windowMs: 3_600_000 } });
+  });
+});
+
+describe("fixed window (fake timers)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(T0);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("allows `limit` requests, refuses the next with Retry-After to the window's end, and resets after it", async () => {
+    const store = memoryRateLimitStore();
+    for (let i = 1; i <= 3; i++) expect(await checkRateLimit("agent-run", "u-1", { store, rule })).toMatchObject({ allowed: true, remaining: 3 - i });
+    vi.advanceTimersByTime(4 * MIN);
+    const refused = await checkRateLimit("agent-run", "u-1", { store, rule });
+    expect(refused).toMatchObject({ allowed: false, remaining: 0, limit: 3, retryAfterSec: 6 * 60, resetAt: new Date(T0.getTime() + 10 * MIN) });
+
+    const res = await enforceRateLimit("agent-run", "u-1", { store, rule });
+    expect(res?.status).toBe(429);
+    expect(res?.headers.get("Retry-After")).toBe("360");
+    expect(res?.headers.get("RateLimit-Limit")).toBe("3");
+    expect(res?.headers.get("RateLimit-Remaining")).toBe("0");
+    expect(await res?.json()).toEqual({ error: "Too many agent runs: the limit is 3 per window. Try again in 6 minutes.", retryAfter: 360 });
+
+    vi.advanceTimersByTime(6 * MIN - 1000);
+    expect((await checkRateLimit("agent-run", "u-1", { store, rule })).retryAfterSec).toBe(1);
+    vi.advanceTimersByTime(1000); // the window has ended
+    expect(await checkRateLimit("agent-run", "u-1", { store, rule })).toMatchObject({ allowed: true, remaining: 2, resetAt: new Date(T0.getTime() + 20 * MIN) });
+    expect(await enforceRateLimit("agent-run", "u-1", { store, rule })).toBeNull();
+  });
+
+  it("counts per user and per scope", async () => {
+    const store = memoryRateLimitStore();
+    for (let i = 0; i < 3; i++) await checkRateLimit("onboard", "u-1", { store, rule });
+    expect((await checkRateLimit("onboard", "u-1", { store, rule })).allowed).toBe(false);
+    expect((await checkRateLimit("onboard", "u-2", { store, rule })).allowed).toBe(true);
+    expect((await checkRateLimit("agent-run", "u-1", { store, rule })).allowed).toBe(true);
+    expect([...store.buckets.keys()].sort()).toEqual(["agent-run:u-1", "onboard:u-1", "onboard:u-2"]);
+  });
+
+  it("concurrent requests cannot share the last slot: exactly `limit` of a burst are allowed", async () => {
+    const store = memoryRateLimitStore();
+    const burst = await Promise.all(Array.from({ length: 10 }, () => checkRateLimit("onboard", "u-1", { store, rule })));
+    expect(burst.filter((d) => d.allowed)).toHaveLength(3);
+  });
+
+  it("fails open, with an error logged, when the bucket store is unavailable", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const broken: RateLimitStore = { hit: async () => Promise.reject(new Error("connection refused")) };
+    expect(await enforceRateLimit("onboard", "u-1", { store: broken, rule })).toBeNull();
+    expect(err).toHaveBeenCalledWith(expect.stringMatching(/onboard: store unavailable, request allowed: connection refused/));
+  });
+});
+
+describe("Postgres bucket store", () => {
+  it("issues one atomic INSERT … ON CONFLICT DO UPDATE … RETURNING with the key and UTC cut-off, and maps the row", async () => {
+    const calls: { sql: string; values: unknown[] }[] = [];
+    const db: RawQueryDb = {
+      $queryRaw: (async (q: TemplateStringsArray, ...values: unknown[]) => {
+        calls.push({ sql: q.join("?"), values });
+        return [{ count: BigInt(4), windowStart: new Date(T0.getTime() - MIN) }];
+      }) as RawQueryDb["$queryRaw"],
+    };
+    const state = await prismaRateLimitStore(db).hit("onboard:u-1", T0, 10 * MIN);
+    expect(state).toEqual({ count: 4, windowStart: new Date(T0.getTime() - MIN) });
+    expect(calls).toHaveLength(1);
+    const { sql, values } = calls[0];
+    expect(sql).toMatch(/INSERT INTO "RateLimitBucket" \("key", "windowStart", "count", "updatedAt"\)/);
+    expect(sql).toMatch(/ON CONFLICT \("key"\) DO UPDATE SET/);
+    expect(sql).toMatch(/RETURNING "count", "windowStart"/);
+    expect(sql).not.toMatch(/DELETE/i);
+    expect(values).toEqual(["onboard:u-1", T0.toISOString(), T0.toISOString(), new Date(T0.getTime() - 10 * MIN).toISOString(), new Date(T0.getTime() - 10 * MIN).toISOString()]);
+  });
+
+  it("refuses an empty RETURNING", async () => {
+    const db: RawQueryDb = { $queryRaw: (async () => []) as RawQueryDb["$queryRaw"] };
+    await expect(prismaRateLimitStore(db).hit("k", T0, MIN)).rejects.toThrow(/returned no row/);
+  });
+});

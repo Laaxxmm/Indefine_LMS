@@ -103,7 +103,7 @@ export function analyzeBooks(extract: BooksExtract, job: Pick<JobContext, "perio
       ]
     : [];
   const missingInputs: string[] = [];
-  if (!extract.priorTb) missingInputs.push("Prior-month trial balance (expense spike check)");
+  if (!extract.priorTb) missingInputs.push("Prior-month trial balance (expense spike and opening-balance checks)");
   if (!extract.statement || !extract.ledger) missingInputs.push("Bank statement and bank ledger (bank reconciliation)");
   if (!extract.tdsDeducted || !extract.tdsChallans) missingInputs.push("TDS deducted ledger and TDS challan list");
   if (!extract.gstLedger || !extract.gstReturn) missingInputs.push("GST ledger balances and filed return summary");

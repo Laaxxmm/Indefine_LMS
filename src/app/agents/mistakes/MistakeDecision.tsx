@@ -16,7 +16,7 @@ export function decisionConsequence(decision: Decision, toVersion: string | null
 }
 
 /**
- * Approve (→ new SOP pack minor version) or reject a proposed rule. Partners and managers only.
+ * Approve (→ new SOP pack minor version) or reject a proposed rule. Partners only (an SOP rule change).
  * Neither can be undone from the screen, so the first click asks for confirmation and says what
  * will happen; the second sends it.
  */

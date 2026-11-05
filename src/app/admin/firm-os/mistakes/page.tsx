@@ -7,7 +7,7 @@ import { MistakesView } from "@/app/agents/mistakes/MistakesView";
 export const dynamic = "force-dynamic";
 
 // Firm OS · mistake log in the admin area (the admin layout already limits it to admins).
-// Approve / reject appear only for an admin who is also a partner or manager; partners who are
+// Approve / reject appear only for an admin who is also a partner; partners who are
 // not LMS admins use /agents/mistakes.
 export default async function AdminMistakesPage() {
   const session = await auth();

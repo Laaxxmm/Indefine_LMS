@@ -30,14 +30,21 @@
     "verify:no-portal": "tsx scripts/verify-no-portal.ts",
     "verify:no-delete": "tsx scripts/verify-no-delete.ts",
     "verify:ai-boundary": "tsx scripts/verify-ai-boundary.ts",
-    "verify:firm-os": "npm run verify:no-skip && npm run verify:secrets && npm run verify:no-portal && npm run verify:no-delete && npm run verify:ai-boundary && npm run verify:ui-links && npm run verify:prompts",
+    "verify:firm-os": "npm run verify:no-skip && npm run verify:secrets && npm run verify:no-portal && npm run verify:no-delete && npm run verify:ai-boundary && npm run verify:ui-links && npm run verify:prompts && npm run verify:rbac && npm run verify:audit-coverage",
     "verify:patha": "tsx --env-file-if-exists=.env.local scripts/verify-patha.ts",
     "map:legacy-folders": "tsx --env-file-if-exists=.env.local scripts/map-legacy-folders.ts",
     "e2e:db": "playwright test --config playwright.db.config.ts --repeat-each=3",
     "accuracy": "tsx scripts/accuracy.ts",
     "verify:ui-links": "tsx scripts/verify-ui-links.ts",
     "verify:prompts": "tsx scripts/verify-prompts.ts",
-    "accuracy:canary": "tsx scripts/accuracy.ts --mode=live"
+    "accuracy:canary": "tsx scripts/accuracy.ts --mode=live",
+    "verify:rbac": "tsx scripts/verify-rbac.ts",
+    "verify:audit-coverage": "tsx scripts/verify-audit-coverage.ts",
+    "e2e:done-trigger": "playwright test --config playwright.db.config.ts done-trigger",
+    "test:chaos": "vitest run tests/chaos",
+    "test:regression": "vitest run tests/regression",
+    "test:visual": "vitest run --config tests/regression/visual.vitest.config.ts",
+    "e2e:db:list": "playwright test --config playwright.db.config.ts --list"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.5.0",

@@ -1,8 +1,13 @@
 // The independent audit's probes, kept as permanent self-tests (tests/fixtures/accuracy-selftest/).
 // Before the fix every one of these produced a "pass" without the agent reading its input. Each
 // probe root holds one echo fixture; the CLI form is in scripts/accuracy.test.ts.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ECHO_RELATED_PARTY_TASK, EchoExtractSchema, echoAgent } from "@/lib/agents/echo";
+
+// Each probe runs the whole accuracy harness (3 runs per fixture plus input-sensitivity re-runs).
+// ~0.5 s alone, but it exceeded the 5 s default under full-suite load with a parallel build.
+// Work, not a race — so this file gets 30 s per test.
+vi.setConfig({ testTimeout: 30_000 });
 import { DEFAULT_FIXTURES_ROOT, loadFixtures, runAgentAccuracy } from "./accuracy-run";
 import { scoreboardMarkdown } from "./accuracy";
 import type { AgentDefinition } from "./runner";

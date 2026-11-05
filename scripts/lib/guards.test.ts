@@ -1,10 +1,14 @@
 // Tests for the Firm OS guard rules. Forbidden literals are assembled from pieces so this file
 // passes the very scans it tests (verify:no-skip, verify:secrets, verify:no-portal, verify:ai-boundary).
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   FIRM_OS_DIRS,
   LEGACY_GEMINI,
   LEGACY_PORTAL_READONLY,
+  NO_DELETE_EXEMPTIONS,
+  exportedFunctionRange,
   checkAiBoundary,
   checkNoDelete,
   checkNoPortal,
@@ -274,6 +278,59 @@ describe("no-delete", () => {
       expect(checkNoDelete([file(p, bad)]), p).toHaveLength(1);
     }
     expect(checkNoDelete([file("src/lib/ai-other/x.ts", bad)])).toEqual([]); // prefix is a directory, not a string
+  });
+});
+
+describe("no-delete: the one ADR-006 retention exemption", () => {
+  const P = "src/lib/hardening/retention.ts";
+  const DM = DOT + "deleteMany(";
+  const purge = (body: string[] = ["  const r = await db" + DOT + "activityHeartbeat" + DM + "{ where: { at: { lt: cutoff } } });", "  return r.count;"]) => [
+    "export async function purgeExpiredHeartbeats(db: Db, now: Date): Promise<number> {",
+    ...body,
+    "}",
+  ];
+  const nd = (path: string, ...lines: string[]) => rules(checkNoDelete([file(path, ...lines)]));
+
+  it("is exactly one function in one file, for one model, citing ADR-006", () => {
+    expect(NO_DELETE_EXEMPTIONS).toHaveLength(1);
+    expect(NO_DELETE_EXEMPTIONS[0]).toMatchObject({ path: P, fn: "purgeExpiredHeartbeats", model: "activityHeartbeat", adr: "ADR-006" });
+    expect(NO_DELETE_EXEMPTIONS[0].why).toMatch(/7 days/);
+    expect(FIRM_OS_DIRS).toContain("src/lib/hardening");
+  });
+
+  it("allows that function's declaration and its heartbeat delete", () => {
+    expect(nd(P, ...purge())).toEqual([]);
+    // Without the exemption the same file fails twice: the export name and the delete.
+    expect(rules(checkNoDelete([file(P, ...purge())], []))).toEqual(["no-delete:prisma-delete", "no-delete:exported-destructive-fn"]);
+  });
+
+  it("does not cover another model, a second delete on the line, another rule, another function, or another file", () => {
+    expect(nd(P, ...purge(["  await db" + DOT + "agentRun" + DM + "{});"]))).toEqual(["no-delete:prisma-delete"]);
+    expect(nd(P, ...purge(["  await db" + DOT + "activityHeartbeat" + DM + "{}); await db" + DOT + "user" + DOT + "delete({ where: { id } });"]))).toEqual(["no-delete:prisma-delete"]);
+    expect(nd(P, ...purge(["  await fetch(url, { method: " + q("DELETE") + " });"]))).toEqual(["no-delete:http-delete"]);
+    expect(nd(P, ...purge(), "export async function clearAll(db: Db) {", "  await db" + DOT + "activityHeartbeat" + DM + "{});", "}")).toEqual(["no-delete:prisma-delete"]);
+    expect(nd(P, ...purge(), "export function removeRuns() {}")).toEqual(["no-delete:exported-destructive-fn"]);
+    expect(nd(P, "const x = 1;", "await db" + DOT + "activityHeartbeat" + DM + "{});")).toEqual(["no-delete:prisma-delete"]); // outside any function
+    expect(nd("src/lib/hardening/other.ts", ...purge())).toEqual(["no-delete:prisma-delete", "no-delete:exported-destructive-fn"]);
+    expect(nd("src/lib/agents/core/retention.ts", ...purge())).toHaveLength(2);
+  });
+
+  it("fails closed when the function is missing or declared twice", () => {
+    expect(nd(P, ...purge(), ...purge())).toHaveLength(4);
+    expect(exportedFunctionRange(purge().join("\n"), "purgeExpiredHeartbeats")).toEqual([1, 4]);
+    expect(exportedFunctionRange([...purge(), ...purge()].join("\n"), "purgeExpiredHeartbeats")).toBeNull();
+    expect(exportedFunctionRange("export const purgeExpiredHeartbeats = () => {};", "purgeExpiredHeartbeats")).toBeNull();
+    expect(exportedFunctionRange("export function f(a: (x: number) => void) {\n  a(1);\n}", "f")).toEqual([1, 3]);
+  });
+
+  it("the real retention module passes with exactly one delete call, inside the exempt function", () => {
+    const content = readFileSync(join(__dirname, "..", "..", P), "utf8");
+    expect(checkNoDelete([{ path: P, content }])).toEqual([]);
+    expect(content.split(DM).length - 1).toBe(1);
+    const range = exportedFunctionRange(content, "purgeExpiredHeartbeats")!;
+    const line = content.split(/\r?\n/).findIndex((l) => l.includes(DM)) + 1;
+    expect(line).toBeGreaterThan(range[0]);
+    expect(line).toBeLessThanOrEqual(range[1]);
   });
 });
 

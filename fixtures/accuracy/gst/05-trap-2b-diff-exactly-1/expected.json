@@ -1,5 +1,5 @@
 {
-  "description": "GSTR-2B CGST/SGST differ from the books by â‚¹1.00 on one bill (tolerance: more than â‚¹1 is a mismatch). Core 3B figures (hand): outward 1,00,000; CGST 9,000, SGST 9,000. ITC lower of books 5,400 and 2B 5,401 per head = 10,800 (diff exactly Rs1 -> matched). Cash CGST 3,600, SGST 3,600 = 7,200; no expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee.",
+  "description": "GSTR-2B CGST/SGST differ from the books by â‚¹1.00 on one bill (tolerance: more than â‚¹1 is a mismatch). Core 3B figures (hand): outward 1,00,000; CGST 9,000, SGST 9,000. ITC lower of books 5,400 and 2B 5,401 per head = 10,800 (diff exactly Rs1 -> matched). Cash CGST 3,600, SGST 3,600 = 7,200; no expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee. ITC held back 0: no purchase ledger the model answered insufficient_evidence on.",
   "category": "trap",
   "job": {
     "fy": "2026-27",
@@ -23,6 +23,7 @@
     "itcBlockedPaise": 0,
     "itcOtherReversalPaise": 0,
     "itcNetPaise": 1080000,
+    "itcHeldBackPaise": 0,
     "cashIgstPaise": 0,
     "cashCessPaise": 0,
     "daysLate": 0,

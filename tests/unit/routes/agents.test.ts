@@ -3,8 +3,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Session } from "next-auth";
 import { NotFoundSignal, redirectTarget, renderHtml as renderRaw } from "./harness";
-import { echoWorld, rows, user, type World } from "../../fakes/agent-world";
+import { RELATED_TASK, echoWorld, rows, user, type World } from "../../fakes/agent-world";
 import { approvePack, logMistake, requestChanges, rerunAgent, startAgentRun, submitForReview } from "@/lib/agents/service";
+import { ABSTENTION_RULES, openQuestionViews, type ChecklistView } from "@/lib/agents/views";
 
 const state = vi.hoisted(() => ({ world: null as unknown as World, turia: [] as Record<string, unknown>[] }));
 
@@ -338,6 +339,50 @@ describe("/agents/[agent]/runs/[id] review screen", () => {
     expect(done).not.toMatch(PORTAL_OR_SEND);
   });
 
+  it("open questions: none → no panel; a model abstention → a client document request beside the checklist; no send action", async () => {
+    await startAgentRun(user("priya"), "echo", "job-1", state.world.deps);
+    as(user("priya"));
+    expect(await review("run-1")).not.toContain("Open questions");
+
+    state.world = echoWorld({ responses: { [RELATED_TASK]: { status: "insufficient_evidence", message: "Ask whether Acme Traders is a group company." } } });
+    await startAgentRun(user("priya"), "echo", "job-1", state.world.deps);
+    const html = await review("run-1");
+    expect(html).toContain('aria-labelledby="open-questions"');
+    expect(html).toContain(">Open questions</h2>");
+    expect(html).toContain("1 question for the reviewer: what the documents did not show");
+    expect(html).toContain("Approval does not wait on them, so settle each first");
+    expect(html).toContain("Client document request:</span> Related parties identified: insufficient evidence — Ask whether Acme Traders is a group company.");
+    expect(html).toContain("echo.related-party · the documents do not show the answer");
+    // The panel sits in the right-hand column, beside the checklist.
+    expect(html.indexOf('id="checklist"')).toBeLessThan(html.indexOf('id="open-questions"'));
+    expect(html).not.toMatch(PORTAL_OR_SEND);
+  });
+
+  it("open questions: an agent-reported abstention shows its evidence and the ITC held back (₹ Indian grouping)", async () => {
+    await startAgentRun(user("priya"), "echo", "job-1", state.world.deps);
+    const db = state.world.db;
+    // A GST-style run: gst.model-questions failed and the draft held back ITC (figure itcHeldBackPaise).
+    Object.assign(rows(db, "agentRun")[0], { figures: { itcHeldBackPaise: 18000000 } });
+    await db.checklistResult.create({
+      data: {
+        agentRunId: "run-1",
+        ruleId: "gst.model-questions",
+        severity: "warn",
+        status: "fail",
+        message: '1 question(s) the documents cannot answer (ITC of ₹180000.00 held back from Table 4(A) until answered); ask the client or decide before approval: ledger "Miscellaneous Expenses": …',
+        evidence: { quote: "Miscellaneous Expenses", location: "purchase-register.csv row 3" },
+        source: "deterministic",
+      },
+    });
+    as(user("priya"));
+    const html = await review("run-1");
+    expect(html).toContain("Client document request:</span> 1 question(s) the documents cannot answer");
+    expect(html).toContain("“Miscellaneous Expenses”");
+    expect(html).toContain("purchase-register.csv row 3");
+    expect(html).toContain('ITC held back until answered: </span><span class="font-bold">₹1,80,000.00</span>');
+    expect(html).not.toMatch(PORTAL_OR_SEND);
+  });
+
   it("failed run shows the error and Run agent for the assignee; hidden from outsiders; wrong agent segment 404", async () => {
     state.world = echoWorld({ register: null });
     await startAgentRun(user("priya"), "echo", "job-1", state.world.deps);
@@ -350,6 +395,40 @@ describe("/agents/[agent]/runs/[id] review screen", () => {
     await expect(review("run-1")).rejects.toBeInstanceOf(NotFoundSignal);
     as(user("priya"));
     await expect(ReviewPage({ params: Promise.resolve({ agent: "gst", id: "run-1" }) })).rejects.toBeInstanceOf(NotFoundSignal);
+  });
+});
+
+describe("openQuestionViews (review read model)", () => {
+  const row = (ruleId: string, over: Partial<ChecklistView> = {}): ChecklistView => ({ id: ruleId, ruleId, severity: "warn", status: "fail", message: `${ruleId} message`, source: "deterministic", quote: null, location: null, link: null, flags: [], ...over });
+  it("flagged LLM rows and agent-reported abstentions, abstentions first; held-back amount only when the figure is positive", () => {
+    const checklist = [
+      row("echo.related-party", { status: "na", flags: ["model-disagreement"], source: "llm" }),
+      row("gst.model-questions", { quote: "Misc", location: "purchases.csv row 3" }),
+      row("gst.blocked-credit"), // an ordinary finding: not a question
+      row("books.classification-questions", { severity: "info", status: "pass" }), // passed: nothing to ask
+      row("gst.hsn-digits", { status: "fail", flags: ["check-error"] }), // a check that could not run is not a question
+      row("gst.free-supplies", { status: "na", flags: ["insufficient-evidence"], source: "llm", location: "sales.csv row 2", link: "https://example.test/doc" }),
+    ];
+    const qs = openQuestionViews(checklist, { itcHeldBackPaise: 180000 });
+    expect(qs.map((q) => [q.ruleId, q.kind, q.clientRequest])).toEqual([
+      ["gst.free-supplies", "insufficient-evidence", true],
+      ["gst.model-questions", "insufficient-evidence", true],
+      ["echo.related-party", "model-disagreement", false],
+    ]);
+    expect(qs[1]).toMatchObject({ quote: "Misc", location: "purchases.csv row 3", heldBack: { label: "ITC held back until answered", amount: "₹1,800.00" } });
+    expect(qs[0]).toMatchObject({ heldBack: null, link: "https://example.test/doc" });
+    expect(openQuestionViews(checklist, { itcHeldBackPaise: 0 })[1].heldBack).toBeNull();
+    expect(Object.keys(ABSTENTION_RULES)).toEqual(["gst.model-questions", "books.classification-questions"]);
+  });
+  it("two rows of one rule stay two questions, each with its own id and evidence, in checklist order", () => {
+    const qs = openQuestionViews(
+      [row("x.rule", { id: "r1", status: "na", flags: ["insufficient-evidence"], quote: "A", location: "a.csv row 2" }), row("x.rule", { id: "r2", status: "na", flags: ["insufficient-evidence"], quote: "B", location: "b.csv row 3" })],
+      {},
+    );
+    expect(qs.map((q) => [q.id, q.quote, q.location])).toEqual([
+      ["r1", "A", "a.csv row 2"],
+      ["r2", "B", "b.csv row 3"],
+    ]);
   });
 });
 
@@ -380,7 +459,7 @@ describe("mistake log pages", () => {
     const admin = await renderHtml(await AdminMistakesPage());
     expect(admin).toContain("Missed the big invoice");
     expect(admin).not.toContain("Approve rule");
-    expect(admin).toContain("Only a partner or manager can approve or reject.");
+    expect(admin).toContain("Only a partner can approve or reject.");
     // The admin copy uses the admin area's header, like /admin/firm-os/models and cycle-time.
     expect(admin).toContain("Admin · Firm OS");
     expect(admin).toContain('href="/admin"');
