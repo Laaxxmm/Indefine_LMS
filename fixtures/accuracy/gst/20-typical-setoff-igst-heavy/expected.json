@@ -1,5 +1,5 @@
 {
-  "description": "Typical: large IGST credit against CGST/SGST liability (rule 88A, deficits first); invoice series gap of two numbers. Core 3B figures (hand): outward 4,00,000 + 1,00,000 = 5,00,000; IGST 18,000, CGST 36,000, SGST 36,000 (tax 90,000). ITC IGST 54,000 + CGST 4,500 + SGST 4,500 = 63,000. Set-off (rule 88A, deficits first): IGST 18,000 vs IGST, 31,500 vs CGST (36,000 - 4,500), 4,500 vs SGST; CGST 4,500 vs CGST; SGST 4,500 vs SGST -> cash SGST 27,000 only; no expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee.",
+  "description": "Typical: large IGST credit against CGST/SGST liability (rule 88A, deficits first); invoice series gap of two numbers (INV/26/1002, INV/26/1003 between 1001 and 1004): Table 13 total 4, net issued 2 (in the register), cancelled 0 — the two missing numbers are listed under 'Gaps — to be explained', not presumed cancelled (docsGapCount 2). Core 3B figures (hand): outward 4,00,000 + 1,00,000 = 5,00,000; IGST 18,000, CGST 36,000, SGST 36,000 (tax 90,000). ITC IGST 54,000 + CGST 4,500 + SGST 4,500 = 63,000. Set-off (rule 88A, deficits first): IGST 18,000 vs IGST, 31,500 vs CGST (36,000 - 4,500), 4,500 vs SGST; CGST 4,500 vs CGST; SGST 4,500 vs SGST -> cash SGST 27,000 only; no expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee.",
   "category": "typical-gap",
   "job": {
     "fy": "2026-27",
@@ -20,7 +20,7 @@
     "creditUtilisedPaise": 6300000,
     "closingCreditPaise": 0,
     "docsIssuedCount": 4,
-    "docsCancelledCount": 2,
+    "docsCancelledCount": 0,
     "outwardTaxablePaise": 50000000,
     "outwardIgstPaise": 1800000,
     "outwardCgstPaise": 3600000,
@@ -34,7 +34,8 @@
     "cashCessPaise": 0,
     "daysLate": 0,
     "interestPaise": 0,
-    "lateFeePaise": 0
+    "lateFeePaise": 0,
+    "docsGapCount": 2
   },
   "deliverables": [
     {
@@ -132,7 +133,9 @@
             "Sr. No. To",
             "Total Number",
             "Cancelled",
-            "Net Issued"
+            "Net Issued",
+            "Gaps — to be explained",
+            "Missing numbers (cancelled or not in the register?)"
           ]
         }
       ]

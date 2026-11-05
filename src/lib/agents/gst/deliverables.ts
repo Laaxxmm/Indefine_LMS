@@ -47,11 +47,29 @@ export const GSTR1_COLUMNS = {
     c("origDate", "Original Invoice Date", "date"),
   ],
   HSN: [c("supply", "Supply Type"), c("hsn", "HSN"), c("description", "Description", "text", 30), c("uqc", "UQC"), c("qty", "Total Quantity"), c("rate", "Rate", "percent"), c("taxable", "Taxable Value", "inr"), ...TAX_COLS, c("total", "Total Value", "inr")],
-  Docs: [c("nature", "Nature of Document", "text", 30), c("from", "Sr. No. From"), c("to", "Sr. No. To"), c("total", "Total Number", "integer"), c("cancelled", "Cancelled", "integer"), c("net", "Net Issued", "integer")],
+  // Gaps in a series are never pre-filled as "Cancelled": they get their own column for staff to
+  // explain (cancelled → enter under Cancelled; otherwise find the missing invoice). Cancelled is
+  // filled only from an input that lists cancelled documents.
+  Docs: [
+    c("nature", "Nature of Document", "text", 30),
+    c("from", "Sr. No. From"),
+    c("to", "Sr. No. To"),
+    c("total", "Total Number", "integer"),
+    c("cancelled", "Cancelled", "integer"),
+    c("net", "Net Issued", "integer"),
+    c("gaps", "Gaps — to be explained", "integer"),
+    c("missing", "Missing numbers (cancelled or not in the register?)", "text", 40),
+  ],
 } as const;
 
 function docRateRows(d: SalesA, extra: (r: { rateBps: number; taxable: number; tax: TaxSplit }) => RowSpec): RowSpec[] {
   return byRate(d.lines).map((r) => ({ rate: rate(r.rateBps), taxable: rupees(r.taxable), ...taxCells(r.tax), ...extra(r) }));
+}
+
+/** Missing document numbers for the Docs sheet: the first 20, then a count of the rest. */
+export function missingList(missing: string[], max = 20): string {
+  if (missing.length <= max) return missing.join(", ");
+  return `${missing.slice(0, max).join(", ")} … (+${missing.length - max} more)`;
 }
 
 function gstr1Sheets(a: Analysis): SheetSpec[] {
@@ -90,7 +108,7 @@ function gstr1Sheets(a: Analysis): SheetSpec[] {
       totals: true,
       rows: g.hsn.map((r) => ({ supply: r.supply, hsn: r.hsn || "(missing)", description: r.description, uqc: r.uqc, qty: r.qty ? String(r.qty) : "", rate: rate(r.rateBps), taxable: rupees(r.taxable), ...taxCells(r.tax), total: rupees(r.taxable + taxTotal(r.tax)) })),
     },
-    { name: "Docs", columns: [...GSTR1_COLUMNS.Docs], rows: g.docs.map((r) => ({ nature: r.nature, from: r.from, to: r.to, total: r.total, cancelled: r.cancelled, net: r.net })) },
+    { name: "Docs", columns: [...GSTR1_COLUMNS.Docs], rows: g.docs.map((r) => ({ nature: r.nature, from: r.from, to: r.to, total: r.total, cancelled: r.cancelled, net: r.net, gaps: r.gaps, missing: missingList(r.missing) })) },
   ];
 }
 

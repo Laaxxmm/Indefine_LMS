@@ -85,7 +85,13 @@ export type PurchaseA = PurchaseDoc & {
 export type Rule37Row = { doc: PayableDoc; days: number; unpaid: number; reversal: TaxSplit };
 export type B2csRow = { pos: string; rateBps: number; taxable: number; tax: TaxSplit };
 export type HsnRow = { supply: "B2B" | "B2C"; hsn: string; description: string; uqc: string; qty: number; rateBps: number; taxable: number; tax: TaxSplit };
-export type DocsRow = { nature: string; prefix: string; from: string; to: string; total: number; cancelled: number; net: number; missing: string[] };
+/**
+ * GSTR-1 Table 13 row. `cancelled` comes only from an input that lists cancelled documents (none is
+ * read in v1.0.0, so it is 0) — a gap in the series is NOT presumed cancelled: it is counted in
+ * `gaps` (numbers in `missing`) for staff to explain (cancelled, or an invoice missing from the
+ * register). `net` = documents actually in the register; total = net + cancelled + gaps.
+ */
+export type DocsRow = { nature: string; prefix: string; from: string; to: string; total: number; cancelled: number; gaps: number; net: number; missing: string[] };
 
 export type Analysis = {
   clientState: string;
@@ -215,7 +221,7 @@ export function docsRows(sales: SalesDoc[]): DocsRow[] {
     for (const d of sales.filter((s) => s.docType === t)) {
       const s = seriesOf(d.number);
       if (s.num === null) {
-        out.push({ nature: NATURE[t], prefix: s.prefix, from: d.number.trim(), to: d.number.trim(), total: 1, cancelled: 0, net: 1, missing: [] });
+        out.push({ nature: NATURE[t], prefix: s.prefix, from: d.number.trim(), to: d.number.trim(), total: 1, cancelled: 0, gaps: 0, net: 1, missing: [] });
         continue;
       }
       const g = groups.get(s.prefix) ?? { nums: new Set<number>(), width: s.width, raw: [] };
@@ -232,7 +238,7 @@ export function docsRows(sales: SalesDoc[]): DocsRow[] {
       const missing: string[] = [];
       for (let n = min; n <= max && missing.length < 500; n++) if (!g.nums.has(n)) missing.push(fmt(n));
       const total = max - min + 1;
-      out.push({ nature: NATURE[t], prefix, from: fmt(min), to: fmt(max), total, cancelled: total - nums.length, net: nums.length, missing });
+      out.push({ nature: NATURE[t], prefix, from: fmt(min), to: fmt(max), total, cancelled: 0, gaps: total - nums.length, net: nums.length, missing });
     }
   }
   return out;
@@ -492,6 +498,7 @@ export function computeFigures(x: GstExtract): Record<string, number> {
     hsnRowCount: a.gstr1.hsn.length,
     docsIssuedCount: a.gstr1.docs.reduce((n, r) => n + r.total, 0),
     docsCancelledCount: a.gstr1.docs.reduce((n, r) => n + r.cancelled, 0),
+    docsGapCount: a.gstr1.docs.reduce((n, r) => n + r.gaps, 0),
     reconMatchedCount: count(a.recon, "matched"),
     reconValueDiffCount: count(a.recon, "value-diff"),
     reconMissingIn2bCount: count(a.recon, "missing-in-2b"),
