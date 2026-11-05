@@ -64,7 +64,8 @@ describe("golden path: mark filed → Turia close → DONE", () => {
     const doneEv = w.events.find((e) => e.toState === "DONE")!;
     expect(doneEv.actorId).toBe(GATE_ACTOR_REF);
     expect(parseGateEvidence(doneEv.note)?.turia).toMatchObject({ turiaRef: "TT-77", minutesLogged: 120, confirmedById: "u-priya" });
-    expect(w.audits.map((a) => a.action)).toEqual(["turia-close-confirmed", "close"]);
+    expect(w.audits.map((a) => a.action)).toEqual(["confirm-filed", "turia-close-confirmed", "close"]);
+    expect(w.audits[0]).toMatchObject({ actorId: "u-priya", entity: "JobTask", entityId: job.id, meta: { from: "APPROVED", to: "FILED_BY_HUMAN" } });
   });
 
   it("with the Turia ref and minutes given at filing, the checklist is issued straight away", async () => {

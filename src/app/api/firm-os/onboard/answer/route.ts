@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { onboardingService } from "@/lib/agents/onboarding/defaults";
 import { answerBodyZ, errorResponse, guard, parseBody } from "@/lib/agents/onboarding/http";
+import { recordAudit } from "@/lib/audit/record";
 
 export const maxDuration = 60;
 
@@ -13,7 +14,10 @@ export async function POST(req: Request) {
   if (!body.ok) return body.res;
   try {
     const { runId, answers, message } = body.data;
-    return NextResponse.json({ run: await onboardingService({ actorIsPartner: g.isPartner }).answer(runId, { answers, message }) });
+    const run = await onboardingService({ actorIsPartner: g.isPartner }).answer(runId, { answers, message });
+    // Which fields were answered, never the values (they can be client personal data, ADR-006).
+    await recordAudit({ actorId: g.user.id, action: "onboarding.answer", entity: "OnboardingRun", entityId: runId, meta: { fields: Object.keys(answers ?? {}), message: !!message } });
+    return NextResponse.json({ run });
   } catch (e) {
     return errorResponse(e);
   }

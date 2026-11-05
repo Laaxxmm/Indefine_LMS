@@ -6,6 +6,7 @@
 // `replayMistake` re-checks a promoted rule against the mistake's example (accuracy harness).
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
+import { logAudit } from "@/lib/audit/log";
 import {
   ChecklistPackSchema,
   MistakeRuleProposalSchema,
@@ -129,7 +130,7 @@ export async function decideMistake(
       if (decision === "reject") {
         const r = await tx.mistakeLog.updateMany({ where: { id, status: "PROPOSED" }, data: { status: "REJECTED", decidedById: by.userId, decidedAt: now } });
         if (r.count !== 1) return { ok: false, code: "CONFLICT", reason: "Decided by someone else meanwhile; reload" } as const;
-        await tx.auditEvent.create({ data: { actorId: by.userId, action: "reject", entity: "MistakeLog", entityId: id, meta: { agent: m.agent } } });
+        await logAudit(tx, { actorId: by.userId, action: "reject", entity: "MistakeLog", entityId: id, meta: { agent: m.agent } });
         return { ok: true, data: { status: "REJECTED" as const, promotedToVersion: null } };
       }
 
@@ -170,9 +171,7 @@ export async function decideMistake(
         data: { status: "APPROVED", decidedById: by.userId, decidedAt: now, promotedToVersion: next.version },
       });
       if (r.count !== 1) throw new Error("Decided by someone else meanwhile; reload");
-      await tx.auditEvent.create({
-        data: { actorId: by.userId, action: "approve", entity: "MistakeLog", entityId: id, meta: { agent: m.agent, ruleId: v.rule.id, promotedToVersion: next.version } },
-      });
+      await logAudit(tx, { actorId: by.userId, action: "approve", entity: "MistakeLog", entityId: id, meta: { agent: m.agent, ruleId: v.rule.id, promotedToVersion: next.version } });
       return { ok: true, data: { status: "APPROVED" as const, promotedToVersion: next.version } };
     });
   } catch (e) {

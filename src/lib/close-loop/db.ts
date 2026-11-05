@@ -4,6 +4,7 @@
 // remove a row, and nothing here writes JobTask.state except through transitionJobTask.
 import type { FirmService, JobTaskState, Prisma, TuriaSyncStatus } from "@prisma/client";
 import type { JobTaskDb, JobTaskTx } from "@/lib/agents/core/state-db";
+import { logAudit } from "@/lib/audit/log";
 
 // ------------------------------------------------------------------ selects
 
@@ -193,8 +194,9 @@ export function loadCloseSyncs(db: CloseLoopTx, jobTaskId: string): PromiseLike<
   return db.turiaSync.findMany({ where: { jobTaskId, operation: "closeTask" }, select: SYNC_SELECT, orderBy: { updatedAt: "desc" } });
 }
 
+/** One AuditEvent through src/lib/audit/log.ts (validated action/entity, capped meta). */
 export async function audit(db: CloseLoopTx, data: AuditEventData): Promise<void> {
-  await db.auditEvent.create({ data, select: { id: true } });
+  await logAudit(db, { ...data, meta: data.meta as Record<string, unknown> | undefined });
 }
 
 /** A plain JSON copy (Dates become ISO strings) for Json columns. */

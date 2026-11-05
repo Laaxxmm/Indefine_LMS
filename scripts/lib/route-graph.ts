@@ -100,7 +100,7 @@ export function createMemoryProgram(files: Record<string, string>): { program: t
 export function discoverFirmOsRoutes(paths: string[]): string[] {
   return paths
     .map(norm)
-    .filter((p) => isFirmOs(p) && /\/route\.(ts|tsx)$/.test(p))
+    .filter((p) => p.startsWith("src/app/") && isFirmOs(p) && /\/route\.(ts|tsx)$/.test(p))
     .sort();
 }
 
@@ -210,13 +210,32 @@ export class CallGraph {
     return [...new Set((this.symbolOf(callee)?.declarations ?? []).map((d) => this.rel(d.getSourceFile().fileName)))];
   }
 
-  /** Every call (and `new`) inside the function, nested callbacks included. */
+  /**
+   * Every call (and `new`) the function makes when it runs: its own body plus callbacks it passes
+   * to a call (`$transaction(async (tx) => …)`, `.map((x) => …)`) and IIFEs. Functions it merely
+   * defines — object-literal methods, nested `const f = () => …`, returned closures, classes — are
+   * separate nodes, reached only if something calls them (a factory that builds a repository
+   * object does not "write" by being called).
+   */
   callsOf(fn: Fn): CallSite[] {
     const cached = this.calls.get(fn.id);
     if (cached) return cached;
     const sf = fn.node.getSourceFile();
     const out: CallSite[] = [];
+    const runsInline = (f: ts.Node) => {
+      const p = f.parent;
+      if (!p) return false;
+      if (ts.isCallExpression(p) || ts.isNewExpression(p)) {
+        const args: readonly ts.Node[] = p.arguments ?? [];
+        if (args.includes(f)) return true;
+      }
+      // (async () => { … })()
+      let up: ts.Node = f;
+      while (up.parent && ts.isParenthesizedExpression(up.parent)) up = up.parent;
+      return !!up.parent && ts.isCallExpression(up.parent) && up.parent.expression === up;
+    };
     const visit = (n: ts.Node) => {
+      if (n !== fn.node.body && (ts.isClassLike(n) || (ts.isFunctionLike(n) && !runsInline(n)))) return;
       if ((ts.isCallExpression(n) || ts.isNewExpression(n)) && n.expression) {
         const callee = unwrap(n.expression);
         const text = callee.getText(sf).replace(/\s+/g, "");

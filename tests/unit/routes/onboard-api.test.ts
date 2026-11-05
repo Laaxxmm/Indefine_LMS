@@ -13,8 +13,14 @@ const svc = {
 };
 const factory = vi.fn((_opts?: unknown) => svc);
 
+// Route-level AuditEvents (src/lib/audit/record.ts) go through the app's Prisma client.
+const audits = vi.hoisted(() => [] as { data: Record<string, unknown> }[]);
+
 vi.mock("@/lib/auth", () => ({ auth: vi.fn(), signIn: vi.fn(), signOut: vi.fn(), handlers: {} }));
 vi.mock("@/lib/agents/onboarding/defaults", () => ({ onboardingService: (opts?: unknown) => factory(opts) }));
+vi.mock("@/lib/prisma", () => ({
+  prisma: { auditEvent: { create: async (a: { data: Record<string, unknown> }) => (audits.push(a), { id: `audit-${audits.length}` }) } },
+}));
 
 const { auth } = await import("@/lib/auth");
 const { OnboardingError } = await import("@/lib/agents/onboarding/service");
@@ -114,6 +120,26 @@ describe("/api/firm-os/onboard — happy path and errors", () => {
     }
     expect((await routes["turia-confirm"](req(VALID["turia-confirm"]))).status).toBe(200);
     expect(svc.turiaConfirm).toHaveBeenCalledWith("run-1", { syncId: "s-1", turiaRef: "TUR-1", minutes: 30 }, "u-partner");
+  });
+
+  it("start, answer, plan and resume each write an AuditEvent; answers are recorded by field name only (create and Turia confirm audit in the service)", async () => {
+    audits.length = 0;
+    await routes.start(req(VALID.start));
+    await routes.answer(req(VALID.answer));
+    await routes.plan(req(VALID.plan));
+    await routes.resume(req(VALID.resume));
+    await routes.create(req(VALID.create));
+    expect(audits.map((a) => a.data.action)).toEqual(["onboarding.start", "onboarding.answer", "onboarding.plan", "onboarding.resume"]);
+    for (const a of audits) expect(a.data).toMatchObject({ actorId: "u-partner", entity: "OnboardingRun", entityId: "run-1" });
+    expect(audits[1].data.meta).toEqual({ fields: ["pan", "services"], message: false });
+    expect(JSON.stringify(audits)).not.toContain("AAACA1234F"); // the PAN itself never reaches the audit trail
+  });
+
+  it("writes no AuditEvent when the service call fails", async () => {
+    audits.length = 0;
+    svc.start.mockRejectedValueOnce(new OnboardingError("invalid", "nope"));
+    expect((await routes.start(req(VALID.start))).status).toBe(400);
+    expect(audits).toEqual([]);
   });
 
   it("managers and admins may onboard too (not as partner)", async () => {

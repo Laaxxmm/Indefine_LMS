@@ -18,6 +18,7 @@ describe("discovery", () => {
         "src/app/api/clients/route.ts",
         "src/app/api/firm-os/jobs/[id]/state/helpers.ts",
         "src\\app\\api\\firm-os\\onboard\\start\\route.ts",
+        "src/lib/audit/route.ts", // a lib file named route.ts is not a route handler
       ]),
     ).toEqual(["src/app/api/cron/firm-os/retention/route.ts", "src/app/api/firm-os/comms/drafts/route.ts", "src/app/api/firm-os/jobs/[id]/state/route.ts", "src/app/api/firm-os/onboard/start/route.ts"]);
     expect(routePath("src/app/api/firm-os/jobs/[id]/state/route.ts")).toBe("/api/firm-os/jobs/[id]/state");

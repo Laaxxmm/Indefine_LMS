@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { onboardingService } from "@/lib/agents/onboarding/defaults";
 import { errorResponse, guard, parseBody, runBodyZ } from "@/lib/agents/onboarding/http";
+import { recordAudit } from "@/lib/audit/record";
 
 export const maxDuration = 300; // SharePoint site creation polls until the site is ready
 
@@ -12,7 +13,9 @@ export async function POST(req: Request) {
   const body = await parseBody(req, runBodyZ);
   if (!body.ok) return body.res;
   try {
-    return NextResponse.json({ run: await onboardingService({ actorIsPartner: g.isPartner }).resume(body.data.runId, g.user.id) });
+    const run = await onboardingService({ actorIsPartner: g.isPartner }).resume(body.data.runId, g.user.id);
+    await recordAudit({ actorId: g.user.id, action: "onboarding.resume", entity: "OnboardingRun", entityId: body.data.runId, meta: { status: run.status } });
+    return NextResponse.json({ run });
   } catch (e) {
     return errorResponse(e);
   }
