@@ -9,20 +9,19 @@
 //   comms drafts                      the draft's creator, the assignee of its job, and managers,
 //                                     partners and admins (canSeeAllRuns)
 //
-// Inactive (deactivated) people find nothing.
+// Inactive (deactivated) people find nothing. Who may search at all is src/lib/rbac/policy.ts
+// canSearch (re-exported here, so the module's public API is unchanged).
 import type { Prisma } from "@prisma/client";
-import { isActive, type SessionUser } from "@/lib/access";
+import type { SessionUser } from "@/lib/access";
 import { canSeeAllRuns, jobScopeWhere, runScopeWhere } from "@/lib/agents/access";
 import { canViewClients } from "@/lib/clients/core";
-import { canOnboard } from "@/lib/rbac/policy";
+import { canOnboard, canSearch } from "@/lib/rbac/policy";
 import type { SearchDb } from "./db";
 
-export { jobScopeWhere, runScopeWhere };
+export { canSearch, jobScopeWhere, runScopeWhere };
 
 export const SIGNED_OUT_MESSAGE = "Sign in to search.";
 export const INACTIVE_MESSAGE = "Your account is not active, so search is not available. Ask an admin to reactivate it.";
-
-export const canSearch = (user: SessionUser): boolean => isActive(user);
 export const canFindClients = (user: SessionUser): boolean => canSearch(user) && canViewClients(user);
 export const canFindFirmWork = (user: SessionUser): boolean => canSearch(user);
 export const canFindOnboarding = (user: SessionUser): boolean => canSearch(user) && canOnboard(user);

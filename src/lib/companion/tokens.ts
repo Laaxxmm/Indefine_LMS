@@ -14,7 +14,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 import { formatDate, formatDateTimeIst } from "@/lib/agents/core/format";
 import { DAY_MS } from "@/lib/ist";
-import { hasCompanionAccess, type CompanionAccessDb, type CompanionUser } from "./access";
+import { hasCompanionAccess, mayRevokePairing, type CompanionAccessDb, type CompanionUser } from "./access";
 import { COMPANION_LABEL_MAX, COMPANION_MAX_ACTIVE_TOKENS, COMPANION_TOKEN_BYTES, COMPANION_TOKEN_PREFIX, COMPANION_TOKEN_TTL_DAYS } from "./config";
 import { CompanionError } from "./errors";
 import { MSG } from "./messages";
@@ -153,8 +153,9 @@ export async function createPairing(
  */
 export async function revokePairing(db: CompanionTokenDb, user: CompanionUser, pairingId: string, now: Date): Promise<{ revoked: boolean }> {
   return db.$transaction(async (tx) => {
-    const row = await tx.companionToken.findFirst({ where: { id: pairingId, userId: user.id }, select: { id: true, label: true, revokedAt: true } });
-    if (!row) throw new CompanionError("not-found", MSG.pairingNotFound);
+    const row = await tx.companionToken.findFirst({ where: { id: pairingId, userId: user.id }, select: { id: true, userId: true, label: true, revokedAt: true } });
+    // Someone else's pairing answers "not found", the same as one that does not exist.
+    if (!row || !mayRevokePairing(user, row)) throw new CompanionError("not-found", MSG.pairingNotFound);
     if (row.revokedAt) return { revoked: false };
     await tx.companionToken.update({ where: { id: row.id }, data: { revokedAt: now } });
     await tx.auditEvent.create({ data: { actorId: user.id, action: "revoke", entity: "CompanionToken", entityId: row.id, meta: { label: row.label } } });

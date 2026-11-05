@@ -9,14 +9,29 @@ import {
   canActOnJob,
   canApproveSopRuleChange,
   canChangeThresholds,
+  canCorrect,
+  canDecideErasure,
   canDecideMistakes,
+  canDismissCoachEvent,
+  canHandlePrivacyRequests,
+  canLiftRestriction,
+  canManageBreaches,
+  canManageOwnCoachPrefs,
+  canManageWorkspace,
   canOnboard,
+  canPairCompanion,
   canRetractFiling,
+  canRevealClientPii,
+  canRevokePairing,
+  canSearch,
   canSeeAllRuns,
   canSeeMistakeLog,
   canSetDone,
   canSpotCheck,
+  canUseCoach,
+  canViewCoachEvent,
   canViewCommsDraft,
+  canViewCorrectionHistory,
   canViewJob,
   commsDraftScopeWhere,
   firmRole,
@@ -191,6 +206,69 @@ describe("RBAC denial matrix: filings and DONE", () => {
     // A forged token is refused too.
     const forged = { jobTaskId: JOB.id, mintedAt: NOW, expiresAt: new Date(NOW.getTime() + 60_000), evidence: {} };
     expect(canTransition("CLOSING", "DONE", { ...ctx("partner")!, gateToken: forged as never })).toMatchObject({ ok: false, code: "GATE_REQUIRED" });
+  });
+});
+
+describe("comms drafts without a job (client-level)", () => {
+  it("open only to the author, the client's primary handler, and managers, partners and admins — not to staff on other jobs of the client", () => {
+    const clientLevel = { createdById: "u-reviewer", job: null, client: { primaryHandlerId: "u-outsider" } };
+    matrix((x) => canViewCommsDraft(x, clientLevel), ["reviewer", "outsider", "manager", "seniorManager", "partner", "adminPartner", "admin"]);
+    const noHandler = { createdById: "u-reviewer", job: null, client: { primaryHandlerId: null } };
+    matrix((x) => canViewCommsDraft(x, noHandler), ["reviewer", "manager", "seniorManager", "partner", "adminPartner", "admin"]);
+    // A draft about a job still follows the job, whoever handles the client.
+    const jobDraft = { createdById: "u-manager", job: { assigneeId: "u-assignee", reviewerId: "u-reviewer" }, client: { primaryHandlerId: "u-outsider" } };
+    matrix((x) => canViewCommsDraft(x, jobDraft), ["assignee", "reviewer", "manager", "seniorManager", "partner", "adminPartner", "admin"]);
+  });
+
+  it("the Prisma scope matches client-level drafts only through clients the person handles", () => {
+    expect(commsDraftScopeWhere(P.outsider, ["job-9"], ["fc-1"])).toEqual({
+      OR: [{ createdById: "u-outsider" }, { jobTaskId: { in: ["job-9"] } }, { jobTaskId: null, firmClientId: { in: ["fc-1"] } }],
+    });
+    expect(commsDraftScopeWhere(P.outsider, [], ["fc-1"])).toEqual({ OR: [{ createdById: "u-outsider" }, { jobTaskId: null, firmClientId: { in: ["fc-1"] } }] });
+    expect(commsDraftScopeWhere(P.manager, [], ["fc-1"])).toEqual({});
+  });
+});
+
+describe("Phase 9-17 policies (one place for who may do what)", () => {
+  it("Daily Coach: every active person, for their own data only", () => {
+    matrix(canUseCoach, ["assignee", "reviewer", "outsider", "manager", "seniorManager", "partner", "adminPartner", "admin"]);
+    matrix((x) => canManageOwnCoachPrefs(x, "u-assignee"), ["assignee"]); // not the manager, partner or admin
+    expect(canManageOwnCoachPrefs(P.inactiveAssignee, "u-assignee")).toBe(false);
+    expect(canDismissCoachEvent({ id: "u-assignee" }, { userId: "u-assignee" })).toBe(true);
+    expect(canDismissCoachEvent({ id: "u-partner" }, { userId: "u-assignee" })).toBe(false);
+    expect(canDismissCoachEvent(null, { userId: "u-assignee" })).toBe(false);
+    expect(canViewCoachEvent({ id: "u-manager" }, { userId: "u-assignee", kind: "summary" }, { managerId: "u-manager" })).toBe(true);
+    expect(canViewCoachEvent({ id: "u-manager" }, { userId: "u-assignee", kind: "break" }, { managerId: "u-manager" })).toBe(false);
+    expect(canViewCoachEvent({ id: "u-partner" }, { userId: "u-assignee", kind: "summary" }, { managerId: "u-manager" })).toBe(false);
+  });
+
+  it("Companion: admins and partners, or anyone switched on; revoke by the owner only", () => {
+    matrix((x) => canPairCompanion(x, false), ["partner", "adminPartner", "admin"]);
+    matrix((x) => canPairCompanion(x, true), ["assignee", "reviewer", "outsider", "manager", "seniorManager", "partner", "adminPartner", "admin"]);
+    matrix((x) => canRevokePairing(x, { userId: "u-assignee" }), ["assignee"]);
+  });
+
+  it("corrections: by the field's rule; history follows who may see the record", () => {
+    matrix((x) => canCorrect(x, "management", {}), ["partner", "adminPartner", "admin"]);
+    matrix((x) => canCorrect(x, "job-manager", { assigneeManagerId: "u-manager" }), ["manager", "partner", "adminPartner"]);
+    matrix((x) => canCorrect(x, "creator", { createdById: "u-reviewer" }), ["reviewer"]);
+    matrix((x) => canViewCorrectionHistory(x, "Client", {}), ["assignee", "reviewer", "outsider", "manager", "seniorManager", "partner", "adminPartner", "admin"]);
+    matrix((x) => canViewCorrectionHistory(x, "CommsDraft", { createdById: "u-reviewer" }), ["reviewer", "partner", "adminPartner", "admin"]);
+    matrix((x) => canViewCorrectionHistory(x, "JobTask", { assigneeId: "u-assignee", reviewerId: "u-reviewer" }), ["assignee", "reviewer", "manager", "seniorManager", "partner", "adminPartner", "admin"]);
+  });
+
+  it("privacy, erasure and breaches: active admins and partners; lifting a restriction: partner only", () => {
+    matrix(canHandlePrivacyRequests, ["partner", "adminPartner", "admin"]);
+    matrix(canDecideErasure, ["partner", "adminPartner", "admin"]);
+    matrix(canManageBreaches, ["partner", "adminPartner", "admin"]);
+    matrix(canLiftRestriction, ["partner", "adminPartner"]);
+  });
+
+  it("search: every active person; workspace settings: active admins; full client identifiers: management", () => {
+    matrix(canSearch, ["assignee", "reviewer", "outsider", "manager", "seniorManager", "partner", "adminPartner", "admin"]);
+    matrix(canManageWorkspace, ["adminPartner", "admin"]);
+    expect(canManageWorkspace(u({ role: "ADMIN", active: false }))).toBe(false);
+    matrix(canRevealClientPii, ["partner", "adminPartner", "admin"]);
   });
 });
 

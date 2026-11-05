@@ -3,8 +3,8 @@
 // after values and the plain-English change list the admin confirmed. Nothing is ever removed:
 // "reset to role default" saves nulls (follow the role) on the person's row.
 import { Prisma, type PrismaClient } from "@prisma/client";
-import { isAdmin, type SessionUser } from "@/lib/access";
-import { firmRole, type FirmRole } from "@/lib/rbac/policy";
+import type { SessionUser } from "@/lib/access";
+import { canManageWorkspace, firmRole, type FirmRole } from "@/lib/rbac/policy";
 import { formatDateTimeIst } from "@/lib/agents/core/format";
 import { canAccessModule } from "./access";
 import { followsRole, roleDefaultChanges, userSettingChanges, type RoleDefaultInput, type UserSettingInput } from "./changes";
@@ -176,7 +176,7 @@ export function personAccessNotes(p: Pick<PersonDetail, "allowed" | "name" | "ac
 const json = (v: unknown) => v as Prisma.InputJsonValue;
 
 export async function saveRoleDefault(actor: SessionUser, role: string, input: RoleDefaultInput, db: AdminWorkspaceDb): Promise<AdminResult<{ changes: string[] }>> {
-  if (!actor || !isAdmin(actor)) return fail(403, ADMIN_ONLY);
+  if (!actor || !canManageWorkspace(actor)) return fail(403, ADMIN_ONLY);
   if (!isFirmRole(role)) return fail(404, "That role does not exist. Choose Staff, Manager, Partner or Admin.");
   const after: RoleDefaultInput = { modules: parseModuleList(input.modules) ?? [], focusMode: input.focusMode };
   if (ALWAYS_ON[role].some((k) => !after.modules.includes(k))) return fail(400, ADMIN_KEEPS_ADMIN);
@@ -198,7 +198,7 @@ export async function saveRoleDefault(actor: SessionUser, role: string, input: R
 }
 
 export async function saveUserSetting(actor: SessionUser, userId: string, input: UserSettingInput, db: AdminWorkspaceDb): Promise<AdminResult<{ changes: string[] }>> {
-  if (!actor || !isAdmin(actor)) return fail(403, ADMIN_ONLY);
+  if (!actor || !canManageWorkspace(actor)) return fail(403, ADMIN_ONLY);
   const u = await db.user.findUnique({ where: { id: userId }, select: USER_SELECT });
   if (!u) return fail(404, "That person was not found. Search again and pick them from the list.");
   const role = firmRole(asSessionUser(u));
