@@ -1,6 +1,6 @@
 # PROGRESS — Indefine Firm OS
-Current phase: 5–8 | Branch: firm-os/phase-0-inventory | Last green: 2026-11-05 22:05 IST
-Tests: unit+integration 2236/2236 (103 files; Firm OS coverage 99.7% lines / 97.4% branches) · e2e 4/4 (smoke, local, no DB) · accuracy (recorded mode, hardened harness): echo pass | GST pass (23) | ROC pass (22) | TAX pass (22) | BOOKS pass (15) | AUDIT pass (15) — independent audit round 2 done (fixes in progress)
+Current phase: 5–8 | Branch: firm-os/phase-0-inventory | Last green: 2026-11-05 22:40 IST
+Tests: unit+integration 2252/2252 ×3 runs (103 files; Firm OS coverage 99.7% lines / 97.4% branches) · e2e 4/4 (smoke, local, no DB) · accuracy (recorded mode, hardened harness): echo pass | GST pass (23) | ROC pass (22) | TAX pass (22) | BOOKS pass (15) | AUDIT pass (15) — independent audit round 2 done (fixes in progress)
 Model mode: CLAUDE_ONLY + LOCAL_STUB(fail-closed) | Turia bridge: MANUAL (ADR-003)
 
 ## Phase checklist (✅ only when QA gate green)
@@ -80,7 +80,7 @@ UI audit (owner request: every button, navigation, flow, breadcrumb) — merged 
 - [x] scripts/verify-ui-links.ts (`npm run verify:ui-links`, chained into verify:firm-os): route map from src/app incl. methods; every href/redirect/router.push and every call()/fetch to /api checked; 439 targets; 0 errors before and after (no broken links existed — all defects were semantic)
 - [x] 27 defects fixed: nav gating = page guard (Agents, mistake log), current-section highlight (NavLink), one label for nav/title/back links, admin sidebar "Firm OS" group + phone menu (was missing below lg), confirm steps with consequence text (Approve pack, mistake decisions, Create, Mark filed), no double-run window, state-specific idle copy, exact state names on chips, DD MMM YYYY without "Sept", AA contrast, focus rings, phone overflow (page was 756px at 390px), agent titles instead of keys, empty states per role
 - [x] Flow gap built: "Waiting for you" on /agents — each person's actionable jobs with Run agent / Open pack / Review pack
-- [ ] Follow-ups (agent running): re-run with a note from AGENT_DONE; retract filing (manager/partner); "Close in Turia" → "Record Turia close"; flagged Firm OS jobs section on /clients/[id]; dashboard Clients link hidden from inactive users
+- [x] Follow-ups: "Re-run with a note" from AGENT_DONE (new route …/runs/[id]/rerun); "Retract filing" for managers/partners with note + confirm (ack ref cleared, kept in history); "Close in Turia" → "Record Turia close"; flagged read-only "Firm OS jobs" card on /clients/[id] (no query with the flag off); dashboard Clients link gated with canViewClients
 - Visual check: SSR pages + compiled Tailwind in the browser pane at 390/1280/1440; no page-level overflow after fixes. Not verifiable here: real sign-in, client-side interactions, Lighthouse.
 
 ## Feature test registry   (feature → test file → status)
@@ -250,3 +250,4 @@ UI audit (owner request: every button, navigation, flow, breadcrumb) — merged 
 - 21:55 · 5–7 · Independent audit round 2 (fable): all six pass, 31 fixtures hand-recomputed with no mismatch; H1 + M1–M6 + coverage gap → fix agent started, harness items sent to guardrails agent · –
 - 22:05 · ui · Merged UI audit (27 fixes, ui-links verifier, Waiting-for-you list); resolved agents.test.ts conflict; two tests updated for registered agents · 2236/2236 · all six accuracy gates pass · build green
 - 22:06 · ui · Follow-up agent started: re-run, retract filing, Record Turia close wording, client-page jobs, dashboard link · –
+- 22:40 · ui · Merged UI follow-ups (re-run, retract filing, Record Turia close, client-page jobs, dashboard link); fixed one timeout flake (cold-import test → 30 s) · 2252/2252 ×3 · build green
