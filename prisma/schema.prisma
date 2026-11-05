@@ -1440,14 +1440,15 @@ model StatutorySource {
 // prompts. AuditEvent records every create/approve/close/export/escalation (Phase 11).
 
 model FirmClient {
-  id             String   @id @default(cuid())
-  lmsClientId    String   @unique
-  clientCode     String   @unique // uppercase A–Z0–9, 3–10 chars (docs/folder-contract.md)
-  turiaClientRef String?
-  clSiteUrl      String?
-  createdById    String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                String   @id @default(cuid())
+  lmsClientId       String   @unique
+  clientCode        String   @unique // uppercase A–Z0–9, 3–10 chars (docs/folder-contract.md)
+  turiaClientRef    String?
+  clSiteUrl         String?
+  preferredLanguage String   @default("en") // en | kn | ta | hi — comms drafts (Phase 10)
+  createdById       String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   client      Client       @relation(fields: [lmsClientId], references: [id])
   engagements Engagement[]
@@ -1735,19 +1736,22 @@ enum TuriaSyncStatus {
 }
 
 model TuriaSync {
-  id            String          @id @default(cuid())
-  jobTaskId     String?
-  firmClientId  String?
-  operation     String // createClient | addService | createTask | closeTask
-  mode          String // API | MANUAL | UI
-  status        TuriaSyncStatus @default(PENDING)
-  turiaRef      String?
-  minutesLogged Int?
-  evidence      Json?
-  confirmedById String?
-  spotChecked   Boolean         @default(false)
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  id              String          @id @default(cuid())
+  jobTaskId       String?
+  firmClientId    String?
+  operation       String // createClient | addService | createTask | closeTask
+  mode            String // API | MANUAL | UI
+  status          TuriaSyncStatus @default(PENDING)
+  turiaRef        String?
+  minutesLogged   Int?
+  evidence        Json?
+  confirmedById   String?
+  spotChecked     Boolean         @default(false)
+  spotCheckedById String?
+  spotCheckedAt   DateTime?
+  spotCheckNote   String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
   jobTask JobTask? @relation(fields: [jobTaskId], references: [id])
 
@@ -1794,8 +1798,40 @@ model CoachEvent {
   jobTaskId   String?
   payload     Json?
   dismissedAt DateTime?
+  // Idempotency: e.g. "reminder:<jobTaskId>:<userId>:<istDay>". Concurrent cron runs cannot double-nudge.
+  dedupeKey   String?   @unique
   createdAt   DateTime  @default(now())
 
   @@index([userId, createdAt])
   @@index([kind, createdAt])
+}
+
+// -------------------- Firm OS: coach + hardening --------------------
+// ActivityHeartbeat feeds the break nudge only (ADR-006): kept 7 days, aggregate only, never
+// reported to managers. CoachPreference holds each person's own opt-outs. RateLimitBucket backs
+// the Phase 11 rate limits on /onboard and agent runs.
+
+model ActivityHeartbeat {
+  id     String   @id @default(cuid())
+  userId String
+  at     DateTime @default(now())
+  source String // lms | greythr
+
+  @@index([userId, at])
+  @@index([at])
+}
+
+model CoachPreference {
+  userId       String    @id
+  breakNudges  Boolean   @default(true)
+  snoozeUntil  DateTime?
+  morningBoard Boolean   @default(true)
+  updatedAt    DateTime  @updatedAt
+}
+
+model RateLimitBucket {
+  key         String   @id // "<scope>:<userId>"
+  windowStart DateTime
+  count       Int      @default(0)
+  updatedAt   DateTime @updatedAt
 }

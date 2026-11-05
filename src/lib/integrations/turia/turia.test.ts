@@ -271,6 +271,7 @@ describe("prismaTuriaSyncRepo", () => {
   const row = (o: Partial<TuriaSync> = {}): TuriaSync => ({
     id: "s1", jobTaskId: null, firmClientId: "fc-1", operation: "createClient", mode: "MANUAL", status: "CHECKLIST_ISSUED",
     turiaRef: null, minutesLogged: null, evidence: { key: "createClient:fc-1" }, confirmedById: null, spotChecked: false,
+    spotCheckedById: null, spotCheckedAt: null, spotCheckNote: null,
     createdAt: new Date(0), updatedAt: new Date(0), ...o,
   });
 
