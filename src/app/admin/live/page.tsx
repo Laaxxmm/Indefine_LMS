@@ -437,6 +437,12 @@ export default async function AdminLivePage({
           Schedule a Teams meeting from here. Attendees get the invite by email,
           and the recording lands in a folder named after the course.
         </p>
+        <p className="mt-2 text-sm">
+          <Link href="/admin/live/parked" className="font-semibold text-brand-600 hover:underline">
+            Sessions parked for review
+          </Link>
+          <span className="text-ink-mute"> · transcripts with client details the AI could not hide</span>
+        </p>
       </div>
 
       {scheduled && (
