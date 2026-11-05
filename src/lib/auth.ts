@@ -25,11 +25,12 @@ const tenantPinned = !!issuer && !/\/(common|organizations|consumers)\//i.test(i
 const baseAdapter = PrismaAdapter(prisma as unknown as PrismaClient);
 const adapter: Adapter = {
   ...baseAdapter,
+  // In production without GRAPH_TOKEN_KEY sealGraphToken refuses to store a token (null → no column value).
   linkAccount: (account: AdapterAccount) =>
     baseAdapter.linkAccount!({
       ...account,
-      access_token: sealGraphToken(account.access_token),
-      refresh_token: sealGraphToken(account.refresh_token),
+      access_token: sealGraphToken(account.access_token) ?? undefined,
+      refresh_token: sealGraphToken(account.refresh_token) ?? undefined,
     }),
   // A deactivated user's live session resolves to no session at all, so every auth()
   // caller (pages, server actions, routes) treats them as signed out. The org sync also

@@ -16,28 +16,56 @@ import { keyFromEnv, open, seal } from "@/lib/secret-box";
 const GRAPH = "https://graph.microsoft.com/v1.0";
 
 // Delegated scope tiers live in ./graph-scopes.ts (pure, asserted). Stored tokens are
-// sealed with GRAPH_TOKEN_KEY (src/lib/secret-box.ts); without the key they are stored
-// as-is and a warning is logged once per process.
+// sealed with GRAPH_TOKEN_KEY (src/lib/secret-box.ts). In production the key is required
+// (security audit #16): without it no token is stored (null is written instead) and none
+// is read, and one plain admin message is logged — sign-in still works, features that act
+// as the person in Microsoft 365 are off until the key is set. With the key, a stored token
+// must be sealed: a plaintext row is refused (see secret-box.ts, LEGACY_PLAINTEXT_SECRETS).
+// Outside production a missing key still stores plaintext, with a warning, for local dev.
 export { ELEVATED_SCOPES, LEAD_SCOPES, SIGNIN_SCOPES } from "@/lib/graph-scopes";
 
 const TOKEN_KEY_ENV = "GRAPH_TOKEN_KEY";
+const GRAPH_TOKEN_LABEL = "Microsoft Graph token";
+export const GRAPH_TOKEN_KEY_MISSING_MESSAGE =
+  "GRAPH_TOKEN_KEY is not set, so Microsoft 365 sign-in tokens are not being saved. Ask the admin to set GRAPH_TOKEN_KEY on the server (a 64-character key from `openssl rand -hex 32`) and redeploy; until then, features that work in Microsoft 365 as you (calendar, Outlook drafts, connected files) are off. Sign-in itself still works.";
+const isProduction = () => process.env.NODE_ENV === "production";
 let warnedNoKey = false;
-/** Seal a token for storage. Null/undefined pass through. */
-export function sealGraphToken<T extends string | null | undefined>(value: T): T {
+
+/** Whether stored delegated tokens can be used, and the admin message when not (for an admin page). */
+export function graphTokenStorageStatus(): { ok: boolean; message: string | null } {
+  const ok = !!keyFromEnv(TOKEN_KEY_ENV) || !isProduction();
+  return { ok, message: ok ? null : GRAPH_TOKEN_KEY_MISSING_MESSAGE };
+}
+
+/**
+ * Seal a token for storage. Null/undefined pass through. In production without GRAPH_TOKEN_KEY
+ * the token is NOT stored: null comes back (so an update clears any old value) and the admin
+ * message is logged once.
+ */
+export function sealGraphToken(value: string | null | undefined): string | null | undefined {
   if (value == null) return value;
   const key = keyFromEnv(TOKEN_KEY_ENV);
-  if (!key) {
+  if (key) return seal(value, key);
+  if (isProduction()) {
     if (!warnedNoKey) {
       warnedNoKey = true;
-      console.error(`${TOKEN_KEY_ENV} is not set: Microsoft Graph tokens are being stored unencrypted. Set it (openssl rand -hex 32).`);
+      console.error(`[graph] ${GRAPH_TOKEN_KEY_MISSING_MESSAGE}`);
     }
-    return value;
+    return null;
   }
-  return seal(value, key) as T;
+  if (!warnedNoKey) {
+    warnedNoKey = true;
+    console.error(`${TOKEN_KEY_ENV} is not set: Microsoft Graph tokens are being stored unencrypted (allowed outside production only). Set it (openssl rand -hex 32).`);
+  }
+  return value;
 }
-/** Read a stored token. Legacy plaintext passes through; a sealed value needs the key. */
+
+/** Read a stored token. Sealed values need the key; plaintext is refused when a key is set, and always in production. */
 function openGraphToken(value: string | null): string | null {
-  return value == null ? null : open(value, keyFromEnv(TOKEN_KEY_ENV));
+  if (value == null) return null;
+  const key = keyFromEnv(TOKEN_KEY_ENV);
+  if (!key && isProduction()) throw new Error(`${TOKEN_KEY_ENV} is not set; stored Microsoft 365 tokens are not used in production`);
+  return open(value, key, GRAPH_TOKEN_LABEL);
 }
 
 let cachedAppToken: { token: string; exp: number } | null = null;

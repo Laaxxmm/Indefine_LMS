@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { isSealed, keyFromEnv, open, seal } from "@/lib/secret-box";
+import { PlaintextSecretError, isSealed, keyFromEnv, open, seal } from "@/lib/secret-box";
 
 // Turia Practice Management client — calls Turia's internal API with the firm's
 // session cookie (captured from a logged-in Turia tab, stored in NeoTuriaSession).
@@ -19,14 +19,23 @@ export class TuriaSessionError extends Error {}
 
 // The cookie is a live bearer credential for the firm's practice-management system,
 // so it is encrypted at rest with NEO_TURIA_COOKIE_KEY (see src/lib/secret-box.ts).
-// A row written before the key existed is plaintext and still readable; the next
-// push from the extension (every 5 minutes) rewrites it encrypted.
+// Only a sealed row is used (security audit #15): a plaintext row — written before the
+// key existed, or swapped in by anyone with database write access — is refused unless
+// LEGACY_PLAINTEXT_SECRETS=true; the next push from the extension (every 5 minutes)
+// rewrites it encrypted. Without the key nothing is stored and nothing is read.
 const COOKIE_KEY_ENV = "NEO_TURIA_COOKIE_KEY";
 
 export async function getTuriaCookie(): Promise<string | null> {
   const row = await prisma.neoTuriaSession.findUnique({ where: { id: 1 } });
   if (!row?.cookie) return null;
-  return open(row.cookie, keyFromEnv(COOKIE_KEY_ENV));
+  const key = keyFromEnv(COOKIE_KEY_ENV);
+  if (!key) throw new TuriaSessionError(`${COOKIE_KEY_ENV} is not set on the server, so the stored Turia session is not used. Ask the admin to set it, then push a fresh cookie from the extension.`);
+  try {
+    return open(row.cookie, key, "Turia cookie");
+  } catch (e) {
+    if (e instanceof PlaintextSecretError) throw new TuriaSessionError("The stored Turia session is not encrypted, so it was not used. Push a fresh cookie from the extension (it is encrypted on arrival).");
+    throw e;
+  }
 }
 
 export async function storeTuriaCookie(cookie: string, byId?: string, byName?: string): Promise<void> {
