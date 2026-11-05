@@ -1,0 +1,44 @@
+{
+  "id": "m-debtor-credit-balances",
+  "pattern": "Reviewer: customer advances shown as credit balances inside Sundry Debtors were not called out; they must be regrouped as other current liabilities.",
+  "ruleProposal": {
+    "id": "audit.m-debtor-credit-balances",
+    "title": "Debtors with credit balances listed for regrouping",
+    "severity": "warn",
+    "kind": "deterministic",
+    "check": "audit.balance-sign",
+    "evidence": "debtor ledger, group and TB row",
+    "params": {
+      "groupPatterns": [
+        "sundry debtors",
+        "trade receivables"
+      ],
+      "expect": "dr",
+      "verify": "Debtor groups expected to carry debit balances; partner to confirm groups."
+    }
+  },
+  "example": {
+    "runId": "audit-run-0003",
+    "extracted": {
+      "tb": {
+        "file": "trial-balance.csv",
+        "rows": [
+          {
+            "row": 5,
+            "ledger": "Kappa Distributors",
+            "group": "Sundry Debtors",
+            "debitPaise": 0,
+            "creditPaise": 4500000
+          },
+          {
+            "row": 6,
+            "ledger": "Capital",
+            "group": "Capital Account",
+            "debitPaise": 4500000,
+            "creditPaise": 0
+          }
+        ]
+      }
+    }
+  }
+}

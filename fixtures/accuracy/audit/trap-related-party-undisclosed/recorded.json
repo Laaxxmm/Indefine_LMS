@@ -1,0 +1,10 @@
+{
+  "audit.check:audit.related-party-disclosure": {
+    "status": "fail",
+    "message": "Ledger for a loan from a director is not covered by the related-party note.",
+    "evidence": {
+      "quote": "Loan from Director - Mr R Kumar",
+      "location": "trial-balance.csv row 7"
+    }
+  }
+}

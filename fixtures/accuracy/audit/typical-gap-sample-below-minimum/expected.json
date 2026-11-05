@@ -1,0 +1,162 @@
+{
+  "description": "Typical gap: the sampling plan sets 20 items for sales, below the SOP minimum of 25 for a 40-invoice population.",
+  "category": "typical-gap",
+  "job": {
+    "fy": "2025-26",
+    "period": "Annual",
+    "title": "Statutory audit FY 2025-26"
+  },
+  "flags": [
+    {
+      "ruleId": "audit.sample-below-minimum",
+      "severity": "warn"
+    }
+  ],
+  "figures": {
+    "tbDebitPaise": 1860000000,
+    "tbCreditPaise": 1860000000,
+    "tbDifferencePaise": 0,
+    "ledgerCount": 19,
+    "priorTbDebitPaise": 1646000000,
+    "priorTbCreditPaise": 1646000000,
+    "leadScheduleCount": 13,
+    "unmappedLedgerCount": 0,
+    "revenuePaise": 1200000000,
+    "materialityPaise": 12000000,
+    "performanceMaterialityPaise": 9000000,
+    "caroApplicable": 0,
+    "caroClausesApplicable": 0,
+    "materialVarianceCount": 6,
+    "unexplainedVarianceCount": 0,
+    "samplePopulationCount": 2,
+    "sampleItemsSelected": 45,
+    "parseIssueCount": 0,
+    "sample.sales.populationPaise": 1200000000,
+    "sample.sales.plannedSize": 20,
+    "sample.sales.intervalPaise": 60000000,
+    "sample.sales.selected": 20,
+    "sample.sales.selectedPaise": 600000000,
+    "sample.expenses.populationPaise": 79500000,
+    "sample.expenses.plannedSize": 25,
+    "sample.expenses.selected": 25
+  },
+  "deliverables": [
+    {
+      "name": "Audit working papers",
+      "sheets": [
+        {
+          "name": "WP index",
+          "columns": [
+            "Ref",
+            "Section",
+            "SA reference",
+            "Description",
+            "Status"
+          ]
+        },
+        {
+          "name": "Materiality",
+          "columns": [
+            "Basis",
+            "Amount",
+            "Note"
+          ]
+        },
+        {
+          "name": "Lead schedules",
+          "columns": [
+            "WP ref",
+            "Area",
+            "Current year",
+            "Prior year",
+            "Variance",
+            "Variance %",
+            "Explanation"
+          ]
+        },
+        {
+          "name": "Lead detail",
+          "columns": [
+            "WP ref",
+            "Ledger",
+            "Group",
+            "Current year",
+            "Prior year",
+            "Variance"
+          ]
+        },
+        {
+          "name": "Sampling plan",
+          "columns": [
+            "Population",
+            "Method",
+            "Seed",
+            "Items",
+            "Population value",
+            "Sample size",
+            "Interval",
+            "Random start",
+            "Selected",
+            "Selected value",
+            "Fingerprint"
+          ]
+        },
+        {
+          "name": "Sample selections",
+          "columns": [
+            "Population",
+            "Pick",
+            "Row",
+            "Reference",
+            "Date",
+            "Party",
+            "Amount",
+            "Selection point"
+          ]
+        },
+        {
+          "name": "Review notes",
+          "columns": [
+            "No",
+            "WP ref",
+            "Note",
+            "Severity",
+            "Source",
+            "Status",
+            "Response"
+          ]
+        },
+        {
+          "name": "Pending information",
+          "columns": [
+            "No",
+            "Item",
+            "Reason",
+            "Requested from"
+          ]
+        },
+        {
+          "name": "CARO 2020",
+          "columns": [
+            "Clause",
+            "Title",
+            "Applicability",
+            "Basis",
+            "Information required",
+            "WP ref"
+          ]
+        },
+        {
+          "name": "Checklist",
+          "columns": [
+            "Rule",
+            "Severity",
+            "Status",
+            "Message",
+            "Evidence"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "tb": {
+    "ledger": "Account Head",
+    "group": "Classification",
+    "debit": "Dr Total",
+    "credit": "Cr Total"
+  }
+}

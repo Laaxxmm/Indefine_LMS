@@ -1,0 +1,39 @@
+{
+  "id": "m-self-cheque",
+  "pattern": "Reviewer: a self cheque (cash withdrawal) matched in the BRS was never questioned; cash withdrawals need a voucher check.",
+  "ruleProposal": {
+    "id": "books.m-self-cheque",
+    "title": "Self cheques / cash withdrawals reviewed",
+    "severity": "warn",
+    "kind": "deterministic",
+    "check": "books.narration-watch",
+    "evidence": "statement narration and row",
+    "params": {
+      "words": [
+        "self chq",
+        "cash withdrawal",
+        "atm wdl"
+      ],
+      "verify": "Narration keywords for cash withdrawals; partner to extend per bank."
+    }
+  },
+  "example": {
+    "runId": "books-run-0015",
+    "extracted": {
+      "statement": {
+        "file": "bank-statement.csv",
+        "openingPaise": 0,
+        "lines": [
+          {
+            "id": "S1",
+            "row": 2,
+            "date": "2026-10-12",
+            "narration": "ATM WDL MG ROAD BLR",
+            "ref": "",
+            "amountPaise": -2000000
+          }
+        ]
+      }
+    }
+  }
+}

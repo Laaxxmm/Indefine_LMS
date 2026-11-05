@@ -4,11 +4,15 @@
 import type { AnyAgent } from "@/lib/agents/core/runner";
 import { echoAgent } from "@/lib/agents/echo";
 import { gstAgent } from "@/lib/agents/gst";
+import { booksAgent } from "@/lib/agents/books";
+import { auditAgent } from "@/lib/agents/audit";
 import { isEchoAgentEnabled } from "./flags";
 
 export const AGENTS: Readonly<Record<string, AnyAgent>> = Object.freeze({
   [echoAgent.key]: echoAgent,
   [gstAgent.key]: gstAgent,
+  [booksAgent.key]: booksAgent,
+  [auditAgent.key]: auditAgent,
 });
 
 export function getAgent(key: string, agents: Readonly<Record<string, AnyAgent>> = AGENTS): AnyAgent | undefined {
