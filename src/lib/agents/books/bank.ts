@@ -3,9 +3,18 @@
 // Sign convention: every line carries a signed amount from the bank account's point of view —
 // money in is positive (statement deposit / ledger debit), money out is negative (statement
 // withdrawal / ledger credit). A row whose narration reads "opening balance" / "b/f" is the
-// opening balance, not a transaction. Balances follow each side's own Cr / Dr wording: on the
-// statement "Cr" is a balance in the customer's favour (+) and "Dr" an overdraft (−); in the
-// ledger "Dr" is + and "Cr" − (see parseBalancePaise).
+// opening balance, not a transaction.
+//
+// Cr / Dr markers follow each side's own wording (IN_MARKER):
+//   statement (the bank's books, written from the customer's side): Cr = money in / in credit = +,
+//     Dr = money out / overdrawn = −;
+//   ledger (the firm's books, the bank account as an asset): Dr = increase = +, Cr = decrease = −.
+// A signed cell (an Amount column, a Balance column) takes its direction from the marker; an
+// unmarked one is read as written (minus or parentheses = negative); a minus sign that agrees with
+// the marker is redundant, one that contradicts it is an issue (signedCell). In a two-column
+// layout (Withdrawal / Deposit, Debit / Credit) the column gives the direction: a marker that agrees
+// with its column is redundant and never flips the sign a second time; a marker that contradicts
+// its column ("Cr" in the ledger's Debit column) is an issue and the row is not read (columnCell).
 //
 // MATCHING ALGORITHM (documented; deterministic for the same input order):
 //   0. Lines are taken in (date, file row) order on both sides. References are normalised:
@@ -70,24 +79,51 @@ export const LEDGER_ALIASES: ColumnAliases<BankField> = {
 const OPENING = /opening\s+balance|^b\/?f$|brought\s+forward|balance\s+b\/?f/i;
 const CLOSING = /closing\s+balance|^c\/?f$|carried\s+forward|^total$|^grand\s+total$/i;
 
-/** A trailing or leading Dr / Cr marker, as parseAmountPaise detects it. */
-const CR_DR = /\s*(dr|cr)\.?$|^(dr|cr)\.?\s*/i;
+/** The marker that means money in (+) on each side: the statement's Cr, the ledger's Dr. */
+export const IN_MARKER = { S: "cr", L: "dr" } as const;
 
-/**
- * Balance and opening-balance cells. A bank statement (side "S") writes them from the customer's
- * side: "5,000.00 Cr" = the account is in credit (money in the bank, +), "5,000.00 Dr" = overdrawn
- * (−). The books (side "L") use the ledger reading of parseAmountPaise: Dr +, Cr −. Unmarked
- * amounts read the same on both sides (a leading minus or parentheses = negative).
- */
-function parseBalancePaise(side: "S" | "L", text: string): AmountParse {
-  const p = parseAmountPaise(text);
-  if (side === "L" || !p.ok || !CR_DR.test(text.trim())) return p;
-  return { ok: true, paise: p.paise === 0 ? 0 : -p.paise };
+/** A cell read: `conflict` marks a Cr / Dr marker that contradicts its column or the cell's own sign. */
+type Conflict = { ok: false; reason: string; conflict: true };
+export type CellParse = AmountParse | Conflict;
+const isConflict = (p: CellParse): p is Conflict => !p.ok && "conflict" in p;
+
+/** Split a trailing (or leading) Dr / Cr marker off a cell, the way parseAmountPaise detects it. */
+function splitMarker(text: string): { marker: "dr" | "cr" | null; rest: string } {
+  const s = text.trim();
+  const m = /\s*(dr|cr)\.?$/i.exec(s) ?? /^(dr|cr)\.?\s*/i.exec(s);
+  return m ? { marker: m[1].toLowerCase() as "dr" | "cr", rest: s.replace(m[0], "").trim() } : { marker: null, rest: s };
 }
 
-/** A statement opening row's Withdrawal / Deposit cell: the column gives the sign, a Cr / Dr marker is ignored. */
-function parseColumnSigned(side: "S" | "L", text: string): AmountParse {
-  return side === "S" ? parseAmountPaise(text.trim().replace(CR_DR, "")) : parseAmountPaise(text);
+/**
+ * A signed cell — the Amount column, the Balance column, an opening row's Amount — in the side's
+ * own wording (IN_MARKER): statement "1,000.00 Cr" = +1,000 (money in / in credit), "1,000.00 Dr" =
+ * −1,000 (money out / overdrawn); ledger "Dr" +, "Cr" −. Unmarked: as written. A minus sign (or
+ * parentheses) that agrees with the marker is redundant ("-500.00 Cr" in the ledger = −500); one
+ * that contradicts it is a conflict.
+ */
+export function signedCell(side: "S" | "L", text: string): CellParse {
+  const { marker, rest } = splitMarker(text);
+  const p = parseAmountPaise(rest);
+  if (!p.ok || !marker || p.paise === 0) return p;
+  const plus = marker === IN_MARKER[side];
+  if (plus && p.paise < 0) return { ok: false, conflict: true, reason: `"${text.trim()}": a minus sign with "${marker === "cr" ? "Cr" : "Dr"}" contradicts the marker (${side === "S" ? "statement: Cr = money in" : "books: Dr = increase"})` };
+  return { ok: true, paise: plus ? p.paise : -Math.abs(p.paise) };
+}
+
+/**
+ * A Withdrawal / Deposit (statement) or Debit / Credit (ledger) cell: the column gives the
+ * direction, so the value is returned as written (a minus is a reversal within the column). A
+ * marker that agrees with the column — Cr in the statement's Deposit column, Dr in its Withdrawal
+ * column; Dr in the ledger's Debit column, Cr in its Credit column — is redundant and ignored (it
+ * must not flip the sign a second time). A marker that contradicts the column is a conflict.
+ */
+export function columnCell(side: "S" | "L", column: "in" | "out", text: string, header: string = column): CellParse {
+  const { marker, rest } = splitMarker(text);
+  const p = parseAmountPaise(rest);
+  if (!p.ok || !marker || p.paise === 0) return p;
+  if ((marker === IN_MARKER[side]) !== (column === "in"))
+    return { ok: false, conflict: true, reason: `"${text.trim()}": a "${marker === "cr" ? "Cr" : "Dr"}" marker in the ${header} column contradicts the column` };
+  return p;
 }
 
 export function parseBank(
@@ -100,6 +136,7 @@ export function parseBank(
   const loc = locateColumns(rows, aliases, ["date", "out|in|amount"], override);
   if (!loc) return { data: null, issues: [{ file, row: 0, message: "no header row with a Date column and Withdrawal/Deposit (or Amount) columns" }] };
   const c = loc.columns;
+  const header = (i: number | undefined, fallback: string) => (i === undefined ? fallback : `"${rows[loc.headerRow][i] ?? fallback}"`);
   const lines: BankLine[] = [];
   const issues: ParseIssue[] = [];
   let openingPaise: number | null = null;
@@ -108,19 +145,26 @@ export function parseBank(
     const row = rows[r];
     if (row.every((x) => (x ?? "").trim() === "")) continue;
     const narration = cell(row, c.narration).replace(/\s+/g, " ");
-    const inn = parseAmountPaise(cell(row, c.in));
-    const out = parseAmountPaise(cell(row, c.out));
-    const amt = parseAmountPaise(cell(row, c.amount));
-    const bal = parseBalancePaise(side, cell(row, c.balance));
+    // Every amount cell in the side's own Cr / Dr wording (see the header): two-column cells by
+    // their column, the signed Amount and Balance cells by their marker.
+    const inn = columnCell(side, "in", cell(row, c.in), header(c.in, "in"));
+    const out = columnCell(side, "out", cell(row, c.out), header(c.out, "out"));
+    const amt = signedCell(side, cell(row, c.amount));
+    const bal = signedCell(side, cell(row, c.balance));
+    // A marker that contradicts its column (or its own sign) cannot be read safely: the row's amount
+    // is not read and a person checks the export. A contradictory balance only loses the balance.
     if (OPENING.test(narration)) {
       // Opening row: the amount sits in the in/out/amount column, or in the balance column. On a
       // statement every cell of this row is a balance: the signed Amount cell reads like the
       // balance column, a Withdrawal / Deposit cell takes its sign from the column.
-      const oIn = parseColumnSigned(side, cell(row, c.in));
-      const oOut = parseColumnSigned(side, cell(row, c.out));
-      const oAmt = parseBalancePaise(side, cell(row, c.amount));
-      const v = oIn.ok && oOut.ok && oAmt.ok ? oIn.paise - oOut.paise + oAmt.paise : 0;
-      openingPaise = v !== 0 ? v : bal.ok ? bal.paise : 0;
+      const conflict = [inn, out, amt].find(isConflict);
+      if (conflict) {
+        issues.push({ file, row: r + 1, message: conflict.reason });
+        continue;
+      }
+      if (isConflict(bal)) issues.push({ file, row: r + 1, message: bal.reason });
+      const v = inn.ok && out.ok && amt.ok ? inn.paise - out.paise + amt.paise : 0;
+      if (v !== 0 || !isConflict(bal)) openingPaise = v !== 0 ? v : bal.ok ? bal.paise : 0;
       continue;
     }
     if (CLOSING.test(narration)) continue;
@@ -134,6 +178,7 @@ export function parseBank(
       issues.push({ file, row: r + 1, message: bad.reason });
       continue;
     }
+    if (isConflict(bal)) issues.push({ file, row: r + 1, message: bal.reason });
     const amountPaise = (inn as { paise: number }).paise - (out as { paise: number }).paise + (amt as { paise: number }).paise;
     if (amountPaise === 0) {
       issues.push({ file, row: r + 1, message: "no amount on the line" });

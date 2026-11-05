@@ -1,0 +1,10 @@
+Date,Particulars,Vch No,Debit,Credit
+01/10/2026,Opening Balance,,"50,000.00 Dr",
+03/10/2026,Alpha Retail,UTR001,"1,50,000.00 Dr",
+04/10/2026,Beta Supplies chq 451,451,,"1,00,000.00 Cr"
+07/10/2026,Rent October,NEFT9902,,"54,000.00 Cr"
+10/10/2026,Salaries October,,,"1,26,000.00 Cr"
+15/10/2026,Gamma Stores,UTR002,"2,40,000.00 Dr",
+20/10/2026,Electricity,,,"12,000.00 Cr"
+29/10/2026,Delta Services chq 452,452,,"4,250.00 Cr"
+31/10/2026,Bank Charges,,,"1,250.00 Cr"

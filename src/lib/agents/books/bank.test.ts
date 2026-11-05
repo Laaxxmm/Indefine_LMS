@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LEDGER_ALIASES, STATEMENT_ALIASES, normRef, parseBank, reconcile, type BankData, type BankLine } from "./bank";
+import { LEDGER_ALIASES, STATEMENT_ALIASES, columnCell, normRef, parseBank, reconcile, signedCell, type BankData, type BankLine } from "./bank";
 import { parseCsv } from "./table";
 
 const line = (id: string, date: string, amountPaise: number, ref = "", narration = id): BankLine => ({ id, row: Number(id.slice(1)) + 1, date, narration, ref, amountPaise });
@@ -86,6 +86,107 @@ describe("parseBank — Cr / Dr on balances (statement: bank wording; ledger: bo
     const led = (bal: string) => parseBank("L", "l.csv", parseCsv(`Date,Particulars,Debit,Credit,Balance\n,Opening Balance,,,"${bal}"\n02/10/2026,X,1,,`), LEDGER_ALIASES).data!.openingPaise;
     expect(led("75.00 Cr")).toBe(-7500);
     expect(led("75.00 Dr")).toBe(7500);
+  });
+});
+
+describe("Cr / Dr conventions on amounts (statement: Cr = in +, Dr = out −; ledger: Dr = increase +, Cr = decrease −)", () => {
+  const stmt = (csv: string) => parseBank("S", "s.csv", parseCsv(csv), STATEMENT_ALIASES);
+  const led = (csv: string) => parseBank("L", "l.csv", parseCsv(csv), LEDGER_ALIASES);
+  const amounts = (r: ReturnType<typeof parseBank>) => r.data!.lines.map((l) => l.amountPaise);
+
+  it.each([
+    // [side, cell, expected paise | "conflict"]
+    ["S", "1,000.00 Cr", 100000],
+    ["S", "500.00 Dr", -50000],
+    ["S", "Cr 1,000.00", 100000],
+    ["S", "Dr. 500", -50000],
+    ["S", "500.00 dr", -50000],
+    ["S", "-500.00 Dr", -50000], // the minus agrees with Dr: redundant
+    ["S", "(500.00) Dr", -50000],
+    ["S", "-500.00 Cr", "conflict"],
+    ["S", "-12.50", -1250], // unmarked: as written
+    ["S", "7", 700],
+    ["S", "0.00 Dr", 0],
+    ["L", "1,000.00 Dr", 100000],
+    ["L", "500.00 Cr", -50000],
+    ["L", "-500.00 Cr", -50000], // redundant minus (parseAmountPaise alone gives +500)
+    ["L", "-500.00 Dr", "conflict"],
+    ["L", "-4", -400],
+  ] as const)("signedCell %s %s → %s", (side, text, want) => {
+    const p = signedCell(side, text);
+    if (want === "conflict") expect(p).toMatchObject({ ok: false, conflict: true });
+    else expect(p).toEqual({ ok: true, paise: want });
+  });
+
+  it.each([
+    // [side, column, cell, expected paise as written in the column | "conflict"]
+    ["S", "in", "1,000.00 Cr", 100000], // Deposit marked Cr: agrees, not flipped (parseAmountPaise alone gives −1,000)
+    ["S", "out", "500.00 Dr", 50000],
+    ["S", "in", "1,000.00 Dr", "conflict"],
+    ["S", "out", "500.00 Cr", "conflict"],
+    ["L", "in", "1,000.00 Dr", 100000],
+    ["L", "out", "500.00 Cr", 50000], // Credit marked Cr: agrees, not flipped (parseAmountPaise alone gives −500)
+    ["L", "in", "1,000.00 Cr", "conflict"],
+    ["L", "out", "500.00 Dr", "conflict"],
+    ["L", "out", "-500.00", -50000], // unmarked minus inside a column = a reversal, as before
+    ["S", "in", "", 0],
+  ] as const)("columnCell %s %s %s → %s", (side, column, text, want) => {
+    const p = columnCell(side, column, text);
+    if (want === "conflict") expect(p).toMatchObject({ ok: false, conflict: true });
+    else expect(p).toEqual({ ok: true, paise: want });
+  });
+
+  it("audit counterexample: statement signed Amount '1,000.00 Cr' is money in (+1,000), '500.00 Dr' money out (was −1,000 / +500)", () => {
+    const r = stmt('Date,Narration,Amount,Balance\n02/10/2026,NEFT IN,"1,000.00 Cr","5,000.00 Cr"\n03/10/2026,CHQ 451,"500.00 Dr","4,500.00 Cr"');
+    expect(r.issues).toEqual([]);
+    expect(amounts(r)).toEqual([100000, -50000]);
+    expect(r.data!.openingPaise).toBe(400000); // 5,000 Cr − 1,000 in (old: 5,000 − (−1,000) = 6,000)
+  });
+  it("audit counterexample: ledger Credit '500.00 Cr' is a payment (−500), not a receipt (+500); Debit '1,000.00 Dr' +1,000", () => {
+    const r = led('Date,Particulars,Debit,Credit\n01/10/2026,Opening Balance,"5,000.00 Dr",\n02/10/2026,Receipt,"1,000.00 Dr",\n03/10/2026,Chq 451,,"500.00 Cr"');
+    expect(r.issues).toEqual([]);
+    expect(r.data!.openingPaise).toBe(500000);
+    expect(amounts(r)).toEqual([100000, -50000]);
+  });
+  it("statement Withdrawal / Deposit with redundant markers read like unmarked ones", () => {
+    const marked = stmt('Date,Narration,Withdrawal,Deposit,Balance\n02/10/2026,NEFT IN,,"1,000.00 Cr","5,000.00 Cr"\n03/10/2026,CHQ,"500.00 Dr",,"4,500.00 Cr"');
+    const plain = stmt('Date,Narration,Withdrawal,Deposit,Balance\n02/10/2026,NEFT IN,,"1,000.00","5,000.00 Cr"\n03/10/2026,CHQ,"500.00",,"4,500.00 Cr"');
+    expect(marked.issues).toEqual([]);
+    expect(marked.data).toEqual(plain.data);
+    expect(amounts(marked)).toEqual([100000, -50000]);
+  });
+  it("ledger signed Amount: Dr +, Cr −, a redundant minus does not flip twice", () => {
+    expect(amounts(led('Date,Particulars,Amount\n02/10/2026,R,"1,000.00 Dr"\n03/10/2026,P,"500.00 Cr"\n04/10/2026,P2,"-250.00 Cr"\n05/10/2026,R2,75'))).toEqual([100000, -50000, -25000, 7500]);
+  });
+  it("a marker that contradicts its column (or its own minus sign) is an issue and the row is not read", () => {
+    const s = stmt('Date,Narration,Withdrawal,Deposit\n02/10/2026,A,,"1,000.00 Dr"\n03/10/2026,B,"500.00 Cr",\n04/10/2026,C,"10.00",');
+    expect(s.issues.map((i) => [i.row, i.message])).toEqual([
+      [2, '"1,000.00 Dr": a "Dr" marker in the "Deposit" column contradicts the column'],
+      [3, '"500.00 Cr": a "Cr" marker in the "Withdrawal" column contradicts the column'],
+    ]);
+    expect(amounts(s)).toEqual([-1000]);
+    const l = led('Date,Particulars,Debit,Credit\n01/10/2026,Opening Balance,"5,000.00 Cr",\n02/10/2026,X,,"4.00 Dr"\n03/10/2026,Y,"-9.00 Dr",');
+    expect(l.issues.map((i) => i.row)).toEqual([2, 3]);
+    expect(l.data!.openingPaise).toBeNull(); // the opening row is not read either
+    expect(amounts(l)).toEqual([-900]); // "-9.00 Dr" in the Debit column: Dr agrees; the minus is a reversal, as unmarked
+    expect(amounts(stmt('Date,Narration,Amount\n02/10/2026,A,"-500.00 Cr"\n03/10/2026,B,"5.00 Cr"'))).toEqual([500]);
+  });
+  it("a contradictory balance is reported but the transaction is still read (the balance is not used)", () => {
+    const r = stmt('Date,Narration,Amount,Balance\n02/10/2026,A,"1,000.00 Cr","-5,000.00 Cr"\n03/10/2026,B,"10.00 Dr","4,990.00 Cr"');
+    expect(r.issues.map((i) => [i.row, i.message])).toEqual([[2, '"-5,000.00 Cr": a minus sign with "Cr" contradicts the marker (statement: Cr = money in)']]);
+    expect(amounts(r)).toEqual([100000, -1000]);
+  });
+  it("overdraft both ways reconciles to zero: statement Amount / Balance with Dr markers; ledger opening in Credit with a redundant Cr", () => {
+    // Statement: first row 500.00 Dr out, balance 2,500.00 Dr → opening −2,500 − (−500) = −2,000; then 3,000.00 Cr in → 500.00 Cr.
+    const s = stmt('Date,Narration,Ref,Amount,Balance\n02/10/2026,CHQ OUT,451,"500.00 Dr","2,500.00 Dr"\n03/10/2026,NEFT IN,U1,"3,000.00 Cr","500.00 Cr"').data!;
+    expect(s.openingPaise).toBe(-200000);
+    expect(s.lines.map((x) => x.amountPaise)).toEqual([-50000, 300000]);
+    // Ledger: opening 2,000.00 Cr in the Credit column (overdrawn in the books) = −2,000 (old code: +2,000).
+    const l = led('Date,Particulars,Vch No,Debit,Credit\n01/10/2026,Opening Balance,,,"2,000.00 Cr"\n02/10/2026,Chq,451,,"500.00 Cr"\n03/10/2026,Receipt,U1,"3,000.00 Dr",').data!;
+    expect(l.openingPaise).toBe(-200000);
+    const r = reconcile(s, l);
+    expect(r.pairs).toHaveLength(2);
+    expect(r.summary).toMatchObject({ balancePerBankPaise: 50000, balancePerBooksPaise: 50000, differencePaise: 0 });
   });
 });
 
