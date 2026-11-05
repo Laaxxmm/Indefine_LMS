@@ -61,6 +61,11 @@ describe("grouping map", () => {
       ["Deferred Tax Liability", "L-P"],
       ["Deferred Tax Liabilities", "L-P"],
       ["FIXED ASSET", "L-E"],
+      // Leftovers of the formula audit round 2 (integration 2026-11-06).
+      ["Non Current Liability", "L-Q"],
+      ["Non-Current Liability", "L-Q"],
+      ["Non Current Liabilities", "L-Q"],
+      ["Overseas Tax Payable", "L-D"],
     ])("%s → %s", (group, wp) => {
       // Before the fix every one of these was unmapped (null), except Deferred Tax Liability, which the
       // catch-all "liabilit" put in L-D (other current liabilities).
@@ -94,7 +99,7 @@ describe("grouping map", () => {
       ["Duties & Taxes", "L-D"],
       ["Other Current Liability", "L-D"],
       ["Other Liability", "L-D"],
-      ["Non Current Liability", "L-D"],
+      ["Current Liabilities", "L-D"],
       ["Long Term Liability", "L-B"],
       ["Provisions", "L-D"],
       ["Intangible Asset", "L-E"],
@@ -109,12 +114,27 @@ describe("grouping map", () => {
       expect(hit?.area.wp).toBe(wp);
       expect(hit?.rule).toBeNull();
     });
-    it.each(["Stock in Trade", "Input Tax Credit Reversal", "Credit Cards Payable", "Tax", "Suspense A/c", "Branch / Divisions", "Overseas Tax Payable"])("anchored: %s is not caught by the new patterns", (group) => {
+    it.each(["Stock in Trade", "Input Tax Credit Reversal", "Credit Cards Payable", "Tax", "Suspense A/c", "Branch / Divisions", "Overseas Tax", "Overseas Tax Payable Old", "Non Current Liability Clearing", "Current Liability"])("anchored: %s is not caught by the new patterns", (group) => {
       expect(matchArea({ group, ledger: "x" })?.rule ?? null).toBeNull();
-      expect(["L-E", "L-G", "L-J", "L-O", "L-P"]).not.toContain(areaOf({ group, ledger: "x" })?.wp ?? "none");
+      expect(["L-E", "L-G", "L-J", "L-O", "L-P", "L-Q"]).not.toContain(areaOf({ group, ledger: "x" })?.wp ?? "none");
+    });
+    it("Non Current Liability and Overseas Tax Payable: their own leads, tied to the TB, with the partner notes", () => {
+      const r = buildLeads(tb("Security deposit received,Non Current Liability,,400\nGratuity provision,Non Current Liability,,100\nUK VAT payable,Overseas Tax Payable,,50\nBank,Bank,550,"), null);
+      expect(r.schedules.map((s) => [s.wp, s.cyPaise])).toEqual([
+        ["L-Q", -50000],
+        ["L-D", -5000],
+        ["L-I", 55000],
+      ]);
+      expect(r.unmapped).toEqual([]);
+      expect(r.tie.cyLeadsPaise).toBe(r.tie.cyTbNetPaise);
+      expect(r.groupingNotes.map((n) => [n.group, n.wp])).toEqual([
+        ["Non Current Liability", "L-Q"],
+        ["Overseas Tax Payable", "L-D"],
+      ]);
+      for (const n of r.groupingNotes) expect(n.verify).toMatch(/partner to confirm Schedule III grouping\.$/);
     });
     it("every conditional pattern carries a verify note; the grouping notes of a run are listed once per group", () => {
-      expect(LEAD_GROUPING_NOTES).toHaveLength(11);
+      expect(LEAD_GROUPING_NOTES).toHaveLength(13);
       for (const n of LEAD_GROUPING_NOTES) expect(n.verify).toMatch(/^Zoho ".+" .+ — partner to confirm Schedule III grouping\.$/);
       const r = buildLeads(tb("Machine,Fixed Asset,100,\nVan,Fixed Asset,50,\nGST In,Input Tax,10,\nCapital,Equity,,160"), null);
       expect(r.groupingNotes.map((n) => [n.group, n.wp])).toEqual([
