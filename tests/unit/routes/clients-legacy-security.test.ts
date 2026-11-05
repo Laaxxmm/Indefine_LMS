@@ -173,7 +173,7 @@ describe("multipart uploads are capped and screened", () => {
     as({ id: "u-staff" });
     const bad = await taxRoute.POST(multipart([new File([PDF], "a.pdf"), new File([enc("<html></html>")], "b.html")], {}), p({ tool: "gstr3b" }));
     expect(bad.status).toBe(415);
-    expect((await bad.json()).error).toMatch(/^b\.html: \.html file type is not accepted\. Upload PDF only\.\. Upload the return PDFs only\.$|^b\.html: /);
+    expect((await bad.json()).error).toMatch(/^b\.html: \.html file type is not accepted\. Upload \.pdf files only\. Upload the return PDFs only\.$|^b\.html: /);
     expect(uploads.taxFiles).toEqual([]);
     const ok = await taxRoute.POST(multipart([new File([PDF], "a.pdf")], {}), p({ tool: "gstr3b" }));
     expect(ok.status).toBe(200);
@@ -184,7 +184,7 @@ describe("multipart uploads are capped and screened", () => {
     as({ id: "u-staff" });
     const notPdf = await letterRoute.POST(multipart([new File([EXE], "letter.pdf")], { kind: "draft" }, "file"), p({ id: "el1" }));
     expect(notPdf.status).toBe(400);
-    expect((await notPdf.json()).error).toBe("That file is not a PDF");
+    expect((await notPdf.json()).error).toBe("That file is not a PDF. Upload the letter as a PDF.");
     // Browsers send Content-Length: an over-limit body is refused before it is read.
     const big = await letterRoute.POST(multipart([new File([PDF], "letter.pdf")], { kind: "draft" }, "file", { "content-length": String(4 * 1024 * 1024) }), p({ id: "el1" }));
     expect(big.status).toBe(413);

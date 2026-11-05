@@ -116,7 +116,7 @@ describe("periodLabel", () => {
   });
 
   it("rejects unknown frequency", () => {
-    expect(() => periodLabel({ frequency: "weekly" } as unknown as PeriodInput)).toThrow(/Unknown frequency/);
+    expect(() => periodLabel({ frequency: "weekly" } as unknown as PeriodInput)).toThrow(/isn't one Firm OS knows/);
   });
 });
 
@@ -147,7 +147,7 @@ describe("periodFor (IST)", () => {
   it("rejects bad input", () => {
     expect(() => periodFor("monthly", new Date("x"))).toThrow(PathError);
     expect(() => periodFor("monthly", "2026-10" as unknown as Date)).toThrow(PathError);
-    expect(() => periodFor("weekly" as Frequency, new Date())).toThrow(/Unknown frequency/);
+    expect(() => periodFor("weekly" as Frequency, new Date())).toThrow(/isn't one Firm OS knows/);
   });
 });
 

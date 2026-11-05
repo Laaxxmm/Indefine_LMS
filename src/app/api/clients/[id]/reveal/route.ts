@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/audit/log";
 import { canRevealClientPii } from "@/lib/rbac/policy";
 import { PII_FIELDS, PII_LABELS, type PiiField } from "@/lib/clients/pii";
+import { validationMessage } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: "Only admins and partners can see a client's full PAN, GSTIN, phone or email. Use the masked value, or ask one of them." }, { status: 403, headers: NO_STORE });
   }
   const parsed = bodyZ.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Choose which detail to show." }, { status: 400, headers: NO_STORE });
+  if (!parsed.success) return NextResponse.json({ error: validationMessage(parsed.error, "Choose which detail to show.") }, { status: 400, headers: NO_STORE });
   const field = parsed.data.field;
   const { id } = await params;
   const client = await prisma.client.findUnique({ where: { id }, select: { id: true, pan: true, gstin: true, contactPhone: true, contactEmail: true } });

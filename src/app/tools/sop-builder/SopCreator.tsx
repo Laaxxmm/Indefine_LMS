@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Sparkles, Loader2, AlertTriangle, CheckCircle2, Wand2 } from "lucide-react";
 import type { SopBrief, SopAnalysis } from "@/lib/sop/types";
 import { departmentLabel } from "@/lib/sop/labels";
+import { userMessage } from "@/lib/errors";
 
 const DEPARTMENTS = ["AUDIT", "TAX", "ACCOUNTS", "ROC", "TECH", "ADMIN", "GENERAL"];
 const input = "w-full rounded-lg border border-border bg-page/60 px-3 py-2 text-[13.5px] text-ink focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400 transition";
@@ -36,12 +37,12 @@ export function SopCreator({ defaultDepartment, lockDepartment, editSopId, initi
     try {
       const res = await fetch("/api/tools/sop-builder/analyze", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ title, department, workCategory, purpose, rawProcedure }) });
       const data = (await res.json()) as SopAnalysis & { error?: string };
-      if (!res.ok) { setError(data.error || "Analysis failed."); return; }
+      if (!res.ok) { setError(data.error || "The SOP draft could not be prepared. Try again in a minute."); return; }
       if (!data.valid || !data.brief) { setRejected(data.reason || "This doesn't look like a valid SOP request for the firm."); return; }
       // Granted editors are locked to their own department — never let the AI reassign it.
       setBrief(lockDepartment ? { ...data.brief, department: defaultDepartment } : data.brief);
     } catch (e) {
-      setError((e as Error).message);
+      setError(userMessage(e));
     } finally {
       setAnalyzing(false);
     }
@@ -55,10 +56,10 @@ export function SopCreator({ defaultDepartment, lockDepartment, editSopId, initi
       const url = editSopId ? `/api/tools/sop-builder/sops/${editSopId}/versions` : "/api/tools/sop-builder/sops";
       const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ brief, rawProcedure, purpose }) });
       const data = (await res.json()) as { id?: string; error?: string };
-      if (!res.ok || !data.id) { setError(data.error || "Generation failed."); return; }
+      if (!res.ok || !data.id) { setError(data.error || "The SOP could not be generated. Try again in a minute."); return; }
       router.push(`/tools/sop-builder/${data.id}`);
     } catch (e) {
-      setError((e as Error).message);
+      setError(userMessage(e));
     } finally {
       setGenerating(false);
     }

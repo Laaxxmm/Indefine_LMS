@@ -173,6 +173,7 @@ export function createSharePointClient(opts: ClientOptions = {}): SharePointClie
       return t;
     }
     if (!opts.sharePointToken) {
+      // plain-messages: for IT — the certificate settings by name. People see a plain sentence instead (src/lib/errors plainAction / userMessage).
       throw new BlockedError(opts.sharePointBlockedAction ?? "Configure the PnP certificate (SP_PNP_CERT_KEY_PEM + SP_PNP_CERT_PEM) for SharePoint REST.");
     }
     return opts.sharePointToken(auth.host);

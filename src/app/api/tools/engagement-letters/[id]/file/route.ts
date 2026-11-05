@@ -20,12 +20,12 @@ const TOO_BIG = `The PDF is over the ${MAX_PDF_BYTES / 1024 / 1024} MB limit. Pr
 // Same name each time per kind, so SharePoint versions it.
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!canUseOfficeTools(session.user)) return NextResponse.json({ error: "You don't have access to this tool" }, { status: 403 });
+  if (!session?.user) return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
+  if (!canUseOfficeTools(session.user)) return NextResponse.json({ error: "You don't have access to this tool. Ask an admin to give you access." }, { status: 403 });
 
   const { id } = await params;
   const letter = await prisma.engagementLetter.findUnique({ where: { id } });
-  if (!letter) return NextResponse.json({ error: "Letter not found" }, { status: 404 });
+  if (!letter) return NextResponse.json({ error: "That letter wasn't found. Go back to the letters list and open it again." }, { status: 404 });
 
   // Body capped before it is read, then the one PDF screened (type, content, size, scan hook).
   const read = await readMultipartUpload(req, { fields: ["file"], types: PDF_TYPES, maxBytes: MAX_PDF_BYTES, maxFiles: 1, source: "engagement-letter" });
@@ -34,12 +34,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: TOO_BIG }, { status: 413 });
   }
   const kind = read.form.get("kind") as FileKind | null;
-  if (kind !== "draft" && kind !== "signed" && kind !== "client") return NextResponse.json({ error: "Unknown file kind" }, { status: 400 });
+  if (kind !== "draft" && kind !== "signed" && kind !== "client") return NextResponse.json({ error: "That file isn't a draft, a signed copy or a client copy. Reload the page and try again." }, { status: 400 });
   if (!can(STEP[kind], letter.status)) return NextResponse.json({ error: WAITING[STEP[kind]] }, { status: 409 });
   const bad = read.rejected[0];
-  if (bad) return NextResponse.json({ error: bad.status === 413 ? TOO_BIG : bad.reason === "The content does not look like a .pdf file" ? "That file is not a PDF" : bad.reason }, { status: bad.status === 413 ? 413 : 400 });
+  if (bad) return NextResponse.json({ error: bad.status === 413 ? TOO_BIG : bad.reason.startsWith("The content does not look like a .pdf file") ? "That file is not a PDF. Upload the letter as a PDF." : bad.reason }, { status: bad.status === 413 ? 413 : 400 });
   const file = read.files[0];
-  if (!file) return NextResponse.json({ error: "Choose a PDF" }, { status: 400 });
+  if (!file) return NextResponse.json({ error: "Choose a PDF to upload." }, { status: 400 });
   const bytes = file.bytes;
 
   let item;
@@ -47,7 +47,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     item = await uploadLetterPdf(letter.clientName, letter.fy, kind, bytes);
   } catch (e) {
     console.error("EL upload failed:", (e as Error).message);
-    return NextResponse.json({ error: "Upload to SharePoint failed — try again, or tell the admin if it keeps failing" }, { status: 502 });
+    return NextResponse.json({ error: "The upload to SharePoint failed. Try again; if it keeps failing, tell IT." }, { status: 502 });
   }
 
   const byName = session.user.name ?? "Unknown";

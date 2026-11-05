@@ -8,8 +8,8 @@ export const maxDuration = 60;
 // "Rebuild database workbook" button.
 export async function POST() {
   const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!canViewClients(session.user)) return NextResponse.json({ error: "No access" }, { status: 403 });
+  if (!session?.user) return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
+  if (!canViewClients(session.user)) return NextResponse.json({ error: "Your account is not active. Ask an admin to reactivate it." }, { status: 403 });
   const r = await rebuildClientWorkbook();
   return NextResponse.json(r, { status: r.ok ? 200 : 502 });
 }

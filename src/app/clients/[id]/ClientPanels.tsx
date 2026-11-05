@@ -8,6 +8,7 @@ import { departmentLabel } from "@/lib/ca-firm";
 import { DOC_TYPES, JOB_DOC_TYPES, JOB_STATUSES, KYC_DOC_TYPES, keysOf } from "@/lib/clients/core";
 import type { Handler } from "@/lib/clients/services";
 import { card, focusRing, h2 } from "@/components/ui";
+import { DEFAULT_MESSAGE, responseError } from "@/lib/errors";
 
 export type JobView = { id: string; fy: string; department: ServiceType["department"]; service: string; handlerId: string; status: JobStatus; dueOn: string; fees: string; notes: string; folderStatus: string; docCount: number; folderHref?: string };
 export type DocView = { id: string; jobId: string | null; docType: ClientDocType; name: string; webUrl: string; uploadedBy: string; createdAt: string };
@@ -22,7 +23,7 @@ const field = "rounded-lg border border-border bg-page/60 px-2.5 py-1.5 text-[13
 async function call(url: string, init: RequestInit): Promise<{ ok: boolean; data: Record<string, unknown> }> {
   const res = await fetch(url, init);
   const data = await res.json().catch(() => ({}));
-  return { ok: res.ok, data };
+  return { ok: res.ok, data: res.ok ? data : { ...data, error: responseError(res.status, data) } };
 }
 const json = (body: unknown, method = "POST"): RequestInit => ({ method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
@@ -36,7 +37,7 @@ export function ClientPanels({ clientId, folderStatus, jobs, documents, services
     setError(null);
     try {
       const r = await fn();
-      if (!r.ok) setError(String(r.data.error ?? "Failed"));
+      if (!r.ok) setError(typeof r.data.error === "string" ? r.data.error : DEFAULT_MESSAGE);
       else router.refresh();
       return r.ok;
     } finally {

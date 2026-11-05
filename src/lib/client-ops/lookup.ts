@@ -13,15 +13,15 @@ export async function rdapExpiry(domain: string): Promise<LookupResult> {
       headers: { accept: "application/rdap+json", "user-agent": UA },
       signal: AbortSignal.timeout(10_000),
     });
-    if (res.status === 404) return { error: "not in registry, or TLD has no RDAP service" };
-    if (!res.ok) return { error: `RDAP responded ${res.status}` };
+    if (res.status === 404) return { error: "The domain registry has no record of this domain, so its expiry could not be checked." };
+    if (!res.ok) return { error: "The domain registry did not answer properly, so the expiry could not be checked. It will be tried again later." };
     const json = (await res.json()) as { events?: { eventAction?: string; eventDate?: string }[] };
     const event = (json.events ?? []).find((e) => /expiration/i.test(e.eventAction ?? ""));
-    if (!event?.eventDate) return { error: "RDAP record carries no expiry date" };
+    if (!event?.eventDate) return { error: "The domain registry's record has no expiry date. Check the expiry with the domain's provider." };
     return { date: new Date(event.eventDate) };
   } catch (e) {
     const err = e as Error;
-    return { error: err.name === "TimeoutError" ? "RDAP timed out" : `RDAP failed: ${err.message}` };
+    return { error: err.name === "TimeoutError" ? "The domain registry took too long to answer. It will be tried again later." : "The domain registry could not be reached. It will be tried again later." };
   }
 }
 
@@ -65,7 +65,7 @@ export async function sslExpiry(hostInput: string, deps: SslDeps = {}): Promise<
         );
       },
     );
-    socket.on("error", (e: NodeJS.ErrnoException) => finish({ error: `TLS failed: ${e.code ?? e.message}` }));
-    socket.on("timeout", () => finish({ error: "TLS timed out" }));
+    socket.on("error", () => finish({ error: "The website's certificate could not be read. Check that the site opens in a browser." }));
+    socket.on("timeout", () => finish({ error: "The website took too long to answer, so its certificate could not be read. It will be tried again later." }));
   });
 }

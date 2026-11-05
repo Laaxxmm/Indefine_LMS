@@ -5,17 +5,18 @@ import { canViewClients, createClientBodyZ } from "@/lib/clients/core";
 import { ClientExistsError, ClientNameError, clientFolderName, createClientRecord, findDuplicateClient } from "@/lib/clients/service";
 import { ensureJobFolder } from "@/lib/clients/storage";
 import { scheduleWorkbookRebuild } from "@/lib/clients/workbook";
+import { validationMessage } from "@/lib/errors";
 
 export const maxDuration = 60;
 
 // Onboard a client together with its first job. Any active user.
 export async function POST(req: Request) {
   const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!canViewClients(session.user)) return NextResponse.json({ error: "No access" }, { status: 403 });
+  if (!session?.user) return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
+  if (!canViewClients(session.user)) return NextResponse.json({ error: "Your account is not active. Ask an admin to reactivate it." }, { status: 403 });
 
   const parsed = createClientBodyZ.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid request" }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: validationMessage(parsed.error) }, { status: 400 });
   const { client, job } = parsed.data;
 
   try {
@@ -26,15 +27,15 @@ export async function POST(req: Request) {
   }
 
   const dup = await findDuplicateClient(prisma, { name: client.name, pan: client.pan });
-  if (dup) return NextResponse.json({ error: `Client already exists: ${dup.name}`, existingId: dup.id }, { status: 409 });
+  if (dup) return NextResponse.json({ error: `A client called ${dup.name} already exists. Open that client instead of adding it again.`, existingId: dup.id }, { status: 409 });
 
   const handlerIds = [...new Set([client.primaryHandlerId, job.handlerId])];
   const [service, handlers] = await Promise.all([
     prisma.serviceType.findUnique({ where: { id: job.serviceTypeId } }),
     prisma.user.findMany({ where: { id: { in: handlerIds }, active: true }, select: { id: true } }),
   ]);
-  if (!service?.active) return NextResponse.json({ error: "Unknown service" }, { status: 400 });
-  if (handlers.length !== handlerIds.length) return NextResponse.json({ error: "Unknown handler" }, { status: 400 });
+  if (!service?.active) return NextResponse.json({ error: "That service isn't offered any more. Reload the page and pick another." }, { status: 400 });
+  if (handlers.length !== handlerIds.length) return NextResponse.json({ error: "That handler isn't an active user. Pick someone from the list." }, { status: 400 });
 
   let created;
   try {

@@ -133,9 +133,9 @@ export function createDeliverableStore(client: SharePointClient, opts: Deliverab
       if (known && now() - known.at < DRIVE_ID_TTL_MS) return known.id;
       const siteUrl = clSiteUrl(clientCode, host);
       const site = await client.getSiteByUrl(siteUrl);
-      if (!site) throw new NotProvisionedError(`Client site ${siteUrl} does not exist yet; run onboarding (ensureClientSite) first`);
+      if (!site) throw new NotProvisionedError(`The client's SharePoint site (${siteUrl}) does not exist yet. Finish the client's onboarding first.`);
       const drive = await client.getDriveByName(site.id, COMPLIANCE_LIBRARY);
-      if (!drive) throw new NotProvisionedError(`Library ${COMPLIANCE_LIBRARY} on ${siteUrl} does not exist yet; run ensureFyTree first`);
+      if (!drive) throw new NotProvisionedError(`The ${COMPLIANCE_LIBRARY} library on the client's SharePoint site (${siteUrl}) does not exist yet. Finish the client's onboarding first.`);
       drives.set(clientCode, { id: drive.id, at: now() });
       return drive.id;
     },

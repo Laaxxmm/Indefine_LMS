@@ -40,7 +40,7 @@ describe("DeliverableStore", () => {
     expect(await store.complianceDrive("ACME")).toBe(drive.id);
     await expect(store.complianceDrive("NOPE")).rejects.toBeInstanceOf(NotProvisionedError);
     fake.addSite("/sites/CL-BARE");
-    await expect(store.complianceDrive("BARE")).rejects.toThrow(/Library Compliance/);
+    await expect(store.complianceDrive("BARE")).rejects.toThrow(/The Compliance library on the client's SharePoint site/);
   });
 
   it("putNew keeps the requested version when free and bumps when taken (never overwrites)", async () => {

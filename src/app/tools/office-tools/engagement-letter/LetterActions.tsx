@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { EngagementLetterStatus } from "@prisma/client";
 import { Check, Mail, Upload } from "lucide-react";
 import { can, type Step } from "@/lib/office-tools/engagement-letter-flow";
+import { DEFAULT_MESSAGE } from "@/lib/errors";
 
 type Draft = { to: string; cc: string; subject: string; text: string };
 type Kind = "draft" | "signed" | "client";
@@ -42,7 +43,7 @@ export function LetterActions({ id, status, mails }: { id: string; status: Engag
       setNote(null);
       router.refresh();
     } else {
-      setMsg({ text: j?.error ?? "Something went wrong", link: j?.connect });
+      setMsg({ text: j?.error ?? DEFAULT_MESSAGE, link: j?.connect });
     }
   }
 

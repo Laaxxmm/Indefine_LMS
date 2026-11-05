@@ -8,6 +8,7 @@ import { compose, isTotalRow, PlaceholderLeakError, type Block } from "@/lib/cer
 import { resolveValues, CertificateValidationError } from "@/lib/certificates/render/values";
 import { isSuggestible } from "@/lib/certificates/suggestible";
 import { FieldCombobox, type FieldOption } from "./FieldCombobox";
+import { userMessage, failureSentence, responseError } from "@/lib/errors";
 
 type Payload = Record<string, unknown>;
 
@@ -111,7 +112,7 @@ export function CertificateForm({ template }: { template: CertificateTemplate })
         return { blocks: null, errors: Array.from(new Set(labels)) };
       }
       if (e instanceof PlaceholderLeakError) return { blocks: null, errors: [e.message] };
-      return { blocks: null, errors: [(e as Error).message] };
+      return { blocks: null, errors: [failureSentence(e, "The preview could not be built.", "Check the fields and try again.")] };
     }
   }, [template, payload, byKey]);
 
@@ -128,7 +129,7 @@ export function CertificateForm({ template }: { template: CertificateTemplate })
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        setServerError(body.error || `Request failed (${res.status})`);
+        setServerError(responseError(res.status, body));
         return;
       }
       const issueId = res.headers.get("X-Issue-Id");
@@ -143,7 +144,7 @@ export function CertificateForm({ template }: { template: CertificateTemplate })
       URL.revokeObjectURL(url);
       setDoneId(issueId || "ok");
     } catch (e) {
-      setServerError((e as Error).message);
+      setServerError(userMessage(e));
     } finally {
       setBusy(false);
     }
