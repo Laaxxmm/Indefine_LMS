@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { QuizAI } from "./QuizAI";
 import { generateQuiz } from "@/lib/quiz-gen";
+import { NAMES_UNAVAILABLE, legacyDictionary } from "@/lib/auto-quiz";
 import { getQuizDefaults } from "@/lib/settings";
 import { SubmitButton } from "@/components/SubmitButton";
 import { ConfirmButton } from "@/components/ConfirmButton";
@@ -119,12 +120,17 @@ async function generateAndAddLive(data: {
 
   await prisma.video.update({ where: { id: video.id }, data: { sourceText } });
 
+  // DPDP: the source text may name clients or staff. Mask them with the client master + staff name
+  // dictionary, as SOP Builder and the automatic quiz do; if it cannot be loaded, send nothing.
+  const dictionary = await legacyDictionary();
+  if (!dictionary) return { ok: false, error: NAMES_UNAVAILABLE };
   const result = await generateQuiz({
     videoTitle: video.title,
     videoDescription: video.description,
     sourceText,
     count: data.count,
     difficulty: data.difficulty,
+    dictionary,
   });
   if (!result.ok) return { ok: false, error: result.error };
 

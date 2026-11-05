@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { generateQuiz, type Difficulty } from "@/lib/quiz-gen";
+import { NAMES_UNAVAILABLE, legacyDictionary } from "@/lib/auto-quiz";
 import { isActive, isAdmin } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
@@ -44,12 +45,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Video not found" }, { status: 404 });
   }
 
+  // DPDP: the source text may name clients or staff. Mask them with the client master + staff name
+  // dictionary, as SOP Builder and the automatic quiz do; if it cannot be loaded, send nothing.
+  const dictionary = await legacyDictionary();
+  if (!dictionary) return NextResponse.json({ ok: false, error: NAMES_UNAVAILABLE }, { status: 503 });
   const result = await generateQuiz({
     videoTitle: video.title,
     videoDescription: video.description,
     sourceText,
     count,
     difficulty,
+    dictionary,
   });
 
   if (!result.ok) {
