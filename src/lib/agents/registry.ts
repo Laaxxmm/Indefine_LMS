@@ -6,6 +6,8 @@ import { echoAgent } from "@/lib/agents/echo";
 import { gstAgent } from "@/lib/agents/gst";
 import { booksAgent } from "@/lib/agents/books";
 import { auditAgent } from "@/lib/agents/audit";
+import { rocAgent } from "@/lib/agents/roc";
+import { taxAgent } from "@/lib/agents/tax";
 import { isEchoAgentEnabled } from "./flags";
 
 export const AGENTS: Readonly<Record<string, AnyAgent>> = Object.freeze({
@@ -13,6 +15,8 @@ export const AGENTS: Readonly<Record<string, AnyAgent>> = Object.freeze({
   [gstAgent.key]: gstAgent,
   [booksAgent.key]: booksAgent,
   [auditAgent.key]: auditAgent,
+  [rocAgent.key]: rocAgent,
+  [taxAgent.key]: taxAgent,
 });
 
 export function getAgent(key: string, agents: Readonly<Record<string, AnyAgent>> = AGENTS): AnyAgent | undefined {

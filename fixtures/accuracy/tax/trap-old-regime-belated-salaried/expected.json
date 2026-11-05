@@ -1,0 +1,159 @@
+{
+  "description": "Trap: old regime claimed (80C 1,50,000) by a salaried person whose return is planned 20-08-2026, after the 31-07-2026 due date: without business income the old regime is available only in a return filed by the due date (block tax.regime-eligibility), so the computation uses the new regime: 1,05,300 as the clean case. Late fee u/s 234F Rs5,000 (TI > 5L) and 234A nil (TDS covers the tax) (warn tax.late-filing). Net payable 1,05,300 + 5,000 - 1,05,300 = 5,000. Old regime (comparison): 14,97,600 - 1,50,000 = 13,47,600: 12,500 + 1,00,000 + 3,47,600 x 30% 1,04,280 = 2,16,780; cess 8,671.20; 2,25,451.20 -> 2,25,451.",
+  "category": "trap",
+  "job": {
+    "fy": "2025-26",
+    "period": "Annual",
+    "title": "Income-tax return AY 2026-27"
+  },
+  "flags": [
+    {
+      "ruleId": "tax.regime-eligibility",
+      "severity": "block"
+    },
+    {
+      "ruleId": "tax.late-filing",
+      "severity": "warn"
+    }
+  ],
+  "figures": {
+    "grossTotalIncomePaise": 147500000,
+    "deductionsAllowedPaise": 0,
+    "totalIncomePaise": 147500000,
+    "taxOldPaise": 22545100,
+    "taxNewPaise": 10530000,
+    "taxLiabilityPaise": 10530000,
+    "rebate87APaise": 0,
+    "surchargePaise": 0,
+    "cessPaise": 405000,
+    "regimeNew": 1,
+    "businessIncomePaise": 0,
+    "presumptiveIncomePaise": 0,
+    "msmeDisallowancePaise": 0,
+    "capitalGainsPaise": 0,
+    "tdsBooksPaise": 10530000,
+    "tds26asPaise": 10530000,
+    "tdsCreditPaise": 10530000,
+    "aisUnexplainedPaise": 0,
+    "advanceTaxPaidPaise": 0,
+    "interest234APaise": 0,
+    "interest234BPaise": 0,
+    "interest234CPaise": 0,
+    "lateFee234FPaise": 500000,
+    "netPayablePaise": 500000,
+    "auditRequired": 0,
+    "itrForm": 1,
+    "dueDate139": 20260731,
+    "lossCarriedForwardPaise": 0,
+    "lossLostPaise": 0,
+    "bfLossSetOffPaise": 0
+  },
+  "deliverables": [
+    {
+      "name": "Tax computation",
+      "sheets": [
+        {
+          "name": "Computation",
+          "columns": [
+            "Particulars",
+            "Amount (regime used)",
+            "Old regime",
+            "New regime"
+          ]
+        },
+        {
+          "name": "26AS vs books",
+          "columns": [
+            "TAN",
+            "Deductor",
+            "TDS per books",
+            "TDS per 26AS",
+            "Difference",
+            "Credit claimed"
+          ]
+        },
+        {
+          "name": "AIS vs books",
+          "columns": [
+            "AIS id",
+            "Category",
+            "Source",
+            "AIS amount",
+            "Books ledger",
+            "Not explained",
+            "Result"
+          ]
+        },
+        {
+          "name": "Advance tax",
+          "columns": [
+            "Instalment date",
+            "Cumulative %",
+            "Tax due",
+            "Paid by date",
+            "Shortfall (rounded)",
+            "Months",
+            "Interest"
+          ]
+        },
+        {
+          "name": "Capital gains",
+          "columns": [
+            "Asset",
+            "Type",
+            "Acquired",
+            "Sold",
+            "Sale value",
+            "Cost + expenses",
+            "Gain / (loss)",
+            "Section"
+          ]
+        },
+        {
+          "name": "MSME 43B(h)",
+          "columns": [
+            "Vendor",
+            "Category",
+            "Accepted on",
+            "Paid on",
+            "Days to pay",
+            "Allowed days",
+            "Amount",
+            "Result"
+          ]
+        },
+        {
+          "name": "Audit and ITR",
+          "columns": [
+            "Check",
+            "Result"
+          ]
+        },
+        {
+          "name": "Missing documents",
+          "columns": [
+            "Document or question",
+            "Kind"
+          ]
+        },
+        {
+          "name": "Checklist",
+          "columns": [
+            "Rule",
+            "Severity",
+            "Status",
+            "Finding",
+            "Evidence"
+          ]
+        },
+        {
+          "name": "Verify",
+          "columns": [
+            "Rate / threshold / date",
+            "Partner to verify"
+          ]
+        }
+      ]
+    }
+  ]
+}

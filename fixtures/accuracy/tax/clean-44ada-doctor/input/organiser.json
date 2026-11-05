@@ -1,0 +1,34 @@
+{
+  "profile": {
+    "name": "Dr Fixture (clinic)",
+    "status": "individual",
+    "dateOfBirth": "1980-01-10",
+    "residentialStatus": "resident",
+    "regimeClaimed": "new",
+    "businessKind": "profession",
+    "plannedFilingDate": "2026-07-31",
+    "notes": "Medical practitioner, consulting at two Bengaluru hospitals. No foreign assets, accounts or income.",
+    "presumptive": "44ADA",
+    "specifiedProfession": true,
+    "itrFormPlanned": "ITR-4"
+  },
+  "otherSources": [],
+  "tdsInBooks": [
+    {
+      "tan": "BLRH00005F",
+      "deductor": "Fixture Hospital One",
+      "amount": "3,60,000"
+    },
+    {
+      "tan": "BLRH00006G",
+      "deductor": "Fixture Hospital Two",
+      "amount": "2,40,000"
+    }
+  ],
+  "business": {
+    "turnover": "60,00,000",
+    "cashReceipts": "1,20,000",
+    "digitalReceipts": "58,80,000",
+    "booksProfit": "34,00,000"
+  }
+}
