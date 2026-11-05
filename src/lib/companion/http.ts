@@ -1,8 +1,8 @@
 // HTTP edge of GET /api/firm-os/companion/next-task, the side panel's only call.
 //
 //   auth     `Authorization: Bearer <pairing token>`. No cookie is read or set, and no session.
-//   CORS     answers only the configured extension origin (FIRM_OS_COMPANION_EXTENSION_ORIGIN),
-//            never with Access-Control-Allow-Credentials. A request from any other browser origin
+//   CORS     answers only the extension origin (its fixed id, or FIRM_OS_COMPANION_EXTENSION_ORIGIN
+//            when set — config.ts), never with Access-Control-Allow-Credentials. A request from any other browser origin
 //            is refused with 403; one with no Origin header (not a browser page) is treated like
 //            the extension, because the token is the gate.
 //   limit    per token (by its hash), before any database work.

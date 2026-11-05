@@ -8,6 +8,7 @@ vi.mock("@/lib/prisma", async () => ({ prisma: (await import("./harness")).prism
 const { auth } = await import("@/lib/auth");
 const { GET, OPTIONS } = await import("@/app/api/firm-os/companion/next-task/route");
 const { MSG } = await import("@/lib/companion/messages");
+const { COMPANION_EXTENSION_ID } = await import("@/lib/companion/config");
 const { fakeToken } = await import("@/lib/companion/__tests__/fakes");
 const { prismaCalls } = await import("./harness");
 
@@ -33,11 +34,14 @@ describe("/api/firm-os/companion/next-task route", () => {
     expect(JSON.stringify(prismaCalls[0].args)).not.toContain(fakeToken("z"));
   });
 
-  it("CORS follows FIRM_OS_COMPANION_EXTENSION_ORIGIN; nothing is allowed when it is unset", async () => {
+  it("CORS allows the extension's fixed id by default, or exactly FIRM_OS_COMPANION_EXTENSION_ORIGIN when set", async () => {
     const pre = (origin: string) => OPTIONS(new Request(url, { method: "OPTIONS", headers: { origin } }));
+    const own = `chrome-extension://${COMPANION_EXTENSION_ID}`;
+    expect((await pre(own)).status).toBe(204);
     expect((await pre(EXT)).status).toBe(403);
     expect((await GET(new Request(url, { headers: { origin: EXT } }))).status).toBe(403);
     vi.stubEnv("FIRM_OS_COMPANION_EXTENSION_ORIGIN", EXT);
+    expect((await pre(own)).status).toBe(403);
     const ok = await pre(EXT);
     expect(ok.status).toBe(204);
     expect(ok.headers.get("access-control-allow-origin")).toBe(EXT);

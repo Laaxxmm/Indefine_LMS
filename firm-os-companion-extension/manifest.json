@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "description": "Shows your current Firm OS task and its SOP steps beside the page you are working on. Read-only: it never reads, fills or submits any page.",
   "minimum_chrome_version": "116",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAty7iR5lRSi8Qt4fvHpiMwTi0D895lK32zN4hhqM5eMnvF4TrOGvtN/v41q2XZE1XS4TqOUNTVBst1gZUBw8hS7MOYXNliQoj60EINxNySGP8LEtgGHSJq5yPsqq2N6Yyzp1zrPV9DzzrwdUNncSbS7Onr4S5394xScVdFxgrefCMeTzkoah7skX1gBeh0/U07o9SYW6FfMG5JW3MH3vnPedixdBR092t8ykJHzne4fYcoC9kzKk4puPbcRnNPHK4I4mJNOIhEOsTesYgMucWIde3Qo+vu95Cdh4++NjkAftPNdM6spNe903LJL3WhxgE/JKVYsBVPQMJeZhxZQopowIDAQAB",
   "permissions": ["sidePanel", "storage"],
   "host_permissions": ["https://lms.indefine.in/*"],
   "background": { "service_worker": "background.js" },

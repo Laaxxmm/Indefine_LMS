@@ -32,17 +32,25 @@ export const COMPANION_QUEUE_MAX = 5;
 export const COMPANION_FIGURES_MAX = 24;
 
 /**
- * Env var holding the extension origin(s) allowed by CORS, comma-separated:
- * `chrome-extension://<32-letter id>`. The id is shown on chrome://extensions after loading the
- * extension unpacked; a packed (store or policy-installed) build has a fixed id.
+ * The extension's id. Fixed by the public `key` in firm-os-companion-extension/manifest.json, so
+ * every unpacked install has the same id (a repo test derives it from the key and compares).
+ */
+export const COMPANION_EXTENSION_ID = "emjmdagolmalbajejchchjihgggcnkdb";
+
+/**
+ * Env var overriding the extension origin(s) allowed by CORS, comma-separated:
+ * `chrome-extension://<32-letter id>`. Unset or empty → the extension's own fixed id. Set it when
+ * a differently keyed build (store, policy, a fork) must be allowed.
  */
 export const COMPANION_ORIGIN_ENV = "FIRM_OS_COMPANION_EXTENSION_ORIGIN";
 
 const EXTENSION_ORIGIN_RE = /^chrome-extension:\/\/[a-p]{32}$/;
 
-/** The configured extension origins; malformed entries are ignored, never loosened to "*". */
+/** The allowed extension origins; malformed entries are ignored, never loosened to "*". */
 export function allowedExtensionOrigins(env: Record<string, string | undefined> = process.env): string[] {
-  return (env[COMPANION_ORIGIN_ENV] ?? "")
+  const raw = env[COMPANION_ORIGIN_ENV]?.trim();
+  if (!raw) return [`chrome-extension://${COMPANION_EXTENSION_ID}`];
+  return raw
     .split(",")
     .map((s) => s.trim().replace(/\/+$/, ""))
     .filter((s) => EXTENSION_ORIGIN_RE.test(s));

@@ -2,7 +2,7 @@
 // credentials, never a cookie), the 401/403/429/500 sentences, the per-token limit and the 200 shape.
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import { COMPANION_ORIGIN_ENV, COMPANION_RATE_LIMIT, allowedExtensionOrigins } from "../config";
+import { COMPANION_EXTENSION_ID, COMPANION_ORIGIN_ENV, COMPANION_RATE_LIMIT, allowedExtensionOrigins } from "../config";
 import { corsOrigin, handleNextTask, handlePreflight, type NextTaskDeps } from "../http";
 import { MSG } from "../messages";
 import { memoryRateLimiter } from "../rate-limit";
@@ -79,10 +79,11 @@ describe("CORS", () => {
     expect(handlePreflight(new Request("https://x/", { method: "OPTIONS", headers: { origin: EXT } }), []).status).toBe(403);
   });
 
-  it("reads the allowed origins from the environment, strictly", () => {
+  it("allows the extension's own fixed id by default; the environment overrides it, strictly", () => {
+    expect(allowedExtensionOrigins({})).toEqual([`chrome-extension://${COMPANION_EXTENSION_ID}`]);
+    expect(allowedExtensionOrigins({ [COMPANION_ORIGIN_ENV]: "  " })).toEqual([`chrome-extension://${COMPANION_EXTENSION_ID}`]);
     expect(allowedExtensionOrigins({ [COMPANION_ORIGIN_ENV]: ` ${EXT}/ , ${OTHER_EXT}` })).toEqual([EXT, OTHER_EXT]);
     expect(allowedExtensionOrigins({ [COMPANION_ORIGIN_ENV]: "*, https://lms.indefine.in, chrome-extension://short, chrome-extension://" + "z".repeat(32) })).toEqual([]);
-    expect(allowedExtensionOrigins({})).toEqual([]);
     expect(corsOrigin(get({ origin: EXT }), [EXT])).toEqual({ allowed: EXT, rejected: false });
   });
 });
