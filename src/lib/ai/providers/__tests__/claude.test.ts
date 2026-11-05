@@ -132,7 +132,7 @@ describe("claude provider", () => {
   });
 
   it("is available with a key (builds a real SDK client lazily, no network here)", async () => {
-    const p = createClaudeProvider({ apiKey: "test-key-not-real" });
+    const p = createClaudeProvider({ apiKey: "test-key" });
     expect(await p.isAvailable()).toBe(true);
   });
 

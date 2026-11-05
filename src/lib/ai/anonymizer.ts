@@ -44,8 +44,8 @@ export function createTokenMap(): TokenMap {
   return { byToken: new Map(), byValue: new Map(), counters: {} };
 }
 
-const TOKEN_SOURCE = "⟨[A-Z]+(?:_[A-Z]+)*_\\d+⟩";
-const tokenRe = () => new RegExp(TOKEN_SOURCE, "g");
+const PLACEHOLDER_SOURCE = "⟨[A-Z]+(?:_[A-Z]+)*_\\d+⟩";
+const tokenRe = () => new RegExp(PLACEHOLDER_SOURCE, "g");
 
 // ---------------------------------------------------------------- validators (pure, exported)
 
