@@ -126,8 +126,7 @@ export async function restrictionsByRequest(db: RestrictionReadDb, q: Subject): 
     const keys = keysIn(m);
     byRequest.set(request, e.lift ? current.filter((k) => !keys.includes(k)) : [...current, ...keys.filter((k) => !current.includes(k))]);
   }
-  for (const [request, keys] of byRequest) if (!keys.length) byRequest.delete(request); // in-memory bookkeeping only
-  return byRequest;
+  return new Map([...byRequest].filter(([, keys]) => keys.length > 0)); // requests whose restriction is fully lifted drop out
 }
 
 /** Restrictions in force for an LMS client or a user (empty when none or all lifted). */
