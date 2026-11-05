@@ -149,7 +149,7 @@ describe("/api/firm-os/onboard — happy path and errors", () => {
     expect(Number(r.headers.get("Retry-After"))).toBeGreaterThan(39 * 60);
     expect(Number(r.headers.get("Retry-After"))).toBeLessThanOrEqual(40 * 60);
     expect(r.headers.get("RateLimit-Limit")).toBe("30");
-    expect((await r.json()).error).toMatch(/Too many onboarding requests: the limit is 30 per window\. Try again in 40 minutes\./);
+    expect((await r.json()).error).toMatch(/You have made too many onboarding requests in an hour \(the limit is 30\)\. Wait 40 minutes, then try again\./);
     expect(svc.start).not.toHaveBeenCalled();
     for (const name of ["answer", "plan", "create", "resume"] as const) expect((await routes[name](req(VALID[name]))).status).toBe(429);
     expect((await routes["turia-confirm"](req(VALID["turia-confirm"]))).status).toBe(200);

@@ -93,7 +93,7 @@ describe("rate limit (429)", () => {
       const r = await runJob();
       expect(r.status).toBe(429);
       expect(r.headers.get("Retry-After")).toBe("30");
-      expect((await r.json()).error).toMatch(/Too many agent runs: the limit is 20 per window\. Try again in 1 minute\./);
+      expect((await r.json()).error).toMatch(/You have made too many agent runs in an hour \(the limit is 20\)\. Wait 1 minute, then try again\./);
       as(user("ravi"));
       expect((await changes.POST(post({ note: "Recheck INV-2" }), p({ id: "run-1" }))).status).toBe(429);
       as(user("priya"));

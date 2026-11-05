@@ -1,8 +1,10 @@
-// Rate limit for identifier searches (PAN, GSTIN, phone, email), per person. The default is an
-// in-memory sliding window, enough for one Node process. Phase 11 adds a database-backed limiter in
-// src/lib/hardening (RateLimitBucket); to switch, pass it as `limiter` in defaultSearchDeps()
-// (src/lib/search/defaults.ts) or call setIdentifierRateLimiter() once at start-up. Anything that
-// implements SearchRateLimiter works.
+// Rate limit for identifier searches (PAN, GSTIN, phone, email), per person. Production uses the
+// database-backed limiter (src/lib/hardening/rate-limit.ts, scope "identifier-search", 10 per 10
+// minutes by default, RATE_LIMIT_IDENTIFIER_SEARCH to change it), so every app instance shares one
+// count; if the bucket table cannot be reached, the in-memory sliding window below decides for
+// this process instead. Tests pass memoryRateLimiter() through deps.limiter, or call
+// setIdentifierRateLimiter(). Anything that implements SearchRateLimiter works.
+import { DEFAULT_LIMITS, scopedRateLimiter } from "@/lib/hardening/rate-limit";
 
 export type RateDecision = { ok: true; remaining: number } | { ok: false; retryAfterSeconds: number };
 
@@ -13,8 +15,8 @@ export interface SearchRateLimiter {
 
 export type RateLimitPolicy = { limit: number; windowMs: number };
 
-/** 10 identifier searches per person in any 10 minutes. */
-export const IDENTIFIER_SEARCH_LIMIT: RateLimitPolicy = { limit: 10, windowMs: 10 * 60_000 };
+/** 10 identifier searches per person in any 10 minutes (the same default as the database limiter). */
+export const IDENTIFIER_SEARCH_LIMIT: RateLimitPolicy = DEFAULT_LIMITS["identifier-search"];
 
 /** Sliding-window limiter held in memory. Refused attempts are not counted. */
 export function memoryRateLimiter(policy: RateLimitPolicy = IDENTIFIER_SEARCH_LIMIT): SearchRateLimiter {
@@ -34,14 +36,20 @@ export function memoryRateLimiter(policy: RateLimitPolicy = IDENTIFIER_SEARCH_LI
   };
 }
 
-let current: SearchRateLimiter = memoryRateLimiter();
+/** The shared, database-backed limiter (RateLimitBucket "identifier-search:<userId>"), memory fallback. */
+export function databaseIdentifierRateLimiter(): SearchRateLimiter {
+  return scopedRateLimiter("identifier-search", { fallback: memoryRateLimiter() });
+}
 
-/** The limiter identifier searches use by default. */
+let current: SearchRateLimiter | null = null;
+
+/** The limiter identifier searches use by default (the database-backed one). */
 export function identifierRateLimiter(): SearchRateLimiter {
+  current ??= databaseIdentifierRateLimiter();
   return current;
 }
 
-/** Replace the default limiter (e.g. with the Phase 11 database-backed one). */
+/** Replace the default limiter (tests, or a different store). */
 export function setIdentifierRateLimiter(limiter: SearchRateLimiter): void {
   current = limiter;
 }
