@@ -1,16 +1,18 @@
+-- Re-runnable: the boot script (scripts/migrate.mjs) retries a half-applied migration, so every
+-- statement is guarded (IF NOT EXISTS, or a DO block that ignores the duplicate). Additive only.
 -- AlterTable
-ALTER TABLE "FirmClient" ADD COLUMN     "preferredLanguage" TEXT NOT NULL DEFAULT 'en';
+ALTER TABLE "FirmClient" ADD COLUMN IF NOT EXISTS     "preferredLanguage" TEXT NOT NULL DEFAULT 'en';
 
 -- AlterTable
-ALTER TABLE "TuriaSync" ADD COLUMN     "spotCheckNote" TEXT,
-ADD COLUMN     "spotCheckedAt" TIMESTAMP(3),
-ADD COLUMN     "spotCheckedById" TEXT;
+ALTER TABLE "TuriaSync" ADD COLUMN IF NOT EXISTS     "spotCheckNote" TEXT,
+ADD COLUMN IF NOT EXISTS     "spotCheckedAt" TIMESTAMP(3),
+ADD COLUMN IF NOT EXISTS     "spotCheckedById" TEXT;
 
 -- AlterTable
-ALTER TABLE "CoachEvent" ADD COLUMN     "dedupeKey" TEXT;
+ALTER TABLE "CoachEvent" ADD COLUMN IF NOT EXISTS     "dedupeKey" TEXT;
 
 -- CreateTable
-CREATE TABLE "ActivityHeartbeat" (
+CREATE TABLE IF NOT EXISTS "ActivityHeartbeat" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -20,7 +22,7 @@ CREATE TABLE "ActivityHeartbeat" (
 );
 
 -- CreateTable
-CREATE TABLE "CoachPreference" (
+CREATE TABLE IF NOT EXISTS "CoachPreference" (
     "userId" TEXT NOT NULL,
     "breakNudges" BOOLEAN NOT NULL DEFAULT true,
     "snoozeUntil" TIMESTAMP(3),
@@ -31,7 +33,7 @@ CREATE TABLE "CoachPreference" (
 );
 
 -- CreateTable
-CREATE TABLE "RateLimitBucket" (
+CREATE TABLE IF NOT EXISTS "RateLimitBucket" (
     "key" TEXT NOT NULL,
     "windowStart" TIMESTAMP(3) NOT NULL,
     "count" INTEGER NOT NULL DEFAULT 0,
@@ -41,11 +43,11 @@ CREATE TABLE "RateLimitBucket" (
 );
 
 -- CreateIndex
-CREATE INDEX "ActivityHeartbeat_userId_at_idx" ON "ActivityHeartbeat"("userId", "at");
+CREATE INDEX IF NOT EXISTS "ActivityHeartbeat_userId_at_idx" ON "ActivityHeartbeat"("userId", "at");
 
 -- CreateIndex
-CREATE INDEX "ActivityHeartbeat_at_idx" ON "ActivityHeartbeat"("at");
+CREATE INDEX IF NOT EXISTS "ActivityHeartbeat_at_idx" ON "ActivityHeartbeat"("at");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "CoachEvent_dedupeKey_key" ON "CoachEvent"("dedupeKey");
+CREATE UNIQUE INDEX IF NOT EXISTS "CoachEvent_dedupeKey_key" ON "CoachEvent"("dedupeKey");
 

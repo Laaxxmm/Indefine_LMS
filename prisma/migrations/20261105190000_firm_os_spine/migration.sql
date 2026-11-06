@@ -1,14 +1,25 @@
+-- Re-runnable: the boot script (scripts/migrate.mjs) retries a half-applied migration, so every
+-- statement is guarded (IF NOT EXISTS, or a DO block that ignores the duplicate). Additive only.
 -- CreateEnum
-CREATE TYPE "ModelProviderId" AS ENUM ('claude', 'grok', 'local');
+DO $$ BEGIN
+  CREATE TYPE "ModelProviderId" AS ENUM ('claude', 'grok', 'local');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- CreateEnum
-CREATE TYPE "ModelTier" AS ENUM ('FAST', 'SMART', 'HARD', 'LOCAL');
+DO $$ BEGIN
+  CREATE TYPE "ModelTier" AS ENUM ('FAST', 'SMART', 'HARD', 'LOCAL');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- CreateEnum
-CREATE TYPE "ModelCallStatus" AS ENUM ('OK', 'SCHEMA_FAIL', 'LOW_CONFIDENCE', 'PROVIDER_ERROR', 'QUEUED_FOR_HUMAN', 'BUDGET_REFUSED');
+DO $$ BEGIN
+  CREATE TYPE "ModelCallStatus" AS ENUM ('OK', 'SCHEMA_FAIL', 'LOW_CONFIDENCE', 'PROVIDER_ERROR', 'QUEUED_FOR_HUMAN', 'BUDGET_REFUSED');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- CreateTable
-CREATE TABLE "FirmClient" (
+CREATE TABLE IF NOT EXISTS "FirmClient" (
     "id" TEXT NOT NULL,
     "lmsClientId" TEXT NOT NULL,
     "clientCode" TEXT NOT NULL,
@@ -22,7 +33,7 @@ CREATE TABLE "FirmClient" (
 );
 
 -- CreateTable
-CREATE TABLE "ModelCall" (
+CREATE TABLE IF NOT EXISTS "ModelCall" (
     "id" TEXT NOT NULL,
     "runId" TEXT NOT NULL,
     "agent" TEXT,
@@ -49,7 +60,7 @@ CREATE TABLE "ModelCall" (
 );
 
 -- CreateTable
-CREATE TABLE "AuditEvent" (
+CREATE TABLE IF NOT EXISTS "AuditEvent" (
     "id" TEXT NOT NULL,
     "actorId" TEXT,
     "action" TEXT NOT NULL,
@@ -62,29 +73,32 @@ CREATE TABLE "AuditEvent" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "FirmClient_lmsClientId_key" ON "FirmClient"("lmsClientId");
+CREATE UNIQUE INDEX IF NOT EXISTS "FirmClient_lmsClientId_key" ON "FirmClient"("lmsClientId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "FirmClient_clientCode_key" ON "FirmClient"("clientCode");
+CREATE UNIQUE INDEX IF NOT EXISTS "FirmClient_clientCode_key" ON "FirmClient"("clientCode");
 
 -- CreateIndex
-CREATE INDEX "ModelCall_runId_idx" ON "ModelCall"("runId");
+CREATE INDEX IF NOT EXISTS "ModelCall_runId_idx" ON "ModelCall"("runId");
 
 -- CreateIndex
-CREATE INDEX "ModelCall_createdAt_idx" ON "ModelCall"("createdAt");
+CREATE INDEX IF NOT EXISTS "ModelCall_createdAt_idx" ON "ModelCall"("createdAt");
 
 -- CreateIndex
-CREATE INDEX "ModelCall_agent_createdAt_idx" ON "ModelCall"("agent", "createdAt");
+CREATE INDEX IF NOT EXISTS "ModelCall_agent_createdAt_idx" ON "ModelCall"("agent", "createdAt");
 
 -- CreateIndex
-CREATE INDEX "AuditEvent_entity_entityId_idx" ON "AuditEvent"("entity", "entityId");
+CREATE INDEX IF NOT EXISTS "AuditEvent_entity_entityId_idx" ON "AuditEvent"("entity", "entityId");
 
 -- CreateIndex
-CREATE INDEX "AuditEvent_actorId_createdAt_idx" ON "AuditEvent"("actorId", "createdAt");
+CREATE INDEX IF NOT EXISTS "AuditEvent_actorId_createdAt_idx" ON "AuditEvent"("actorId", "createdAt");
 
 -- CreateIndex
-CREATE INDEX "AuditEvent_createdAt_idx" ON "AuditEvent"("createdAt");
+CREATE INDEX IF NOT EXISTS "AuditEvent_createdAt_idx" ON "AuditEvent"("createdAt");
 
 -- AddForeignKey
-ALTER TABLE "FirmClient" ADD CONSTRAINT "FirmClient_lmsClientId_fkey" FOREIGN KEY ("lmsClientId") REFERENCES "Client"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "FirmClient" ADD CONSTRAINT "FirmClient_lmsClientId_fkey" FOREIGN KEY ("lmsClientId") REFERENCES "Client"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN NULL;
+END $$;
 

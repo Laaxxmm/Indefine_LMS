@@ -1,17 +1,31 @@
+-- Re-runnable: the boot script (scripts/migrate.mjs) retries a half-applied migration, so every
+-- statement is guarded (IF NOT EXISTS, or a DO block that ignores the duplicate). Additive only.
 -- CreateEnum
-CREATE TYPE "FirmService" AS ENUM ('GST', 'ROC', 'IncomeTax', 'TDS', 'Books', 'Audit', 'Engagement');
+DO $$ BEGIN
+  CREATE TYPE "FirmService" AS ENUM ('GST', 'ROC', 'IncomeTax', 'TDS', 'Books', 'Audit', 'Engagement');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- CreateEnum
-CREATE TYPE "JobTaskState" AS ENUM ('DRAFT', 'ASSIGNED', 'IN_PREP', 'AGENT_DONE', 'IN_REVIEW', 'APPROVED', 'FILED_BY_HUMAN', 'CLOSING', 'DONE');
+DO $$ BEGIN
+  CREATE TYPE "JobTaskState" AS ENUM ('DRAFT', 'ASSIGNED', 'IN_PREP', 'AGENT_DONE', 'IN_REVIEW', 'APPROVED', 'FILED_BY_HUMAN', 'CLOSING', 'DONE');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- CreateEnum
-CREATE TYPE "MistakeStatus" AS ENUM ('PROPOSED', 'APPROVED', 'REJECTED');
+DO $$ BEGIN
+  CREATE TYPE "MistakeStatus" AS ENUM ('PROPOSED', 'APPROVED', 'REJECTED');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- CreateEnum
-CREATE TYPE "TuriaSyncStatus" AS ENUM ('PENDING', 'CHECKLIST_ISSUED', 'CONFIRMED', 'CLOSED', 'FAILED');
+DO $$ BEGIN
+  CREATE TYPE "TuriaSyncStatus" AS ENUM ('PENDING', 'CHECKLIST_ISSUED', 'CONFIRMED', 'CLOSED', 'FAILED');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- CreateTable
-CREATE TABLE "Engagement" (
+CREATE TABLE IF NOT EXISTS "Engagement" (
     "id" TEXT NOT NULL,
     "firmClientId" TEXT NOT NULL,
     "service" "FirmService" NOT NULL,
@@ -28,7 +42,7 @@ CREATE TABLE "Engagement" (
 );
 
 -- CreateTable
-CREATE TABLE "SopPack" (
+CREATE TABLE IF NOT EXISTS "SopPack" (
     "id" TEXT NOT NULL,
     "key" TEXT NOT NULL,
     "version" TEXT NOT NULL,
@@ -49,7 +63,7 @@ CREATE TABLE "SopPack" (
 );
 
 -- CreateTable
-CREATE TABLE "JobTask" (
+CREATE TABLE IF NOT EXISTS "JobTask" (
     "id" TEXT NOT NULL,
     "firmClientId" TEXT NOT NULL,
     "engagementId" TEXT,
@@ -77,7 +91,7 @@ CREATE TABLE "JobTask" (
 );
 
 -- CreateTable
-CREATE TABLE "JobTaskEvent" (
+CREATE TABLE IF NOT EXISTS "JobTaskEvent" (
     "id" TEXT NOT NULL,
     "jobTaskId" TEXT NOT NULL,
     "fromState" "JobTaskState",
@@ -90,7 +104,7 @@ CREATE TABLE "JobTaskEvent" (
 );
 
 -- CreateTable
-CREATE TABLE "AgentRun" (
+CREATE TABLE IF NOT EXISTS "AgentRun" (
     "id" TEXT NOT NULL,
     "jobTaskId" TEXT NOT NULL,
     "agent" TEXT NOT NULL,
@@ -111,7 +125,7 @@ CREATE TABLE "AgentRun" (
 );
 
 -- CreateTable
-CREATE TABLE "ChecklistResult" (
+CREATE TABLE IF NOT EXISTS "ChecklistResult" (
     "id" TEXT NOT NULL,
     "agentRunId" TEXT NOT NULL,
     "ruleId" TEXT NOT NULL,
@@ -126,7 +140,7 @@ CREATE TABLE "ChecklistResult" (
 );
 
 -- CreateTable
-CREATE TABLE "MistakeLog" (
+CREATE TABLE IF NOT EXISTS "MistakeLog" (
     "id" TEXT NOT NULL,
     "agent" TEXT NOT NULL,
     "pattern" TEXT NOT NULL,
@@ -144,7 +158,7 @@ CREATE TABLE "MistakeLog" (
 );
 
 -- CreateTable
-CREATE TABLE "Deliverable" (
+CREATE TABLE IF NOT EXISTS "Deliverable" (
     "id" TEXT NOT NULL,
     "jobTaskId" TEXT NOT NULL,
     "agentRunId" TEXT,
@@ -163,7 +177,7 @@ CREATE TABLE "Deliverable" (
 );
 
 -- CreateTable
-CREATE TABLE "TuriaSync" (
+CREATE TABLE IF NOT EXISTS "TuriaSync" (
     "id" TEXT NOT NULL,
     "jobTaskId" TEXT,
     "firmClientId" TEXT,
@@ -182,7 +196,7 @@ CREATE TABLE "TuriaSync" (
 );
 
 -- CreateTable
-CREATE TABLE "OnboardingRun" (
+CREATE TABLE IF NOT EXISTS "OnboardingRun" (
     "id" TEXT NOT NULL,
     "createdById" TEXT NOT NULL,
     "prompt" TEXT NOT NULL,
@@ -199,7 +213,7 @@ CREATE TABLE "OnboardingRun" (
 );
 
 -- CreateTable
-CREATE TABLE "CommsDraft" (
+CREATE TABLE IF NOT EXISTS "CommsDraft" (
     "id" TEXT NOT NULL,
     "firmClientId" TEXT NOT NULL,
     "jobTaskId" TEXT,
@@ -215,7 +229,7 @@ CREATE TABLE "CommsDraft" (
 );
 
 -- CreateTable
-CREATE TABLE "CoachEvent" (
+CREATE TABLE IF NOT EXISTS "CoachEvent" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "kind" TEXT NOT NULL,
@@ -228,86 +242,113 @@ CREATE TABLE "CoachEvent" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Engagement_firmClientId_service_key" ON "Engagement"("firmClientId", "service");
+CREATE UNIQUE INDEX IF NOT EXISTS "Engagement_firmClientId_service_key" ON "Engagement"("firmClientId", "service");
 
 -- CreateIndex
-CREATE INDEX "SopPack_key_active_idx" ON "SopPack"("key", "active");
+CREATE INDEX IF NOT EXISTS "SopPack_key_active_idx" ON "SopPack"("key", "active");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "SopPack_key_version_key" ON "SopPack"("key", "version");
+CREATE UNIQUE INDEX IF NOT EXISTS "SopPack_key_version_key" ON "SopPack"("key", "version");
 
 -- CreateIndex
-CREATE INDEX "JobTask_assigneeId_state_idx" ON "JobTask"("assigneeId", "state");
+CREATE INDEX IF NOT EXISTS "JobTask_assigneeId_state_idx" ON "JobTask"("assigneeId", "state");
 
 -- CreateIndex
-CREATE INDEX "JobTask_state_idx" ON "JobTask"("state");
+CREATE INDEX IF NOT EXISTS "JobTask_state_idx" ON "JobTask"("state");
 
 -- CreateIndex
-CREATE INDEX "JobTask_internalDueOn_idx" ON "JobTask"("internalDueOn");
+CREATE INDEX IF NOT EXISTS "JobTask_internalDueOn_idx" ON "JobTask"("internalDueOn");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "JobTask_firmClientId_service_fy_period_title_key" ON "JobTask"("firmClientId", "service", "fy", "period", "title");
+CREATE UNIQUE INDEX IF NOT EXISTS "JobTask_firmClientId_service_fy_period_title_key" ON "JobTask"("firmClientId", "service", "fy", "period", "title");
 
 -- CreateIndex
-CREATE INDEX "JobTaskEvent_jobTaskId_createdAt_idx" ON "JobTaskEvent"("jobTaskId", "createdAt");
+CREATE INDEX IF NOT EXISTS "JobTaskEvent_jobTaskId_createdAt_idx" ON "JobTaskEvent"("jobTaskId", "createdAt");
 
 -- CreateIndex
-CREATE INDEX "AgentRun_jobTaskId_startedAt_idx" ON "AgentRun"("jobTaskId", "startedAt");
+CREATE INDEX IF NOT EXISTS "AgentRun_jobTaskId_startedAt_idx" ON "AgentRun"("jobTaskId", "startedAt");
 
 -- CreateIndex
-CREATE INDEX "AgentRun_agent_startedAt_idx" ON "AgentRun"("agent", "startedAt");
+CREATE INDEX IF NOT EXISTS "AgentRun_agent_startedAt_idx" ON "AgentRun"("agent", "startedAt");
 
 -- CreateIndex
-CREATE INDEX "ChecklistResult_agentRunId_idx" ON "ChecklistResult"("agentRunId");
+CREATE INDEX IF NOT EXISTS "ChecklistResult_agentRunId_idx" ON "ChecklistResult"("agentRunId");
 
 -- CreateIndex
-CREATE INDEX "MistakeLog_agent_status_idx" ON "MistakeLog"("agent", "status");
+CREATE INDEX IF NOT EXISTS "MistakeLog_agent_status_idx" ON "MistakeLog"("agent", "status");
 
 -- CreateIndex
-CREATE INDEX "Deliverable_jobTaskId_kind_idx" ON "Deliverable"("jobTaskId", "kind");
+CREATE INDEX IF NOT EXISTS "Deliverable_jobTaskId_kind_idx" ON "Deliverable"("jobTaskId", "kind");
 
 -- CreateIndex
-CREATE INDEX "TuriaSync_jobTaskId_idx" ON "TuriaSync"("jobTaskId");
+CREATE INDEX IF NOT EXISTS "TuriaSync_jobTaskId_idx" ON "TuriaSync"("jobTaskId");
 
 -- CreateIndex
-CREATE INDEX "TuriaSync_firmClientId_idx" ON "TuriaSync"("firmClientId");
+CREATE INDEX IF NOT EXISTS "TuriaSync_firmClientId_idx" ON "TuriaSync"("firmClientId");
 
 -- CreateIndex
-CREATE INDEX "OnboardingRun_createdById_createdAt_idx" ON "OnboardingRun"("createdById", "createdAt");
+CREATE INDEX IF NOT EXISTS "OnboardingRun_createdById_createdAt_idx" ON "OnboardingRun"("createdById", "createdAt");
 
 -- CreateIndex
-CREATE INDEX "CommsDraft_firmClientId_createdAt_idx" ON "CommsDraft"("firmClientId", "createdAt");
+CREATE INDEX IF NOT EXISTS "CommsDraft_firmClientId_createdAt_idx" ON "CommsDraft"("firmClientId", "createdAt");
 
 -- CreateIndex
-CREATE INDEX "CoachEvent_userId_createdAt_idx" ON "CoachEvent"("userId", "createdAt");
+CREATE INDEX IF NOT EXISTS "CoachEvent_userId_createdAt_idx" ON "CoachEvent"("userId", "createdAt");
 
 -- CreateIndex
-CREATE INDEX "CoachEvent_kind_createdAt_idx" ON "CoachEvent"("kind", "createdAt");
+CREATE INDEX IF NOT EXISTS "CoachEvent_kind_createdAt_idx" ON "CoachEvent"("kind", "createdAt");
 
 -- AddForeignKey
-ALTER TABLE "Engagement" ADD CONSTRAINT "Engagement_firmClientId_fkey" FOREIGN KEY ("firmClientId") REFERENCES "FirmClient"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "Engagement" ADD CONSTRAINT "Engagement_firmClientId_fkey" FOREIGN KEY ("firmClientId") REFERENCES "FirmClient"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "JobTask" ADD CONSTRAINT "JobTask_firmClientId_fkey" FOREIGN KEY ("firmClientId") REFERENCES "FirmClient"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "JobTask" ADD CONSTRAINT "JobTask_firmClientId_fkey" FOREIGN KEY ("firmClientId") REFERENCES "FirmClient"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "JobTask" ADD CONSTRAINT "JobTask_engagementId_fkey" FOREIGN KEY ("engagementId") REFERENCES "Engagement"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "JobTask" ADD CONSTRAINT "JobTask_engagementId_fkey" FOREIGN KEY ("engagementId") REFERENCES "Engagement"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "JobTaskEvent" ADD CONSTRAINT "JobTaskEvent_jobTaskId_fkey" FOREIGN KEY ("jobTaskId") REFERENCES "JobTask"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "JobTaskEvent" ADD CONSTRAINT "JobTaskEvent_jobTaskId_fkey" FOREIGN KEY ("jobTaskId") REFERENCES "JobTask"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "AgentRun" ADD CONSTRAINT "AgentRun_jobTaskId_fkey" FOREIGN KEY ("jobTaskId") REFERENCES "JobTask"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "AgentRun" ADD CONSTRAINT "AgentRun_jobTaskId_fkey" FOREIGN KEY ("jobTaskId") REFERENCES "JobTask"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "ChecklistResult" ADD CONSTRAINT "ChecklistResult_agentRunId_fkey" FOREIGN KEY ("agentRunId") REFERENCES "AgentRun"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "ChecklistResult" ADD CONSTRAINT "ChecklistResult_agentRunId_fkey" FOREIGN KEY ("agentRunId") REFERENCES "AgentRun"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "Deliverable" ADD CONSTRAINT "Deliverable_jobTaskId_fkey" FOREIGN KEY ("jobTaskId") REFERENCES "JobTask"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "Deliverable" ADD CONSTRAINT "Deliverable_jobTaskId_fkey" FOREIGN KEY ("jobTaskId") REFERENCES "JobTask"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "Deliverable" ADD CONSTRAINT "Deliverable_agentRunId_fkey" FOREIGN KEY ("agentRunId") REFERENCES "AgentRun"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "Deliverable" ADD CONSTRAINT "Deliverable_agentRunId_fkey" FOREIGN KEY ("agentRunId") REFERENCES "AgentRun"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "TuriaSync" ADD CONSTRAINT "TuriaSync_jobTaskId_fkey" FOREIGN KEY ("jobTaskId") REFERENCES "JobTask"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "TuriaSync" ADD CONSTRAINT "TuriaSync_jobTaskId_fkey" FOREIGN KEY ("jobTaskId") REFERENCES "JobTask"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN NULL;
+END $$;
 

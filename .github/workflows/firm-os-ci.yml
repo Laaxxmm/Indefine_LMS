@@ -78,5 +78,14 @@ jobs:
       - run: npm ci
       - run: npx prisma generate
       - run: npx prisma migrate deploy
+      # Boot retries a half-applied migration (scripts/migrate.mjs), so each Firm OS migration must
+      # apply again over its own state (production incident 06 Nov 2026). Re-apply every one.
+      - name: Firm OS migrations re-run cleanly
+        run: |
+          for f in prisma/migrations/2026110*/migration.sql; do
+            echo "re-applying $f"
+            psql "postgresql://postgres:postgres@localhost:5432/lms_e2e" -v ON_ERROR_STOP=1 -q -f "$f"
+          done
+      - run: npx prisma migrate deploy # still up to date after the re-runs
       # The smoke spec uses only Playwright's request fixture: no browser install needed.
       - run: npm run e2e
