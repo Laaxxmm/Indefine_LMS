@@ -205,7 +205,7 @@ describe("NEW-1 end to end: the real GST agent through the real router", () => {
       },
     };
     await runFixtureOnce(def, fx, pack, router);
-    const parsed = def.inputSchema.safeParse(fx.inputFiles);
+    const parsed = await def.inputSchema.safeParseAsync(fx.inputFiles);
     expect(parsed.success).toBe(true);
     const job: JobContext = { jobTaskId: "fixture-job", title: def.title, service: def.service, fy: "2026-27", period: "2026-10", clientCode: "ACCURACY", clientName: "Fixture", assigneeId: null, reviewerId: null };
     const dict = await buildRunDictionary(def, parsed.success ? parsed.data : null, fx.inputFiles, job, undefined);

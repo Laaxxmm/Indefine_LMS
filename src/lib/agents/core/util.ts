@@ -1,6 +1,7 @@
 // Small deterministic helpers for the ROC agent: exact rupee → paise parsing (no float drift),
 // "YYYY-MM-DD" day arithmetic in UTC (calendar days, no clock), a CSV reader, and integer
 // rounding. Nothing here reads the wall clock or the network.
+import { CSV_LIMITS, CSV_WORKER_BYTES, RECORDS_CSV, checkCsvShape, readCsvCells, readCsvGuarded } from "@/lib/hardening/csv-guard";
 
 const AMOUNT_RE = /^(-)?(\d+)(?:\.(\d{1,2}))?$/;
 
@@ -118,39 +119,55 @@ export const roundToRupee = (paise: number) => divRoundHalfUp(paise, 100) * 100;
 
 // ------------------------------------------------------------------ CSV
 
-/** RFC-4180-ish CSV: quoted fields, doubled quotes, CRLF. First row = headers (trimmed, lower-cased). */
-export function parseCsv(text: string): Record<string, string>[] {
-  const rows: string[][] = [];
-  let field = "";
-  let row: string[] = [];
-  let quoted = false;
+export type CsvRecords = Record<string, string>[];
+
+/**
+ * RFC-4180-ish CSV: quoted fields, doubled quotes, CRLF. First row = headers (trimmed, lower-cased).
+ * Re-audit NEW-11 follow-up: the XLSX caps (rows, columns, filled cells) are checked before any
+ * cell is built (src/lib/hardening/csv-guard.ts, RECORDS_CSV: a quote opens anywhere in a field,
+ * cells untrimmed); a file over them throws XlsxLimitError with a plain sentence.
+ */
+export function parseCsv(text: string): CsvRecords {
   const src = text.replace(/^﻿/, "");
-  for (let i = 0; i < src.length; i++) {
-    const ch = src[i];
-    if (quoted) {
-      if (ch === '"' && src[i + 1] === '"') {
-        field += '"';
-        i++;
-      } else if (ch === '"') quoted = false;
-      else field += ch;
-      continue;
+  checkCsvShape(src, ",", CSV_LIMITS, RECORDS_CSV);
+  return csvRecordsOf(readCsvCells(src, ",", RECORDS_CSV).rows);
+}
+
+/** parseCsv, in a worker thread for a large file (CSV_WORKER_BYTES and up), like books and GST. */
+export async function parseCsvSafe(text: string): Promise<CsvRecords> {
+  return csvRecordsOf((await readCsvGuarded(text.replace(/^﻿/, ""), ",", RECORDS_CSV)).rows);
+}
+
+/**
+ * CSV inputs read ahead of a synchronous parse (ROC and Tax parse inside their input schema):
+ * the records of each named file of CSV_WORKER_BYTES or more, or the error reading it gave.
+ */
+export type CsvAhead = ReadonlyMap<object, CsvRecords | Error>;
+export const NO_CSV_AHEAD: CsvAhead = new Map();
+
+/** Reads the named CSV files (case-insensitive) that are CSV_WORKER_BYTES or larger, each in a worker thread. */
+export async function readCsvAhead(files: readonly { name: string; bytes: Buffer }[], names: readonly string[]): Promise<CsvAhead> {
+  const wanted = new Set(names.map((n) => n.toLowerCase()));
+  const out = new Map<object, CsvRecords | Error>();
+  for (const f of files) {
+    if (!wanted.has(f.name.toLowerCase()) || f.bytes.length < CSV_WORKER_BYTES) continue;
+    try {
+      out.set(f, await parseCsvSafe(f.bytes.toString("utf8")));
+    } catch (e) {
+      out.set(f, e instanceof Error ? e : new Error(String(e)));
     }
-    if (ch === '"') quoted = true;
-    else if (ch === ",") {
-      row.push(field);
-      field = "";
-    } else if (ch === "\n" || ch === "\r") {
-      if (ch === "\r" && src[i + 1] === "\n") i++;
-      row.push(field);
-      rows.push(row);
-      row = [];
-      field = "";
-    } else field += ch;
   }
-  if (field !== "" || row.length) {
-    row.push(field);
-    rows.push(row);
-  }
+  return out;
+}
+
+/** A CSV input's records: read ahead (readCsvAhead), or parsed here within the caps. */
+export function csvRecords(file: { bytes: Buffer }, ahead: CsvAhead = NO_CSV_AHEAD): CsvRecords {
+  const r = ahead.get(file);
+  if (r instanceof Error) throw r;
+  return r ?? parseCsv(file.bytes.toString("utf8"));
+}
+
+function csvRecordsOf(rows: string[][]): CsvRecords {
   const nonEmpty = rows.filter((r) => r.some((c) => c.trim() !== ""));
   if (!nonEmpty.length) return [];
   const headers = nonEmpty[0].map((h) => h.trim().toLowerCase());

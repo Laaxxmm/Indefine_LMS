@@ -14,7 +14,7 @@ import ExcelJS from "exceljs";
 import { z } from "zod";
 import type { InputFile } from "@/lib/agents/core/runner";
 import { wrongDepartment } from "@/lib/agents/core/guardrails/shared";
-import { isDayKey, optPaise, parseCsv, rupeesToPaise, yes } from "@/lib/agents/core/util";
+import { NO_CSV_AHEAD, csvRecords, isDayKey, optPaise, readCsvAhead, rupeesToPaise, yes, type CsvAhead } from "@/lib/agents/core/util";
 import { causeSentence } from "@/lib/errors";
 
 // ------------------------------------------------------------------ financial heads
@@ -169,8 +169,8 @@ export function parseAuditor(file: InputFile): Auditor {
 
 const DIN_STATUS = new Set(["active", "deactivated", "disqualified"]);
 
-export function parseDirectors(file: InputFile): Director[] {
-  const rows = parseCsv(file.bytes.toString("utf8"));
+export function parseDirectors(file: InputFile, ahead: CsvAhead = NO_CSV_AHEAD): Director[] {
+  const rows = csvRecords(file, ahead);
   if (!rows.length) throw new Error(`${file.name} has no directors`);
   return rows.map((r, i) => {
     const at = `${file.name} row ${i + 2}`;
@@ -190,8 +190,8 @@ export function parseDirectors(file: InputFile): Director[] {
   });
 }
 
-export function parseShareholding(file: InputFile): Holding[] {
-  const rows = parseCsv(file.bytes.toString("utf8"));
+export function parseShareholding(file: InputFile, ahead: CsvAhead = NO_CSV_AHEAD): Holding[] {
+  const rows = csvRecords(file, ahead);
   if (!rows.length) throw new Error(`${file.name} has no shareholders`);
   return rows.map((r, i) => {
     const at = `${file.name} row ${i + 2}`;
@@ -208,8 +208,8 @@ export function parseShareholding(file: InputFile): Holding[] {
   });
 }
 
-export function parseMsme(file: InputFile): MsmeDue[] {
-  return parseCsv(file.bytes.toString("utf8")).map((r, i) => {
+export function parseMsme(file: InputFile, ahead: CsvAhead = NO_CSV_AHEAD): MsmeDue[] {
+  return csvRecords(file, ahead).map((r, i) => {
     const at = `${file.name} row ${i + 2}`;
     const hy = (r.half_year ?? "").toUpperCase();
     if (hy !== "H1" && hy !== "H2") throw new Error(`${at}: half_year must be H1 or H2`);
@@ -280,8 +280,11 @@ export async function parseFinancialsXlsx(fileName: string, bytes: Buffer): Prom
 
 const byName = (files: InputFile[], name: string) => files.find((f) => f.name.toLowerCase() === name);
 
-/** Gathered files → RocInput. Throws one message listing what is missing or unreadable. */
-export function parseRocFiles(files: InputFile[]): RocInput {
+/** The CSV inputs, read ahead in a worker thread when large (readCsvAhead). */
+export const ROC_CSV_FILES = ["directors.csv", "shareholding.csv", "msme.csv"] as const;
+
+/** Gathered files → RocInput. Throws one message listing what is missing or unreadable. `ahead`: large CSVs already read (readCsvAhead). */
+export function parseRocFiles(files: InputFile[], ahead: CsvAhead = NO_CSV_AHEAD): RocInput {
   // Wrong-department input fails closed before any model call (ADR-008).
   const elsewhere = wrongDepartment(files, "roc");
   if (elsewhere) throw new Error(elsewhere);
@@ -310,15 +313,15 @@ export function parseRocFiles(files: InputFile[]): RocInput {
   const notesF = byName(files, "notes.txt");
 
   const company = companyF && attempt(() => parseCompany(companyF));
-  const directors = directorsF && attempt(() => parseDirectors(directorsF));
-  const shareholding = holdingF && attempt(() => parseShareholding(holdingF));
+  const directors = directorsF && attempt(() => parseDirectors(directorsF, ahead));
+  const shareholding = holdingF && attempt(() => parseShareholding(holdingF, ahead));
   const auditor = auditorF && attempt(() => parseAuditor(auditorF));
   const financials: FinancialsSource | undefined = finJson
     ? attempt(() => parseFinancialsJson(finJson))
     : finXlsx
       ? { kind: "xlsx", fileName: finXlsx.name, bytes: finXlsx.bytes }
       : undefined;
-  const msme = msmeF ? attempt(() => parseMsme(msmeF)) : [];
+  const msme = msmeF ? attempt(() => parseMsme(msmeF, ahead)) : [];
   if (problems.length || !company || !directors || !shareholding || !auditor || !financials || !msme) throw new Error(problems.join("; "));
   return {
     company,
@@ -334,9 +337,10 @@ export function parseRocFiles(files: InputFile[]): RocInput {
 
 const InputFileZ = z.object({ name: z.string(), source: z.string(), bytes: z.instanceof(Buffer) }).passthrough();
 
-export const rocInputSchema = z.array(InputFileZ).transform((files, ctx): RocInput => {
+// Async: a large CSV is read in a worker thread first (the runner parses inputs with safeParseAsync).
+export const rocInputSchema = z.array(InputFileZ).transform(async (files, ctx): Promise<RocInput> => {
   try {
-    return parseRocFiles(files as InputFile[]);
+    return parseRocFiles(files as InputFile[], await readCsvAhead(files, ROC_CSV_FILES));
   } catch (e) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: causeSentence(e) ?? "The ROC documents could not be read. Check the files and upload them again." });
     return z.NEVER;

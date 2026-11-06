@@ -17,7 +17,7 @@ import { parse2bJson, parse2bSheets } from "./gstr2b";
 import { GstParseError, parseAmount, parseDay, rupeesToPaise, zeroTax, type TaxSplit } from "./money";
 import { matchKey, parseEinvoiceJson, parseEinvoiceTable, parsePayablesTable, parsePurchaseTable, parseSalesTable, registerTable } from "./registers";
 import { agentHintForName, sniffRegister } from "./sniff";
-import { parseCsv, readXlsx, type Grid } from "./tabular";
+import { parseCsvSafe, readXlsx, type Grid } from "./tabular";
 import type { FileRole, GstExtract, GstInput, PrevReturn, Profile, RoleFile } from "./types";
 
 const ROLE_RULES: { role: FileRole; test: RegExp; kinds: RoleFile["kind"][] }[] = [
@@ -155,7 +155,7 @@ function zodOrThrow<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, value: unkno
 }
 
 async function gridsOf(f: RoleFile): Promise<{ grid: Grid; sheet?: string }[]> {
-  if (f.kind === "csv") return [{ grid: parseCsv(f.text ?? "") }];
+  if (f.kind === "csv") return [{ grid: await parseCsvSafe(f.text ?? "") }]; // capped; a large file is read in a worker
   const sheets = await readXlsx(Buffer.from(f.base64 ?? "", "base64"));
   return sheets.map((s) => ({ grid: s.grid, sheet: s.name }));
 }
