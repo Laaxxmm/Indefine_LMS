@@ -56,7 +56,7 @@ export const FAILURE_MODE: Readonly<Record<RateLimitScope, "closed" | "open">> =
 
 /** Seconds a client is asked to wait after a 503 (blind limiter, full agent-run queue). */
 export const BUSY_RETRY_AFTER_SEC = 60;
-export const BUSY_MESSAGE = "The system is busy — try again in a minute.";
+export const BUSY_MESSAGE = "The system is busy. Wait a minute, then try again.";
 
 export const envName = (scope: RateLimitScope) => `RATE_LIMIT_${scope.toUpperCase().replace(/-/g, "_")}`;
 

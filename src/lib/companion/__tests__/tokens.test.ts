@@ -175,11 +175,13 @@ describe("verifyPairing", () => {
     return { t, db };
   };
 
-  it("accepts a live token and updates lastUsedAt on every use", async () => {
+  it("accepts a live token and updates lastUsedAt at most every 10 minutes", async () => {
     const { t, db } = seed();
     await expect(verifyPairing(db as never, t, NOW)).resolves.toEqual({ ok: true, tokenId: "tok-v", userId: "u-staff" });
     expect(db.tokens[0].lastUsedAt).toEqual(NOW);
-    const later = new Date(NOW.getTime() + 60_000);
+    await verifyPairing(db as never, t, new Date(NOW.getTime() + 60_000)); // the next poll: no write
+    expect(db.tokens[0].lastUsedAt).toEqual(NOW);
+    const later = new Date(NOW.getTime() + 10 * 60_000);
     await verifyPairing(db as never, t, later);
     expect(db.tokens[0].lastUsedAt).toEqual(later);
   });

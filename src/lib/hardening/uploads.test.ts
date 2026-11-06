@@ -43,8 +43,8 @@ describe("checkUpload: type allowlist and 25 MB", () => {
   it("enforces 25 MB: exactly the limit passes, one byte more is 413; empty is 400", () => {
     expect(UPLOAD_MAX_BYTES).toBe(25 * 1024 * 1024);
     expect(checkUpload({ name: "big.xlsx", size: UPLOAD_MAX_BYTES })).toMatchObject({ ok: true });
-    expect(checkUpload({ name: "big.xlsx", size: UPLOAD_MAX_BYTES + 1 })).toEqual({ ok: false, status: 413, code: "size", reason: "The file is 25 MB; the limit is 25 MB" });
-    expect(checkUpload({ name: "big.pdf", size: 40 * 1024 * 1024 })).toMatchObject({ reason: "The file is 40 MB; the limit is 25 MB" });
+    expect(checkUpload({ name: "big.xlsx", size: UPLOAD_MAX_BYTES + 1 })).toEqual({ ok: false, status: 413, code: "size", reason: "The file is 25 MB; the limit is 25 MB. Upload a smaller file, or split it." });
+    expect(checkUpload({ name: "big.pdf", size: 40 * 1024 * 1024 })).toMatchObject({ reason: "The file is 40 MB; the limit is 25 MB. Upload a smaller file, or split it." });
     expect(checkUpload({ name: "empty.csv", size: 0 })).toMatchObject({ ok: false, status: 400, code: "empty" });
   });
 
@@ -204,7 +204,7 @@ describe("readMultipartUpload (every multipart route: body capped before it is r
     const r = await readMultipartUpload(multi([new File([CSV], "returns.csv"), new File([CSV], "return.pdf"), new File([PDF], "gstr3b.pdf")]), { fields: ["files"], types: PDF_TYPES, maxFiles: 5, log: () => {} });
     if (!r.ok) throw new Error("expected ok");
     expect(r.files.map((f) => f.name)).toEqual(["gstr3b.pdf"]);
-    expect(r.rejected.map((x) => x.reason)).toEqual([".csv file type is not accepted. Upload PDF only.", "The content does not look like a .pdf file"]);
+    expect(r.rejected.map((x) => x.reason)).toEqual([".csv file type is not accepted. Upload .pdf files only.", "The content does not look like a .pdf file. Save it again as .pdf and upload it."]);
     expect(sniffMatches("jpg", JPG)).toBe(true);
     expect(sniffMatches("png", PNG)).toBe(true);
     expect(sniffMatches("png", JPG)).toBe(false);

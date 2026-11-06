@@ -10,7 +10,7 @@ import { buildAccessExport, downloadAccessExport } from "./export";
 import { confirmErasure, planErasure } from "./erasure";
 import { withdrawConsent } from "./consent";
 import { correctForRequest } from "./correction";
-import { IDENTIFIER_ONLY_NO_RECORD, NOTHING_MATCHED, NOT_RESOLVED, closeRequest, createRequest, resolutionOf, verifyIdentity, type PrivacyDeps } from "./register";
+import { IDENTIFIER_ONLY_NO_RECORD, NOTHING_MATCHED, NOT_RESOLVED, closeRequest, createRequest, recordNomination, resolutionOf, verifyIdentity, type PrivacyDeps } from "./register";
 import type { PrivacyDb } from "./inventory";
 import type { CorrectionsDb } from "@/lib/corrections/service";
 import { PAN_PROP, T0, USERS, privacyWorld } from "./__tests__/fixtures";
@@ -74,6 +74,27 @@ describe("several clients: parked", () => {
     expect(await confirmErasure(USERS.admin, erasure, { fingerprint: plan.fingerprint }, deps(db))).toEqual({ ok: false, status: 409, error: NOT_RESOLVED });
     expect(db.tables.onboardingRun.find((r) => r.id === "ob-shared")?.prompt).toContain(SHARED_PHONE);
     expect(removalCalls(db.calls)).toEqual([]);
+  });
+});
+
+describe("nomination needs a resolved principal (like erasure and close)", () => {
+  const NOMINEE = { nomineeName: "Meena Kumar", relationship: "spouse", nomineeContact: "9000011111" };
+  it("refused when several people matched or nobody did; recorded for one client or identifier-only rows", async () => {
+    const db = world();
+    const several = await verified(db, "nomination", { phone: SHARED_PHONE });
+    expect(await recordNomination(USERS.admin, several, NOMINEE, deps(db))).toEqual({ ok: false, status: 409, error: NOT_RESOLVED });
+    const nobody = await verified(db, "nomination", { email: "nobody@nowhere.test" });
+    expect(await recordNomination(USERS.admin, nobody, NOMINEE, deps(db))).toEqual({ ok: false, status: 409, error: NOTHING_MATCHED });
+    for (const id of [several, nobody]) {
+      const row = db.tables.privacyRequest.find((r) => r.id === id)!;
+      expect(row.status).not.toBe("COMPLETED");
+      expect(String(row.notes ?? "")).not.toContain("Meena");
+    }
+    expect(db.tables.auditEvent.filter((e) => e.action === "nominate")).toEqual([]);
+    const one = await verified(db, "nomination", { pan: PAN_PROP });
+    expect(await recordNomination(USERS.admin, one, NOMINEE, deps(db))).toEqual({ ok: true, data: { id: one } });
+    const ghost = await verified(db, "nomination", { pan: GHOST_PAN });
+    expect((await recordNomination(USERS.admin, ghost, NOMINEE, deps(db))).ok).toBe(true);
   });
 });
 

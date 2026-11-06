@@ -397,7 +397,7 @@ export const DATASETS: readonly DataSet[] = [
     principals: STAFF,
     purpose: "Attendance points for KRA scoring.",
     fields: [f("periodMonth", "Month", "B"), f("workingDays", "Working days", "B"), f("presentDays", "Days present", "B"), f("lateMarks", "Late marks", "B"), f("attendancePct", "Attendance %", "B"), f("points", "KRA points", "B")],
-    erasure: { kind: "keep", reason: "Linked to the person only by user id; anonymous once the profile is anonymised. Kept with the employment records." },
+    erasure: { kind: "keep", reason: "Linked to the person only through their staff account; anonymous once the profile is anonymised. Kept with the employment records." },
     rows: async (db, s) => (staffOf(s) ? finder(db, "attendanceRecord").findMany({ where: { userId: staffOf(s)!.user.id }, orderBy: { periodMonth: "asc" } }) : []),
   },
   {
@@ -407,7 +407,7 @@ export const DATASETS: readonly DataSet[] = [
     principals: STAFF,
     purpose: "Allocate and review work.",
     fields: [f("service", "Service", "C"), f("fy", "Financial year", "C"), f("period", "Period", "C"), f("title", "Title", "C"), f("state", "State", "C")],
-    erasure: { kind: "keep", reason: "Firm work records; the person appears only as a user id." },
+    erasure: { kind: "keep", reason: "Firm work records; the person appears only as a staff account, not by name." },
     rows: async (db, s) => {
       const st = staffOf(s);
       return st ? finder(db, "jobTask").findMany({ where: { OR: [{ assigneeId: st.user.id }, { reviewerId: st.user.id }] }, orderBy: { createdAt: "asc" } }) : [];
@@ -420,7 +420,7 @@ export const DATASETS: readonly DataSet[] = [
     principals: STAFF,
     purpose: "The person's own choices for the morning board and break nudges.",
     fields: [f("breakNudges", "Break nudges on", "B"), f("morningBoard", "Morning board on", "B"), f("snoozeUntil", "Snoozed until", "B")],
-    erasure: { kind: "keep", reason: "The person's own settings; no identifiers beyond the user id." },
+    erasure: { kind: "keep", reason: "The person's own settings; nothing identifies them beyond their staff account." },
     rows: async (db, s) => (staffOf(s) ? finder(db, "coachPreference").findMany({ where: { userId: staffOf(s)!.user.id } }) : []),
   },
   {
@@ -430,7 +430,7 @@ export const DATASETS: readonly DataSet[] = [
     principals: STAFF,
     purpose: "Break nudges only. Kept 7 days, never reported to managers (ADR-006).",
     fields: [f("at", "At", "B"), f("source", "Source", "B")],
-    erasure: { kind: "keep", reason: "Removed automatically after 7 days by the coach retention job (ADR-006)." },
+    erasure: { kind: "keep", reason: "Removed automatically after 7 days by the coach's clean-up." },
     rows: async (db, s) => (staffOf(s) ? finder(db, "activityHeartbeat").findMany({ where: { userId: staffOf(s)!.user.id }, orderBy: { at: "asc" }, take: 5000 }) : []),
   },
 ];

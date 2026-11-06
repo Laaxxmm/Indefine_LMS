@@ -51,18 +51,18 @@ export const extOf = (name: string) => (name.match(/\.([A-Za-z0-9]+)$/)?.[1] ?? 
 /** Name, extension, declared MIME type and size; no bytes needed. */
 export function checkUpload(file: { name: string; size: number; type?: string | null }, maxBytes = UPLOAD_MAX_BYTES, types: UploadTypes = UPLOAD_TYPES): UploadCheck {
   const name = file.name?.trim() ?? "";
-  if (!name || name.length > 200 || /[\\/\0]/.test(name) || name === "." || name === "..") return { ok: false, status: 400, code: "name", reason: "The file needs a plain name (no folders), up to 200 characters" };
+  if (!name || name.length > 200 || /[\\/\0]/.test(name) || name === "." || name === "..") return { ok: false, status: 400, code: "name", reason: "The file needs a plain name (no folders), up to 200 characters. Rename it and upload it again." };
   const ext = extOf(name);
-  if (!types[ext]) return { ok: false, status: 415, code: "type", reason: `${ext ? `.${ext}` : "This"} file type is not accepted. Upload ${Object.keys(types).map((e) => e.toUpperCase()).join(", ")} only.` };
+  if (!types[ext]) return { ok: false, status: 415, code: "type", reason: `${ext ? `.${ext}` : "This"} file type is not accepted. Upload ${Object.keys(types).map((e) => `.${e}`).join(", ")} files only.` };
   const mime = (file.type ?? "").split(";")[0].trim().toLowerCase();
-  if (!GENERIC_MIME.has(mime) && !types[ext].includes(mime)) return { ok: false, status: 415, code: "type-mismatch", reason: `The file is named .${ext} but was sent as ${mime}` };
+  if (!GENERIC_MIME.has(mime) && !types[ext].includes(mime)) return { ok: false, status: 415, code: "type-mismatch", reason: `The file is named .${ext} but its contents are a different kind of file. Save it again as .${ext} and upload it.` };
   return sizeCheck(file.size, maxBytes) ?? { ok: true, ext };
 }
 
 /** Empty (400) or over the limit (413), or null. */
 function sizeCheck(size: number, maxBytes: number): Extract<UploadCheck, { ok: false }> | null {
-  if (size <= 0) return { ok: false, status: 400, code: "empty", reason: "The file is empty" };
-  if (size > maxBytes) return { ok: false, status: 413, code: "size", reason: `The file is ${mb(size)}; the limit is ${mb(maxBytes)}` };
+  if (size <= 0) return { ok: false, status: 400, code: "empty", reason: "The file is empty. Check you picked the right file and upload it again." };
+  if (size > maxBytes) return { ok: false, status: 413, code: "size", reason: `The file is ${mb(size)}; the limit is ${mb(maxBytes)}. Upload a smaller file, or split it.` };
   return null;
 }
 
@@ -181,7 +181,7 @@ export async function screenUpload(file: { name: string; bytes: Uint8Array; type
   if (size) return reject(size);
   const typeWarning = !c.ok ? c.reason : null;
   if (c.ok && !sniffMatches(c.ext, file.bytes)) {
-    const r = { ok: false as const, status: 415 as const, code: "content" as const, reason: `The content does not look like a .${c.ext} file` };
+    const r = { ok: false as const, status: 415 as const, code: "content" as const, reason: `The content does not look like a .${c.ext} file. Save it again as .${c.ext} and upload it.` };
     if (opts.typeMode !== "warn") return reject(r);
   }
 
@@ -265,7 +265,7 @@ export async function readMultipartUpload(
   try {
     form = await new Response(body.bytes, { headers: { "content-type": req.headers.get("content-type") ?? "" } }).formData();
   } catch {
-    return { ok: false, res: NextResponse.json({ error: "Send the file as multipart/form-data", code: "name" }, { status: 400 }) };
+    return { ok: false, res: NextResponse.json({ error: "The upload could not be read. Choose the file again and upload it from the Firm OS page.", code: "name" }, { status: 400 }) };
   }
   const values = (opts.fields ?? ["file"]).flatMap((f) => form.getAll(f)).filter((v): v is File => typeof v !== "string");
   if (values.length > maxFiles) {
@@ -318,7 +318,7 @@ export function precheckContentLength(req: Request, maxBytes: number = UPLOAD_MA
   const raw = req.headers.get("content-length");
   if (raw === null || raw.trim() === "") return null;
   const declared = Number(raw);
-  if (!Number.isFinite(declared) || declared < 0) return NextResponse.json({ error: "The Content-Length header is not a number", code: "size" }, { status: 400 });
+  if (!Number.isFinite(declared) || declared < 0) return NextResponse.json({ error: "The upload could not be read. Choose the file again and upload it from the Firm OS page.", code: "size" }, { status: 400 });
   return declared > maxBytes + framing ? tooLarge(declared, maxBytes) : null;
 }
 
@@ -337,7 +337,7 @@ export async function readFormDataCapped(
   const pre = precheckContentLength(req, maxBytes, framing);
   if (pre) return { ok: false, res: pre };
   const limit = maxBytes + framing;
-  const badForm = () => ({ ok: false as const, res: NextResponse.json({ error: "Send the file as multipart/form-data", code: "name" }, { status: 400 }) });
+  const badForm = () => ({ ok: false as const, res: NextResponse.json({ error: "The upload could not be read. Choose the file again and upload it from the Firm OS page.", code: "name" }, { status: 400 }) });
   if (!req.body) return badForm();
   let seen = 0;
   const counted = req.body.pipeThrough(

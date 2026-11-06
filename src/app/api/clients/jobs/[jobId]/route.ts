@@ -5,6 +5,7 @@ import { canEditClientJob, canManageClients, canViewClients, jobPatchZ } from "@
 import { JOB_PII, auditEdit, maskedChanges } from "@/lib/clients/audit";
 import { logAudit } from "@/lib/audit/log";
 import { scheduleWorkbookRebuild } from "@/lib/clients/workbook";
+import { validationMessage } from "@/lib/errors";
 
 // Inline edits (handler / status / due / fees / notes): management, the client's primary handler
 // or the job's own handler (canEditClientJob). Each change is an AuditEvent with masked
@@ -24,7 +25,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ jobId:
     return NextResponse.json({ error: "Only the client's handler, the job's handler, an admin or a partner can change this job. Ask one of them." }, { status: 403 });
   }
   const parsed = jobPatchZ.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Some details are missing or in the wrong format. Check them and try again." }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: validationMessage(parsed.error, "Some details are missing or in the wrong format. Check them and try again.") }, { status: 400 });
   if (parsed.data.handlerId) {
     const h = await prisma.user.findUnique({ where: { id: parsed.data.handlerId }, select: { active: true } });
     if (!h?.active) return NextResponse.json({ error: "That handler isn't an active user. Pick someone from the list." }, { status: 400 });
@@ -41,13 +42,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ jobId:
 // (SharePoint files are never deleted, so the DB rows must not silently vanish either).
 export async function DELETE(_req: Request, { params }: { params: Promise<{ jobId: string }> }) {
   const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!canManageClients(session.user)) return NextResponse.json({ error: "Admins and partners only" }, { status: 403 });
+  if (!session?.user) return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
+  if (!canManageClients(session.user)) return NextResponse.json({ error: "Only admins and partners can do this. Ask one of them." }, { status: 403 });
 
   const { jobId } = await params;
   const job = await prisma.job.findUnique({ where: { id: jobId }, select: { _count: { select: { documents: true } } } });
-  if (!job) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (job._count.documents > 0) return NextResponse.json({ error: "Remove the job's documents first" }, { status: 409 });
+  if (!job) return NextResponse.json({ error: "That job wasn't found. Reload the client page." }, { status: 404 });
+  if (job._count.documents > 0) return NextResponse.json({ error: "This job still has documents, so it can't be removed. Remove its documents first." }, { status: 409 });
   await prisma.job.delete({ where: { id: jobId } });
   await logAudit(prisma, { actorId: session.user.id, action: "delete", entity: "Job", entityId: jobId });
   scheduleWorkbookRebuild();

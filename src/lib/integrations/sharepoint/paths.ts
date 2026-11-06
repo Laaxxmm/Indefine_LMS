@@ -58,7 +58,7 @@ export function validateClientCode(code: unknown): string {
   if (code.length < 3 || code.length > 10) throw new PathError(`Client code "${code}" must be 3–10 characters`);
   if (/[a-z]/.test(code)) throw new PathError(`Client code "${code}" must be uppercase`);
   if (!CODE_RE.test(code)) throw new PathError(`Client code "${code}" may contain only A–Z and 0–9`);
-  if (RESERVED_CLIENT_CODES.has(code)) throw new PathError(`Client code "${code}" is a reserved Windows name (CON, PRN, AUX, NUL, COM1–9, LPT1–9); choose another code`);
+  if (RESERVED_CLIENT_CODES.has(code)) throw new PathError(`Client code "${code}" is a reserved Windows name (such as Con, Prn, Aux or Nul), so it can't be a folder name; choose another code`);
   return code;
 }
 
@@ -104,7 +104,7 @@ export function periodLabel(input: PeriodInput): Period {
     case "annual":
       return "Annual";
     default:
-      throw new PathError(`Unknown frequency "${(input as { frequency: unknown }).frequency}"`);
+      throw new PathError(`The filing frequency "${(input as { frequency: unknown }).frequency}" isn't one Firm OS knows; use monthly, quarterly or annual`);
   }
 }
 
@@ -115,7 +115,7 @@ export function periodFor(frequency: Frequency, date: Date): Period {
   if (frequency === "monthly") return ym as MonthlyPeriod;
   if (frequency === "quarterly") return QUARTERS[Math.floor(((Number(ym.slice(5, 7)) + 8) % 12) / 3)];
   if (frequency === "annual") return "Annual";
-  throw new PathError(`Unknown frequency "${frequency as string}"`);
+  throw new PathError(`The filing frequency "${frequency as string}" isn't one Firm OS knows; use monthly, quarterly or annual`);
 }
 
 export function isValidPeriod(p: unknown): p is Period {
@@ -123,7 +123,7 @@ export function isValidPeriod(p: unknown): p is Period {
 }
 
 export function parsePeriod(p: unknown): Period {
-  if (!isValidPeriod(p)) throw new PathError(`Period "${String(p)}" must be YYYY-MM, Q1–Q4 or Annual`);
+  if (!isValidPeriod(p)) throw new PathError(`Period "${String(p)}" must be a month (like 2026-10), a quarter (Q1 to Q4) or Annual`);
   return p;
 }
 

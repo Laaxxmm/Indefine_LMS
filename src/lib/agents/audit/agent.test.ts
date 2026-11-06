@@ -78,7 +78,7 @@ describe("input parsing", () => {
     expect(parseProfile("e.json", "{", issues)).toBeNull();
     expect(parseProfile("e.json", JSON.stringify({ companyClass: "llc" }), issues)).toBeNull();
     parseProfile("e.json", JSON.stringify({ companyClass: "public", reserves: "abc" }), issues);
-    expect(issues.map((i) => i.message)).toEqual(["entity profile is not valid JSON", expect.stringMatching(/companyClass/), expect.stringMatching(/reserves/)]);
+    expect(issues.map((i) => i.message)).toEqual(["entity profile is not a valid .json file", expect.stringMatching(/companyClass/), expect.stringMatching(/reserves/)]);
   });
   it("population: amount or debit/credit columns, totals and zero rows skipped, bad amounts reported", () => {
     const r = parsePopulation("p.csv", parseCsv("Date,Voucher No,Particulars,Debit,Credit\n01/04/2025,V1,Rent,100.00,\n02/04/2025,V2,Refund,,40.00\n,Total,,100,40\n03/04/2025,V3,Zero,0,\n04/04/2025,V4,Bad,x,"));
@@ -102,7 +102,7 @@ describe("input parsing", () => {
     expect(b.populations[0].config.seed).toBe("ACME01/FY2025-26/sales");
     expect(b.notes).toEqual({ file: "notes.csv", lines: ["Note", "Related: none"] });
     expect(b.issues.map((i) => i.message)).toEqual(
-      expect.arrayContaining([expect.stringMatching(/sampling plan ignored/), "column-map file is not valid JSON; ignored", "a second tb file; only the first is used", expect.stringMatching(/Area and Explanation/)]),
+      expect.arrayContaining([expect.stringMatching(/sampling plan ignored/), "column-map file is not a valid .json file; ignored", "a second tb file; only the first is used", expect.stringMatching(/Area and Explanation/)]),
     );
   });
   it("planned size: plan > MUS formula (≥ SOP minimum) > SOP minimum; capped at the item count", () => {

@@ -9,6 +9,7 @@ import { CertificateValidationError } from "@/lib/certificates/render/values";
 import { PlaceholderLeakError } from "@/lib/certificates/render/compose";
 import { DOCX_MIME, certificateFilename } from "@/lib/certificates/download";
 import { SUGGESTIBLE_FIELD_KEYS } from "@/lib/certificates/suggestible";
+import { failureSentence } from "@/lib/errors";
 
 const Body = z.object({
   formatId: z.string(),
@@ -19,20 +20,20 @@ const Body = z.object({
 
 export async function POST(req: Request) {
   const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!canUseCertificateTool(session.user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!session?.user) return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
+  if (!canUseCertificateTool(session.user)) return NextResponse.json({ error: "You don't have access to the certificate generator. Ask an admin to give you access." }, { status: 403 });
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: "Some details were missing or not in the right format. Check the form and try again." }, { status: 400 });
   const { formatId, clientName, acknowledged, payload } = parsed.data;
-  if (JSON.stringify(payload).length > 200_000) return NextResponse.json({ error: "Form is too large" }, { status: 413 });
+  if (JSON.stringify(payload).length > 200_000) return NextResponse.json({ error: "The form is too large to save. Shorten the longest entries and try again." }, { status: 413 });
 
   // §0.8 — the illustrative-format acknowledgment must be ticked.
-  if (acknowledged !== true) return NextResponse.json({ error: "Acknowledgment is required" }, { status: 400 });
+  if (acknowledged !== true) return NextResponse.json({ error: "Tick the box to confirm you have checked the certificate, then issue it." }, { status: 400 });
 
   const template = byId(formatId);
   if (!template || (process.env.NODE_ENV === "production" && !isEnabled(template))) {
-    return NextResponse.json({ error: "Unknown or unavailable format" }, { status: 400 });
+    return NextResponse.json({ error: "That certificate format isn't available any more. Go back and pick another format." }, { status: 400 });
   }
 
   // Render from the server's own pinned template + the submitted values (§0.3). This also
@@ -41,9 +42,9 @@ export async function POST(req: Request) {
   try {
     buffer = await renderDocx(template, payload as Record<string, unknown>);
   } catch (e) {
-    if (e instanceof CertificateValidationError) return NextResponse.json({ error: "Some fields are missing or invalid", fieldErrors: e.fieldErrors }, { status: 400 });
+    if (e instanceof CertificateValidationError) return NextResponse.json({ error: "Some fields are missing or not filled in correctly. Check the highlighted fields.", fieldErrors: e.fieldErrors }, { status: 400 });
     if (e instanceof PlaceholderLeakError) return NextResponse.json({ error: e.message }, { status: 400 });
-    return NextResponse.json({ error: (e as Error).message }, { status: 400 });
+    return NextResponse.json({ error: failureSentence(e, "The certificate could not be issued.", "Check the details and try again; if it keeps happening, tell IT.") }, { status: 400 });
   }
 
   // No rendered file is stored — only the reproducible record (§0.6).

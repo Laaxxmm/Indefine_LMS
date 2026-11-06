@@ -86,7 +86,7 @@ describe("DONE cannot be set through the API", () => {
     signedIn(activeSession({ id: "u-partner", level: "PARTNER" }));
     const r = await state(req({ to: "DONE", expectedState: "CLOSING" }), ctx(job.id));
     expect(r.status).toBe(403);
-    expect(await r.json()).toMatchObject({ code: "gate-required", error: expect.stringMatching(/only by the close gate/) });
+    expect(await r.json()).toMatchObject({ code: "gate-required", error: expect.stringMatching(/marked done only by the closing checks/) });
     expect(w.job(job.id).state).toBe("CLOSING");
     expect(w.events.some((e) => e.toState === "DONE")).toBe(false);
   });

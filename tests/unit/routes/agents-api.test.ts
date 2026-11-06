@@ -67,7 +67,7 @@ describe("auth", () => {
     // The assignee approving their own pack.
     const r = await approve.POST(post({}), p({ id: "run-1" }));
     expect(r.status).toBe(403);
-    expect((await r.json()).error).toMatch(/Only the reviewer, a manager or a partner may approve/);
+    expect((await r.json()).error).toMatch(/Only the job's reviewer, a manager or a partner can approve this pack/);
     // Staff deciding a mistake rule.
     as(user("ravi"));
     expect((await decide.POST(post({ decision: "approve" }), p({ id: "nope" }))).status).toBe(403);
@@ -194,7 +194,7 @@ describe("re-run with a note from AGENT_DONE", () => {
     // The superseded run cannot be re-run again.
     const again = await rerun.POST(post({ note: "Once more" }), p({ id: "run-1" }));
     expect(again.status).toBe(409);
-    expect((await again.json()).error).toMatch(/newer run exists/);
+    expect((await again.json()).error).toMatch(/The agent has run again on this job since this page was opened/);
   });
 
   it("managers and partners may re-run; the reviewer (staff), admin and outsiders may not; not after submit", async () => {
@@ -203,7 +203,7 @@ describe("re-run with a note from AGENT_DONE", () => {
     as(user("ravi"));
     const reviewer = await rerun.POST(post({ note: "Recheck" }), p({ id: "run-1" }));
     expect(reviewer.status).toBe(403);
-    expect((await reviewer.json()).error).toMatch(/Only the assignee, a manager or a partner/);
+    expect((await reviewer.json()).error).toMatch(/Only the person the job is assigned to, a manager or a partner/);
     as(user("admin"));
     expect((await rerun.POST(post({ note: "Recheck" }), p({ id: "run-1" }))).status).toBe(403);
     as(user("outsider"));
@@ -230,6 +230,6 @@ describe("re-run with a note from AGENT_DONE", () => {
     expect(await requestRerun("run-1", "  Use the corrected register ", send)).toEqual({ ok: true, runId: "run-2" });
     expect(send).toHaveBeenCalledWith("/api/firm-os/agents/runs/run-1/rerun", { note: "Use the corrected register" });
     as(user("ravi"));
-    expect(await requestRerun("run-2", "Reviewer tries", send)).toEqual({ ok: false, error: expect.stringMatching(/Only the assignee, a manager or a partner/) });
+    expect(await requestRerun("run-2", "Reviewer tries", send)).toEqual({ ok: false, error: expect.stringMatching(/Only the person the job is assigned to, a manager or a partner/) });
   });
 });

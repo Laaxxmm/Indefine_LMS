@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Loader2, AlertTriangle, FileDown } from "lucide-react";
+import { PlainError, userMessage } from "@/lib/errors";
 
 export const inputCls =
   "w-full rounded-lg border border-border bg-page/60 px-3 py-2 text-[13.5px] text-ink focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400 transition";
@@ -70,7 +71,7 @@ async function download(kind: "doc" | "tax", tool: string, payload: unknown): Pr
   });
   if (!res.ok) {
     const j = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(j.error || "Generation failed. Check the inputs and try again.");
+    throw new PlainError(j.error || "The document could not be generated. Check the inputs and try again.");
   }
   const blob = await res.blob();
   const name = filenameFrom(res.headers.get("Content-Disposition") || "");
@@ -110,7 +111,7 @@ export function ToolShell({
       await download("doc", tool, buildPayload());
       setDone(true);
     } catch (e) {
-      setError((e as Error).message);
+      setError(userMessage(e));
     } finally {
       setBusy(false);
     }

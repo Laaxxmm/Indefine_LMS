@@ -218,7 +218,7 @@ export class ManualBridge implements TuriaAdapter {
 
   closeTask(taskRef: string, minutes: number, ctx: TuriaCloseContext = {}, actorId?: string | null): Promise<TuriaOpResult> {
     const ref = taskRef.trim();
-    if (!ref) throw new TuriaConfirmError("invalid", "A Turia task ref is needed to close a task");
+    if (!ref) throw new TuriaConfirmError("invalid", "Enter the Turia task reference to close the task.");
     checkMinutes(minutes, true);
     return this.issue(`closeTask:${ctx.jobTaskId ?? ref}`, "closeTask", closeTaskChecklist(ref, minutes, ctx), { firmClientId: ctx.firmClientId ?? null, jobTaskId: ctx.jobTaskId ?? null }, actorId);
   }
@@ -235,17 +235,17 @@ export class ManualBridge implements TuriaAdapter {
   /** A person did the checklist in Turia: record the reference (and minutes for closeTask). */
   async confirm(syncId: string, input: ConfirmInput): Promise<TuriaSyncRecord> {
     const row = await this.repo.get(syncId);
-    if (!row) throw new TuriaConfirmError("not-found", "That Turia checklist does not exist");
+    if (!row) throw new TuriaConfirmError("not-found", "That Turia checklist wasn't found. Reload the page and try again.");
     const turiaRef = input.turiaRef.trim();
-    if (!turiaRef) throw new TuriaConfirmError("invalid", "Enter the Turia reference");
-    if (turiaRef.length > 100) throw new TuriaConfirmError("invalid", "The Turia reference is longer than 100 characters");
+    if (!turiaRef) throw new TuriaConfirmError("invalid", "Enter the Turia reference.");
+    if (turiaRef.length > 100) throw new TuriaConfirmError("invalid", "The Turia reference is too long. Keep it to 100 characters or fewer.");
     const closing = row.operation === "closeTask";
     const minutes = input.minutes ?? null;
     checkMinutes(minutes, closing);
 
     if (row.status === "CONFIRMED" || row.status === "CLOSED") {
       if (row.turiaRef === turiaRef) return row; // same confirmation twice — idempotent
-      throw new TuriaConfirmError("conflict", `Already confirmed with Turia ref ${row.turiaRef}`);
+      throw new TuriaConfirmError("conflict", `Already confirmed with Turia ref ${row.turiaRef}. Reload the page to see it.`);
     }
     return this.repo.update(syncId, {
       status: closing ? "CLOSED" : "CONFIRMED",
@@ -259,10 +259,10 @@ export class ManualBridge implements TuriaAdapter {
 
 function checkMinutes(minutes: number | null | undefined, required: boolean): void {
   if (minutes === null || minutes === undefined) {
-    if (required) throw new TuriaConfirmError("invalid", "Enter the minutes logged in Turia");
+    if (required) throw new TuriaConfirmError("invalid", "Enter the minutes logged in Turia.");
     return;
   }
   if (!Number.isInteger(minutes) || minutes < 1 || minutes > MAX_MINUTES) {
-    throw new TuriaConfirmError("invalid", `Minutes must be a whole number from 1 to ${MAX_MINUTES}`);
+    throw new TuriaConfirmError("invalid", `Enter the minutes as a whole number from 1 to ${MAX_MINUTES.toLocaleString("en-IN")}.`);
   }
 }

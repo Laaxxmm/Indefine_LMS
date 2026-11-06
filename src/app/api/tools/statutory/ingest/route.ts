@@ -8,6 +8,7 @@ import { bearerUnauthorized } from "@/lib/cron-auth";
 import { pdfTextFromBytes } from "@/lib/statutory/cloud";
 import { saveItems, saveStatus, summarisePending } from "@/lib/statutory/digest";
 import { EXTENSION_PORTALS, type RawItem } from "@/lib/statutory/portals";
+import { validationMessage } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest) {
   const denied = bearerUnauthorized(req, process.env.STATUTORY_RELAY_TOKEN);
   if (denied) return denied;
   const parsed = bodyZ.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "bad body" }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: validationMessage(parsed.error) }, { status: 400 });
   const { portal, items, done } = parsed.data;
 
   const rows: RawItem[] = [];

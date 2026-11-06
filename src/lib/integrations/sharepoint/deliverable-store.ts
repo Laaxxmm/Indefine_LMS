@@ -8,8 +8,9 @@
 // are listed with one children GET (a missing folder is a 404, not a separate item GET), and kept
 // for a few seconds so the several deliverables of one run are numbered from one listing (a stale
 // name is harmless: the upload is create-only and a 409 bumps the version, as for any race); and
-// every upload records what SharePoint now holds (content-registry.ts) so later checks of the same
-// file can be answered from its metadata instead of a download.
+// every upload records what SharePoint now holds (content-registry.ts, and quickXorHash + cTag on
+// the StoredFile for the Deliverable row) so later checks of the same file can be answered from its
+// metadata instead of a download, also after a restart.
 import { createHash } from "node:crypto";
 import { defaultContentRegistry, factsFromBytes, type ContentRegistry } from "./content-registry";
 import { ConflictError, GraphError, NotProvisionedError } from "./errors";
@@ -54,6 +55,14 @@ export type StoredFile = {
   version: number;
   sha256: string;
   sizeBytes: number;
+  /**
+   * SharePoint's quickXorHash and content tag of the new item, set only when its reported
+   * quickXorHash and size equal those of the bytes we uploaded (SharePoint holds exactly them);
+   * null otherwise. Written to the Deliverable row so the close gate can verify the file from its
+   * metadata after a restart (close-loop/verifier.ts).
+   */
+  quickXorHash: string | null;
+  cTag: string | null;
 };
 
 export interface DeliverableStore {
@@ -118,7 +127,7 @@ export function createDeliverableStore(client: SharePointClient, opts: Deliverab
         const sha256 = sha256Hex(bytes);
         const facts = factsFromBytes(item, bytes, sha256);
         if (facts) registry.remember(driveId, item.id, facts);
-        return { item, driveId, folder, fileName: name, version: v, sha256, sizeBytes: bytes.byteLength };
+        return { item, driveId, folder, fileName: name, version: v, sha256, sizeBytes: bytes.byteLength, quickXorHash: facts?.quickXorHash ?? null, cTag: facts?.cTag ?? null };
       } catch (e) {
         if (!(e instanceof ConflictError)) throw e;
         taken.add(name);
@@ -133,9 +142,9 @@ export function createDeliverableStore(client: SharePointClient, opts: Deliverab
       if (known && now() - known.at < DRIVE_ID_TTL_MS) return known.id;
       const siteUrl = clSiteUrl(clientCode, host);
       const site = await client.getSiteByUrl(siteUrl);
-      if (!site) throw new NotProvisionedError(`Client site ${siteUrl} does not exist yet; run onboarding (ensureClientSite) first`);
+      if (!site) throw new NotProvisionedError(`The client's SharePoint site (${siteUrl}) does not exist yet. Finish the client's onboarding first.`);
       const drive = await client.getDriveByName(site.id, COMPLIANCE_LIBRARY);
-      if (!drive) throw new NotProvisionedError(`Library ${COMPLIANCE_LIBRARY} on ${siteUrl} does not exist yet; run ensureFyTree first`);
+      if (!drive) throw new NotProvisionedError(`The ${COMPLIANCE_LIBRARY} library on the client's SharePoint site (${siteUrl}) does not exist yet. Finish the client's onboarding first.`);
       drives.set(clientCode, { id: drive.id, at: now() });
       return drive.id;
     },

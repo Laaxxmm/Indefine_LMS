@@ -1,6 +1,7 @@
 // In-memory tables for the retention job (src/lib/hardening/retention.ts): AgentRun, OnboardingRun,
-// ActivityHeartbeat, AuditEvent and ModelCall, with just the Prisma calls the job makes. Kept under
-// tests/ (outside the Firm OS no-delete scan) because it must implement the heartbeat delete the job calls.
+// ActivityHeartbeat, RateLimitBucket, AuditEvent and ModelCall, with just the Prisma calls the job
+// makes. Kept under tests/ (outside the Firm OS no-delete scan) because it must implement the
+// heartbeat and rate-limit bucket deletes the job calls.
 import { Prisma } from "@prisma/client";
 import type { EscalationDb } from "@/lib/audit/escalations";
 import type { RetentionDb } from "@/lib/hardening/retention";
@@ -8,6 +9,7 @@ import type { RetentionDb } from "@/lib/hardening/retention";
 export type RunRec = { id: string; inputs: unknown; inputsPurgeAt: Date | null; startedAt: Date; figures: unknown; status: string };
 export type OnboardingRec = { id: string; prompt: string; spec: unknown; plan: unknown; status: string; steps?: unknown; error?: string | null; firmClientId: string | null; updatedAt: Date };
 export type BeatRec = { id: string; userId: string; at: Date; source: string };
+export type BucketRec = { key: string; windowStart: Date; count: number };
 export type AuditRec = { id: string; actorId: string | null; action: string; entity: string; entityId: string | null; meta?: unknown; createdAt?: Date };
 export type CallRec = {
   id: string;
@@ -34,6 +36,7 @@ export class RetentionWorld {
   runs: RunRec[] = [];
   onboarding: OnboardingRec[] = [];
   beats: BeatRec[] = [];
+  buckets: BucketRec[] = [];
   audits: AuditRec[] = [];
   calls: CallRec[] = [];
   /** Every call the job made, in order (model.method). */
@@ -67,6 +70,15 @@ export class RetentionWorld {
         const keep = this.beats.filter((b) => !before(b.at, args.where.at));
         const count = this.beats.length - keep.length;
         this.beats = keep;
+        return { count };
+      },
+    },
+    rateLimitBucket: {
+      deleteMany: async (args: { where: { windowStart: DateCond } }) => {
+        this.log.push("rateLimitBucket.deleteMany");
+        const keep = this.buckets.filter((b) => !before(b.windowStart, args.where.windowStart));
+        const count = this.buckets.length - keep.length;
+        this.buckets = keep;
         return { count };
       },
     },

@@ -81,7 +81,7 @@ describe("Claude down, Grok configured → failover", () => {
   it("Claude AND Grok down: the Grok outage is surfaced with its status; the partner is told to answer the questions", async () => {
     const m = modelWorld({ claude: [], claudeFallback: overloaded(), grok: { status: 503 } });
     const x = await extractSpec(PROMPT, { router: m.router, runId: "onb-3", people: PEOPLE });
-    expect(x.notes).toEqual(["Automatic reading failed (Grok unavailable (503).). Answer the questions below instead."]);
+    expect(x.notes).toEqual(["The description could not be read automatically. The AI service was unavailable. Answer the questions below instead."]);
     expect(x.spec.pan).toBeUndefined(); // nothing guessed: the clarifier will ask for it
     expect(m.xai.bodies).toHaveLength(4); // the real Grok provider retried 503 with backoff before giving up
     expect(m.sleeps).toEqual([500, 1000, 2000]);
@@ -102,7 +102,7 @@ describe("Claude down, no XAI_API_KEY → clear error, no silent success", () =>
     expect(err).toBeInstanceOf(ProviderError);
     expect(err).toMatchObject({ provider: "claude", kind: "outage", status: 529, failoverable: true });
     expect(m.rows.map((r) => r.status)).toEqual(["PROVIDER_ERROR", "PROVIDER_ERROR"]);
-    expect(m.rows[1].error).toBe("Claude is unavailable and Grok is not configured (XAI_API_KEY empty).");
+    expect(m.rows[1].error).toBe("Claude is unavailable and no backup AI service (Grok) is set up.");
     expect(m.xai.bodies).toHaveLength(0);
   });
 
@@ -110,7 +110,7 @@ describe("Claude down, no XAI_API_KEY → clear error, no silent success", () =>
     const m = modelWorld({ claude: [], claudeFallback: overloaded() });
     const x = await extractSpec(PROMPT, { router: m.router, runId: "onb-4", people: PEOPLE });
     expect(x.notes).toHaveLength(1);
-    expect(x.notes[0]).toMatch(/^Automatic reading failed \(Claude unavailable \(529\): .*\)\. Answer the questions below instead\.$/);
+    expect(x.notes[0]).toBe("The description could not be read automatically. The AI service was unavailable. Answer the questions below instead.");
     expect(x.spec).toEqual({});
   });
 
@@ -121,7 +121,7 @@ describe("Claude down, no XAI_API_KEY → clear error, no silent success", () =>
     expect(out.ok).toBe(true);
     const llm = rows(w.db, "checklistResult").find((r) => r.ruleId === "echo.related-party")!;
     expect(llm).toMatchObject({ status: "na", source: "llm" });
-    expect(String(llm.message)).toMatch(/model check failed \(Claude unavailable \(503\).*\); review manually/);
+    expect(String(llm.message)).toBe("Related parties identified: the AI could not check this, so check it by hand. The AI service was unavailable.");
     expect((llm.evidence as { flags?: string[] }).flags).toEqual(["llm-error"]);
     // Figures come from code, so the outage does not change them.
     expect(rows(w.db, "agentRun")[0]).toMatchObject({ status: "AGENT_DONE", figures: { rowCount: 3, totalPaise: 4745649, largestPaise: 2345650 } });
@@ -130,7 +130,7 @@ describe("Claude down, no XAI_API_KEY → clear error, no silent success", () =>
   it("ANTHROPIC_API_KEY unset: 'not configured' is the message, nothing is called", async () => {
     const m = modelWorld({ claude: null });
     const x = await extractSpec(PROMPT, { router: m.router, runId: "onb-5", people: PEOPLE });
-    expect(x.notes).toEqual(["Automatic reading failed (Claude is unavailable and Grok is not configured (XAI_API_KEY empty).). Answer the questions below instead."]);
+    expect(x.notes).toEqual(["The description could not be read automatically. The AI service was unavailable. Answer the questions below instead."]);
     expect(m.claude.requests).toHaveLength(0);
   });
 });

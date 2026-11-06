@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { PlainError, userMessage } from "@/lib/errors";
 
 interface Question {
   id: string;
@@ -34,12 +35,12 @@ export default function QuizPlayer({ quizId }: { quizId: string }) {
     try {
       const res = await fetch(`/api/quiz/${quizId}/start`, { method: "POST" });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Could not start quiz");
+      if (!res.ok) throw new PlainError(json.error ?? "The quiz could not be started. Reload the page and try again.");
       setData(json);
       setRemaining(json.remainingSec);
       setState("active");
     } catch (e) {
-      setError((e as Error).message);
+      setError(userMessage(e));
       setState("error");
     }
   };
@@ -56,7 +57,7 @@ export default function QuizPlayer({ quizId }: { quizId: string }) {
           body: JSON.stringify({ attemptId: data.attemptId, answers }),
         });
         const json = await res.json();
-        if (!res.ok) throw new Error(json.error ?? "Submit failed");
+        if (!res.ok) throw new PlainError(json.error ?? "Your answers could not be submitted. Try again.");
         const params = new URLSearchParams({
           attempt: String(json.attemptId),
           auto: auto ? "1" : "0",
@@ -64,7 +65,7 @@ export default function QuizPlayer({ quizId }: { quizId: string }) {
         router.replace(`/quiz/${quizId}/result?${params.toString()}`);
       } catch (e) {
         submittedRef.current = false;
-        setError((e as Error).message);
+        setError(userMessage(e));
         setState("error");
       }
     },

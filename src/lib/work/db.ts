@@ -188,7 +188,7 @@ export async function setWeekPlan(workIds: string[], actor: Actor, now = new Dat
   if (ids.length > PLAN_CAP) return fail(`Pick at most ${PLAN_CAP} works for the week`);
   return prisma.$transaction(async (tx) => {
     const works = await tx.work.findMany({ where: { id: { in: ids } } });
-    if (works.length !== ids.length) return fail("Unknown work");
+    if (works.length !== ids.length) return fail("Some of that work wasn't found. Reload the page and try again.");
 
     // First pass (no writes): validate every work, collecting Ideas that the lead is
     // activating. Any refusal here must happen before anything below is written.
@@ -246,7 +246,7 @@ export async function addPicks(taskIds: string[], actor: Actor, now = new Date()
       where: { id: { in: newIds } },
       include: { work: { select: { status: true, title: true, weekPlans: { where: { userId: actor.id, weekStart }, select: { id: true } } } } },
     });
-    if (tasks.length !== newIds.length) return fail("Unknown task");
+    if (tasks.length !== newIds.length) return fail("Some of those tasks weren't found. Reload the page and try again.");
     for (const t of tasks) {
       if (t.assigneeId !== actor.id) return fail(`"${t.title}" is not your task`);
       if (t.status !== "TODO") return fail(`"${t.title}" is not open`);

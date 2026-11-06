@@ -34,7 +34,7 @@ describe("middleware: refuses oversized bodies before Next reads them", () => {
   it("a 60 MB anonymous POST to the public sign-in page (a server-action shape) gets 413", async () => {
     const res = middleware(post("/", { "content-length": String(60 * MB), "next-action": "deadbeef", "content-type": "multipart/form-data; boundary=x" }));
     expect(res.status).toBe(413);
-    expect(await res.json()).toEqual({ error: "This request is too large (60 MB). The limit here is 64 KB.", limit: 64 * 1024 });
+    expect(await res.json()).toEqual({ error: "This is too large to send (60 MB). The limit here is 64 KB — send a smaller file or fewer files at a time.", limit: 64 * 1024 });
   });
 
   it("anonymous bodies: 64 KB; signed in: 2 MB; bearer callers: 1 MB", () => {

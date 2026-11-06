@@ -3,16 +3,28 @@
 // no "use client" needed. Import from "@/components/ui" instead of restyling per module.
 // The scales and the reasons behind each value: docs/design/firm-os-ui.md. The React pieces built
 // on these strings (PageHeader, Card, Alert, DataTable, Button, …) are in src/components/firm-os.
+import { responseError, userMessage } from "@/lib/errors";
+
 export type CallResult = { ok: boolean; error: string | null; data: Record<string, unknown> };
 
+/**
+ * POST (or `method`) JSON and read the reply. `error` is the sentence to show: the response's
+ * `error`, or a plain sentence for its status, or for a network failure. A `code` field in the reply
+ * stays in `data` for programs and is never part of `error` (src/lib/errors).
+ */
 export async function call(url: string, body?: unknown, method = "POST"): Promise<CallResult> {
-  const res = await fetch(url, {
-    method,
-    headers: body === undefined ? undefined : { "content-type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method,
+      headers: body === undefined ? undefined : { "content-type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch (e) {
+    return { ok: false, error: userMessage(e), data: {} };
+  }
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-  return { ok: res.ok, error: res.ok ? null : String(data.error ?? "Something went wrong"), data };
+  return { ok: res.ok, error: res.ok ? null : responseError(res.status, data), data };
 }
 
 /** Joins class names, skipping empty ones (no stray spaces in the rendered class attribute). */

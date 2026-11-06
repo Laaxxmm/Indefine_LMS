@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { generateQuiz, type Difficulty } from "@/lib/quiz-gen";
+import { NAMES_UNAVAILABLE, legacyDictionary } from "@/lib/auto-quiz";
 import { isActive, isAdmin } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +10,7 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user || !isActive(session.user) || !isAdmin(session.user)) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ ok: false, error: "Only admins can do this. Sign in with an admin account, or ask an admin." }, { status: 401 });
   }
 
   let body: {
@@ -21,7 +22,7 @@ export async function POST(req: Request) {
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
+    return NextResponse.json({ ok: false, error: "The request could not be read. Reload the page and try again." }, { status: 400 });
   }
 
   const videoId = String(body.videoId ?? "").trim();
@@ -30,10 +31,10 @@ export async function POST(req: Request) {
   const difficulty = (body.difficulty ?? "MEDIUM") as Difficulty;
 
   if (!videoId) {
-    return NextResponse.json({ ok: false, error: "videoId required" }, { status: 400 });
+    return NextResponse.json({ ok: false, error: "Choose a video first." }, { status: 400 });
   }
   if (!["EASY", "MEDIUM", "HARD", "MIXED"].includes(difficulty)) {
-    return NextResponse.json({ ok: false, error: "Bad difficulty" }, { status: 400 });
+    return NextResponse.json({ ok: false, error: "Pick a difficulty: easy, medium, hard or mixed." }, { status: 400 });
   }
 
   const video = await prisma.video.findUnique({
@@ -41,15 +42,20 @@ export async function POST(req: Request) {
     select: { id: true, title: true, description: true },
   });
   if (!video) {
-    return NextResponse.json({ ok: false, error: "Video not found" }, { status: 404 });
+    return NextResponse.json({ ok: false, error: "That video wasn't found. Run a sync, then try again." }, { status: 404 });
   }
 
+  // DPDP: the source text may name clients or staff. Mask them with the client master + staff name
+  // dictionary, as SOP Builder and the automatic quiz do; if it cannot be loaded, send nothing.
+  const dictionary = await legacyDictionary();
+  if (!dictionary) return NextResponse.json({ ok: false, error: NAMES_UNAVAILABLE }, { status: 503 });
   const result = await generateQuiz({
     videoTitle: video.title,
     videoDescription: video.description,
     sourceText,
     count,
     difficulty,
+    dictionary,
   });
 
   if (!result.ok) {

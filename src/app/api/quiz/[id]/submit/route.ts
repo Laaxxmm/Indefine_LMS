@@ -17,12 +17,12 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth();
-  if (!session?.user || !isActive(session.user)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session?.user || !isActive(session.user)) return NextResponse.json({ error: "Sign in with an active account to continue. If you are signed in, ask an admin to check your account." }, { status: 401 });
   const userId = session.user.id;
   const { id: quizId } = await params;
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Bad body" }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: "Your answers could not be read. Reload the page and take the quiz again." }, { status: 400 });
   const { attemptId, answers } = parsed.data;
 
   const attempt = await prisma.quizAttempt.findUnique({
@@ -36,10 +36,10 @@ export async function POST(
     },
   });
   if (!attempt || attempt.userId !== userId || attempt.quizId !== quizId) {
-    return NextResponse.json({ error: "Attempt not found" }, { status: 404 });
+    return NextResponse.json({ error: "That quiz attempt wasn't found. Start the quiz again." }, { status: 404 });
   }
   if (attempt.submittedAt) {
-    return NextResponse.json({ error: "Already submitted" }, { status: 409 });
+    return NextResponse.json({ error: "These answers were already submitted. Open the result to see your score." }, { status: 409 });
   }
 
   // The timer is a client-side guard (the player auto-submits when it hits 0).

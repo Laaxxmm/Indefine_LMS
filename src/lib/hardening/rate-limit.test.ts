@@ -105,7 +105,7 @@ describe("fixed window (fake timers)", () => {
     const res = await enforceRateLimit("onboard", "u-1", { store: broken, rule });
     expect(res?.status).toBe(503);
     expect(res?.headers.get("Retry-After")).toBe("60");
-    expect(await res?.json()).toEqual({ error: "The system is busy — try again in a minute.", retryAfter: 60 });
+    expect(await res?.json()).toEqual({ error: "The system is busy. Wait a minute, then try again.", retryAfter: 60 });
     expect(err).toHaveBeenCalledWith(expect.stringMatching(/onboard: store unavailable, request refused with 503 \(fail closed\): connection refused/));
   });
 });

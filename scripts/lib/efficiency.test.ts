@@ -5,7 +5,9 @@ import { describe, expect, it } from "vitest";
 import { createMemoryDb } from "@/lib/agents/core/memory-db";
 import { echoAgent } from "@/lib/agents/echo";
 import { graphCallKind, instrument, measureAgent, newCounter, relationLoads, sqlFor } from "./efficiency";
-import { rowBytes, valueBytes } from "./efficiency-scenarios";
+import { AGENTS } from "@/lib/agents/registry";
+import type { ChecklistPack } from "@/lib/agents/core/checklist";
+import { measureCoach, measureViews, rowBytes, valueBytes } from "./efficiency-scenarios";
 import { harnessRepo, routerExtras } from "./efficiency-wiring";
 
 describe("counting", () => {
@@ -42,6 +44,21 @@ describe("counting", () => {
     expect(r.heap).toBeGreaterThan(28);
     expect(r.index).toBeGreaterThan(0);
   });
+});
+
+describe("applied patches (docs/qa/efficiency-patches.md)", () => {
+  it("P1 mistakes: one pack read per version; P2 focus: the pack JSON is not re-read; P3 coach: a later run makes no insert", async () => {
+    const packs: Record<string, ChecklistPack> = Object.fromEntries(Object.values(AGENTS).map((d) => [d.sopPackKey, d.defaultChecklist]));
+    const views = await measureViews(packs);
+    const mistakes = Object.entries(views).find(([k]) => k.includes("listMistakes"))![1];
+    expect(mistakes.ops["sopPack.findFirst"] ?? 0).toBeLessThan(10); // was one per row (30)
+    const focus = Object.entries(views).find(([k]) => k.includes("getNextTaskView"))![1];
+    expect(focus.total).toBeLessThanOrEqual(3);
+    const { results } = await measureCoach();
+    const later = Object.entries(results).find(([k]) => k.includes("a later run"))![1];
+    expect(later.ops["coachEvent.createMany"] ?? 0).toBe(0);
+    expect(later.total).toBeLessThanOrEqual(4); // was 93
+  }, 60_000);
 });
 
 describe("measureAgent (echo)", () => {

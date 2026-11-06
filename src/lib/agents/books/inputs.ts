@@ -99,7 +99,7 @@ export async function parseBooksFiles(input: BooksInput): Promise<ParsedBooks> {
       if (parsed.success) map = parsed.data;
       else issues.push({ file: mapFile.name, row: 0, message: "column-map.json is not { kind: { field: header } }; ignored" });
     } catch {
-      issues.push({ file: mapFile.name, row: 0, message: "column-map.json is not valid JSON; ignored" });
+      issues.push({ file: mapFile.name, row: 0, message: "column-map.json is not a valid .json file; ignored" });
     }
   }
   const out: ParsedBooks = {

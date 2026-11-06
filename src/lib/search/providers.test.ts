@@ -149,14 +149,29 @@ describe("deliverables", () => {
 });
 
 describe("comms drafts", () => {
-  it("creator, assignee of the draft's job, and managers see a draft; nobody else", async () => {
+  it("the draft page's rule: author, the job's assignee or reviewer, and managers see a job draft; nobody else", async () => {
     expect(await ids(draftsProvider, PEOPLE.priya, "acme")).toEqual(["draft-chase"]); // assignee of job-acme-gst
     expect(await ids(draftsProvider, PEOPLE.arun, "acme")).toEqual(["draft-roc"]); // assignee of job-acme-roc
-    expect(await ids(draftsProvider, PEOPLE.arun, "bharat")).toEqual(["draft-bsw"]); // creator
-    expect(await ids(draftsProvider, PEOPLE.ravi, "acme")).toEqual([]); // reviewer only: not the creator or assignee
+    expect(await ids(draftsProvider, PEOPLE.arun, "bharat")).toEqual(["draft-bsw"]); // creator (and primary handler)
+    expect(await ids(draftsProvider, PEOPLE.ravi, "acme")).toEqual(["draft-chase"]); // reviewer of job-acme-gst, as on the draft page
     expect(await ids(draftsProvider, PEOPLE.manager, "acme")).toEqual(["draft-chase", "draft-roc"]);
     expect(await ids(draftsProvider, PEOPLE.admin, "draft-bsw")).toEqual(["draft-bsw"]);
     expect(await ids(draftsProvider, PEOPLE.gone, "acme")).toEqual([]);
+  });
+
+  it("a job-less (client-level) draft: its author, the client's primary handler and managers; not people on another job of the client", async () => {
+    w.seed("commsDraft", [
+      { id: "draft-acme-client", firmClientId: "fc-acme", jobTaskId: null, kind: "status", language: "en", subject: "Year-end status for Acme", body: DRAFT_BODY, createdById: "u-manager", outlookDraftId: null, createdAt: new Date("2026-11-04T06:30:00Z") },
+    ]);
+    const { canViewCommsDraft } = await import("@/lib/rbac/policy");
+    const draft = { createdById: "u-manager", job: null, client: { primaryHandlerId: "u-priya" } }; // c-acme's primary handler
+    for (const [who, person] of Object.entries(PEOPLE)) {
+      const found = (await ids(draftsProvider, person, "year-end")).includes("draft-acme-client");
+      expect(found, who).toBe(canViewCommsDraft(person, draft));
+    }
+    expect(await ids(draftsProvider, PEOPLE.priya, "year-end")).toEqual(["draft-acme-client"]); // primary handler of Acme
+    expect(await ids(draftsProvider, PEOPLE.arun, "year-end")).toEqual([]); // assignee of another Acme job: no
+    expect(await ids(draftsProvider, PEOPLE.ravi, "year-end")).toEqual([]);
   });
 
   it("matches the subject, the client code and the kind; shows the subject only", async () => {

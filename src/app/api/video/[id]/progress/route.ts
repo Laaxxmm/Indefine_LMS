@@ -16,7 +16,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth();
-  if (!session?.user || !isActive(session.user)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session?.user || !isActive(session.user)) return NextResponse.json({ error: "Sign in with an active account to continue. If you are signed in, ask an admin to check your account." }, { status: 401 });
   const userId = session.user.id;
   const { id: videoId } = await params;
 
@@ -27,12 +27,12 @@ export async function POST(
     select: { id: true },
   });
   if (!exists || !(await canAccessVideo(userId, videoId, isAdmin(session.user)))) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return NextResponse.json({ error: "That video wasn't found. Go back to the dashboard and open it again." }, { status: 404 });
   }
 
   const json = await req.json().catch(() => null);
   const parsed = Body.safeParse(json);
-  if (!parsed.success) return NextResponse.json({ error: "Bad body" }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: "Your progress could not be read. Reload the page; it will be saved from there." }, { status: 400 });
   const { lastPosition, percent } = parsed.data;
 
   const existing = await prisma.videoProgress.findUnique({

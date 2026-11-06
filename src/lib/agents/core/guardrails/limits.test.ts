@@ -95,11 +95,11 @@ describe("the session applies the limits on every scoped call", () => {
     const w2 = echoWorld();
     w2.deps.router = refuse;
     expect((await runAgent(echoAgent, "job-1", w2.deps)).ok).toBe(true);
-    expect(rows(w2.db, "checklistResult").find((r) => r.ruleId === "echo.related-party")).toMatchObject({ status: "na", message: `Related parties identified: model check failed (${plain}); review manually` });
+    expect(rows(w2.db, "checklistResult").find((r) => r.ruleId === "echo.related-party")).toMatchObject({ status: "na", message: `Related parties identified: the AI could not check this, so check it by hand. ${plain}` });
     for (const m of [budgetMessage(new BudgetExceededError("run", 1, 2)), budgetMessage(new BudgetExceededError("day", 1000, 1000))]) {
       expect(m).not.toMatch(/maxCostInr|AI_DAILY_BUDGET_INR|BUDGET_REFUSED|\b[45]\d\d\b/);
     }
-    expect(budgetMessage(new BudgetExceededError("day", 1000, 1000))).toBe("Today's AI budget for the firm is used up (₹1000.00 of ₹1000.00), so this run stopped. Run it again tomorrow, or ask an admin to raise the daily AI budget.");
+    expect(budgetMessage(new BudgetExceededError("day", 1000, 1000))).toBe("Today's AI budget for the firm is used up (₹1,000.00 of ₹1,000.00), so this run stopped. Run it again tomorrow, or ask an admin to raise the daily AI budget.");
   });
 });
 

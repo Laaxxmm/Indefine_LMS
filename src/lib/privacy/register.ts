@@ -527,6 +527,7 @@ export async function recordNomination(
   return step(deps, async (tx) => {
     await loadOpen(tx, id, ["nomination"]);
     await requireVerified(tx, id);
+    await requireResolved(tx, id, deps.hashKey); // like erasure and close: never a nominee for nobody, or for several people at once
     const r = await tx.privacyRequest.findUnique({ where: { id }, select: { notes: true } });
     // The register itself keeps the nominee's details (that is the point of a nomination); the
     // audit row keeps initials only.

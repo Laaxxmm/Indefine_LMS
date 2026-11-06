@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { call, errorText, linkText, type ChipTone } from "@/components/ui";
 import type { NoticeView } from "@/lib/agents/coach/views";
 import { Button, Chip } from "@/components/firm-os";
+import { DEFAULT_MESSAGE } from "@/lib/errors";
 
 const TONE: Record<string, ChipTone> = { board: "brand", reminder: "info", escalation: "warning" };
 
@@ -22,7 +23,7 @@ export function NoticeList({ notices }: { notices: NoticeView[] }) {
     setError(null);
     const r = await call(`/api/firm-os/coach/events/${encodeURIComponent(id)}/dismiss`);
     setBusy(null);
-    if (!r.ok) return setError({ id, text: r.error ?? "Something went wrong" });
+    if (!r.ok) return setError({ id, text: r.error ?? DEFAULT_MESSAGE });
     router.refresh();
   }
 

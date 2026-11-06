@@ -268,28 +268,30 @@ export type NoDeleteExemption = {
   path: string;
   /** The one exported function in it that may delete. */
   fn: string;
-  /** The one Prisma model it may delete from: only `.<model>.deleteMany(` inside the function's body. */
-  model: string;
+  /** The Prisma models it may delete from: only `.<model>.deleteMany(` inside the function's body. */
+  models: readonly string[];
   /** The decision that requires the delete. */
   adr: string;
   why: string;
 };
 
 /**
- * Deletes Firm OS code may contain: exactly ONE, required by ADR-006 (retention: break-nudge
- * heartbeats are kept 7 days and then deleted; they carry no business value). The exemption is as
- * narrow as the rule allows: in this one file, the declaration line of this one exported function
- * (rule no-delete:exported-destructive-fn) and `.activityHeartbeat.deleteMany(` lines inside that
- * function's body (rule no-delete:prisma-delete). Every other rule, line, function, model and file is
- * scanned exactly as before. Adding a second entry needs an ADR, like this one.
+ * Deletes Firm OS code may contain: exactly ONE function, required by ADR-006 (retention): break-nudge
+ * heartbeats are kept 7 days and then deleted (they carry no business value), and rate-limit buckets
+ * whose window ended more than a day ago are deleted (pure request counters: no personal data, no
+ * business record; an expired bucket limits nothing). The exemption is as narrow as the rule allows:
+ * in this one file, the declaration line of this one exported function (rule
+ * no-delete:exported-destructive-fn) and `.activityHeartbeat.deleteMany(` / `.rateLimitBucket.deleteMany(`
+ * lines inside that function's body (rule no-delete:prisma-delete). Every other rule, line, function,
+ * model and file is scanned exactly as before. Adding an entry or a model needs an ADR, like this one.
  */
 export const NO_DELETE_EXEMPTIONS: readonly NoDeleteExemption[] = [
   {
     path: "src/lib/hardening/retention.ts",
-    fn: "purgeExpiredHeartbeats",
-    model: "activityHeartbeat",
+    fn: "purgeExpiredRows",
+    models: ["activityHeartbeat", "rateLimitBucket"],
     adr: "ADR-006",
-    why: "ActivityHeartbeat (break-nudge signal) is kept 7 days, then deleted (ADR-006 retention table); the rows have no business value after the nudge window.",
+    why: "ActivityHeartbeat (break-nudge signal) is kept 7 days, then deleted (ADR-006 retention table); the rows have no business value after the nudge window. RateLimitBucket rows (key, window start, count: no personal data) are deleted a day after their window ends (ADR-006 amendment 2026-11-06); an expired bucket limits nothing, so this only bounds the table.",
   },
 ];
 
@@ -333,7 +335,7 @@ function isExempt(v: Violation, file: SourceFile, exemptions: readonly NoDeleteE
     if (v.rule === "no-delete:prisma-delete" && v.line > first && v.line <= last) {
       const line = file.content.split(/\r?\n/)[v.line - 1] ?? "";
       const all = line.match(/\.delete(?:Many)?\s*\(/g)?.length ?? 0;
-      const allowed = line.match(new RegExp("\\." + escRe(e.model) + "\\.deleteMany\\s*\\(", "g"))?.length ?? 0;
+      const allowed = line.match(new RegExp("\\.(?:" + e.models.map(escRe).join("|") + ")\\.deleteMany\\s*\\(", "g"))?.length ?? 0;
       if (all > 0 && all === allowed) return true;
     }
   }

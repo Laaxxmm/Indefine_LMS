@@ -43,6 +43,7 @@ export type TenantCheck = { ok: true; tenant: string } | { ok: false; reason: st
 /** Sign-in gate: the issuer pins a tenant AND the id token's `tid` claim is that tenant. */
 export function checkTenant(issuer: string | null | undefined, tid: unknown): TenantCheck {
   const tenant = tenantFromIssuer(issuer);
+  // plain-messages: for IT — the sign-in setting by name; written to the server log, never shown on a page.
   if (!tenant) return { ok: false, reason: "AUTH_MICROSOFT_ENTRA_ID_ISSUER must be https://login.microsoftonline.com/<tenant id>/v2.0 for the firm's tenant; sign-in refused" };
   if (typeof tid !== "string" || tid.toLowerCase() !== tenant) return { ok: false, reason: `the account's tenant (${typeof tid === "string" ? tid : "missing"}) is not the firm's tenant; sign-in refused` };
   return { ok: true, tenant };

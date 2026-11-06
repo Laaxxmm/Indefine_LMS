@@ -15,6 +15,7 @@ import type { SagaStep, StepStatus } from "@/lib/agents/onboarding/saga";
 import type { RunView, TuriaItem } from "@/lib/agents/onboarding/service";
 import { ENTITY_TYPES, FIELD_LABELS, SERVICE_LABELS, serviceLineLabel, type PartialSpec } from "@/lib/agents/onboarding/spec";
 import { Alert, Chip, Spinner } from "@/components/firm-os";
+import { DEFAULT_MESSAGE, userMessage } from "@/lib/errors";
 
 const API = "/api/firm-os/onboard";
 // Shared tokens (src/components/ui.ts): fields, labels, buttons and the section title.
@@ -59,7 +60,7 @@ export function OnboardPanel({ initial }: { initial: RunView | null }) {
     try {
       const r = await call(`${API}/${path}`, body);
       if (!r.ok) {
-        setError({ key, text: r.error ?? "Something went wrong" });
+        setError({ key, text: r.error ?? DEFAULT_MESSAGE });
         return null;
       }
       const next = r.data.run as RunView;
@@ -67,7 +68,7 @@ export function OnboardPanel({ initial }: { initial: RunView | null }) {
       router.replace(`/onboard?run=${encodeURIComponent(next.id)}`, { scroll: false });
       return next;
     } catch (e) {
-      setError({ key, text: (e as Error).message });
+      setError({ key, text: userMessage(e) });
       return null;
     } finally {
       setBusy(null);

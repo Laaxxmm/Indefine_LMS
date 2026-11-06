@@ -96,7 +96,7 @@ const EXTRA_LABELS: Record<string, string> = {
   plan: "onboarding plan",
   clientName: "client name",
   inputs: "cached inputs",
-  error: "error text",
+  error: "failure details",
   steps: "onboarding steps",
 };
 

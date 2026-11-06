@@ -93,7 +93,7 @@ export async function recordHeartbeat(userId: string, deps: ActivityDeps): Promi
 export async function dismissEvent(userId: string, eventId: string, deps: Pick<ActivityDeps, "db" | "now">): Promise<CoachResult<{ id: string; dismissedAt: string }>> {
   const now = deps.now?.() ?? new Date();
   const e = await deps.db.coachEvent.findUnique({ where: { id: eventId }, select: { id: true, userId: true, kind: true, dismissedAt: true } });
-  if (!e || !canDismissCoachEvent({ id: userId }, e)) return { ok: false, status: 404, error: "Notice not found" };
+  if (!e || !canDismissCoachEvent({ id: userId }, e)) return { ok: false, status: 404, error: "That notice wasn't found. It may already be dismissed — reload the page." };
   if (e.dismissedAt) return { ok: true, data: { id: e.id, dismissedAt: e.dismissedAt.toISOString() } };
   await deps.db.coachEvent.update({ where: { id: e.id }, data: { dismissedAt: now }, select: { id: true } });
   // A break nudge's audit row names no kind (ADR-006: no lasting trace of break activity).
@@ -125,7 +125,7 @@ export async function updatePreferences(userId: string, input: PreferencesInput,
   if (input.morningBoard !== undefined) data.morningBoard = input.morningBoard;
   if (input.snoozeMinutes !== undefined) data.snoozeUntil = input.snoozeMinutes ? new Date(now.getTime() + input.snoozeMinutes * MIN) : null;
   if (input.breakNudges === false) data.snoozeUntil = null;
-  if (Object.keys(data).length === 0) return { ok: false, status: 400, error: "Nothing to change" };
+  if (Object.keys(data).length === 0) return { ok: false, status: 400, error: "Nothing was changed. Pick a setting to change first." };
 
   const saved = await deps.db.coachPreference.upsert({
     where: { userId },

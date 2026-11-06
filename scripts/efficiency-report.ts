@@ -112,7 +112,7 @@ function storage(
     {
       ...line("AuditEvent", [closeRefused], cronAudits.reconcilerPerRun * RECONCILER_RUNS_PER_DAY * VOLUME.workingDays, `reconciler: ${cronAudits.reconcilerPerRun} close-refused per run (held CLOSING jobs) × ${RECONCILER_RUNS_PER_DAY} runs × ${VOLUME.workingDays} days`),
       table: "AuditEvent (automated close-refused)",
-      steadyStateNote: "grows every year (kept); proposal P4c",
+      steadyStateNote: "grows every year (kept); P4c applied: an automated retry writes one only when the job's refusal reasons change",
     },
     { ...line("AuditEvent", [coachAudit], cronAudits.coachPerDay * VOLUME.workingDays, `coach: ${cronAudits.coachPerDay} per day (overdue escalations, board, summary) × ${VOLUME.workingDays} days`), table: "AuditEvent (coach crons)" },
     line("JobTaskEvent", [...events, doneNote], VOLUME.jobs * VOLUME.jobEventsPerJob, `${VOLUME.jobEventsPerJob} transitions per job; the DONE event carries the gate evidence JSON (~${doneNote.note.length} B)`),
@@ -163,7 +163,8 @@ function headline(r: Report) {
   const mean = (f: (k: string) => number) => prod.reduce((n, k) => n + f(k), 0) / Math.max(prod.length, 1);
   const pick = (sec: Record<string, Measured>, ...parts: string[]) => Object.entries(sec).find(([k]) => parts.every((p) => k.includes(p)))?.[1];
   const steady = pick(r.reconciler, "run 2", "copyToFinal");
-  const restart = pick(r.reconciler, "run 1", "restart");
+  const restart = pick(r.reconciler, "run 1", "already in SharePoint");
+  const restartRecorded = pick(r.reconciler, "run 1", "fingerprint on the row");
   const kept = r.storage.filter((s) => s.table !== "ActivityHeartbeat").reduce((n, s) => n + s.perYearMiB, 0);
   return [
     ["Model calls per agent run (5 production agents, mean)", mean((k) => r.agents[k].perRun.modelCalls)],
@@ -174,6 +175,7 @@ function headline(r: Report) {
     ["Graph calls per reconciler run (steady state)", steady?.graphTotal ?? 0],
     ["File downloads per reconciler run (steady state)", steady?.graph?.["GET file content (download)"] ?? 0],
     ["File downloads, first reconciler run after a restart", restart?.graph?.["GET file content (download)"] ?? 0],
+    ["File downloads, first reconciler run after a restart (files this app uploaded)", restartRecorded ? (restartRecorded.graph?.["GET file content (download)"] ?? 0) : (restart?.graph?.["GET file content (download)"] ?? 0)],
     ["Graph calls to read an existing FY tree (ensureFyTree)", NaN],
     ["DB operations per reconciler run (steady state)", steady?.total ?? 0],
     ["DB operations per later coach reminder run", pick(r.coach, "later run")?.total ?? 0],

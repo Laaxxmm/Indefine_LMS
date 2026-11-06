@@ -202,7 +202,7 @@ describe("runAgent — failure path (run FAILED, job stays IN_PREP)", () => {
     };
     const out = await runAgent(echoAgent, "job-1", w.deps);
     expect(out).toMatchObject({ ok: false, code: "FAILED" });
-    expect(!out.ok && out.reason).toMatch(/could not move to AGENT_DONE/);
+    expect(!out.ok && out.reason).toMatch(/The pack was prepared, but the job could not be marked ready/);
     expect(rows(w.db, "agentRun")[0].status).toBe("FAILED");
   });
 });
@@ -225,8 +225,8 @@ describe("runAgent — LLM evidence is checked against the documents the model w
 
 describe("runAgent — model trouble on the LLM rule is not a run failure", () => {
   it.each([
-    ["queued for a human (local-only)", { status: "queued", reason: "local model down", needsPartnerReview: true, runId: "run-1", attempts: 0 }, /queued for a human: local model down/],
-    ["output that fails the schema", { status: "needs-review", output: null, issues: ["status: Invalid enum value"], needsPartnerReview: true }, /Model output not usable/],
+    ["queued for a human (local-only)", { status: "queued", reason: "local model down", needsPartnerReview: true, runId: "run-1", attempts: 0 }, /the AI could not check this, so check it by hand. The AI answer was held for a person to check./],
+    ["output that fails the schema", { status: "needs-review", output: null, issues: ["status: Invalid enum value"], needsPartnerReview: true }, /the AI could not check this, so check it by hand. The AI answer could not be used./],
   ] as const)("%s → related-party is na + llm-error, the run completes", async (_n, answer, message) => {
     const w = echoWorld();
     w.deps.router = { run: async () => answer as never };

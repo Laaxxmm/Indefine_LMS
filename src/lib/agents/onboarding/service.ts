@@ -24,6 +24,7 @@ import type { OnboardingSubject } from "./restriction";
 import { AI_RESTRICTED_MESSAGE } from "@/lib/privacy/consent";
 import type { SessionUser } from "@/lib/access";
 import { canOpenOnboardingRun } from "@/lib/rbac/policy";
+import { plainAction, storedFailureMessage } from "@/lib/errors";
 
 /** Shown when the sentence is about a client whose AI processing is restricted (DPDP, src/lib/privacy/consent.ts). */
 export const ONBOARDING_AI_RESTRICTED = AI_RESTRICTED_MESSAGE;
@@ -71,6 +72,15 @@ export interface OnboardingDeps {
 }
 
 /** Shown for a run that does not exist or that the person may not open (the same answer, so nothing leaks). */
+/** A step as the page shows it: setup instructions and failures in plain words (the stored step keeps the detail for IT). */
+function plainStep(s: SagaStep): SagaStep {
+  return {
+    ...s,
+    ...(s.action ? { action: plainAction(s.action) } : {}),
+    ...(s.error ? { error: storedFailureMessage(s.error, { subject: "the onboarding", fallback: "This step failed. Use Resume to try it again; if it fails again, tell IT." }) } : {}),
+  };
+}
+
 export const RUN_NOT_YOURS = "That onboarding wasn't found, or someone else started it. Only the person who started it or a partner can open it.";
 
 export interface TuriaItem {
@@ -105,7 +115,7 @@ export function createOnboardingService(deps: OnboardingDeps) {
 
   async function load(runId: string): Promise<RunRecord> {
     const run = await deps.runs.get(runId);
-    if (!run) throw new OnboardingError("not-found", "Onboarding run not found");
+    if (!run) throw new OnboardingError("not-found", "That onboarding wasn't found. Go back to the onboarding page and open it again.");
     if (deps.viewer !== null && !canOpenOnboardingRun(deps.viewer, run)) throw new OnboardingError("not-found", RUN_NOT_YOURS);
     return run;
   }
@@ -133,14 +143,14 @@ export function createOnboardingService(deps: OnboardingDeps) {
       needsReview: extra.needsReview ?? false,
       complete: questions.length === 0 && errors.length === 0,
       plan: run.plan,
-      steps: run.steps ? normalizeSteps(run.steps) : null,
+      steps: run.steps ? normalizeSteps(run.steps).map(plainStep) : null,
       turia,
       confirmRequired: deps.confirmRequired,
     };
   }
 
   function requireDraft(run: RunRecord) {
-    if (run.status !== "DRAFT") throw new OnboardingError("conflict", "This onboarding has already been confirmed; it can only be resumed");
+    if (run.status !== "DRAFT") throw new OnboardingError("conflict", "This onboarding is already confirmed, so its answers can't be changed now. Use Resume to carry on from where it stopped.");
   }
 
   /** DPDP: refuse before the model reads anything about a restricted client (and before any write). */
@@ -185,7 +195,7 @@ export function createOnboardingService(deps: OnboardingDeps) {
     const run = await load(runId);
     requireDraft(run);
     const current = await view(run);
-    if (!current.complete) throw new OnboardingError("invalid", "Answer the remaining questions before planning");
+    if (!current.complete) throw new OnboardingError("invalid", "Answer the remaining questions, then build the plan.");
     const spec = OnboardingSpec.parse(current.spec);
     const people = await deps.people();
     const name = (id: string) => people.find((p) => p.id === id)?.name ?? id;
@@ -215,7 +225,7 @@ export function createOnboardingService(deps: OnboardingDeps) {
 
   async function create(runId: string, actorId: string): Promise<RunView> {
     const run = await load(runId);
-    if (!run.plan) throw new OnboardingError("invalid", "Build the plan first");
+    if (!run.plan) throw new OnboardingError("invalid", "Build the plan first, then confirm it.");
     if (run.status === "DRAFT") {
       await deps.runs.update(runId, { status: "CONFIRMED", steps: initialSteps() });
       await logAudit(auditDbFromSink(deps), { actorId, action: "onboarding.confirm", entity: "OnboardingRun", entityId: runId, meta: { clientCode: run.plan.clientCode } });
@@ -225,14 +235,14 @@ export function createOnboardingService(deps: OnboardingDeps) {
 
   async function resume(runId: string, actorId: string): Promise<RunView> {
     const run = await load(runId);
-    if (run.status === "DRAFT") throw new OnboardingError("conflict", "This plan has not been confirmed yet");
+    if (run.status === "DRAFT") throw new OnboardingError("conflict", "Confirm the plan first, then create the client.");
     return view(await deps.saga.resume(runId, actorId));
   }
 
   async function turiaConfirm(runId: string, input: { syncId: string; turiaRef: string; minutes?: number | null }, actorId: string): Promise<RunView> {
     const run = await load(runId);
     const sync = await deps.getTuriaSync(input.syncId);
-    if (!sync || !run.firmClientId || sync.firmClientId !== run.firmClientId) throw new OnboardingError("not-found", "That Turia checklist is not part of this onboarding");
+    if (!sync || !run.firmClientId || sync.firmClientId !== run.firmClientId) throw new OnboardingError("not-found", "That Turia checklist belongs to a different onboarding. Reload the page and try again.");
     const rec = await deps.manual.confirm(input.syncId, { turiaRef: input.turiaRef, minutes: input.minutes ?? null, confirmedBy: actorId });
     if (rec.operation === "createClient") await deps.setTuriaClientRef(run.firmClientId, rec.turiaRef as string);
     await logAudit(auditDbFromSink(deps), { actorId, action: "turia.confirm", entity: "TuriaSync", entityId: rec.id, meta: { operation: rec.operation, runId } });

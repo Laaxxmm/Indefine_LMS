@@ -13,8 +13,8 @@ export const dynamic = "force-dynamic";
 
 const SETUP_STEPS = [
   "Get the Firm OS Companion extension folder from your admin. In Chrome, open the Extensions page (chrome://extensions), turn on Developer mode and choose Load unpacked.",
-  "Create a pairing token on this page and copy it.",
-  "Open the companion's Options page (right-click its toolbar icon, then Options), paste the token and choose Save and test connection.",
+  "Create a pairing code on this page and copy it.",
+  "Open the companion's Options page (right-click its toolbar icon, then Options), paste the code and choose Save and test connection.",
   "Click the toolbar icon to open the side panel beside the page you are working on.",
 ];
 

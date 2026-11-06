@@ -107,7 +107,7 @@ describe("cron", () => {
     for (const job of [null, "everything"]) {
       const r = await cron(cronReq(job));
       expect(r.status).toBe(400);
-      expect((await r.json()).error).toMatch(/^job must be morning, reminders/);
+      expect((await r.json()).error).toMatch(/^This scheduled task needs to know which job to run \(morning, reminders/);
     }
   });
 

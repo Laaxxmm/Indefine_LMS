@@ -71,6 +71,7 @@ export function pnpBlockedAction(missing: string[], clientId = PNP_CLIENT_ID_DEF
   );
 }
 
+// plain-messages: for IT — the server setting by name, for verify:patha and the logs. People see a plain sentence instead (src/lib/errors plainAction / userMessage).
 export const SITE_OWNER_BLOCKED_ACTION =
   "Set SP_SITE_OWNER to the UPN of the account that should own new CL- sites (e.g. a partner or the SharePoint admin) in .env.local / Railway.";
 

@@ -72,7 +72,7 @@ describe("markSpotChecked", () => {
     const w = new SpotCheckWorld();
     const id = w.selected();
     w.syncs.push({ ...w.syncs[0], id: "not-selected" });
-    expect(await markSpotChecked(w.db, partner, "not-selected", null, NOW)).toMatchObject({ ok: false, status: 404, error: "This Turia close was not selected for a spot check" });
+    expect(await markSpotChecked(w.db, partner, "not-selected", null, NOW)).toMatchObject({ ok: false, status: 404, error: "This Turia close was not picked for a spot check, so there is nothing to record. Reload the spot-check list." });
     expect(await markSpotChecked(w.db, partner, "missing", null, NOW)).toMatchObject({ ok: false, status: 404 });
     expect(await markSpotChecked(w.db, partner, id, "x".repeat(SPOT_CHECK_NOTE_MAX + 1), NOW)).toMatchObject({ ok: false, status: 400 });
     expect(w.syncs.every((s) => !s.spotChecked)).toBe(true);

@@ -10,7 +10,9 @@
 //       acknowledgement reference is stored where the service has one (never checked against a portal).
 // closeJob() re-reads the database facts inside one transaction, mints a token and asks the state
 // machine for CLOSING → DONE as `system:close-gate`, with the evidence as JSON in the event note.
-// Every attempt, passing or not, writes an AuditEvent. A refused job stays CLOSING.
+// Every attempt by a person, passing or not, writes an AuditEvent. Automated retries (the
+// reconciler, refusalAudit "on-change") write a refusal only when its reasons differ from the
+// job's last `close-refused` event (owner decision 2026-11-06). A refused job stays CLOSING.
 import { createHash } from "node:crypto";
 import type { JobTaskState } from "@prisma/client";
 import { ACK_REF_REQUIRED, actorRef, registerCloseGate, type Actor } from "@/lib/agents/core/state";
@@ -19,6 +21,7 @@ import { deliverablePath, isServiceFolder, type DeliverablePath } from "@/lib/in
 import {
   audit,
   joinTransaction,
+  lastRefusalReasons,
   loadCloseSyncs,
   loadEvents,
   loadFinalDeliverables,
@@ -32,6 +35,8 @@ import {
   type TuriaSyncRow,
 } from "./db";
 import { sha256Hex, type DeliverableRef, type DeliverableVerifier } from "./verifier";
+import { causeSentence, plainAction, userMessage } from "@/lib/errors";
+import { STATE_WORDS } from "@/lib/agents/core/state";
 
 const mint = registerCloseGate();
 
@@ -135,10 +140,10 @@ const validName = (n: string) => n.trim().length > 0 && !/[\\/]/.test(n) && n !=
 /** The job's Path A Final folder, or a reason why it cannot be built. */
 export function finalFolder(job: Pick<CloseJobRow, "fy" | "service" | "period" | "firmClient">): { ok: true; folder: DeliverablePath } | { ok: false; reason: string } {
   try {
-    if (!isServiceFolder(job.service)) return { ok: false, reason: `Service ${job.service} has no Path A folder` };
+    if (!isServiceFolder(job.service)) return { ok: false, reason: "Jobs of this kind have no Final folder in SharePoint, so the Final file cannot be checked. Tell IT." };
     return { ok: true, folder: deliverablePath(job.firmClient.clientCode, job.fy, job.service, job.period as DeliverablePath["period"], "Final") };
   } catch (e) {
-    return { ok: false, reason: `The Path A Final folder cannot be built: ${(e as Error).message}` };
+    return { ok: false, reason: `The job's Final folder in SharePoint cannot be worked out.${(s => (s ? ` ${s}` : ""))(causeSentence(e))} Check the job's client code, year and period.` };
   }
 }
 
@@ -165,28 +170,35 @@ export async function verifyDeliverable(
   });
   const f = finalFolder(job);
   if (!f.ok) return fail("final-path", f.reason);
-  if (!isInFinalFolder(d, f.folder)) return fail("final-path", `recorded at ${d.spPath}, not in ${f.folder.serverRelativeUrl}`);
-  if (!d.driveItemId) return fail("final-missing", "no SharePoint item id recorded");
+  if (!isInFinalFolder(d, f.folder)) return fail("final-path", `the file is recorded somewhere else, not in ${f.folder.serverRelativeUrl}. Use "Copy to Final" on the approved pack.`);
+  if (!d.driveItemId) return fail("final-missing", "Firm OS has no record of where this file is in SharePoint. Use \"Copy to Final\" on the approved pack.");
 
   const expectedPath = `${f.folder.path}/${d.name}`;
-  const ref: DeliverableRef = { clientCode: job.firmClient.clientCode, driveId: d.driveId, driveItemId: d.driveItemId, path: expectedPath };
+  const ref: DeliverableRef = {
+    clientCode: job.firmClient.clientCode,
+    driveId: d.driveId,
+    driveItemId: d.driveItemId,
+    path: expectedPath,
+    recorded: { sha256: d.sha256, quickXorHash: d.quickXorHash ?? null, cTag: d.cTag ?? null, sizeBytes: d.sizeBytes },
+  };
   try {
     const live = await verifier.getItem(ref);
-    if (!live.exists) return fail("final-missing", `not found in SharePoint at ${f.folder.serverRelativeUrl}`);
-    if (live.driveItemId && live.driveItemId !== d.driveItemId) return fail("final-moved", "a different file is at that path in SharePoint");
-    if (!live.path || normPath(live.path) !== normPath(expectedPath)) return fail("final-moved", `the file is not inside ${f.folder.serverRelativeUrl}`);
-    if (!(live.sizeBytes > 0)) return fail("final-empty", "the file in SharePoint is empty (0 bytes)");
+    if (!live.exists) return fail("final-missing", `not found in SharePoint at ${f.folder.serverRelativeUrl}. It may have been moved or deleted — put it back, or copy the approved pack to Final again.`);
+    if (live.driveItemId && live.driveItemId !== d.driveItemId) return fail("final-moved", "a different file now has this name in the Final folder. Check the folder, then copy the approved pack to Final again.");
+    if (!live.path || normPath(live.path) !== normPath(expectedPath)) return fail("final-moved", `the file has been moved out of ${f.folder.serverRelativeUrl}. Move it back into the Final folder.`);
+    if (!(live.sizeBytes > 0)) return fail("final-empty", "the file in SharePoint is empty. Copy the approved pack to Final again.");
     let sha = live.sha256;
     if (!sha) {
       const bytes = await verifier.download(ref);
-      if (!bytes) return fail("final-missing", "the file could not be downloaded from SharePoint");
+      if (!bytes) return fail("final-missing", "the file could not be downloaded from SharePoint. Run the check again in a few minutes.");
       sha = sha256Hex(bytes);
     }
-    if (sha.toLowerCase() !== d.sha256.toLowerCase()) return fail("final-hash", "the file in SharePoint has changed (SHA-256 does not match)");
+    if (sha.toLowerCase() !== d.sha256.toLowerCase()) return fail("final-hash", "the file in SharePoint was changed after it was approved, so it no longer matches the approved pack. Copy the approved pack to Final again, or get the changed file approved.");
     return { ok: true, evidence: { id: d.id, name: d.name, driveItemId: d.driveItemId, sha256: d.sha256.toLowerCase(), sizeBytes: live.sizeBytes, path: expectedPath } };
   } catch (e) {
     const action = (e as { action?: string }).action;
-    return fail("final-unverifiable", `SharePoint check failed: ${action ?? (e as Error).message}`, true);
+    console.warn(`[close-gate] SharePoint check of ${d.name} failed`, e);
+    return fail("final-unverifiable", action ? `SharePoint could not be checked: ${plainAction(action)}` : `SharePoint could not be checked just now. ${userMessage(e, { fallback: "Run the check again in a few minutes." })}`, true);
   }
 }
 
@@ -196,9 +208,9 @@ export function checkTuria(syncs: TuriaSyncRow[]): { ok: true; sync: TuriaSyncRo
   const closed = syncs.filter((s) => s.status === "CLOSED");
   const good = closed.find((s) => (s.minutesLogged ?? 0) > 0 && !!s.turiaRef?.trim());
   if (good) return { ok: true, sync: good };
-  if (closed.length) return { ok: false, check: { code: "turia-minutes", message: "Turia task closed but no time logged (minutes must be more than 0)" } };
-  if (syncs.length) return { ok: false, check: { code: "turia-open", message: `Turia task close not confirmed yet (${syncs[0].status.toLowerCase().replace(/_/g, " ")})` } };
-  return { ok: false, check: { code: "turia-missing", message: "Turia task not closed: enter the Turia task ref and minutes logged" } };
+  if (closed.length) return { ok: false, check: { code: "turia-minutes", message: "The Turia task is closed but no time is logged. Enter the minutes logged in Turia (more than 0)." } };
+  if (syncs.length) return { ok: false, check: { code: "turia-open", message: `The Turia task close is not confirmed yet (${syncs[0].status.toLowerCase().replace(/_/g, " ")}). Close the task in Turia, then record it here.` } };
+  return { ok: false, check: { code: "turia-missing", message: "The Turia task is not closed yet. Close it in Turia, then enter its task reference and the minutes logged." } };
 }
 
 // ------------------------------------------------------------------ (c) filing
@@ -214,10 +226,10 @@ export function checkFiling(
     if (e.toState === "FILED_BY_HUMAN" && e.fromState === "APPROVED") filedIdx = i;
     if (e.fromState === "FILED_BY_HUMAN" && e.toState === "CLOSING") closingIdx = i;
   });
-  if (filedIdx < 0 || !job.filedById || !job.filedAt) checks.push({ code: "filing", message: "No filing confirmation by a named person (mark the job filed first)" });
-  else if (closingIdx < filedIdx) checks.push({ code: "filing", message: "The filing has not moved to closing yet" });
+  if (filedIdx < 0 || !job.filedById || !job.filedAt) checks.push({ code: "filing", message: "No filing confirmation by a named person. Mark the job filed first." });
+  else if (closingIdx < filedIdx) checks.push({ code: "filing", message: "The filing has not moved to closing yet. Reload the page; if it stays like this, tell IT." });
   if (ACK_REF_REQUIRED[job.service] && !job.ackRef?.trim()) {
-    checks.push({ code: "ack-ref", message: `${job.service} filings need the acknowledgement reference (ARN / SRN / ack no.)` });
+    checks.push({ code: "ack-ref", message: `This filing needs its acknowledgement number (the ARN, SRN or acknowledgement number from the portal). Take back the filing confirmation and mark it filed again with the number.` });
   }
   if (checks.length) return { ok: false, checks };
   return { ok: true, filed: events[filedIdx], closing: events[closingIdx] };
@@ -245,7 +257,7 @@ function result(job: CloseJobRow | null, checks: CloseCheck[], evidence: GateEvi
 export async function canClose(jobTaskId: string, deps: GateDeps): Promise<CanCloseResult> {
   const now = deps.now?.() ?? new Date();
   const job = await loadJob(deps.db, jobTaskId);
-  if (!job) return result(null, [{ code: "not-found", message: `Job ${jobTaskId} not found` }], null);
+  if (!job) return result(null, [{ code: "not-found", message: "That job wasn't found. Reload the page and try again." }], null);
   const [events, deliverables, syncs] = await Promise.all([
     loadEvents(deps.db, jobTaskId),
     loadFinalDeliverables(deps.db, jobTaskId),
@@ -253,14 +265,14 @@ export async function canClose(jobTaskId: string, deps: GateDeps): Promise<CanCl
   ]);
 
   const checks: CloseCheck[] = [];
-  if (job.state !== "CLOSING") checks.push({ code: "state", message: `Job is ${job.state}; only a CLOSING job can be closed` });
+  if (job.state !== "CLOSING") checks.push({ code: "state", message: `The job is ${STATE_WORDS[job.state].toLowerCase()}; only a job in closing can be closed.` });
 
   const filing = checkFiling(job, events);
   if (!filing.ok) checks.push(...filing.checks);
 
   const passing: DeliverableEvidence[] = [];
   const fileFailures: CloseCheck[] = [];
-  if (deliverables.length === 0) fileFailures.push({ code: "no-final", message: "No Final deliverable recorded: copy the approved pack to the Final folder" });
+  if (deliverables.length === 0) fileFailures.push({ code: "no-final", message: "No Final deliverable recorded. Copy the approved pack to the Final folder." });
   for (const d of deliverables) {
     const r = await verifyDeliverable(job, d, deps.verifier);
     if (r.ok) passing.push(r.evidence);
@@ -340,15 +352,33 @@ async function recheck(tx: CloseLoopTx, jobTaskId: string, ev: GateEvidence): Pr
   return null;
 }
 
+export type CloseJobOptions = {
+  /**
+   * "every" (default): each refusal writes a `close-refused` AuditEvent — a person's attempt.
+   * "on-change": only when the reasons differ from the job's last `close-refused` event — the
+   * reconciler's automated retries, so a held job does not add a row every 30 minutes.
+   */
+  refusalAudit?: "every" | "on-change";
+};
+
+/** Same reasons, in any order. */
+export function sameReasons(a: readonly string[] | null, b: readonly string[]): boolean {
+  if (!a || a.length !== b.length) return false;
+  const x = [...a].sort();
+  const y = [...b].sort();
+  return x.every((r, i) => r === y[i]);
+}
+
 /**
  * Closes the job if, and only if, canClose passes. `triggeredBy` is who asked (a person or the
  * reconciler); the transition itself is always made by `system:close-gate`.
  */
-export async function closeJob(jobTaskId: string, triggeredBy: Actor, deps: GateDeps): Promise<CloseJobResult> {
+export async function closeJob(jobTaskId: string, triggeredBy: Actor, deps: GateDeps, opts: CloseJobOptions = {}): Promise<CloseJobResult> {
   const now = deps.now?.() ?? new Date();
   const actorId = actorRef(triggeredBy);
   const refuse = async (state: JobTaskState | null, reasons: string[], missing: CanCloseResult["missing"]): Promise<CloseJobResult> => {
-    await audit(deps.db, { actorId, action: "close-refused", entity: "JobTask", entityId: jobTaskId, meta: { reasons, state } });
+    const unchanged = opts.refusalAudit === "on-change" && sameReasons(await lastRefusalReasons(deps.db, jobTaskId), reasons);
+    if (!unchanged) await audit(deps.db, { actorId, action: "close-refused", entity: "JobTask", entityId: jobTaskId, meta: { reasons, state } });
     return { ok: false, state, reasons, missing };
   };
 

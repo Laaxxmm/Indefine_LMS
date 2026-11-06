@@ -64,7 +64,17 @@ export async function createOnce(db: Pick<CoachDb, "coachEvent">, e: NewCoachEve
   return r.count === 1;
 }
 
-export type CoachAudit = { actorId: string; action: string; entity: string; entityId?: string | null; meta?: Record<string, unknown> };
+/**
+ * Which of `keys` already have a CoachEvent — one indexed read instead of one failed insert per
+ * nudge that was already sent. createOnce still guards a concurrent run.
+ */
+export async function sentKeys(db: Pick<CoachDb, "coachEvent">, keys: string[]): Promise<Set<string>> {
+  if (keys.length === 0) return new Set();
+  const rows = await db.coachEvent.findMany({ where: { dedupeKey: { in: keys } }, select: { dedupeKey: true } });
+  return new Set(rows.map((r) => r.dedupeKey).filter((k): k is string => !!k));
+}
+
+export type CoachAudit ={ actorId: string; action: string; entity: string; entityId?: string | null; meta?: Record<string, unknown> };
 
 /** One AuditEvent row, through logAudit (src/lib/audit/log.ts). Never called for heartbeats or break nudges (ADR-006). */
 export async function audit(db: Pick<CoachDb, "auditEvent">, e: CoachAudit): Promise<void> {

@@ -4,6 +4,7 @@ import { canUseOfficeTools } from "@/lib/office-tools/access";
 import { DOC_GENERATORS, slug } from "@/lib/office-tools/generate";
 import { recordToolRun } from "@/lib/office-tools/audit";
 import { DOCX_MIME } from "@/lib/certificates/download";
+import { validationMessage, failureSentence } from "@/lib/errors";
 
 export const maxDuration = 60;
 
@@ -11,23 +12,23 @@ export const maxDuration = 60;
 // stream straight back as a download; a one-line audit row records who/when.
 export async function POST(req: Request, { params }: { params: Promise<{ tool: string }> }) {
   const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!canUseOfficeTools(session.user)) return NextResponse.json({ error: "You don't have access to this tool" }, { status: 403 });
+  if (!session?.user) return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
+  if (!canUseOfficeTools(session.user)) return NextResponse.json({ error: "You don't have access to this tool. Ask an admin to give you access." }, { status: 403 });
 
   const { tool } = await params;
   const gen = DOC_GENERATORS[tool];
-  if (!gen) return NextResponse.json({ error: "Unknown tool" }, { status: 404 });
+  if (!gen) return NextResponse.json({ error: "That tool doesn't exist. Go back to Office tools and pick one from the list." }, { status: 404 });
 
   const parsed = gen.schema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input", issues: parsed.error.issues }, { status: 400 });
+    return NextResponse.json({ error: validationMessage(parsed.error), issues: parsed.error.issues }, { status: 400 });
   }
 
   let buf: Buffer;
   try {
     buf = await gen.render(parsed.data);
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 502 });
+    return NextResponse.json({ error: failureSentence(e, "The document could not be generated.", "Check the details and try again.") }, { status: 502 });
   }
 
   await recordToolRun(session.user, tool, gen.summary(parsed.data));

@@ -6,7 +6,7 @@
 // only (storage.js) and never sent.
 import { fetchNextTask } from "./api.js";
 import { LMS_ORIGIN } from "./config.js";
-import { FRESH_MS, TEXT, companionPageUrl, interpret, istTime, jobLink, nextPollDelay, taskKey, ticksFor, whereLabel, withTick } from "./core.js";
+import { FRESH_MS, TEXT, companionPageUrl, interpret, istTime, jobLink, nextPollDelay, resolveUnchanged, taskKey, ticksFor, whereLabel, withTick } from "./core.js";
 import { onTokenChange, readTicks, readToken, saveTicks } from "./storage.js";
 
 const view = document.getElementById("view");
@@ -24,6 +24,7 @@ let timer = null; // the next automatic refresh
 let lastView = ""; // the view the last answer gave
 let lastTaskKey = ""; // the task the last answer carried (taskKey)
 let unchanged = 0; // answers in a row that brought the same task
+let lastEtag = null; // ETag of the task on screen, sent as If-None-Match (a 304 means unchanged)
 
 // ---------------------------------------------------------------- tiny DOM helpers
 
@@ -73,7 +74,7 @@ function renderUnpaired() {
 }
 
 function renderPairing(message) {
-  show(notice("warn", message, companionLink(), el("button", { type: "button", class: "btn btn-sm", onclick: openOptions }, "Paste a new token")));
+  show(notice("warn", message, companionLink(), el("button", { type: "button", class: "btn btn-sm", onclick: openOptions }, "Paste a new pairing code")));
 }
 
 function renderMessage(kind, message) {
@@ -250,8 +251,9 @@ async function refresh() {
       renderUnpaired();
       return;
     }
-    const result = navigator.onLine === false ? { kind: "network" } : await fetchNextTask(token);
-    const next = interpret(result);
+    const result = navigator.onLine === false ? { kind: "network" } : await fetchNextTask(token, lastTask ? lastEtag : null);
+    const next = resolveUnchanged(interpret(result), lastTask);
+    if (result.kind === "http" && result.status !== 304) lastEtag = next.view === "task" ? result.etag || null : null;
     lastRefresh = Date.now();
     noteAnswer(next);
     switch (next.view) {

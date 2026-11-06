@@ -95,7 +95,7 @@ describe("POST /api/tools/engagement-letters/[id]/outlook-draft", () => {
     expect((await POST(req(mail({ to: "" })), ctx("el-1"))).status).toBe(400);
     const bad = await POST(req(mail({ to: "ceo@acme.test, nope" })), ctx("el-1"));
     expect(bad.status).toBe(400);
-    expect((await bad.json()).error).toBe("Not an email address: nope");
+    expect((await bad.json()).error).toBe("nope is not an email address. Check it and try again.");
     expect((await POST(req(mail({ subject: " " })), ctx("el-1"))).status).toBe(400);
     expect(calls).toEqual([]);
     expect(db.letters[0].status).toBe("DRAFT_UPLOADED");

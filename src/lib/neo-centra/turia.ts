@@ -59,9 +59,9 @@ export function turiaAccessTokenCookie(header: string): string | null {
 
 export async function storeTuriaCookie(cookie: string, byId?: string, byName?: string): Promise<void> {
   const key = keyFromEnv(COOKIE_KEY_ENV);
-  if (!key) throw new TuriaSessionError(`${COOKIE_KEY_ENV} is not set on the server, refusing to store the Turia cookie in plaintext.`);
+  if (!key) throw new TuriaSessionError("The server is not set up to keep the Turia sign-in safe, so it was not stored (refusing to store it unprotected). Ask IT to add the key for the Turia sign-in.");
   const token = turiaAccessTokenCookie(cookie);
-  if (!token) throw new TuriaSessionError("No Turia accessToken in what was sent, so nothing was stored. Log into practice.turia.in and sync again.");
+  if (!token) throw new TuriaSessionError("What was pasted does not contain the Turia sign-in, so nothing was stored. Log into practice.turia.in and sync again.");
   const sealed = seal(token, key);
   await prisma.neoTuriaSession.upsert({
     where: { id: 1 },
@@ -99,7 +99,7 @@ async function turiaPost(endpoint: string, action: string, data: Record<string, 
   try {
     json = JSON.parse(text);
   } catch {
-    throw new TuriaSessionError("Turia session expired (non-JSON response). Refresh the Turia cookie.");
+    throw new TuriaSessionError("The Turia sign-in has expired. Log into practice.turia.in and paste a fresh Turia cookie.");
   }
   if (json && json.status != null && json.status !== "SUCCESS") {
     throw new Error(`Turia rejected ${endpoint}/${action}: ${(json.message as string) || json.status}`);

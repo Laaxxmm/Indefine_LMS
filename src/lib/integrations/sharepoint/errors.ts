@@ -27,6 +27,20 @@ export class GraphError extends Error {
   }
 }
 
+/**
+ * A request the client refused to send because its address is not where the credential belongs
+ * (a Graph token to a non-Graph host, a SharePoint token to another host, an upload URL off
+ * Microsoft's hosts). Only the host is named: the full URL may carry a credential.
+ */
+export class UnsafeUrlError extends Error {
+  readonly host: string;
+  constructor(host: string, what: string) {
+    super(`Refused to send ${what} to ${host || "an invalid address"}: it is not a Microsoft Graph or SharePoint address for this tenant.`);
+    this.name = "UnsafeUrlError";
+    this.host = host;
+  }
+}
+
 /** The site or library an operation needs does not exist yet (run the matching ensure-* first). */
 export class NotProvisionedError extends Error {
   constructor(message: string) {
@@ -35,6 +49,7 @@ export class NotProvisionedError extends Error {
   }
 }
 
+// plain-messages: for IT — the server settings and permissions by name, for verify:patha and the logs. People see a plain sentence instead (src/lib/errors plainAction / userMessage).
 export const GRAPH_BLOCKED_ACTION =
   "Set MS_TENANT_ID, MS_CLIENT_ID and MS_CLIENT_SECRET (the LMS app-only Graph app) in .env.local (dev) / Railway variables (prod), " +
   "and grant that app Microsoft Graph application permissions Sites.ReadWrite.All and Group.Read.All with tenant admin consent.";

@@ -15,14 +15,14 @@ export async function POST(req: NextRequest) {
   let byName: string | undefined = "Turia extension";
   if (bearerUnauthorized(req, process.env.NEO_TURIA_RELAY_TOKEN)) {
     const session = await auth();
-    if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    if (!canUseNeoCentra(session.user)) return NextResponse.json({ error: "Not permitted" }, { status: 403 });
+    if (!session?.user) return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
+    if (!canUseNeoCentra(session.user)) return NextResponse.json({ error: "You don't have access to Neo Centra. Ask an admin to give you access." }, { status: 403 });
     byId = session.user.id;
     byName = session.user.name ?? undefined;
   }
 
   const parsed = z.object({ cookie: z.string().min(10).max(16_384) }).safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "A cookie string is required" }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: "Paste the Turia session cookie first." }, { status: 400 });
 
   try {
     await storeTuriaCookie(parsed.data.cookie, byId, byName);
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
 
 export async function GET() {
   const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!canUseNeoCentra(session.user)) return NextResponse.json({ error: "Not permitted" }, { status: 403 });
+  if (!session?.user) return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
+  if (!canUseNeoCentra(session.user)) return NextResponse.json({ error: "You don't have access to Neo Centra. Ask an admin to give you access." }, { status: 403 });
   return NextResponse.json(await turiaStatus());
 }

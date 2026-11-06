@@ -37,6 +37,7 @@ import ScheduleLiveForm from "./ScheduleLiveForm";
 import AddPastSessionForm from "./AddPastSessionForm";
 import { AutoIngest } from "./AutoIngest";
 import { isAdmin } from "@/lib/access";
+import { failureSentence } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 
@@ -107,7 +108,7 @@ async function scheduleSession(formData: FormData) {
       Number.isFinite(occurrences) ? occurrences : 1
     );
   } catch (e) {
-    errMsg = (e as Error).message;
+    errMsg = failureSentence(e, "The session could not be scheduled.", "Check the details and try again.");
   }
 
   if (errMsg) {
@@ -139,7 +140,7 @@ async function editSession(formData: FormData) {
       durationMin: Number.isFinite(durationMin) ? durationMin : 60,
     });
   } catch (e) {
-    errMsg = (e as Error).message;
+    errMsg = failureSentence(e, "The session could not be changed.", "Check the details and try again.");
   }
   if (errMsg) {
     redirect(`/admin/live?tab=sessions&error=${encodeURIComponent(errMsg)}`);
@@ -160,7 +161,7 @@ async function moveFolderAction(formData: FormData) {
   try {
     await moveSessionFolder(id, folderParent);
   } catch (e) {
-    errMsg = (e as Error).message;
+    errMsg = failureSentence(e, "The recording folder could not be moved.", "Try again in a minute.");
   }
   revalidatePath("/admin/live");
   redirect(
@@ -271,7 +272,7 @@ async function addPastSession(formData: FormData) {
       select: { id: true },
     });
   } catch (e) {
-    back((e as Error).message || "Could not create the session.");
+    back(failureSentence(e, "The past session could not be added.", "Check the details and try again."));
   }
 
   // Copy the recording in and run the normal pipeline (video + allotment).
@@ -436,6 +437,12 @@ export default async function AdminLivePage({
         <p className="text-ink-mute mt-1 text-sm">
           Schedule a Teams meeting from here. Attendees get the invite by email,
           and the recording lands in a folder named after the course.
+        </p>
+        <p className="mt-2 text-sm">
+          <Link href="/admin/live/parked" className="font-semibold text-brand-600 hover:underline">
+            Sessions parked for review
+          </Link>
+          <span className="text-ink-mute"> · transcripts with client details the AI could not hide</span>
         </p>
       </div>
 

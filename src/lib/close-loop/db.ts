@@ -65,6 +65,8 @@ export const DELIVERABLE_SELECT = {
   driveId: true,
   driveItemId: true,
   sha256: true,
+  quickXorHash: true,
+  cTag: true,
   sizeBytes: true,
   verifiedAt: true,
 } as const;
@@ -77,6 +79,9 @@ export type DeliverableRow = {
   driveId: string | null;
   driveItemId: string | null;
   sha256: string;
+  /** SharePoint's quickXorHash + content tag recorded at upload (null for older rows): verify without download. */
+  quickXorHash: string | null;
+  cTag: string | null;
   sizeBytes: number;
   verifiedAt: Date | null;
 };
@@ -162,6 +167,11 @@ export interface CloseLoopTx extends JobTaskTx {
   };
   auditEvent: {
     create(args: { data: AuditEventData; select: { id: true } }): PromiseLike<{ id: string }>;
+    findFirst(args: {
+      where: { entity: "JobTask"; entityId: string; action: "close-refused" };
+      orderBy: { createdAt: "desc" };
+      select: { meta: true };
+    }): PromiseLike<{ meta: unknown } | null>;
   };
   user: {
     findUnique(args: { where: { id: string }; select: { managerId: true } }): PromiseLike<{ managerId: string | null } | null>;
@@ -194,6 +204,37 @@ export function loadFinalDeliverables(db: CloseLoopTx, jobTaskId: string): Promi
 
 export function loadCloseSyncs(db: CloseLoopTx, jobTaskId: string): PromiseLike<TuriaSyncRow[]> {
   return db.turiaSync.findMany({ where: { jobTaskId, operation: "closeTask" }, select: SYNC_SELECT, orderBy: { updatedAt: "desc" } });
+}
+
+/** The reasons of the job's last `close-refused` AuditEvent (whoever asked), or null when there is none. */
+export async function lastRefusalReasons(db: CloseLoopTx, jobTaskId: string): Promise<string[] | null> {
+  const row = await db.auditEvent.findFirst({ where: { entity: "JobTask", entityId: jobTaskId, action: "close-refused" }, orderBy: { createdAt: "desc" }, select: { meta: true } });
+  const reasons = (row?.meta as { reasons?: unknown } | null | undefined)?.reasons;
+  return Array.isArray(reasons) ? reasons.filter((r): r is string => typeof r === "string") : null;
+}
+
+/** The two batched reads of the reconciler's DONE re-check. PrismaClient has both shapes. */
+interface DoneRecheckReads {
+  jobTaskEvent: {
+    findMany(args: { where: { jobTaskId: { in: string[] }; toState: "DONE" }; select: typeof EVENT_SELECT & { jobTaskId: true }; orderBy: { createdAt: "asc" } }): PromiseLike<(JobEventRow & { jobTaskId: string })[]>;
+  };
+  deliverable: {
+    findMany(args: { where: { jobTaskId: { in: string[] }; kind: "Final" }; select: typeof DELIVERABLE_SELECT & { jobTaskId: true }; orderBy: { createdAt: "asc" } }): PromiseLike<(DeliverableRow & { jobTaskId: string })[]>;
+  };
+}
+
+/** DONE events and Final deliverables of many jobs: two reads in all, grouped by job. */
+export async function loadDoneFacts(db: CloseLoopTx, ids: string[]): Promise<Map<string, { events: JobEventRow[]; rows: DeliverableRow[] }>> {
+  const out = new Map(ids.map((id) => [id, { events: [] as JobEventRow[], rows: [] as DeliverableRow[] }]));
+  if (!ids.length) return out;
+  const reads = db as unknown as DoneRecheckReads;
+  const [events, rows] = await Promise.all([
+    reads.jobTaskEvent.findMany({ where: { jobTaskId: { in: ids }, toState: "DONE" }, select: { ...EVENT_SELECT, jobTaskId: true }, orderBy: { createdAt: "asc" } }),
+    reads.deliverable.findMany({ where: { jobTaskId: { in: ids }, kind: "Final" }, select: { ...DELIVERABLE_SELECT, jobTaskId: true }, orderBy: { createdAt: "asc" } }),
+  ]);
+  for (const { jobTaskId, ...e } of events) out.get(jobTaskId)?.events.push(e);
+  for (const { jobTaskId, ...d } of rows) out.get(jobTaskId)?.rows.push(d);
+  return out;
 }
 
 /** One AuditEvent through src/lib/audit/log.ts (validated action/entity, capped meta). */

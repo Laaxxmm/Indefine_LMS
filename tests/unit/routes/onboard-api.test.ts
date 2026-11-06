@@ -85,14 +85,14 @@ describe("/api/firm-os/onboard — validation (400)", () => {
   });
 
   it.each<[Route, unknown, RegExp]>([
-    ["start", "not json", /Invalid|Expected/],
+    ["start", "not json", /Some details were missing or not in the right format/],
     ["start", { prompt: "hi" }, /Describe the client/],
     ["start", { prompt: "x".repeat(2001) }, /2,000/],
     ["answer", { runId: "run-1" }, /Answer at least one question/],
     ["answer", { runId: "run-1", answers: {} }, /Answer at least one question/],
     ["answer", { runId: "", answers: { pan: "X" } }, /./],
     ["answer", { runId: "run-1", answers: { pan: 5 } }, /./],
-    ["plan", {}, /Required/],
+    ["plan", {}, /Some details were missing or not in the right format/],
     ["create", { runId: "x".repeat(65) }, /./],
     ["resume", null, /./],
     ["turia-confirm", { runId: "run-1", syncId: "s-1", turiaRef: "  " }, /Enter the Turia reference/],
@@ -101,7 +101,10 @@ describe("/api/firm-os/onboard — validation (400)", () => {
   ])("%s rejects %j", async (name, body, msg) => {
     const r = await routes[name](req(body));
     expect(r.status).toBe(400);
-    expect((await r.json()).error).toMatch(msg);
+    const { error } = await r.json();
+    expect(error).toMatch(msg);
+    // Zod's own wording ("Required", "Expected string…", "Invalid input") never reaches a person.
+    expect(error).not.toMatch(/^(?:Required|Expected|Invalid)\b/);
     expect(factory).not.toHaveBeenCalled();
   });
 });

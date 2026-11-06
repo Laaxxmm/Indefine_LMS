@@ -188,6 +188,10 @@ docs/superpowers/            design specs and implementation plans
 - **Dates** go through `src/lib/ist.ts`; nothing else mentions `Asia/Kolkata`.
 - **Cron routes** start with `cronUnauthorized(req)` from `src/lib/cron-auth.ts`.
 - **Styling**: reuse the class strings in `src/components/ui.ts` before writing new ones.
+- **Error messages are plain sentences**: what went wrong and what to do next, in the firm's words, with no status
+  numbers, codes, internal names or jargon. Routes answer `{ error: <sentence> }` (a `code` may sit beside it for
+  programs; no page shows it). In a catch block use `userMessage(e, …)` or `failureSentence(e, what, next)` from
+  `src/lib/errors` — never `(e as Error).message`. `tests/unit/plain-language-errors.test.tsx` scans every message.
 - **A new module** follows the template in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) §10:
   `core.ts` (pure rules) + `access.ts` + `db.ts`/`storage.ts`, routes, pages, a schema
   section, a `scripts/verify-<module>.ts`, and a design note under `docs/superpowers/`.

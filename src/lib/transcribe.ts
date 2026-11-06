@@ -12,6 +12,7 @@
 // verifiable against real spoken content, keeping the generator's guardrails.
 
 import { resolveGeminiModel, isThinkingModel } from "@/lib/gemini";
+import { failureSentence } from "@/lib/errors";
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com";
 
@@ -97,7 +98,7 @@ export async function transcribeVideo(opts: {
     if (!u) return { ok: false, error: "Gemini did not return an upload URL." };
     uploadUrl = u;
   } catch (e) {
-    return { ok: false, error: `Gemini upload start error: ${(e as Error).message}` };
+    return { ok: false, error: failureSentence(e, "The video could not be sent to the AI service for transcription.", "Try again in a few minutes.") };
   }
 
   // 3. Upload the bytes and finalize.
@@ -148,7 +149,7 @@ export async function transcribeVideo(opts: {
       state = pj.state ?? state;
     }
   } catch (e) {
-    return { ok: false, error: `Gemini processing poll error: ${(e as Error).message}` };
+    return { ok: false, error: failureSentence(e, "The AI service stopped answering while it transcribed the video.", "Try again in a few minutes.") };
   }
   if (state !== "ACTIVE") {
     void deleteFile(fileName, apiKey);

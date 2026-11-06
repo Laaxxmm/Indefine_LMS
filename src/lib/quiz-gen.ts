@@ -57,6 +57,14 @@ const MAX_CALLS = 8; // hard cap on Gemini calls per generate, bounds cost/laten
 // thinking models; 45s was too tight and timed out mid-batch, killing the whole
 // run. 120s stays well inside the routes' 300s budget for the count=20 path.
 const REQUEST_TIMEOUT_MS = 90_000;
+
+/** What a person reads when Gemini answers with an error status (the status and its text go to the log). */
+function geminiStatusSentence(status: number): string {
+  if (status === 429) return "The AI service for quizzes is busy or has hit its limit for now. Wait a few minutes, then try again.";
+  if (status === 401 || status === 403) return "The AI service for quizzes refused the firm's key. Ask IT to check the Gemini key.";
+  if (status === 400) return "The AI service for quizzes could not use this request. Try a shorter script or fewer questions.";
+  return "The AI service for quizzes is unavailable right now. Try again in a few minutes.";
+}
 // Cap total time spent looping batches so distillation (≤90s) + generation stay
 // well under the ~300s HTTP request budget. Returns partial results on hit.
 const GENERATE_BUDGET_MS = 150_000;
@@ -341,9 +349,9 @@ async function generateBatch(args: {
   } catch (e) {
     const err = e as Error;
     if (err.name === "TimeoutError" || err.name === "AbortError") {
-      return { ok: false, error: "Gemini took too long to respond. Try again or reduce the question count." };
+      return { ok: false, error: "The AI service took too long to answer. Try again, or ask for fewer questions." };
     }
-    return { ok: false, error: `Network error calling Gemini: ${err.message}` };
+    return { ok: false, error: "The AI service for quizzes could not be reached. Try again in a few minutes." };
   }
 
   if (!res.ok) {
@@ -354,7 +362,8 @@ async function generateBatch(args: {
     } catch {
       /* keep raw text */
     }
-    return { ok: false, error: `Gemini API error ${res.status}: ${detail || res.statusText}` };
+    console.warn(`[quiz-gen] Gemini API error ${res.status}: ${detail || res.statusText}`);
+    return { ok: false, error: geminiStatusSentence(res.status) };
   }
 
   let json: {
@@ -364,7 +373,7 @@ async function generateBatch(args: {
   try {
     json = await res.json();
   } catch {
-    return { ok: false, error: "Gemini returned a non-JSON response." };
+    return { ok: false, error: "The AI service for quizzes sent back an answer that could not be used. Try again." };
   }
 
   if (json.promptFeedback?.blockReason) {
@@ -388,7 +397,7 @@ async function generateBatch(args: {
     parsed = extractJson(text);
   } catch {
     // A MAX_TOKENS truncation lands here; the caller simply keeps prior batches.
-    return { ok: false, error: "Could not parse Gemini output as JSON (the batch may have been truncated)." };
+    return { ok: false, error: "The AI answer was cut off or could not be read. Try again with fewer questions." };
   }
 
   // Grab the questions array loosely, then validate each item on its own. Doing
@@ -419,7 +428,7 @@ async function generateBatch(args: {
 
 export async function generateQuiz(input: GenerateInput): Promise<GenerateResult> {
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return { ok: false, error: "GEMINI_API_KEY is not set on the server." };
+  if (!apiKey) return { ok: false, error: "The AI service for quizzes is not set up on the server. Ask IT to add the Gemini key." };
 
   const sourceText = input.sourceText.trim();
   if (sourceText.length < MIN_SOURCE_CHARS) {

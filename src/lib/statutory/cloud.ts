@@ -4,6 +4,7 @@
 // cbic-gst.gov.in tickers, PT Karnataka, GST Council.
 import { extractPdfText } from "@/lib/office-tools/pdf";
 import { effDate, type RawItem } from "./portals";
+import { failureSentence } from "@/lib/errors";
 
 const UA = {
   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
@@ -384,7 +385,7 @@ export async function collectCloud(frm: string, to: string): Promise<SourceResul
         }
         return { portal, ok: true, error: null, fetched: got.length, undated: got.filter((x) => !effDate(x)).length, items };
       } catch (e) {
-        return { portal, ok: false, error: String((e as Error).message).slice(0, 200), fetched: 0, undated: 0, items: [] };
+        return { portal, ok: false, error: failureSentence(e, "The portal could not be read.", "It will be tried again on the next run.").slice(0, 300), fetched: 0, undated: 0, items: [] };
       }
     }),
   );

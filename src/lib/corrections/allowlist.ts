@@ -294,7 +294,7 @@ export const RECORD_GUARDS: Record<CorrectionEntity, (record: Row) => Problem | 
   Client: () => null,
   JobTask: (r) =>
     r.state === "DONE"
-      ? conflict("This job is DONE, so its details are closed and can't be corrected. If something is wrong, add a note on the job and tell a partner.")
+      ? conflict("This job is done, so its details are closed and can't be corrected. If something is wrong, add a note on the job and tell a partner.")
       : null,
   Engagement: (r) =>
     r.active === false ? conflict("This engagement is archived, so it can't be corrected. Ask a partner to restore it first if the details matter.") : null,

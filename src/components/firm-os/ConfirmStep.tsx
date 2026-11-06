@@ -7,6 +7,7 @@
 import { useId, useState } from "react";
 import { errorText } from "@/components/ui";
 import { Button, type ButtonVariant } from "./Button";
+import { userMessage } from "@/lib/errors";
 
 export function ConfirmPanel({
   label,
@@ -98,7 +99,7 @@ export function ConfirmStep({
     try {
       r = await onConfirm();
     } catch (e) {
-      r = { ok: false, error: (e as Error).message };
+      r = { ok: false, error: userMessage(e) };
     }
     setBusy(false);
     const ok = typeof r === "boolean" ? r : r.ok;

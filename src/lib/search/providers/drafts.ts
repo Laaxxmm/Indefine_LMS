@@ -1,5 +1,6 @@
-// Client comms drafts. Visible to the draft's creator, the assignee of its job, and managers,
-// partners and admins (access.ts draftScopeWhere). Matches the subject, the client code and name,
+// Client comms drafts. Visible exactly as on the draft page: the author, the job's assignee or
+// reviewer, the client's primary handler for a client-level draft, and managers, partners and
+// admins (access.ts draftScopeWhere → commsDraftScopeWhere). Matches the subject, the client code and name,
 // and the kind of message. The body is never read: it is not selected, searched or shown.
 import type { Prisma } from "@prisma/client";
 import { canFindDrafts, draftScopeWhere } from "../access";

@@ -295,8 +295,8 @@ function toDayKey(v: string | Date): string | null {
 export function dueDatesFor(rule: CalendarRule, ctx: DueContext, opts: DueOptions = {}): DueResult {
   const fail = (code: DueErrorCode, message: string): DueResult => ({ ok: false, ruleId: rule.id, code, message });
   const bufferDays = opts.bufferDays ?? 3;
-  if (!Number.isInteger(bufferDays) || bufferDays < 0 || bufferDays > 60) return fail("INVALID_BUFFER", `bufferDays must be 0-60, got ${bufferDays}`);
-  if (parseFy(ctx.fy) === null) return fail("INVALID_FY", `FY must look like 2026-27, got "${ctx.fy}"`);
+  if (!Number.isInteger(bufferDays) || bufferDays < 0 || bufferDays > 60) return fail("INVALID_BUFFER", `The SOP pack's buffer must be 0 to 60 days (it is ${bufferDays}). Ask a partner to correct the SOP pack.`);
+  if (parseFy(ctx.fy) === null) return fail("INVALID_FY", `The financial year must look like 2026-27 (it is "${ctx.fy}").`);
   const p = parsePeriod(ctx.fy, ctx.period);
   if (!p) return fail("INVALID_PERIOD", `"${ctx.period}" is not a period of FY ${ctx.fy}`);
   if (!rule.periodKinds.includes(p.kind)) return fail("PERIOD_KIND_NOT_SUPPORTED", `${rule.form} is not filed ${p.kind} (allowed: ${rule.periodKinds.join(", ")})`);
@@ -316,7 +316,7 @@ export function dueDatesFor(rule: CalendarRule, ctx: DueContext, opts: DueOption
       if (!ctx.state) return fail("STATE_REQUIRED", `${rule.form}: the due date depends on the state of registration; give the GST state code`);
       const groups = opts.stateGroups ?? {};
       const group = Object.keys(groups).find((g) => groups[g].includes(ctx.state as string));
-      if (!group) return fail("UNKNOWN_STATE", `${rule.form}: state code "${ctx.state}" is in no state group`);
+      if (!group) return fail("UNKNOWN_STATE", `${rule.form}: the GST state code "${ctx.state}" is not one Firm OS knows; check the state of registration`);
       if (group !== w.stateGroup) continue;
     }
     if (v.notApplicable) return fail("NOT_APPLICABLE", `${rule.form} ${p.label}: ${v.notApplicable}`);

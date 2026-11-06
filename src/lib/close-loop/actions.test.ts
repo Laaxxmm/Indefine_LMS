@@ -117,7 +117,7 @@ describe("refusals", () => {
   it("GST filing without the ARN is invalid; the job stays APPROVED", async () => {
     const { w, deps } = setup();
     const job = approvedJob(w);
-    await rejects(markFiled(job.id, {}, priya, deps), "invalid", /acknowledgement reference/);
+    await rejects(markFiled(job.id, {}, priya, deps), "invalid", /Enter the acknowledgement number for this GST filing/);
     expect(w.job(job.id).state).toBe("APPROVED");
   });
 
@@ -163,7 +163,7 @@ describe("setJobState: DONE is never settable directly", () => {
   it("a request for DONE is refused with gate-required, audited, and changes nothing", async () => {
     const { w, deps } = setup();
     const { job } = w.readyJob();
-    await rejects(setJobState(job.id, { to: "DONE", expectedState: "CLOSING" }, partnerAdmin, deps), "gate-required", /only by the close gate/);
+    await rejects(setJobState(job.id, { to: "DONE", expectedState: "CLOSING" }, partnerAdmin, deps), "gate-required", /marked done only by the closing checks/);
     expect(w.job(job.id).state).toBe("CLOSING");
     expect(w.events.some((e) => e.toState === "DONE")).toBe(false);
     expect(w.audits).toEqual([expect.objectContaining({ action: "done-refused", actorId: "u-partner", entityId: job.id })]);

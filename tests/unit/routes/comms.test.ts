@@ -88,7 +88,7 @@ describe("POST /api/firm-os/comms/drafts", () => {
     expect((await create(req("not json"))).status).toBe(400);
     const bad = await create(req({ kind: "send-now" }));
     expect(bad.status).toBe(400);
-    expect((await bad.json()).error).toBe("Pick what the message is for");
+    expect((await bad.json()).error).toBe("Pick what the message is for.");
     signedIn(activeSession({ id: "u-other" }));
     expect((await create(req({ kind: "status", jobId: job.id }))).status).toBe(403);
     signedIn(priya());

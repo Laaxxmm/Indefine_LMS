@@ -59,7 +59,7 @@ form.addEventListener("submit", async (e) => {
   if (!isTokenShape(token)) return report("bad", TEXT.badToken);
   await saveToken(token);
   input.value = "";
-  input.placeholder = "Saved. Paste a new token to replace it.";
+  input.placeholder = "Saved. Paste a new code to replace it.";
   await test(token, saveBtn);
 });
 
@@ -76,5 +76,5 @@ forgetBtn.addEventListener("click", async () => {
 });
 
 readToken().then((t) => {
-  if (t) input.placeholder = "Saved. Paste a new token to replace it.";
+  if (t) input.placeholder = "Saved. Paste a new code to replace it.";
 });

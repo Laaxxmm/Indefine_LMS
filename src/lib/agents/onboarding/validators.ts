@@ -9,6 +9,7 @@ import {
   CLIENT_CODE_RE, COMPANY_TYPES, ENTITY_TYPES, MONTH_RE, SERVICE_FREQUENCIES, SERVICE_LABELS,
   type PartialSpec, type SpecField,
 } from "./spec";
+import { causeSentence } from "@/lib/errors";
 
 export interface Issue {
   field: SpecField;
@@ -167,14 +168,14 @@ export async function validateSpec(spec: PartialSpec, ports: ValidationPorts): P
     if (taken && taken.lmsClientId !== existingLmsClient?.id) {
       errors.push({ field: "clientCode", message: `Client code ${spec.clientCode} is already used by ${taken.legalName}` });
     }
-    const t = await ports.turia.findClientByCode(spec.clientCode).catch((e: Error) => ({ status: "unknown" as const, reason: e.message, checklistItem: `Check Turia by hand for client code ${spec.clientCode}.` }));
+    const t = await ports.turia.findClientByCode(spec.clientCode).catch((e: Error) => ({ status: "unknown" as const, reason: causeSentence(e) ?? "Turia could not be checked.", checklistItem: `Check Turia by hand for client code ${spec.clientCode}.` }));
     if (t.status === "found") errors.push({ field: "clientCode", message: `Client code ${spec.clientCode} already exists in Turia (${t.turiaRef})` });
     else if (t.status === "unknown") checks.push(t.checklistItem);
   }
 
   for (const field of ["assigneeId", "reviewerId"] as const) {
     const id = spec[field];
-    if (id && !(await ports.findActiveUser(id))) errors.push({ field, message: `${field === "assigneeId" ? "Assignee" : "Reviewer"} is not an active LMS user` });
+    if (id && !(await ports.findActiveUser(id))) errors.push({ field, message: `The ${field === "assigneeId" ? "assignee" : "reviewer"} is not an active member of staff. Pick someone else from the list.` });
   }
   return { errors, checks, existingLmsClient };
 }

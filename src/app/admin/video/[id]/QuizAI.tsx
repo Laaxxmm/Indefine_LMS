@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Sparkles, Loader2, Check, X, Pencil, Plus, FileText } from "lucide-react";
+import { userMessage } from "@/lib/errors";
 
 type Difficulty = "EASY" | "MEDIUM" | "HARD" | "MIXED";
 
@@ -98,7 +99,7 @@ export function QuizAI({
         );
         router.refresh();
       } else {
-        setError(res.error || "Generation failed.");
+        setError(res.error || "The quiz could not be generated. Try again.");
       }
     } finally {
       setBusy(null);
@@ -122,7 +123,7 @@ export function QuizAI({
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
-        setError(data.error || "Generation failed.");
+        setError(data.error || "The quiz could not be generated. Try again.");
         return;
       }
       setDrafts(
@@ -135,7 +136,7 @@ export function QuizAI({
       );
       setDropped(data.dropped ?? 0);
     } catch (e) {
-      setError((e as Error).message);
+      setError(userMessage(e));
     } finally {
       setBusy(null);
     }
@@ -188,11 +189,11 @@ export function QuizAI({
         return true;
       }
       updateDraft(d.localId, { status: "pending" });
-      setError(res.error || "Failed to add question.");
+      setError(res.error || "The question could not be added. Try again.");
       return false;
     } catch (e) {
       updateDraft(d.localId, { status: "pending" });
-      setError((e as Error).message);
+      setError(userMessage(e));
       return false;
     }
   }

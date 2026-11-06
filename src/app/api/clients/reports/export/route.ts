@@ -3,8 +3,7 @@ import ExcelJS from "exceljs";
 import { auth } from "@/lib/auth";
 import { departmentLabel } from "@/lib/ca-firm";
 import { canManageClients, ENTITY_TYPES, GROWTH_GOALS, JOB_STATUSES, TURNOVER_BANDS } from "@/lib/clients/core";
-import { logAudit } from "@/lib/audit/log";
-import { prisma } from "@/lib/prisma";
+import { auditClientReportExport } from "@/lib/audit/reads";
 import { loadJobRows, parseFilters } from "@/lib/clients/reports";
 import { istDate } from "@/lib/ist";
 import { addSheet, workbookBytes } from "@/lib/office-tools/xlsx";
@@ -21,7 +20,8 @@ export async function GET(req: Request) {
   const sp = Object.fromEntries(new URL(req.url).searchParams);
   const filters = parseFilters(sp);
   const rows = await loadJobRows(filters);
-  await logAudit(prisma, { actorId: session.user.id, action: "export", entity: "Client", entityId: null, meta: { report: "client-jobs", rows: rows.length, filters: Object.keys(sp).sort() } });
+  // Read audit (export, every time): row count and filter names only, never their values.
+  await auditClientReportExport(session.user, { rows: rows.length, format: "xlsx", filters: Object.keys(sp).sort() });
   const columns = ["Client", "FY", "Month", "Department", "Service", "Handler", "Status", "Due on", "Fees (₹)", "Turnover (₹)", "Turnover band", "Growth goal", "Entity type", "City", "Created on"];
   const wb = new ExcelJS.Workbook();
   addSheet(wb, "Jobs", columns, rows.map((r) => ({

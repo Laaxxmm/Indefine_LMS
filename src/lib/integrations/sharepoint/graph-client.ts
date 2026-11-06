@@ -9,8 +9,15 @@
 // Throttling (429) and server errors (5xx) are retried a bounded number of times,
 // honouring Retry-After. Several independent reads go out as one Graph JSON batch (POST /$batch
 // whose sub-requests are GETs only; batchGet). Item reads ask for ITEM_SELECT fields only.
+//
+// Credentials go only where they belong (security re-audit NEW-3): the app-only Graph token only to
+// https://graph.microsoft.com (isGraphUrl) — so an @odata.nextLink pointing anywhere else is refused,
+// not followed —, a SharePoint REST token only to the https *.sharepoint.com host it was minted for,
+// and upload-session bytes only to an https Microsoft host (graph.microsoft.com or *.sharepoint.com).
+// A refused request throws UnsafeUrlError before anything is sent.
 import { createHash } from "node:crypto";
-import { BlockedError, ConflictError, GRAPH_BLOCKED_ACTION, GraphError } from "./errors";
+import { isGraphUrl } from "@/lib/hardening/net";
+import { BlockedError, ConflictError, GRAPH_BLOCKED_ACTION, GraphError, UnsafeUrlError } from "./errors";
 import type { FetchLike } from "./sp-auth";
 
 export type { FetchLike } from "./sp-auth";
@@ -147,6 +154,31 @@ export function isRetryable(status: number): boolean {
   return status === 429 || status >= 500;
 }
 
+/** The URL parsed, or null when it is not an https URL without user info. */
+function httpsUrl(url: string): URL | null {
+  try {
+    const u = new URL(url);
+    return u.protocol === "https:" && !u.username && !u.password && u.hostname ? u : null;
+  } catch {
+    return null;
+  }
+}
+const hostOf = (url: string) => httpsUrl(url)?.host ?? "";
+const SHAREPOINT_HOST = /^[a-z0-9-]+\.sharepoint\.com$/i;
+
+/** May this request carry the credential `auth` names? Graph: graph.microsoft.com; SharePoint REST: its own *.sharepoint.com host. */
+export function tokenMayGoTo(url: string, auth: { kind: "graph" } | { kind: "sp"; host: string }): boolean {
+  if (auth.kind === "graph") return isGraphUrl(url);
+  const u = httpsUrl(url);
+  return !!u && SHAREPOINT_HOST.test(u.host) && u.host.toLowerCase() === auth.host.toLowerCase();
+}
+
+/** An upload session URL Graph returned: https on graph.microsoft.com or a *.sharepoint.com host. */
+export function isUploadSessionUrl(url: string): boolean {
+  const u = httpsUrl(url);
+  return !!u && (isGraphUrl(url) || SHAREPOINT_HOST.test(u.host));
+}
+
 const encPath = (p: string) => p.split("/").filter(Boolean).map(encodeURIComponent).join("/");
 /** SharePoint REST string literal inside ('...'): single quotes are doubled. */
 const spLiteral = (s: string) => s.replace(/'/g, "''");
@@ -173,6 +205,7 @@ export function createSharePointClient(opts: ClientOptions = {}): SharePointClie
       return t;
     }
     if (!opts.sharePointToken) {
+      // plain-messages: for IT — the certificate settings by name. People see a plain sentence instead (src/lib/errors plainAction / userMessage).
       throw new BlockedError(opts.sharePointBlockedAction ?? "Configure the PnP certificate (SP_PNP_CERT_KEY_PEM + SP_PNP_CERT_PEM) for SharePoint REST.");
     }
     return opts.sharePointToken(auth.host);
@@ -180,6 +213,7 @@ export function createSharePointClient(opts: ClientOptions = {}): SharePointClie
 
   /** One logical request with bounded retries. Returns the final Response (ok or not). */
   async function send(method: Method, url: string, auth: Auth, body?: unknown): Promise<Response> {
+    if (!tokenMayGoTo(url, auth)) throw new UnsafeUrlError(hostOf(url), auth.kind === "graph" ? "the Microsoft Graph token" : "the SharePoint token");
     const token = await bearer(auth);
     const headers: Record<string, string> =
       auth.kind === "graph"
@@ -220,6 +254,9 @@ export function createSharePointClient(opts: ClientOptions = {}): SharePointClie
    * conflictBehavior "fail". Session URLs are pre-authenticated, so no bearer token is sent to them.
    */
   async function putContent(url: string, bytes: Uint8Array, extraHeaders: Record<string, string>, withBearer: boolean): Promise<Response> {
+    if (withBearer ? !tokenMayGoTo(url, { kind: "graph" }) : !isUploadSessionUrl(url)) {
+      throw new UnsafeUrlError(hostOf(url), withBearer ? "the Microsoft Graph token" : "file contents");
+    }
     const headers: Record<string, string> = { "Content-Type": "application/octet-stream", ...extraHeaders };
     if (withBearer) headers.Authorization = `Bearer ${await bearer({ kind: "graph" })}`;
     return withRetries(() =>

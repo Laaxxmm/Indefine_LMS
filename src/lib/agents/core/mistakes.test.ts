@@ -121,7 +121,7 @@ describe("proposal guard rails", () => {
     expect(await proposeMistake(w.mdeps, "run-1", "f", { ...PROPOSAL, check: "echo.nope" }, undefined, reviewer)).toMatchObject({
       ok: false,
       code: "INVALID",
-      reason: expect.stringMatching(/choose one of: echo.duplicate-refs/),
+      reason: expect.stringMatching(/"echo.nope" is not one of the .* checks. Pick a check from the list./),
     });
     expect(await proposeMistake(w.mdeps, "run-1", "f", { ...PROPOSAL, id: "echo.duplicate-refs" }, undefined, reviewer)).toMatchObject({ ok: false, code: "CONFLICT" });
     expect(await proposeMistake(w.mdeps, "run-1", "f", PROPOSAL, { notExtracted: true, extracted: undefined }, reviewer)).toMatchObject({ ok: false, code: "INVALID" });

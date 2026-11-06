@@ -35,7 +35,7 @@ async function saveAttendance(data: {
   "use server";
   const session = await auth();
   if (!session?.user || !isAdmin(session.user)) {
-    return { ok: false, error: "Unauthorized" };
+    return { ok: false, error: "Only admins can do this. Sign in with an admin account, or ask an admin." };
   }
   const periodMonth = periodMonthFromString(data.periodMonth);
   if (!periodMonth) return { ok: false, error: "Pick a valid month." };

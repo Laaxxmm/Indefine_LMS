@@ -123,7 +123,7 @@ export function parseProfile(file: string, text: string, issues: ParseIssue[]): 
   try {
     json = JSON.parse(text);
   } catch {
-    issues.push({ file, row: 0, message: "entity profile is not valid JSON" });
+    issues.push({ file, row: 0, message: "entity profile is not a valid .json file" });
     return null;
   }
   const p = EntityProfileSchema.safeParse(json);
@@ -206,7 +206,7 @@ export async function parseAuditFiles(input: AuditInput, job: Pick<JobContext, "
           else issues.push({ file: f.name, row: 0, message: `sampling plan ignored: ${s.error.issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`).join("; ")}` });
         }
       } catch {
-        issues.push({ file: f.name, row: 0, message: `${f.kind} file is not valid JSON; ignored` });
+        issues.push({ file: f.name, row: 0, message: `${f.kind} file is not a valid .json file; ignored` });
       }
     }
   }

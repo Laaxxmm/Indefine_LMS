@@ -59,7 +59,7 @@ export function isMicrosoftUploadUrl(url: string): boolean {
 }
 
 async function graphCall<T>(token: string, method: "GET" | "POST", path: string, body: unknown, deps: OutlookDeps): Promise<{ status: number; data: T | null }> {
-  if (!isDraftOnlyPath(path)) throw new OutlookDraftError(`Refused Graph path ${path}: this module only creates Outlook drafts`);
+  if (!isDraftOnlyPath(path)) throw new OutlookDraftError("Firm OS only creates Outlook drafts, so this request was refused. Nothing was sent.");
   const f = deps.fetch ?? fetch;
   const res = await f(`${GRAPH_BASE}${path}`, {
     method,
@@ -69,7 +69,8 @@ async function graphCall<T>(token: string, method: "GET" | "POST", path: string,
     signal: AbortSignal.timeout(30_000),
   });
   if (method === "GET" && res.status === 404) return { status: 404, data: null };
-  if (!res.ok) throw new OutlookDraftError(`Graph ${method} ${path.replace(/\/me\/messages\/[^/?]+/, "/me/messages/{id}")} failed: ${res.status} ${(await res.text()).slice(0, 300)}`, res.status);
+  if (!res.ok) console.warn(`[outlook] ${method} ${path.replace(/\/me\/messages\/[^/?]+/, "/me/messages/{id}")} failed: ${res.status} ${(await res.text()).slice(0, 300)}`);
+  if (!res.ok) throw new OutlookDraftError("Outlook did not accept the draft. Nothing was sent — try again in a minute.", res.status);
   return { status: res.status, data: (await res.json().catch(() => null)) as T | null };
 }
 
@@ -88,7 +89,7 @@ async function uploadLarge(token: string, messageId: string, a: DraftAttachment,
     deps,
   );
   const url = session.data?.uploadUrl;
-  if (!url || !isMicrosoftUploadUrl(url)) throw new OutlookDraftError("Graph returned no usable upload URL for the attachment");
+  if (!url || !isMicrosoftUploadUrl(url)) throw new OutlookDraftError("Outlook did not accept the attachment. Nothing was sent — try again in a minute, or attach the file by hand.");
   const f = deps.fetch ?? fetch;
   const total = a.bytes.byteLength;
   for (let start = 0; start < total; start += UPLOAD_CHUNK) {
@@ -101,7 +102,7 @@ async function uploadLarge(token: string, messageId: string, a: DraftAttachment,
       cache: "no-store",
       signal: AbortSignal.timeout(60_000),
     });
-    if (!res.ok) throw new OutlookDraftError(`Attachment upload failed at bytes ${start}-${end - 1}: ${res.status}`, res.status);
+    if (!res.ok) throw new OutlookDraftError("The attachment upload to Outlook stopped part-way. Nothing was sent — try again in a minute, or attach the file by hand.", res.status);
   }
 }
 
@@ -111,8 +112,8 @@ async function uploadLarge(token: string, messageId: string, a: DraftAttachment,
  */
 export async function createOutlookDraft(token: string, input: OutlookDraftInput, deps: OutlookDeps = {}): Promise<OutlookDraft> {
   const bad = [...input.to, ...(input.cc ?? [])].find((e) => !isEmail(e));
-  if (bad) throw new OutlookDraftError(`Not an email address: ${bad}`, 400);
-  if (!input.subject.trim()) throw new OutlookDraftError("A draft needs a subject", 400);
+  if (bad) throw new OutlookDraftError(`${bad} is not an email address. Check it and try again.`, 400);
+  if (!input.subject.trim()) throw new OutlookDraftError("Enter a subject for the draft.", 400);
   const created = await graphCall<{ id?: string; webLink?: string }>(
     token,
     "POST",
@@ -121,7 +122,7 @@ export async function createOutlookDraft(token: string, input: OutlookDraftInput
     deps,
   );
   const id = created.data?.id;
-  if (!id) throw new OutlookDraftError("Graph created no draft id");
+  if (!id) throw new OutlookDraftError("Outlook did not create the draft. Nothing was sent — try again in a minute.");
   for (const a of input.attachments ?? []) {
     if (a.bytes.byteLength < INLINE_ATTACHMENT_MAX) {
       await graphCall(token, "POST", `/me/messages/${encodeURIComponent(id)}/attachments`, { "@odata.type": "#microsoft.graph.fileAttachment", name: a.name, contentType: a.contentType, contentBytes: toBase64(a.bytes) }, deps);

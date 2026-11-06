@@ -9,6 +9,7 @@ import type { ZodType, ZodTypeDef } from "zod";
 import type { Difficulty, Privacy } from "@/lib/ai/router";
 import type { ChecklistPack } from "../checklist";
 import { UNTRUSTED_DATA_INSTRUCTION } from "./untrusted";
+import { causeSentence } from "@/lib/errors";
 
 /** Files as the runner gathered them (structurally the runner's InputFile). */
 export type SniffFile = { name: string; bytes: Buffer; contentType?: string };
@@ -202,9 +203,9 @@ export async function sniffInputs(scope: AgentScope, files: SniffFile[]): Promis
     const r = await scope.inputSniff(files);
     if (r && r.ok === true) return { ok: true };
     if (r && r.ok === false) return { ok: false, reason: String(r.reason || "inputs are not this department's documents"), suggestAgent: r.suggestAgent };
-    return { ok: false, reason: "inputSniff returned no verdict" };
+    return { ok: false, reason: "The documents could not be checked before the run. Run the agent again; if it keeps happening, tell IT." };
   } catch (e) {
-    return { ok: false, reason: `inputSniff could not read the files (${e instanceof Error ? e.message : String(e)})` };
+    return { ok: false, reason: `The documents could not be checked before the run.${(s => (s ? ` ${s}` : ""))(causeSentence(e))} Check the files and run the agent again.` };
   }
 }
 

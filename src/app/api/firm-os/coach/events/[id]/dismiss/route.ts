@@ -11,6 +11,6 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const g = await requireCoachUser();
   if (g.res) return g.res;
   const id = eventIdZ.safeParse((await params).id);
-  if (!id.success) return NextResponse.json({ error: id.error.issues[0]?.message ?? "Invalid notice id" }, { status: 400 });
+  if (!id.success) return NextResponse.json({ error: id.error.issues[0]?.message ?? "That notice could not be found. Reload the page and try again." }, { status: 400 });
   return toJson(await dismissEvent(g.user.id, id.data, { db: coachDb() }));
 }

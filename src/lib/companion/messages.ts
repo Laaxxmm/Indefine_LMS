@@ -4,9 +4,9 @@
 import { COMPANION_LABEL_MAX, COMPANION_MAX_ACTIVE_TOKENS } from "./config";
 
 export const MSG = {
-  tokenMissing: "No pairing token was sent. Paste your token on the companion's Options page.",
+  tokenMissing: "This browser has not sent a pairing code. Paste your pairing code on the companion's Options page.",
   tokenUnknown:
-    "Firm OS does not recognise this pairing token. Check that you pasted all of it, or create a new one on the Companion page in Firm OS.",
+    "Firm OS does not recognise this pairing code. Check that you pasted all of it, or create a new one on the Companion page in Firm OS.",
   tokenRevoked: "This pairing was revoked. Create a new one on the Companion page in Firm OS.",
   tokenExpired: "Your pairing has expired. Create a new one on the Companion page in Firm OS.",
   accountInactive: "Your Firm OS account is not active. Ask an admin if you think this is wrong.",

@@ -58,7 +58,7 @@ describe("GET /api/firm-os/workspace/next-task", () => {
     as(user("priya", { active: false }));
     res = await GET();
     expect(res.status).toBe(403);
-    expect(await res.json()).toEqual({ error: "Your account cannot use agents. Ask an admin if you need them." });
+    expect(await res.json()).toEqual({ error: "Your account can't use the agents. Ask an admin if you need them." });
     as(user("priya"));
     state.setting = { modules: ["search"], focusMode: null, companionEnabled: false };
     res = await GET();

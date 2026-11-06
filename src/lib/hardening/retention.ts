@@ -15,9 +15,14 @@
 //                          (⟨PAN_1⟩). New notes are masked when written; the sweep covers older rows
 //                          and writers outside Firm OS's control. UPDATEs, resumable by cursor.
 //   ActivityHeartbeat      break-nudge signal, kept 7 days, then DELETED. These rows carry no business
-//                          value after the nudge window and ADR-006 commits to deleting them. This is the
-//                          only delete in Firm OS code: scripts/lib/guards.ts NO_DELETE_EXEMPTIONS allows
-//                          exactly purgeExpiredHeartbeats() below, and only its activityHeartbeat delete.
+//                          value after the nudge window and ADR-006 commits to deleting them.
+//   RateLimitBucket        per-scope request counters (key, window start, count; no personal data, no
+//                          business record): a bucket whose window ended more than a day ago is DELETED.
+//                          A deleted bucket and an expired one limit exactly the same way (the next
+//                          request starts a new window), so this only stops the table from growing.
+//                          These two are the only deletes in Firm OS code: scripts/lib/guards.ts
+//                          NO_DELETE_EXEMPTIONS allows exactly purgeExpiredRows() below, and only its
+//                          activityHeartbeat and rateLimitBucket deletes.
 //   ModelCall escalations are mirrored into AuditEvent (auditModelEscalations) on the same run.
 //
 // Each run writes one `retention` AuditEvent with the counts and the sweep cursors, so a run is
@@ -29,10 +34,13 @@ import { Prisma } from "@prisma/client";
 import { logAudit } from "@/lib/audit/log";
 import { auditModelEscalations, type EscalationDb } from "@/lib/audit/escalations";
 import { scrubFreeText } from "@/lib/corrections/mask";
+import { RATE_LIMIT_SCOPES, ruleFor } from "./rate-limit";
 
 export const AGENT_RUN_INPUTS_DAYS = 30;
 export const ONBOARDING_COPY_DAYS = 30;
 export const HEARTBEAT_DAYS = 7;
+/** A RateLimitBucket is removed once its window has been over for this many days. */
+export const RATE_LIMIT_BUCKET_GRACE_DAYS = 1;
 export const RETENTION_ACTOR = "system:retention";
 /** What a cleared OnboardingRun.prompt reads (the column is required, so it cannot be null). */
 export const ONBOARDING_CLEARED = "[cleared by retention]";
@@ -49,10 +57,10 @@ const daysBefore = (now: Date, days: number) => new Date(now.getTime() - days * 
 
 /**
  * The Prisma delegates the run uses. Typed from PrismaClient (no hand-written delegate interface, so
- * the only delete-shaped code in this file is the one call in purgeExpiredHeartbeats); tests pass a
+ * the only delete-shaped code in this file is the two calls in purgeExpiredRows); tests pass a
  * fake from tests/fakes/retention-world.ts.
  */
-export type RetentionDb = Pick<AppDb, "agentRun" | "activityHeartbeat" | "auditEvent" | "onboardingRun" | "modelCall">;
+export type RetentionDb = Pick<AppDb, "agentRun" | "activityHeartbeat" | "auditEvent" | "onboardingRun" | "modelCall" | "rateLimitBucket">;
 /** The app's client (src/lib/prisma.ts, which configures `omit`), so the delegates match exactly. */
 type AppDb = (typeof import("@/lib/prisma"))["prisma"];
 
@@ -147,12 +155,27 @@ export async function sweepFreeText(db: Pick<RetentionDb, "auditEvent" | "modelC
 }
 
 /**
- * ADR-006: break-nudge heartbeats older than 7 days are deleted (no business value; aggregate-only
- * purpose). The single allowlisted delete in Firm OS code (scripts/lib/guards.ts NO_DELETE_EXEMPTIONS).
+ * The window start before which every RateLimitBucket's window has been over for more than
+ * RATE_LIMIT_BUCKET_GRACE_DAYS, whatever its scope: now − (the longest window in force + the grace).
  */
-export async function purgeExpiredHeartbeats(db: Pick<RetentionDb, "activityHeartbeat">, now: Date): Promise<number> {
-  const r = await db.activityHeartbeat.deleteMany({ where: { at: { lt: daysBefore(now, HEARTBEAT_DAYS) } } });
-  return r.count;
+export function rateLimitBucketCutoff(now: Date, env: Record<string, string | undefined> = process.env): Date {
+  const longest = Math.max(...RATE_LIMIT_SCOPES.map((s) => ruleFor(s, env).windowMs));
+  return new Date(now.getTime() - longest - RATE_LIMIT_BUCKET_GRACE_DAYS * DAY_MS);
+}
+
+/** Rows purgeExpiredRows removed (a named type: the guard reads the function's body as its first `{ … }`). */
+export type PurgeCounts = { heartbeats: number; rateLimitBuckets: number };
+
+/**
+ * The single allowlisted delete function in Firm OS code (scripts/lib/guards.ts NO_DELETE_EXEMPTIONS):
+ *  - ADR-006: break-nudge heartbeats older than 7 days (no business value; aggregate-only purpose);
+ *  - rate-limit buckets whose window ended more than a day ago (pure counters, no personal data:
+ *    removing one changes no limit, it only keeps the table from growing with every new key).
+ */
+export async function purgeExpiredRows(db: Pick<RetentionDb, "activityHeartbeat" | "rateLimitBucket">, now: Date): Promise<PurgeCounts> {
+  const beats = await db.activityHeartbeat.deleteMany({ where: { at: { lt: daysBefore(now, HEARTBEAT_DAYS) } } });
+  const buckets = await db.rateLimitBucket.deleteMany({ where: { windowStart: { lt: rateLimitBucketCutoff(now) } } });
+  return { heartbeats: beats.count, rateLimitBuckets: buckets.count };
 }
 
 export type RetentionSummary = {
@@ -162,6 +185,7 @@ export type RetentionSummary = {
   auditNotesMasked: number;
   modelErrorsMasked: number;
   heartbeatsDeleted: number;
+  rateLimitBucketsDeleted: number;
   escalationsAudited: number;
 };
 
@@ -170,7 +194,7 @@ export async function runRetention(db: RetentionDb & EscalationDb, now: Date = n
   const agentRunInputsCleared = await clearExpiredAgentRunInputs(db, now);
   const onboardingCopiesCleared = await clearStaleOnboardingCopies(db, now);
   const sweep = await sweepFreeText(db, now, await lastSweepCursors(db));
-  const heartbeatsDeleted = await purgeExpiredHeartbeats(db, now);
+  const purged = await purgeExpiredRows(db, now);
   const escalations = await auditModelEscalations(db, { now });
   const summary: RetentionSummary = {
     at: now.toISOString(),
@@ -178,7 +202,8 @@ export async function runRetention(db: RetentionDb & EscalationDb, now: Date = n
     onboardingCopiesCleared,
     auditNotesMasked: sweep.auditNotesMasked,
     modelErrorsMasked: sweep.modelErrorsMasked,
-    heartbeatsDeleted,
+    heartbeatsDeleted: purged.heartbeats,
+    rateLimitBucketsDeleted: purged.rateLimitBuckets,
     escalationsAudited: escalations.written,
   };
   await logAudit(db, {
@@ -189,7 +214,7 @@ export async function runRetention(db: RetentionDb & EscalationDb, now: Date = n
     meta: {
       ...summary,
       cursors: sweep.cursors,
-      windows: { agentRunInputsDays: AGENT_RUN_INPUTS_DAYS, onboardingCopyDays: ONBOARDING_COPY_DAYS, heartbeatDays: HEARTBEAT_DAYS },
+      windows: { agentRunInputsDays: AGENT_RUN_INPUTS_DAYS, onboardingCopyDays: ONBOARDING_COPY_DAYS, heartbeatDays: HEARTBEAT_DAYS, rateLimitBucketGraceDays: RATE_LIMIT_BUCKET_GRACE_DAYS },
     },
   });
   return summary;

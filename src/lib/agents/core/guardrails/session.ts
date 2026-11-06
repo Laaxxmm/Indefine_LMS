@@ -36,6 +36,7 @@ import { AGREEMENT_TIER, needsAgreement, settleAgreement } from "./agreement";
 import { GroundingError, groundCheck } from "./grounding";
 import { shapeFingerprint, unboundedStrings } from "./schema";
 import { BudgetExceededError } from "@/lib/ai/errors";
+import { PlainError } from "@/lib/errors";
 import { capLongRuns } from "@/lib/ai/anonymizer";
 import { estimateTokens } from "@/lib/ai/pricing";
 import { limitsFor, runBudgetFor, truncateToLimit, truncationResult, type Truncation } from "./limits";
@@ -100,7 +101,7 @@ export const emptyGuardrailStats = (): GuardrailStats => ({
   truncatedCalls: 0,
 });
 
-const rupees = (n: number) => `₹${n.toFixed(2)}`;
+const rupees = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 /** What a person reads when the router refuses a call over budget (the ModelCall row keeps the code). */
 export function budgetMessage(e: BudgetExceededError): string {
@@ -314,7 +315,7 @@ export function createGuardrailSession(deps: GuardrailSessionDeps) {
         ...extra,
       });
     } catch (e) {
-      throw e instanceof BudgetExceededError ? new Error(budgetMessage(e)) : e;
+      throw e instanceof BudgetExceededError ? new PlainError(budgetMessage(e), { status: 503 }) : e;
     }
     return unwrap(res);
   }

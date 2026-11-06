@@ -4,6 +4,7 @@
 // PrismaClient satisfies JobTaskDb (compile-time check in state-db.test.ts). Nothing is deleted.
 import type { FirmService, JobTaskState } from "@prisma/client";
 import {
+  STATE_WORDS,
   actorRef,
   canTransition,
   consumeCloseGateToken,
@@ -128,9 +129,9 @@ export async function transitionJobTask(
   const now = opts.now ?? new Date();
   return db.$transaction(async (tx): Promise<TransitionResult> => {
     const row = await tx.jobTask.findUnique({ where: { id: jobTaskId }, select: ROW_SELECT });
-    if (!row) return { ok: false, code: "NOT_FOUND", reason: `JobTask ${jobTaskId} not found` };
+    if (!row) return { ok: false, code: "NOT_FOUND", reason: "That job wasn't found. Go back to the list and open it again." };
     if (row.state !== opts.expectedState) {
-      return { ok: false, code: "CONFLICT", reason: `Job moved to ${row.state} since you loaded it (expected ${opts.expectedState}); reload and try again` };
+      return { ok: false, code: "CONFLICT", reason: `Someone else moved this job while you had it open (it is now ${STATE_WORDS[row.state].toLowerCase()}). Reload the page to see where it is, then try again.` };
     }
 
     let blockingFailures = 0;
@@ -155,7 +156,7 @@ export async function transitionJobTask(
     if (!decision.ok) return decision;
 
     if (to === "DONE") {
-      if (!consumeCloseGateToken(opts.gateToken as CloseGateToken)) return { ok: false, code: "GATE_REQUIRED", reason: "Close gate token already used" };
+      if (!consumeCloseGateToken(opts.gateToken as CloseGateToken)) return { ok: false, code: "GATE_REQUIRED", reason: "Those closing checks were already used to close the job. Reload the page to see the job." };
       // Arm the DONE trigger for this job only, inside this transaction (is_local = true).
       await tx.$queryRaw`SELECT set_config(${CLOSE_GATE_SETTING}, ${jobTaskId}, true)`;
     }
@@ -165,7 +166,7 @@ export async function transitionJobTask(
       data: updateFor(to, row.state, actor, ackRef, now),
     });
     if (updated.count !== 1) {
-      return { ok: false, code: "CONFLICT", reason: "Job changed while this transition was being saved; reload and try again" };
+      return { ok: false, code: "CONFLICT", reason: "Someone else changed this job at the same moment. Reload the page to see where it is, then try again." };
     }
 
     const event = await tx.jobTaskEvent.create({

@@ -35,7 +35,8 @@ vi.mock("@/lib/prisma", () => ({
     engagementLetterEvent: { create: async () => ({}) },
   },
 }));
-vi.mock("@/lib/clients/workbook", () => ({ scheduleWorkbookRebuild: vi.fn() }));
+const workbook = vi.hoisted(() => ({ ok: true }));
+vi.mock("@/lib/clients/workbook", () => ({ scheduleWorkbookRebuild: vi.fn(), rebuildClientWorkbook: async () => (workbook.ok ? { ok: true } : { ok: false, error: "Graph not configured" }) }));
 vi.mock("@/lib/clients/storage", () => ({
   MAX_UPLOAD_BYTES: 50 * 1024 * 1024,
   renameClientFolder: async () => true,
@@ -57,6 +58,7 @@ const { auth } = await import("@/lib/auth");
 const jobRoute = await import("@/app/api/clients/jobs/[jobId]/route");
 const clientRoute = await import("@/app/api/clients/[id]/route");
 const reportRoute = await import("@/app/api/clients/reports/export/route");
+const workbookRoute = await import("@/app/api/clients/workbook/route");
 const docsRoute = await import("@/app/api/clients/[id]/documents/route");
 const taxRoute = await import("@/app/api/tools/office-tools/tax/[tool]/route");
 const letterRoute = await import("@/app/api/tools/engagement-letters/[id]/file/route");
@@ -140,7 +142,25 @@ describe("all-clients report download", () => {
     as({ id: "u-partner", level: "PARTNER" });
     const ok = await reportRoute.GET(new Request("http://x/api/clients/reports/export?fy=2026-27"));
     expect(ok.status).toBe(200);
-    expect(db.audits).toEqual([{ actorId: "u-partner", action: "export", entity: "Client", entityId: null, meta: { report: "client-jobs", rows: 0, filters: ["fy"] } }]);
+    // A read audit (src/lib/audit/reads.ts): row count and filter names, never their values.
+    expect(db.audits).toEqual([{ actorId: "u-partner", action: "export", entity: "Client", entityId: null, meta: { what: "client-jobs-report", rows: 0, format: "xlsx", filters: ["fy"] } }]);
+    await reportRoute.GET(new Request("http://x/api/clients/reports/export?fy=2026-27"));
+    expect(db.audits).toHaveLength(2); // every download, no deduplication
+  });
+});
+
+describe("all-clients workbook rebuild", () => {
+  it("a successful rebuild is recorded as an export (every time); a failed one records nothing", async () => {
+    as({ id: "u-staff" });
+    workbook.ok = true;
+    const ok = await workbookRoute.POST();
+    expect(ok.status).toBe(200);
+    expect(db.audits).toEqual([{ actorId: "u-staff", action: "export", entity: "Client", entityId: null, meta: { what: "client-workbook" } }]);
+    await workbookRoute.POST();
+    expect(db.audits).toHaveLength(2);
+    workbook.ok = false;
+    expect((await workbookRoute.POST()).status).toBe(502);
+    expect(db.audits).toHaveLength(2);
   });
 });
 
@@ -173,7 +193,7 @@ describe("multipart uploads are capped and screened", () => {
     as({ id: "u-staff" });
     const bad = await taxRoute.POST(multipart([new File([PDF], "a.pdf"), new File([enc("<html></html>")], "b.html")], {}), p({ tool: "gstr3b" }));
     expect(bad.status).toBe(415);
-    expect((await bad.json()).error).toMatch(/^b\.html: \.html file type is not accepted\. Upload PDF only\.\. Upload the return PDFs only\.$|^b\.html: /);
+    expect((await bad.json()).error).toMatch(/^b\.html: \.html file type is not accepted\. Upload \.pdf files only\. Upload the return PDFs only\.$|^b\.html: /);
     expect(uploads.taxFiles).toEqual([]);
     const ok = await taxRoute.POST(multipart([new File([PDF], "a.pdf")], {}), p({ tool: "gstr3b" }));
     expect(ok.status).toBe(200);
@@ -184,7 +204,7 @@ describe("multipart uploads are capped and screened", () => {
     as({ id: "u-staff" });
     const notPdf = await letterRoute.POST(multipart([new File([EXE], "letter.pdf")], { kind: "draft" }, "file"), p({ id: "el1" }));
     expect(notPdf.status).toBe(400);
-    expect((await notPdf.json()).error).toBe("That file is not a PDF");
+    expect((await notPdf.json()).error).toBe("That file is not a PDF. Upload the letter as a PDF.");
     // Browsers send Content-Length: an over-limit body is refused before it is read.
     const big = await letterRoute.POST(multipart([new File([PDF], "letter.pdf")], { kind: "draft" }, "file", { "content-length": String(4 * 1024 * 1024) }), p({ id: "el1" }));
     expect(big.status).toBe(413);

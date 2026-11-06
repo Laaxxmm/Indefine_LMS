@@ -154,6 +154,31 @@ export function consumeCloseGateToken(token: CloseGateToken): boolean {
   return true;
 }
 
+// ------------------------------------------------------------------ words for people
+
+/** A job's stage in words, for refusal sentences (the chips show the state names themselves). */
+export const STATE_WORDS: Readonly<Record<JobTaskState, string>> = {
+  DRAFT: "Still a draft",
+  ASSIGNED: "Assigned",
+  IN_PREP: "In preparation",
+  AGENT_DONE: "Prepared by the agent",
+  IN_REVIEW: "In review",
+  APPROVED: "Approved",
+  FILED_BY_HUMAN: "Filed",
+  CLOSING: "Closing",
+  DONE: "Done",
+};
+
+const SERVICE_WORDS: Readonly<Record<FirmService, string>> = { GST: "GST", ROC: "ROC", IncomeTax: "income tax", TDS: "TDS", Books: "books", Audit: "audit", Engagement: "engagement" };
+
+const GATE_PROBLEM_WORDS: Readonly<Record<GateTokenProblem, string>> = {
+  MISSING: "they have not been run for this job",
+  FORGED: "the closing check was not valid",
+  CONSUMED: "that closing check was already used",
+  WRONG_JOB: "that closing check was for a different job",
+  EXPIRED: "the closing check has expired",
+};
+
 // ------------------------------------------------------------------ edges
 
 export type TransitionContext = {
@@ -214,7 +239,7 @@ const deny = (code: DenyCode, reason: string) => ({ code, reason });
 const hasNote = (ctx: TransitionContext) => !!ctx.note && ctx.note.trim().length > 0;
 
 const preparerOrManager = (ctx: TransitionContext) =>
-  isUser(ctx.actor, ctx.assigneeId) || isManagerUp(ctx.actor) ? null : deny("FORBIDDEN", "Only the assignee, a manager or a partner may do this");
+  isUser(ctx.actor, ctx.assigneeId) || isManagerUp(ctx.actor) ? null : deny("FORBIDDEN", "Only the person the job is assigned to, a manager or a partner can do this. Ask one of them.");
 
 const EDGES: readonly EdgeDef[] = [
   {
@@ -223,8 +248,8 @@ const EDGES: readonly EdgeDef[] = [
     name: "assign",
     who: "manager or partner; the job must have an assignee",
     check: (ctx) => {
-      if (!isManagerUp(ctx.actor)) return deny("FORBIDDEN", "Only a manager or partner may assign a job");
-      if (!ctx.assigneeId) return deny("ASSIGNEE_REQUIRED", "Set an assignee before assigning the job");
+      if (!isManagerUp(ctx.actor)) return deny("FORBIDDEN", "Only a manager or a partner can assign a job. Ask one of them.");
+      if (!ctx.assigneeId) return deny("ASSIGNEE_REQUIRED", "Choose who will prepare the job, then assign it.");
       return null;
     },
   },
@@ -240,7 +265,7 @@ const EDGES: readonly EdgeDef[] = [
     to: "AGENT_DONE",
     name: "agent-finished",
     who: "the agent runner only",
-    check: (ctx) => (ctx.actor.kind === "agent" ? null : deny("FORBIDDEN", "Only an agent run can mark a job AGENT_DONE")),
+    check: (ctx) => (ctx.actor.kind === "agent" ? null : deny("FORBIDDEN", "Only the agent can mark its pack as ready. Run the agent, or submit your own preparation for review.")),
   },
   {
     from: "IN_PREP",
@@ -254,7 +279,7 @@ const EDGES: readonly EdgeDef[] = [
     to: "IN_PREP",
     name: "rerun-agent",
     who: "the assignee, a manager or partner; note required",
-    check: (ctx) => preparerOrManager(ctx) ?? (hasNote(ctx) ? null : deny("NOTE_REQUIRED", "Say why the agent is being re-run")),
+    check: (ctx) => preparerOrManager(ctx) ?? (hasNote(ctx) ? null : deny("NOTE_REQUIRED", "Add a note saying why the agent should run again.")),
   },
   {
     from: "AGENT_DONE",
@@ -270,8 +295,8 @@ const EDGES: readonly EdgeDef[] = [
     who: "the job's reviewer, a manager or partner; note required",
     check: (ctx) => {
       if (!isUser(ctx.actor, ctx.reviewerId) && !isManagerUp(ctx.actor))
-        return deny("FORBIDDEN", "Only the reviewer, a manager or a partner may request changes");
-      return hasNote(ctx) ? null : deny("NOTE_REQUIRED", "Say what needs to change");
+        return deny("FORBIDDEN", "Only the job's reviewer, a manager or a partner can ask for changes. Ask one of them.");
+      return hasNote(ctx) ? null : deny("NOTE_REQUIRED", "Add a note saying what needs to change.");
     },
   },
   {
@@ -281,12 +306,12 @@ const EDGES: readonly EdgeDef[] = [
     who: "the job's reviewer, a manager or partner, not the assignee (a partner may approve own work); block failures need a partner and a note",
     check: (ctx) => {
       const a = ctx.actor;
-      if (!isUser(a, ctx.reviewerId) && !isManagerUp(a)) return deny("FORBIDDEN", "Only the reviewer, a manager or a partner may approve");
-      if (isUser(a, ctx.assigneeId) && !hasRole(a, "partner")) return deny("SELF_APPROVAL", "The assignee cannot approve their own job");
+      if (!isUser(a, ctx.reviewerId) && !isManagerUp(a)) return deny("FORBIDDEN", "Only the job's reviewer, a manager or a partner can approve this pack. Ask one of them.");
+      if (isUser(a, ctx.assigneeId) && !hasRole(a, "partner")) return deny("SELF_APPROVAL", "You prepared this job, so someone else must approve it. Ask the reviewer, a manager or a partner.");
       if ((ctx.blockingFailures ?? 0) > 0) {
         if (!hasRole(a, "partner"))
-          return deny("BLOCKING_FAILURES", `${ctx.blockingFailures} block-severity checklist failure(s): only a partner may approve over them`);
-        if (!hasNote(ctx)) return deny("NOTE_REQUIRED", "Approving over block-severity failures needs a partner note");
+          return deny("BLOCKING_FAILURES", `The checklist has ${ctx.blockingFailures === 1 ? "1 serious problem" : `${ctx.blockingFailures} serious problems`} that stop approval. Fix them and run the agent again, or ask a partner to approve with a note.`);
+        if (!hasNote(ctx)) return deny("NOTE_REQUIRED", "Add a note saying why you are approving despite the serious checklist problems.");
       }
       return null;
     },
@@ -298,12 +323,12 @@ const EDGES: readonly EdgeDef[] = [
     who: "a named person (staff, manager or partner) who filed it on the portal; ack ref where the service has one",
     check: (ctx) => {
       if (!hasRole(ctx.actor, "staff", "manager", "partner"))
-        return deny("FORBIDDEN", "Only a person on the firm's staff can confirm a filing");
+        return deny("FORBIDDEN", "Only a member of the firm's staff can confirm a filing.");
       const ref = ctx.ackRef?.trim() ?? "";
       if (ref) {
-        if (ref.length > ACK_REF_MAX || !ACK_REF_RE.test(ref)) return deny("ACK_REF_INVALID", "Acknowledgement reference is not in a valid form");
+        if (ref.length > ACK_REF_MAX || !ACK_REF_RE.test(ref)) return deny("ACK_REF_INVALID", "The acknowledgement number doesn't look right. Copy it again from the portal's acknowledgement, using only letters, digits and dashes.");
       } else if (ACK_REF_REQUIRED[ctx.service]) {
-        return deny("ACK_REF_REQUIRED", `${ctx.service} filings need the acknowledgement reference (ARN / SRN / ack no.)`);
+        return deny("ACK_REF_REQUIRED", `Enter the acknowledgement number for this ${SERVICE_WORDS[ctx.service]} filing (the ARN, SRN or acknowledgement number from the portal).`);
       }
       return null;
     },
@@ -316,7 +341,7 @@ const EDGES: readonly EdgeDef[] = [
     check: (ctx) =>
       ctx.actor.kind === "system" || hasRole(ctx.actor, "staff", "manager", "partner")
         ? null
-        : deny("FORBIDDEN", "Only the close-loop hook or staff may start closing"),
+        : deny("FORBIDDEN", "Only a member of the firm's staff can start closing a job."),
   },
   {
     from: "FILED_BY_HUMAN",
@@ -339,14 +364,14 @@ const EDGES: readonly EdgeDef[] = [
     who: "only with a CloseGateToken minted by src/lib/close-loop/gate.ts",
     check: (ctx) => {
       const problem = gateTokenProblem(ctx.gateToken, ctx.jobTaskId, ctx.now);
-      return problem ? deny("GATE_REQUIRED", `DONE is set only by the close-loop gate (token ${problem.toLowerCase()})`) : null;
+      return problem ? deny("GATE_REQUIRED", `A job is marked done only when the closing checks pass (${GATE_PROBLEM_WORDS[problem] ?? "the closing check was not valid"}). Run the closing checks again.`) : null;
     },
   },
 ];
 
 function retract(ctx: TransitionContext) {
-  if (!isManagerUp(ctx.actor)) return deny("FORBIDDEN", "Only a manager or partner may retract a filing confirmation");
-  return hasNote(ctx) ? null : deny("NOTE_REQUIRED", "Say why the filing confirmation is being retracted");
+  if (!isManagerUp(ctx.actor)) return deny("FORBIDDEN", "Only a manager or a partner can take back a filing confirmation. Ask one of them.");
+  return hasNote(ctx) ? null : deny("NOTE_REQUIRED", "Add a note saying why the filing confirmation is being taken back.");
 }
 
 const edgeOf = (from: JobTaskState, to: JobTaskState) => EDGES.find((e) => e.from === from && e.to === to);
@@ -368,12 +393,12 @@ export function transitionTable(): { from: JobTaskState; to: JobTaskState; name:
 
 /** Full decision: edge exists, actor allowed, preconditions hold. */
 export function canTransition(from: JobTaskState, to: JobTaskState, ctx: TransitionContext): TransitionDecision {
-  if (!isJobTaskState(from) || !isJobTaskState(to)) return { ok: false, code: "UNKNOWN_STATE", reason: `Unknown state ${String(isJobTaskState(from) ? to : from)}` };
-  if (from === to) return { ok: false, code: "SAME_STATE", reason: `Job is already ${to}` };
+  if (!isJobTaskState(from) || !isJobTaskState(to)) return { ok: false, code: "UNKNOWN_STATE", reason: "That job stage isn't one Firm OS knows. Reload the page and try again." };
+  if (from === to) return { ok: false, code: "SAME_STATE", reason: `The job is already ${STATE_WORDS[to].toLowerCase()}. Reload the page to see where it is now.` };
   const edge = edgeOf(from, to);
   if (!edge) {
-    if (to === "DONE") return { ok: false, code: "GATE_REQUIRED", reason: "DONE is set only by the close-loop gate, from CLOSING" };
-    return { ok: false, code: "ILLEGAL_EDGE", reason: `${from} → ${to} is not an allowed transition` };
+    if (to === "DONE") return { ok: false, code: "GATE_REQUIRED", reason: "A job is marked done only when its closing checks pass. Mark it filed first, then run the closing checks." };
+    return { ok: false, code: "ILLEGAL_EDGE", reason: `A job that is ${STATE_WORDS[from].toLowerCase()} can't move to ${STATE_WORDS[to].toLowerCase()}. Reload the page to see the job's current stage.` };
   }
   const problem = edge.check(ctx);
   return problem ? { ok: false, ...problem } : { ok: true, edge: edge.name };

@@ -7,9 +7,10 @@ import type { Session } from "next-auth";
 import { isActive } from "@/lib/access";
 import { JOB_TASK_STATES } from "@/lib/agents/core/state";
 import { TuriaConfirmError } from "@/lib/integrations/turia/errors";
+import { USER_MESSAGES, validationMessage } from "@/lib/errors";
 import { CloseLoopError } from "./errors";
 
-export const jobIdZ = z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9_-]+$/, "Invalid job id");
+export const jobIdZ = z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9_-]+$/, "That job link is not complete. Open the job again from your list.");
 
 export const filedBodyZ = z.object({
   ackRef: z.string().trim().max(64, "Acknowledgement reference is at most 64 characters").nullable().optional(),
@@ -33,8 +34,8 @@ type Guarded = { ok: true; user: Session["user"] } | { ok: false; res: NextRespo
 
 /** 401 when signed out, 403 when the account is inactive. */
 export function guard(session: Session | null): Guarded {
-  if (!session?.user) return { ok: false, res: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
-  if (!isActive(session.user)) return { ok: false, res: NextResponse.json({ error: "Your account is inactive" }, { status: 403 }) };
+  if (!session?.user) return { ok: false, res: NextResponse.json({ error: USER_MESSAGES.signIn() }, { status: 401 }) };
+  if (!isActive(session.user)) return { ok: false, res: NextResponse.json({ error: USER_MESSAGES.inactive() }, { status: 403 }) };
   return { ok: true, user: session.user };
 }
 
@@ -42,7 +43,7 @@ export function guard(session: Session | null): Guarded {
 export function parse<T>(schema: z.ZodType<T>, value: unknown): { ok: true; data: T } | { ok: false; res: NextResponse } {
   const parsed = schema.safeParse(value);
   if (parsed.success) return { ok: true, data: parsed.data };
-  return { ok: false, res: NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid request" }, { status: 400 }) };
+  return { ok: false, res: NextResponse.json({ error: validationMessage(parsed.error) }, { status: 400 }) };
 }
 
 export async function readJson(req: Request): Promise<unknown> {

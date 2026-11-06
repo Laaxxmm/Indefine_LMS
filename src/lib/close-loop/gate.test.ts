@@ -15,6 +15,7 @@ import {
   isInFinalFolder,
   isSpotCheckSelected,
   parseGateEvidence,
+  sameReasons,
   type GateEvidence,
 } from "./gate";
 import { graphDeliverableVerifier, type DeliverableVerifier } from "./verifier";
@@ -141,7 +142,7 @@ describe("closeJob — SharePoint condition (a) unmet: job stays CLOSING", () =>
     w.addFiledHistory(job.id);
     w.addFinal(job, { spPath: "/sites/CL-ACME01/Compliance/FY2026-27/GST/2026-10/Working" });
     w.addCloseSync(job.id);
-    await expectStaysClosing(w, job.id, deps, /not in \/sites\/CL-ACME01\/Compliance\/FY2026-27\/GST\/2026-10\/Final/);
+    await expectStaysClosing(w, job.id, deps, /recorded somewhere else, not in \/sites\/CL-ACME01\/Compliance\/FY2026-27\/GST\/2026-10\/Final/);
   });
 
   it("file recorded in another client's / period's Final folder", async () => {
@@ -159,7 +160,7 @@ describe("closeJob — SharePoint condition (a) unmet: job stays CLOSING", () =>
     w.addFiledHistory(job.id);
     w.addFinal(job, { livePath: "FY2026-27/GST/2026-10/Working/ACME01_GSTR-3B_2026-10_v1.xlsx" });
     w.addCloseSync(job.id);
-    await expectStaysClosing(w, job.id, deps, /not inside/);
+    await expectStaysClosing(w, job.id, deps, /has been moved out of/);
   });
 
   it("a different item sits at the expected path", async () => {
@@ -178,7 +179,7 @@ describe("closeJob — SharePoint condition (a) unmet: job stays CLOSING", () =>
     w.addFiledHistory(job.id);
     w.addFinal(job, { liveBytes: new TextEncoder().encode("edited by hand") });
     w.addCloseSync(job.id);
-    await expectStaysClosing(w, job.id, deps, /SHA-256 does not match/);
+    await expectStaysClosing(w, job.id, deps, /no longer matches the approved pack/);
   });
 
   it("sha256 mismatch reported by the drive", async () => {
@@ -187,7 +188,7 @@ describe("closeJob — SharePoint condition (a) unmet: job stays CLOSING", () =>
     w.addFiledHistory(job.id);
     w.addFinal(job, { liveBytes: new TextEncoder().encode("other"), reportSha: true });
     w.addCloseSync(job.id);
-    await expectStaysClosing(w, job.id, deps, /SHA-256 does not match/);
+    await expectStaysClosing(w, job.id, deps, /no longer matches the approved pack/);
     expect(w.verifierCalls.download).toBe(0);
   });
 
@@ -197,7 +198,7 @@ describe("closeJob — SharePoint condition (a) unmet: job stays CLOSING", () =>
     w.addFiledHistory(job.id);
     w.addFinal(job, { content: "", liveBytes: new Uint8Array() });
     w.addCloseSync(job.id);
-    await expectStaysClosing(w, job.id, deps, /empty \(0 bytes\)/);
+    await expectStaysClosing(w, job.id, deps, /the file in SharePoint is empty/);
   });
 
   it("no driveItemId recorded", async () => {
@@ -206,7 +207,7 @@ describe("closeJob — SharePoint condition (a) unmet: job stays CLOSING", () =>
     w.addFiledHistory(job.id);
     w.addFinal(job, { driveItemId: null });
     w.addCloseSync(job.id);
-    await expectStaysClosing(w, job.id, deps, /no SharePoint item id/);
+    await expectStaysClosing(w, job.id, deps, /no record of where this file is in SharePoint/);
   });
 
   it("the file cannot be downloaded", async () => {
@@ -222,9 +223,9 @@ describe("closeJob — SharePoint condition (a) unmet: job stays CLOSING", () =>
     w.verifierError = new BlockedError("Set MS_CLIENT_SECRET");
     const check = await canClose(job.id, deps);
     expect(check.missing).toEqual({ finalFile: true, turiaClose: false, filing: false });
-    await expectStaysClosing(w, job.id, deps, /SharePoint check failed: Set MS_CLIENT_SECRET/);
+    await expectStaysClosing(w, job.id, deps, /SharePoint could not be checked: This step needs IT to finish setting up the connection/);
     w.verifierError = new Error("ECONNRESET");
-    await expectStaysClosing(w, job.id, deps, /ECONNRESET/);
+    await expectStaysClosing(w, job.id, deps, /SharePoint could not be checked just now\. The server could not be reached/);
   });
 
   it("the Graph verifier: hashes the download when Graph reports no sha256, refuses a deleted file", async () => {
@@ -258,7 +259,7 @@ describe("closeJob — Turia condition (b) unmet: job stays CLOSING", () => {
     const job = w.addJob();
     w.addFiledHistory(job.id);
     w.addFinal(job);
-    await expectStaysClosing(w, job.id, deps, /Turia task not closed/);
+    await expectStaysClosing(w, job.id, deps, /The Turia task is not closed yet/);
     expect((await canClose(job.id, deps)).missing).toEqual({ finalFile: false, turiaClose: true, filing: false });
   });
 
@@ -277,7 +278,7 @@ describe("closeJob — Turia condition (b) unmet: job stays CLOSING", () => {
     w.addFiledHistory(job.id);
     w.addFinal(job);
     w.addCloseSync(job.id, { minutesLogged: 0 });
-    await expectStaysClosing(w, job.id, deps, /no time logged/);
+    await expectStaysClosing(w, job.id, deps, /no time is logged/);
   });
 
   it("minutes missing on a CLOSED row", async () => {
@@ -286,7 +287,7 @@ describe("closeJob — Turia condition (b) unmet: job stays CLOSING", () => {
     w.addFiledHistory(job.id);
     w.addFinal(job);
     w.addCloseSync(job.id, { minutesLogged: null });
-    await expectStaysClosing(w, job.id, deps, /no time logged/);
+    await expectStaysClosing(w, job.id, deps, /no time is logged/);
   });
 
   it("checkTuria prefers any CLOSED row with minutes", () => {
@@ -308,7 +309,7 @@ describe("closeJob — filing condition (c) and state", () => {
     w.addCloseSync(job.id);
     const r = await closeJob(job.id, staff, deps);
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.reasons.join(" ")).toMatch(/only a CLOSING job/);
+    if (!r.ok) expect(r.reasons.join(" ")).toMatch(/only a job in closing can be closed/);
     expect(w.job(job.id).state).toBe("FILED_BY_HUMAN");
   });
 
@@ -333,15 +334,39 @@ describe("closeJob — filing condition (c) and state", () => {
   it("GST without an ARN", async () => {
     const { w, deps } = setup();
     const { job } = w.readyJob({ ackRef: null });
-    await expectStaysClosing(w, job.id, deps, /acknowledgement reference/);
+    await expectStaysClosing(w, job.id, deps, /needs its acknowledgement number/);
     expect((await canClose(job.id, deps)).missing.filing).toBe(true);
   });
 
   it("unknown job", async () => {
     const { deps, w } = setup();
     const r = await closeJob("nope", { kind: "system", name: "close-loop-reconciler" }, deps);
-    expect(r).toEqual({ ok: false, state: null, reasons: ["Job nope not found"], missing: { finalFile: false, turiaClose: false, filing: false } });
+    expect(r).toEqual({ ok: false, state: null, reasons: ["That job wasn't found. Reload the page and try again."], missing: { finalFile: false, turiaClose: false, filing: false } });
     expect(w.audits[0]).toMatchObject({ action: "close-refused", actorId: "system:close-loop-reconciler" });
+  });
+});
+
+describe("closeJob — refusal audit option", () => {
+  it("'every' (default) audits each refusal; 'on-change' only when the reasons differ from the last close-refused", async () => {
+    const { w, deps } = setup();
+    const job = w.addJob();
+    w.addFiledHistory(job.id);
+    const robot = { kind: "system", name: "close-loop-reconciler" } as const;
+    await closeJob(job.id, robot, deps, { refusalAudit: "on-change" });
+    await closeJob(job.id, robot, deps, { refusalAudit: "on-change" });
+    expect(w.audits.filter((a) => a.action === "close-refused")).toHaveLength(1);
+    await closeJob(job.id, staff, deps);
+    await closeJob(job.id, staff, deps);
+    expect(w.audits.filter((a) => a.action === "close-refused")).toHaveLength(3);
+    w.addCloseSync(job.id); // one reason fewer
+    await closeJob(job.id, robot, deps, { refusalAudit: "on-change" });
+    expect(w.audits.filter((a) => a.action === "close-refused")).toHaveLength(4);
+  });
+
+  it("sameReasons ignores order and needs a previous refusal", () => {
+    expect(sameReasons(["a", "b"], ["b", "a"])).toBe(true);
+    expect(sameReasons(["a"], ["a", "b"])).toBe(false);
+    expect(sameReasons(null, [])).toBe(false);
   });
 });
 
@@ -480,7 +505,7 @@ describe("path rules", () => {
     w.addFiledHistory(j.id);
     w.addFinal({ ...j, clientCode: "ACME01" });
     w.addCloseSync(j.id);
-    await expectStaysClosing(w, j.id, deps, /cannot be built/);
+    await expectStaysClosing(w, j.id, deps, /Final folder in SharePoint cannot be worked out/);
   });
 });
 
