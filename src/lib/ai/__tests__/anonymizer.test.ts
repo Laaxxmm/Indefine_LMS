@@ -138,7 +138,7 @@ describe("mask(): behaviour", () => {
     expect(mask("Date of birth 4 July 1988").masked).toBe("Date of birth ⟨DOB_1⟩");
     expect(mask("Born on July 4, 1988").masked).toBe("Born on ⟨DOB_1⟩");
     expect(mask("Invoice dated 04/07/2026").masked).toBe("Invoice dated 04/07/2026");
-    expect(mask("Kestrel Nagar, Bengaluru 560999").masked).toBe("Kestrel Nagar, Bengaluru ⟨PIN_1⟩");
+    expect(mask("Kestrel Nagar, Bengaluru 560999").masked).toBe("⟨ADDRESS_1⟩"); // re-audit NEW-15: the whole address line, not just the PIN
     expect(mask("PIN code: 560 038").masked).toBe("PIN code: ⟨PIN_1⟩");
     expect(mask("LLPIN AAB-1234").masked).toBe("LLPIN ⟨LLPIN_1⟩");
     expect(mask("A/c no. 50100123456789").masked).toBe("A/c no. ⟨BANK_AC_1⟩");

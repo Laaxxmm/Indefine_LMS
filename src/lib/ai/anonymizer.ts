@@ -358,13 +358,15 @@ const M = {
 } as const;
 
 const CONTEXT = {
-  DOB: /\b(?:dob|d\.o\.b|date\s+of\s+birth|birth\s*date|born(?:\s+on)?|birthday)\b/i,
+  // Re-audit NEW-15: the Hindi and Kannada labels too (जन्म तिथि / जन्मतिथि / जन्म दिनांक / जन्म की तारीख, ಜನ್ಮ ದಿನಾಂಕ).
+  DOB: /\b(?:dob|d\.o\.b|date\s+of\s+birth|birth\s*date|born(?:\s+on)?|birthday)\b|जन्म\s*(?:की\s*)?(?:तिथि|तारीख|दिनांक)|ಜನ್ಮ\s*(?:ದಿನಾಂಕ|ದಿನ)/i,
   DOB_AFTER: /^\s{0,3}[([]?\s{0,2}(?:dob|d\.o\.b\.?|date\s+of\s+birth|birth\s*date|born)\b/i,
   LLP: /\bLLP(?:IN)?\b/i,
   AADHAAR: /\b(?:aadh?aa?r|uid|uidai|uin)\b/i,
   ACCOUNT: /(?:\ba\/c|\bacct|\baccount|\bac\s*no\b|\bbank\b|\bsb\s*a\/?c)/i,
   DIN: /\bDIN\b|director\s+identification|\bdirector\b/i,
-  PASSPORT: /\bpass\s?port\b|\bppt\s*no\b/i,
+  // Re-audit NEW-15: "PP No Z1234567" (the short label on forms and KYC sheets).
+  PASSPORT: /\bpass\s?port\b|\bppt\s*no\b|\bpp\.?\s*(?:no|number|#)/i,
   VOTER: /\bvoter\b|\bepic\b|\belection\s+(?:id|card|commission)\b/i,
   CURRENCY_END: /(?:₹|\brs\.?|\binr)\s{0,2}$/i,
   /** A labelled document number, not an account: invoice, bill, e-way bill, IRN, ARN, order… */
@@ -748,7 +750,10 @@ const freeAccountDecider: Decide = (m, w) => {
 
 const dinDecider: Decide = (m, w) => {
   const b = before(w, m.index, 30);
-  return CONTEXT.DIN.test(b) && !CONTEXT.CURRENCY_END.test(b) ? "DIN" : null;
+  if (CONTEXT.DIN.test(b) && !CONTEXT.CURRENCY_END.test(b)) return "DIN";
+  // Re-audit NEW-15: the long label can sit further back ("Director Identification Number of the person: 01234567").
+  const far = before(w, m.index, 80);
+  return /director\s+identification\s+(?:number|no\b)/i.test(far) && !/\n/.test(far.slice(far.search(/director\s+identification/i))) && !CONTEXT.CURRENCY_END.test(b) ? "DIN" : null;
 };
 
 /** A PIN code in an address; with a door number earlier on the line, the whole address is one ADDRESS. */
@@ -765,6 +770,13 @@ const pinDecider: Decide = (m, w) => {
   CONTEXT.DOOR.lastIndex = 0;
   const door = CONTEXT.DOOR.exec(seg);
   if (door) return { kind: "ADDRESS", start: segStart + door.index, end: m.index + m[0].length };
+  // Re-audit NEW-15: a whole address line ending in the PIN, with no door number ("4th Cross,
+  // Jayanagar, Bengaluru - 560041"): from after any "Address:" label to the PIN is one ADDRESS.
+  const label = /^[^,\n:]{0,40}:\s*/.exec(seg);
+  const from = label ? label[0].length : 0;
+  const line = seg.slice(from);
+  const lead = line.length - line.trimStart().length;
+  if (line.includes(",") && /[A-Za-z]{3}/.test(line) && CONTEXT.ADDRESS.test(readable(line))) return { kind: "ADDRESS", start: segStart + from + lead, end: m.index + m[0].length };
   return "PIN";
 };
 
@@ -912,11 +924,11 @@ const G = {
   IFSC: /(?<![A-Za-z0-9])[A-Za-z]{4}0[A-Za-z0-9]{6}(?![A-Za-z0-9])/,
   AADHAAR: /(?<![\d.])[2-9]\d{3}([\s.-]?)\d{4}\1\d{4}(?![\d]|\.\d)/g,
   PHONE: /(?<![\d+.])(?:(?:\+|00)\s?91[\s.-]?|0[\s-]?)?(?:[6-9](?:[\s-]?\d){9}|[6-9]\d{4}\.\d{5})(?![\d]|\.\d)/,
-  DOB_LABEL: /\b(?:dob|d\.o\.b|date\s+of\s+birth|birth\s*date|born)\b/gi,
+  DOB_LABEL: /\b(?:dob|d\.o\.b|date\s+of\s+birth|birth\s*date|born)\b|जन्म\s*(?:की\s*)?(?:तिथि|तारीख|दिनांक)|ಜನ್ಮ\s*(?:ದಿನಾಂಕ|ದಿನ)/gi,
   DATE: new RegExp(DATE_SOURCE, "i"),
-  PASSPORT_LABEL: /\bpass\s?port\b[^\n]{0,20}?(?<![A-Za-z0-9])[A-Za-z][\s-]?\d{7}(?![A-Za-z0-9])/i,
+  PASSPORT_LABEL: /(?:\bpass\s?port\b|\bppt\s*no\b|\bpp\.?\s*(?:no|number|#))[^\n]{0,20}?(?<![A-Za-z0-9])[A-Za-z][\s-]?\d{7}(?![A-Za-z0-9])/i,
   VOTER_LABEL: /\b(?:voter|epic)\b[^\n]{0,20}?(?<![A-Za-z0-9])[A-Za-z]{3}[\s-]?\d{7}(?![A-Za-z0-9])/i,
-  DIN_LABEL: /\bDIN\b[^\n\d]{0,12}(?<![\d.])\d{8}(?![\d]|\.\d)/,
+  DIN_LABEL: /(?:\bDIN\b[^\n\d]{0,12}|director\s+identification\s+(?:number|no\b)[^\n\d]{0,50})(?<![\d.])\d{8}(?![\d]|\.\d)/i,
 };
 
 export interface DetectOptions {
