@@ -7,7 +7,10 @@
 import { formatDateTimeIst } from "@/lib/agents/core/format";
 import { fail, ok, type ServiceResult } from "@/lib/corrections/result";
 import type { SessionUser } from "@/lib/access";
+import { mask, withTextNames, type PiiKind } from "@/lib/ai/anonymizer";
 import { DATASETS, EXTERNAL_SYSTEMS, RESIDUE_DATASETS, SHARED_WITH, nameOnlyRecords, nameOnlySentence, type PrivacyDb, type Row } from "./inventory";
+import { matchingIdentifiers } from "./identifier-only";
+import { normaliseIdentifier, type Identifier, type IdentifierKind } from "./locator";
 import { PRINCIPAL_LABELS, type PrincipalType } from "./policy";
 import { guardRegister, requireResolved, requireVerified, resolutionOf, step, writeAudit, type PrivacyDeps } from "./register";
 import { loadScopes } from "./scope";
@@ -48,6 +51,51 @@ const ORPHAN_EXPORT_FIELDS = [
   { name: "createdAt", label: "Started at" },
 ] as const;
 
+/** What an identifier-only export shows in place of another person's detail. */
+export const WITHHELD_THIRD_PARTY = "[withheld: another person's detail]";
+
+const TOKEN_KIND: Partial<Record<PiiKind, IdentifierKind>> = { PAN: "pan", GSTIN: "gstin", EMAIL: "email", PHONE: "phone" };
+const sameName = (a: string, b: string) => a.replace(/\s+/g, " ").trim().toLowerCase() === b.replace(/\s+/g, " ").trim().toLowerCase();
+
+/**
+ * Re-audit NEW-9: an onboarding run that never reached a client can name other people (a partner,
+ * an accountant, their phones and e-mails). The identifier-only export keeps the person's own
+ * identifiers (the ones the request matched) and the names the run recorded for the client itself
+ * (legal / trade / contact name); every other identifier and name in the prompt and the extracted
+ * details is withheld.
+ */
+export function scrubThirdParties(row: Row, own: readonly Identifier[]): Row {
+  const ownIds = new Set(own.map((i) => `${i.kind}:${i.value}`));
+  const spec = (row.spec && typeof row.spec === "object" ? row.spec : {}) as Row;
+  const ownNames = [spec.legalName, spec.tradeName, spec.contactName].filter((v): v is string => typeof v === "string" && v.trim().length > 1);
+  const keep = (kind: PiiKind, value: string): boolean => {
+    const idKind = TOKEN_KIND[kind];
+    if (idKind) {
+      const n = normaliseIdentifier(idKind, value);
+      return n !== null && ownIds.has(`${idKind}:${n}`);
+    }
+    return (kind === "NAME" || kind === "ORG") && ownNames.some((n) => sameName(n, value));
+  };
+  const scrub = (text: string): string => {
+    const { masked, map } = mask(text, { dictionary: withTextNames([], text), literals: "none" });
+    return masked.replace(/⟨([A-Z]+(?:_[A-Z]+)*)_\d+⟩/g, (t, kind: string) => {
+      const value = map.byToken.get(t);
+      return value !== undefined && keep(kind as PiiKind, value) ? value : WITHHELD_THIRD_PARTY;
+    });
+  };
+  const walk = (v: unknown, key?: string): unknown => {
+    if (typeof v === "string") {
+      // A field the run recorded for the client itself keeps its own value.
+      if (key && ["legalName", "tradeName", "contactName"].includes(key)) return v;
+      return scrub(v);
+    }
+    if (Array.isArray(v)) return v.map((x) => walk(x));
+    if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x, k)]));
+    return v;
+  };
+  return { ...row, prompt: typeof row.prompt === "string" ? scrub(row.prompt) : row.prompt, spec: walk(row.spec ?? null) };
+}
+
 function pickValues(fields: readonly { name: string }[], row: Row, derived?: Row): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const f of fields) out[f.name] = derived && f.name in derived ? derived[f.name] : (row[f.name] ?? null);
@@ -68,7 +116,11 @@ export async function buildAccessExport(db: PrivacyDb, requestId: string, now: D
       label: ds.label,
       purpose: ds.purpose,
       fields: ORPHAN_EXPORT_FIELDS.map((f) => ({ ...f })),
-      records: resolution.rows.map((r) => ({ id: String(r.id), values: pickValues(ORPHAN_EXPORT_FIELDS, r) })),
+      // Re-audit NEW-9: the person's own identifiers only; other people named in the run are withheld.
+      records: resolution.rows.map((r) => {
+        const own = request.identifierHash ? (matchingIdentifiers(r, String(request.identifierHash), hashKey) ?? []) : [];
+        return { id: String(r.id), values: pickValues(ORPHAN_EXPORT_FIELDS, scrubThirdParties(r, own)) };
+      }),
     });
   }
   for (const scope of scopes) {
