@@ -20,7 +20,7 @@
 //                         documents" by definition), so an injected document could have the job's
 //                         PAN / Aadhaar / phone written into a stored row. Here identifier tokens
 //                         (PAN, Aadhaar, phone, e-mail, bank account, UPI, date of birth, passport,
-//                         voter ID) are never restored, under any key; other tokens (names,
+//                         voter ID, vehicle registration) are never restored, under any key; other tokens (names,
 //                         organisations, GSTIN …) are restored only when the whole restored string
 //                         is a whole line or cell of the documents AND has at least
 //                         FINDING_MIN_LITERAL characters besides its placeholders. Free-text keys
@@ -34,7 +34,7 @@ import { hasToken, unmask, type TokenMap } from "./anonymizer";
 export type UnmaskMode = "grounded" | "all" | "findings";
 
 /** Token kinds a stored finding never gets back (findings mode). */
-export const IDENTIFIER_TOKEN_KINDS: ReadonlySet<string> = new Set(["PAN", "AADHAAR", "PHONE", "EMAIL", "BANK_AC", "UPI", "DOB", "PASSPORT", "VOTER_ID"]);
+export const IDENTIFIER_TOKEN_KINDS: ReadonlySet<string> = new Set(["PAN", "AADHAAR", "PHONE", "EMAIL", "BANK_AC", "UPI", "DOB", "PASSPORT", "VOTER_ID", "VEHICLE"]);
 
 /** Characters a stored quote must have besides its placeholders before names in it are restored. */
 export const FINDING_MIN_LITERAL = 12;
