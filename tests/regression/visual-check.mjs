@@ -45,7 +45,13 @@ function inPage() {
   // Control heights on the grid: buttons 32 (24 compact, 36 nav pill / tab, 40 beside a field), fields 40.
   const buttons = [...new Set([...document.querySelectorAll("button")].filter(visible).map((b) => Math.round(b.getBoundingClientRect().height)))];
   const fields = [...new Set([...document.querySelectorAll("input:not([type=checkbox]):not([type=radio]):not([type=hidden]), select")].filter(visible).map((f) => Math.round(f.getBoundingClientRect().height)))];
+  // The header's row and the page title's left edge: the same on every Firm OS page at one width.
+  const row = document.querySelector("header > div");
+  const box = row ? row.getBoundingClientRect() : null;
+  const h1 = document.querySelector("main h1");
   return {
+    headerRow: box ? `${Math.round(box.left)}+${Math.round(box.width)}` : null,
+    titleLeft: h1 ? Math.round(h1.getBoundingClientRect().left) : null,
     buttons,
     fields,
     overflow: document.documentElement.scrollWidth - window.innerWidth,
@@ -116,6 +122,26 @@ for (const slug of pages) {
   }
 }
 await browser.close();
+
+// One header box and one title edge per width across the Firm OS pages (the admin pages, in the
+// admin layout, agree among themselves): a page may narrow its content, never the header or the title's start.
+const family = (slug) => (LMS_CONTROLS.has(slug) ? null : slug.startsWith("admin-") ? "admin" : "firm-os");
+for (const width of WIDTHS) {
+  for (const fam of ["firm-os", "admin"]) {
+    const rows = out.filter((r) => r.width === width && family(r.slug) === fam);
+    for (const key of fam === "firm-os" ? ["headerRow", "titleLeft"] : ["titleLeft"]) {
+      const counts = new Map();
+      for (const r of rows) if (r[key] !== null) counts.set(r[key], (counts.get(r[key]) ?? 0) + 1);
+      const usual = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+      for (const r of rows) {
+        if (r[key] === null || r[key] === usual) continue;
+        r.fails.push(`${key} ${r[key]} (the other ${fam} pages: ${usual})`);
+        console.log(`FAIL  ${r.slug} @${width}  ${key} ${r[key]}, the other ${fam} pages ${usual}`);
+      }
+      console.log(`${fam} @${width}: ${key} ${[...counts.entries()].map(([v, n]) => `${v} ×${n}`).join(", ")}`);
+    }
+  }
+}
 writeFileSync(join(DIR, "check.json"), JSON.stringify(out, null, 2));
 const failed = out.filter((r) => r.fails.length);
 console.log(`\n${out.length - failed.length}/${out.length} page × width checks pass → ${join(DIR, "check.json")}`);

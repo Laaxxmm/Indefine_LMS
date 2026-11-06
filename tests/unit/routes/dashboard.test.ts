@@ -21,10 +21,20 @@ const signedIn = (s: unknown) => (auth as unknown as ReturnType<typeof vi.fn>).m
 const renderHtml = async (el: Parameters<typeof renderRaw>[0]) => (await renderRaw(el)).replace(/<!-- -->/g, "");
 const page = async (sp: Record<string, string> = {}) => renderHtml(await Dashboard({ searchParams: Promise.resolve(sp) }));
 
-/** The header's links after Home, as label → href, in order. */
+/** The header's links after Home, as label → href, in order (as the bar shows them from 640 px, menus included). */
 async function navOf(html: string): Promise<string[]> {
-  const nav = html.match(/<nav aria-label="Main"[^>]*>([\s\S]*?)<\/nav>/)?.[1] ?? "";
+  const nav = (html.match(/<nav aria-label="Main"[^>]*>([\s\S]*?)<\/nav>/)?.[1] ?? "").split('<div class="relative sm:hidden">')[0];
   return [...nav.matchAll(/<a [^>]*href="([^"]+)"[^>]*>([^<]+)<\/a>/g)].map((m) => `${m[2]} ${m[1]}`);
+}
+/** The phone Menu's links, in order. */
+function phoneMenuOf(html: string): string[] {
+  const menu = (html.match(/<nav aria-label="Main"[^>]*>([\s\S]*?)<\/nav>/)?.[1] ?? "").split('<div class="relative sm:hidden">')[1] ?? "";
+  return [...menu.matchAll(/<a [^>]*href="([^"]+)"[^>]*>([^<]+)<\/a>/g)].map((m) => `${m[2]} ${m[1]}`);
+}
+/** The bar's own buttons and links (not inside a menu): "Learn ▾", "Tools", … */
+function barOf(html: string): string[] {
+  const nav = (html.match(/<nav aria-label="Main"[^>]*>([\s\S]*?)<\/nav>/)?.[1] ?? "").split('<div class="relative sm:hidden">')[0].replace(/<div id="[^"]+" hidden=""[\s\S]*?<\/ul><\/div><\/div>/g, "");
+  return [...nav.matchAll(/<a [^>]*>([^<]+)<\/a>|<button [^>]*aria-expanded[^>]*>([^<]+)<svg/g)].map((m) => (m[2] ? `${m[2]} ▾` : m[1]));
 }
 const FIRM_OS_HREF = /href="\/(agents|coach|focus|comms|search|onboard|workspace|companion)\b/;
 const FIRM_OS_MODELS = new Set(["jobTask", "agentRun", "checklistResult", "sopPack", "commsDraft", "coachEvent", "coachPreference", "activityHeartbeat"]);
@@ -70,6 +80,8 @@ describe("/dashboard", () => {
         prismaCalls.length = 0;
         const html = await page();
         expect(await navOf(html)).toEqual(["Courses /dashboard#courses", "Leaderboard /leaderboard", "Check-in /checkin", "Recap /recap/year", "Tools /tools", "Clients /clients"]);
+        expect(barOf(html)).toEqual(["Learn ▾", "Tools", "Clients"]); // no Firm OS menu
+        expect(phoneMenuOf(html)).toEqual(await navOf(html));
         expect(html).not.toMatch(FIRM_OS_HREF);
         expect(html).not.toContain(SEARCH_BUTTON); // no command palette without Firm OS
         expect(prismaCalls.filter((c) => FIRM_OS_MODELS.has(c.model))).toEqual([]);
@@ -106,6 +118,10 @@ describe("/dashboard", () => {
         "Agents /agents",
         "My day /coach",
       ]);
+      // Grouped on the bar: the learning pages under Learn, the Firm OS places under Firm OS; a phone gets one Menu with the same links.
+      expect(barOf(html)).toEqual(["Learn ▾", "Tools", "Firm OS ▾"]);
+      expect(phoneMenuOf(html)).toEqual(await navOf(html));
+      expect(html).toContain('<nav aria-label="Main" data-tour="leaderboard"'); // the tour points at the bar, seen at every width
     });
 
     it("built-in manager modules add Clients and Client messages; the work tracker still needs its allow-list", async () => {

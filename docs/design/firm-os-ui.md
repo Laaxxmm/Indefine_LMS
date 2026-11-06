@@ -98,6 +98,9 @@ files other agents are editing without touching them.
 | `FormField` + `describedBy()` (label, hint, error `role="alert"`, ids tied) | label / hint / error triples written per form |
 | `Button` (variants from `ui.ts`, `busy` → spinner + disabled + `aria-busy`), `buttonClass()` | `${btnX} ${focusRing} inline-flex items-center gap-1.5` + `{busy && <Loader2 …/>}` per button; the comms pill buttons |
 | `ConfirmStep` / `ConfirmPanel` | the confirm groups written per screen (privacy, breaches, spot checks, companion, mistakes) |
+| `FirmOsHeader`, `FirmOsSubnav` (`src/components/FirmOsHeader.tsx`) | the per-layout `width` prop and the agents layout's hand-written second row |
+| `NavMenu` (`src/components/NavMenu.tsx`) | long rows of links that scrolled sideways (Firm OS header, dashboard bar) |
+| `HelpButton` / `HelpPanel` (`src/components/HelpButton.tsx`) | — (new: help for the page, from `src/lib/help/pages.ts`) |
 
 The focus ring is part of `btn`, `field` and `linkText`; `focusRing` has one definition (`ui.ts`),
 and the copies in FirmOsHeader, DraftForm, DraftActions, CorrectionHistory and OnboardPanel are gone.
@@ -107,6 +110,75 @@ ghost button (40 px beside the 40 px field), so the page's one primary stays the
 
 *Settled by:* the request named the pieces and where they go; `ui.ts` was already the shared layer
 (imported by 45 files), so the strings went there and the components on top.
+
+## Headers and menus (owner report, 06 Nov 2026)
+
+The owner saw the page "become small and bigger": `/focus` drew its header in a 768 px column (menu
+squeezed, cut off by a sideways scrollbar, Companion / Search / Dashboard hidden) while `/agents` used
+the full 1280. The menus were long and said different things in different places ("Agent runs" and
+"Agents", "Spot check" and "Spot checks", 12 links on the dashboard).
+
+**One header box.** `FirmOsHeader` takes no width: its row is `firmOsRow` (`contentWidth` + `mx-auto`
++ `pageGutter`) on every Firm OS page, and every Firm OS layout's `<main>` is `pageMain`. A page that
+wants a narrower column (focus) narrows its **content** inside the same box with `readingWidth`
+(`max-w-3xl`, left-aligned), never the header and never the box, so the logo, the header's right edge
+and the page title's left edge are at the same x on every page. The guided workspace's title moved
+out of its card into `PageHeader` for the same reason. A section's own pages go in a second row,
+`FirmOsSubnav` (same row box): the agents (GST Prep, Books Close, Audit Assist, ROC Prep, Tax Prep)
+and Mistake log, on agent pages only.
+
+**The same labels everywhere** (`src/lib/workspace/nav.ts`, the only place that decides them):
+
+| Where | From 1024 px (`lg`) | Below |
+|---|---|---|
+| Firm OS header | Next task · Agents · My day · Client messages · **More ▾** (Onboard client, Spot checks, Companion) · Search icon `Ctrl K` · Help · Dashboard | logo · Search · Help · **Menu ▾** (the same places in the same order, then Dashboard) |
+| Dashboard bar (from 640 px, `sm`) | Home · **Learn ▾** (Courses, Leaderboard, Check-in, Recap) · Tools · Clients · **Firm OS ▾** (Next task, Agents, My day, Client messages) · Work, then Search · Help · streak · account | Home · **Menu ▾** (Learn and Firm OS as headed groups, Tools, Clients, Work) |
+
+* "Agents" is the name of `/agents` in every menu, as its page title and in every back link to it
+  (`AGENTS_LABEL`); whose runs staff see is said by the page's lead, not by a different title.
+  "Spot checks" is always plural; `/onboard` is "Onboard client" in the Firm OS header and "Onboard client (Firm OS)" in the Clients bar, the Tools card and Workspace settings (beside the LMS "Onboard", which is `/clients/new`).
+* Each link still shows only when its module is on and the role may use it: `firmOsNav()` and
+  `dashboardLinks()` decide; `dashboardNav()` only groups `dashboardLinks()`. A group left with one link
+  is that link on its own; a group with none is not drawn — with Firm OS switched off there is no
+  Firm OS menu at all (tests/regression/firm-os-flags-off.test.ts).
+* **Firm OS on the dashboard is a menu, not one link to `/focus`.** `/focus` needs the Agents module;
+  a person with only My day or Client messages on would get a link to a page that sends them back. The
+  menu lists exactly the places that person can open, with the Firm OS header's own labels, and is
+  built like Learn beside it.
+* A place inside More marks the More button as current (the brand-50 fill); the link itself carries
+  `aria-current`.
+
+**Menus** are `NavMenu` (`src/components/NavMenu.tsx`): a disclosure — a real `<button>` with
+`aria-expanded` and `aria-controls`, the shared focus ring, and a panel of ordinary links (rendered
+hidden on the server, so the links exist without script). Enter / Space / ArrowDown open it,
+ArrowUp / ArrowDown / Home / End move between its links, Escape closes it and returns focus to the
+button; it closes when focus leaves it, on a click outside and on a route change. No header nav scrolls
+sideways any more (`AreaHeader` wraps). Pills are `navPill` (36 px), icon buttons `navIcon` (36 × 36),
+menu links `menuItem` (36 px) in `menuPanel`, all in `ui.ts`.
+
+## Help on every page
+
+`src/lib/help/pages.ts` is the one registry, keyed by route pattern (the folder under `src/app`); the
+words are grouped by area in `src/lib/help/content/` (work, agents, admin, lms). Each entry has: what
+the page is for (one or two sentences), how to use it (steps; the panel numbers them), what the words
+and statuses mean (job states as the same `StateChip` the page shows), if you're stuck (problem →
+exact fix), and who to ask. 25 entries: all 22 Firm OS pages, the dashboard, and the Tools and Clients
+areas (`section: true` covers the pages under them). `findHelp()` picks the page's own entry (fixed
+words beat a placeholder: `/agents/mistakes` over `/agents/[agent]`), then its area's.
+
+* `HelpButton` (`src/components/HelpButton.tsx`) sits in the Firm OS header, the dashboard bar, the LMS
+  area header (Tools, Clients) and the admin layout; it renders nothing where there is no entry. It
+  opens a modal side panel (480 px, full width on a phone): `role="dialog"`, `aria-modal`, named by its
+  heading; Close, Escape or a click outside shuts it; Tab stays inside (`trapTab`); focus returns to the
+  Help button; a route change closes it. It is rendered into `<body>` through a portal: the headers'
+  `backdrop-blur` makes the header the box a `position: fixed` child is placed in, so a panel rendered
+  in place would be clipped to the header's 64 px (found by the checker, 06 Nov 2026). Any new overlay
+  opened from a header follows the same rule.
+* The words are written for CA staff from what the code does (each entry names its source files) and
+  pass the plain-language rules: no codes, no jargon beyond the firm-term allowlist. Job states are
+  never written as codes in a sentence; the chip shows the code.
+* tests/unit/help-registry.test.tsx fails when a Firm OS page has no entry, when an entry's route is not
+  a page, or when a sentence breaks the rules. A new Firm OS page needs its entry in the same change.
 
 ## Conventions every page follows
 
@@ -128,7 +200,12 @@ ghost button (40 px beside the 40 px field), so the page's one primary stays the
 
 * Render tests: `tests/unit/firm-os-components.test.tsx` (variants, busy state, roles, aria wiring),
   `tests/unit/area-header.test.tsx`, `tests/unit/ist-display.test.ts`, and the route render tests.
+* Header, menus and help: `tests/unit/routes/firm-os-header.test.tsx` (labels, More / Menu contents,
+  one header box in every layout), `tests/unit/dashboard-nav.test.ts`, `tests/unit/routes/dashboard.test.ts`,
+  `tests/unit/help-registry.test.tsx` (coverage, words, lookup, the panel's markup, `trapTab`).
 * Visual: `npx vitest run --config tests/regression/visual.vitest.config.ts` renders every page in
-  docs/qa/ui-checklist.md; `node tests/regression/visual-check.mjs` measures each at 390 / 1280 / 1440
-  (overflow, row / control heights, card padding, focus ring on every Tab stop, primaries, "Sept", axe-core
-  WCAG A/AA). Results are in docs/qa/ui-checklist.md.
+  docs/qa/ui-checklist.md with every module on (so the headers show every place) and the page's path
+  (so the current place and Help show); `node tests/regression/visual-check.mjs` measures each at
+  390 / 1280 / 1440 (overflow, row / control heights, card padding, focus ring on every Tab stop,
+  primaries, "Sept", axe-core WCAG A/AA, and the header box and title edge, which must be the same on
+  every Firm OS page at one width). Results are in docs/qa/ui-checklist.md.

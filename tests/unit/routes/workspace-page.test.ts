@@ -68,7 +68,7 @@ describe("layout", () => {
     const html = await renderHtml(await Layout({ children: null }));
     expect(html).toContain('aria-label="Firm OS"');
     expect(html).toContain(">Next task</a>");
-    expect(html).toContain(">My agent runs</a>");
+    expect(html).toContain(">Agents</a>"); // the same label for everyone
     expect(html).toContain('href="/dashboard"');
     as(null);
     expect(await redirectTarget(() => Layout({ children: null }))).toBe("/");

@@ -2,7 +2,9 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Menu } from "lucide-react";
+import { HelpButton } from "@/components/HelpButton";
 import { LogoMark } from "@/components/Logo";
+import { menuItem, navIcon } from "@/components/ui";
 import AdminNav, { type AdminNavItem } from "./AdminNav";
 import { isAdmin } from "@/lib/access";
 import { requireModule } from "@/lib/workspace/guard";
@@ -94,6 +96,8 @@ export default async function AdminLayout({
             <ArrowLeft className="w-4 h-4" />
             My Dashboard
           </Link>
+          {/* Help for the page open (the Firm OS admin pages have it; others show nothing). */}
+          <HelpButton className={`${menuItem} mt-1`} />
         </div>
 
         <nav aria-label="Admin" className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
@@ -120,7 +124,10 @@ export default async function AdminLayout({
               <ArrowLeft className="w-4 h-4" />
               Dashboard
             </Link>
-            <span className="font-display font-bold">Admin</span>
+            <span className="flex items-center gap-2">
+              <HelpButton className={navIcon} labelClassName="sr-only sm:not-sr-only" />
+              <span className="font-display font-bold">Admin</span>
+            </span>
           </div>
           <details className="mt-2 group">
             <summary className="list-none cursor-pointer inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border text-sm font-semibold text-ink-soft hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 [&::-webkit-details-marker]:hidden">

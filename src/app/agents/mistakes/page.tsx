@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { canSeeAllRuns, canSeeMistakeLog } from "@/lib/agents/access";
-import { runsListLabel } from "../parts";
+import { canSeeMistakeLog } from "@/lib/agents/access";
+import { AGENTS_LABEL } from "../parts";
 import { loadMistakesPage } from "./load";
 import { MistakesView } from "./MistakesView";
 
@@ -14,5 +14,5 @@ export default async function AgentMistakesPage() {
   if (!session?.user) redirect("/");
   if (!canSeeMistakeLog(session.user)) redirect("/agents");
   const { data, names } = await loadMistakesPage(session.user);
-  return <MistakesView data={data} names={names} back={{ href: "/agents", label: runsListLabel(canSeeAllRuns(session.user)) }} />;
+  return <MistakesView data={data} names={names} back={{ href: "/agents", label: AGENTS_LABEL }} />;
 }

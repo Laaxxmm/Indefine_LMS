@@ -3,8 +3,8 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { ExternalLink } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-import { card, eyebrow, focusRing, linkText, pageTitle, sectionTitle, type ChipTone } from "@/components/ui";
-import { BackLink, Chip, RunStatusChip, Section, StateChip } from "@/components/firm-os";
+import { card, focusRing, linkText, sectionTitle, type ChipTone } from "@/components/ui";
+import { Chip, PageHeader, RunStatusChip, Section, StateChip } from "@/components/firm-os";
 import { DeliverablesPanel } from "@/app/agents/[agent]/runs/[id]/ReviewPanels";
 import { DOC_TYPES } from "@/lib/clients/core";
 import { loadWorkspaceView, type WorkspaceView, type WorkspaceViewDb } from "@/lib/workspace/view";
@@ -126,19 +126,23 @@ export default async function WorkspacePage({ params }: { params: Promise<{ jobI
 
   return (
     <div>
-      <BackLink href="/focus">Next task</BackLink>
+      {/* The title above the panels, where every Firm OS page has it (same left edge as the header). */}
+      <PageHeader
+        back={{ href: "/focus", label: "Next task" }}
+        eyebrow="Guided workspace"
+        title={job.title}
+        titleId="job"
+        meta={
+          <>
+            {job.clientName ? `${job.clientName} (${job.clientCode})` : job.clientCode} · {job.service} · {job.period} · FY {job.fy}
+          </>
+        }
+      />
       <div className="grid grid-cols-1 gap-6 items-start lg:grid-cols-[minmax(0,400px)_minmax(0,1fr)]">
-        {/* Not an <aside>: it holds the page's title and its one primary action. The padding keeps the cards' shadow inside the scroll box. */}
+        {/* Not an <aside>: it holds the job's state and its one primary action, named by the page title. The padding keeps the cards' shadow inside the scroll box. */}
         <div data-panel="job" role="region" aria-labelledby="job" tabIndex={0} className={`space-y-6 lg:sticky lg:top-20 lg:self-start lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:px-3 lg:-mx-3 lg:pb-6 rounded-2xl ${focusRing}`}>
-          <section aria-labelledby="job" className={card}>
-            <p className={`${eyebrow} mb-2`}>Guided workspace</p>
-            <h1 id="job" className={`${pageTitle} break-words`}>
-              {job.title}
-            </h1>
-            <p className="text-ink-mute text-[13px] mt-2">
-              {job.clientName ? `${job.clientName} (${job.clientCode})` : job.clientCode} · {job.service} · <span className="tabular-nums">{job.period} · FY {job.fy}</span>
-            </p>
-            <div className="flex items-center gap-2 flex-wrap mt-3">
+          <section aria-labelledby="ws-next" className={card}>
+            <div className="flex items-center gap-2 flex-wrap">
               <StateChip state={job.state} />
               {view.latestRun && <RunStatusChip status={view.latestRun.status} />}
             </div>
@@ -146,7 +150,9 @@ export default async function WorkspacePage({ params }: { params: Promise<{ jobI
               <DueLine internalDue={job.internalDue} statutoryDue={job.statutoryDue} overdue={job.overdue} />
             </div>
             <div className="mt-6 pt-4 border-t border-border">
-              <h2 className={sectionTitle}>Next action</h2>
+              <h2 id="ws-next" className={sectionTitle}>
+                Next action
+              </h2>
               {action?.kind === "prepare-by-hand" ? (
                 <p className="text-[13px] text-ink-soft">There is no agent for {job.service} yet. Prepare the work by hand in the job&apos;s Working folder, following the steps below.</p>
               ) : action ? (

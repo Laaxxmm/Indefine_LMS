@@ -42,6 +42,8 @@ export const focusRing = "focus:outline-none focus-visible:ring-2 focus-visible:
 /** Content max width (1280); forms 640. */
 export const contentWidth = "max-w-[1280px]";
 export const formWidth = "max-w-[640px]";
+/** A reading column inside the page box (focus): narrower content, same left edge as every page. */
+export const readingWidth = "max-w-3xl";
 /** Side gutter of every page and header: 16 on a phone, 32 from 640 px up. */
 export const pageGutter = "px-4 sm:px-8";
 /** The bleed that undoes pageGutter, for a bar that spans the content edge to edge. */
@@ -75,6 +77,23 @@ export const numeric = "tabular-nums";
 export const figure = "font-display text-[28px] leading-8 font-extrabold tabular-nums";
 /** Inline text link. */
 export const linkText = `font-semibold text-brand-600 hover:text-brand-700 hover:underline rounded ${focusRing}`;
+
+// ------------------------------------------------------------------ navigation
+// One header build for Firm OS, the LMS areas and the dashboard's menus (docs/design/firm-os-ui.md,
+// "Headers and menus"). The current place gets navActive (src/components/NavLink.tsx) on top.
+
+/** A nav pill on a header bar: 14 px semibold, 36 px tall (20 line + 2 × 8), the shared focus ring. */
+export const navPill = `shrink-0 whitespace-nowrap px-4 py-2 leading-5 rounded-full text-sm font-semibold text-ink-mute hover:text-ink hover:bg-muted transition ${focusRing}`;
+/** An icon-only pill (Search, Help on a phone): 36 × 36, same height as navPill. */
+export const navIcon = `shrink-0 inline-flex items-center justify-center gap-2 h-9 min-w-9 px-2 leading-5 rounded-full text-sm font-semibold text-ink-mute hover:text-ink hover:bg-muted transition ${focusRing}`;
+/** The panel a header menu opens (More, Learn, Firm OS, the phone Menu). */
+export const menuPanel = "absolute top-full mt-2 z-40 w-64 max-w-[calc(100vw-32px)] rounded-2xl bg-card border border-border shadow-lift p-2";
+/** A link inside a menu panel: full width, 36 px tall. */
+export const menuItem = `flex w-full items-center px-3 py-2 leading-5 rounded-lg text-sm font-semibold text-ink-soft hover:text-ink hover:bg-muted transition ${focusRing}`;
+/** A group heading inside a menu panel (Learn, Firm OS on the phone menu). */
+export const menuHeading = "px-3 pt-2 pb-1 text-[11px] leading-4 font-extrabold tracking-[0.12em] uppercase text-ink-mute";
+/** The keyboard hint beside an icon button ("Ctrl K"). */
+export const kbdHint = "rounded border border-border bg-page px-1 text-[11px] leading-4 font-semibold text-ink-mute";
 
 // ------------------------------------------------------------------ buttons
 // One shape: rounded-lg, 13 px bold, 32 px tall (20 line + 2 × 5 padding + 2 × 1 border; every variant has a

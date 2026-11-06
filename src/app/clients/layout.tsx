@@ -19,7 +19,7 @@ export default async function ClientsLayout({ children }: { children: React.Reac
   const links: AreaNavItem[] = [
     { href: "/clients", label: "All clients", except: ["/clients/new", "/clients/reports", "/clients/admin"] },
     { href: "/clients/new", label: "Onboard" },
-    ...(onboard ? [{ href: "/onboard", label: "Firm OS onboarding" }] : []),
+    ...(onboard ? [{ href: "/onboard", label: "Onboard client (Firm OS)" }] : []),
     { href: "/clients/reports", label: "Reports" },
     ...(isClientsAdmin(session.user) ? [{ href: "/clients/admin/services", label: "Services" }] : []),
   ];
