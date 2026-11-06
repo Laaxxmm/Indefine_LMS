@@ -1,0 +1,54 @@
+{
+  "gst.classify-ledgers": {
+    "ledgers": [
+      {
+        "ledger": "Directors Cab Hire",
+        "blockedCategory": "rent-a-cab-insurance",
+        "rcmService": "none",
+        "note": "hiring a car with driver for the directors; not one of the listed reverse-charge services",
+        "evidence": {
+          "quote": "Directors Cab Hire",
+          "location": "purchase-register.csv row 5"
+        }
+      },
+      {
+        "ledger": "Legal and Professional Fees",
+        "blockedCategory": "none",
+        "rcmService": "legal",
+        "note": "fees of an advocate firm",
+        "evidence": {
+          "quote": "Legal and Professional Fees",
+          "location": "purchase-register.csv row 4"
+        }
+      },
+      {
+        "ledger": "Motor Car - Director",
+        "blockedCategory": "motor-vehicle",
+        "rcmService": "none",
+        "note": "passenger car for a director",
+        "evidence": {
+          "quote": "Motor Car - Director",
+          "location": "purchase-register.csv row 3"
+        }
+      },
+      {
+        "ledger": "Raw Material Purchases",
+        "blockedCategory": "none",
+        "rcmService": "none",
+        "note": "ordinary business input",
+        "evidence": {
+          "quote": "Raw Material Purchases",
+          "location": "purchase-register.csv row 2"
+        }
+      }
+    ]
+  },
+  "gst.check:gst.free-supplies": {
+    "status": "pass",
+    "message": "No free supply, gift, sample or personal use described",
+    "evidence": {
+      "quote": "Car with driver for the directors in October",
+      "location": "purchase-register.csv row 5"
+    }
+  }
+}

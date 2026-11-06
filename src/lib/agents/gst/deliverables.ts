@@ -188,8 +188,8 @@ function gstr3bSheets(a: Analysis, x: GstExtract): SheetSpec[] {
         { details: "Memo: ITC deferred (in books, not in GSTR-2B)", ...taxCells(a.itc.deferred) },
         { details: "Memo: ITC held back (the model could not classify the bill; reviewer question)", ...taxCells(a.itc.heldBack) },
         { details: "Memo: ITC in GSTR-2B not in books (not claimed)", ...taxCells(a.itc.notBooked) },
-        { details: "Memo: reverse-charge credit notes above this period's 4(A)(3) credit (not in (A)(3); carried forward with the 3.1(d) excess)", ...taxCells(a.itc.a3CarryForward) },
-        { details: "Memo: credit notes on s.17(5) blocked purchases above this period's blocked ITC (kept out of 4(A); never availed)", ...taxCells(a.itc.blockedNoteExcess) },
+        { details: "Memo: reverse-charge credit notes on purchases not blocked u/s 17(5), above this period's reverse-charge bills on such purchases (not in (A)(3); carried forward)", ...taxCells(a.itc.a3CarryForward) },
+        { details: "Memo: credit notes on s.17(5) blocked purchases above this period's blocked ITC of the same kind, forward or reverse charge (kept out of 4(A); never availed)", ...taxCells(a.itc.blockedNoteExcess) },
       ],
     },
     { name: "6.1 Payment", columns: [...GSTR3B_COLUMNS.payment], totals: true, rows: payment },
@@ -227,7 +227,7 @@ function gstr3bSheets(a: Analysis, x: GstExtract): SheetSpec[] {
           ? [
               {
                 topic: "Reverse charge carried forward",
-                note: `Reverse-charge credit notes exceed this period's reverse-charge bills (warn finding gst.negative-rcm): Table 3.1(d) excess ${taxNote(a.rcm.carryForward)}; Table 4(A)(3) excess ${taxNote(a.itc.a3CarryForward)}. Neither table takes a negative figure, so the head is entered as nil in both (no reverse-charge cash is paid on it and no 4(A)(3) credit is taken on it). Carry the amounts forward to reduce the same head's reverse-charge liability and its 4(A)(3) credit in a later return — partner to verify the treatment. The notes: ${a.purchases
+                note: `Reverse-charge credit notes exceed this period's reverse-charge bills (warn finding gst.negative-rcm): Table 3.1(d) excess ${taxNote(a.rcm.carryForward)}; Table 4(A)(3) excess ${taxNote(a.itc.a3CarryForward)}. The 3.1(d) excess is where the notes exceed all of the head's reverse-charge bills; the 4(A)(3) excess is where notes on purchases that are not blocked u/s 17(5) exceed the bills on such purchases (credit on a blocked bill is reversed in 4(B)(1) and never absorbs it). Neither table takes a negative figure, so each excess is entered as nil (no reverse-charge cash is paid on it and no 4(A)(3) credit is taken on it). Carry the amounts forward to reduce the same head's reverse-charge liability and its 4(A)(3) credit in a later return — partner to verify the treatment. The notes: ${a.purchases
                   .filter((p) => p.rcm && p.docType === "CRN")
                   .map((p) => `${p.number} (${p.supplier || "supplier"}, ${p.date})`)
                   .join("; ")}.`,
@@ -238,7 +238,15 @@ function gstr3bSheets(a: Analysis, x: GstExtract): SheetSpec[] {
           ? [
               {
                 topic: "Credit notes on blocked purchases",
-                note: `Supplier credit notes on purchases blocked u/s 17(5) exceed this period's blocked ITC by ${taxNote(a.itc.blockedNoteExcess)}. That ITC was never availed (it was reversed in Table 4(B)(1) when the bill was booked), so the excess is kept out of Table 4(A) and 4(B)(1) stays nil; net ITC is not reduced. If the GSTR-2B auto-populates the note in 4(A)(5), edit 4(A)(5) to these figures.`,
+                note: `Supplier credit notes on purchases blocked u/s 17(5) exceed this period's blocked ITC of the same kind (forward charge in 4(A)(5), reverse charge in 4(A)(3)) by ${taxNote(a.itc.blockedNoteExcess)}. That ITC was never availed (it was reversed in Table 4(B)(1) when the bill was booked), so the excess is kept out of Table 4(A); it does not reduce 4(B)(1) (a blocked bill of the other kind is still reversed in full) or net ITC. If the GSTR-2B auto-populates the note in 4(A)(5), edit 4(A)(5) to these figures.`,
+              },
+            ]
+          : []),
+        ...(x.prev?.carryForward && taxTotal(x.prev.carryForward.outward) + taxTotal(x.prev.carryForward.rcm) + taxTotal(x.prev.carryForward.rcmItc) > 0
+          ? [
+              {
+                topic: "Carried forward from last period",
+                note: `The previous return (${x.prev.period}) carried forward output tax ${taxNote(x.prev.carryForward.outward)}; reverse-charge tax ${taxNote(x.prev.carryForward.rcm)}; reverse-charge input tax credit ${taxNote(x.prev.carryForward.rcmItc)} (warn finding gst.prior-carry-forward). This draft does not use these amounts: Tables 3.1, 4 and 6.1 are computed without them. A partner confirms each amount and how it is adjusted in this return before staff enter it.`,
               },
             ]
           : []),

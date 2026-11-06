@@ -3,7 +3,7 @@
 // audit + ITR form, missing documents, checklist and verify notes. Draft for review; the
 // return is prepared and filed by a person on the income-tax portal.
 import type { ChecklistResultItem } from "@/lib/agents/core/checklist";
-import { formatDayKey } from "@/lib/agents/core/format";
+import { formatDayKey, formatInr } from "@/lib/agents/core/format";
 import type { DeliverableDraft } from "@/lib/agents/core/runner";
 import type { RowSpec, SheetSpec } from "@/lib/agents/core/templates";
 import { checklistSheet } from "@/lib/agents/core/checklist-sheet";
@@ -13,7 +13,7 @@ import { taxVerifyNotes } from "./data";
 export const TAX_WORKBOOK_TITLE = "Tax computation";
 const r = (paise: number) => paise / 100;
 
-function computationSheet(a: TaxAnalysis): SheetSpec {
+function computationSheet(a: TaxAnalysis, planned: string): SheetSpec {
   const chosen = a.chosen;
   const line = (label: string, f: (x: RegimeResult) => number): RowSpec => ({
     item: label,
@@ -42,9 +42,21 @@ function computationSheet(a: TaxAnalysis): SheetSpec {
     line("Tax liability", (x) => x.tax.total),
   ];
   const fixed = (item: string, paise: number): RowSpec => ({ item, chosen: r(paise), old: null, new: null });
+  const late = a.advance.paidAfterFiling;
   rows.push(
     fixed("Less: TDS credit (lower of books and 26AS)", a.tds.credit),
-    fixed("Less: advance tax paid", a.advance.paidPaise),
+    fixed(late.length ? "Less: advance and self-assessment tax paid on or before the planned filing date" : "Less: advance tax paid", a.advance.paidPaise - a.advance.paidAfterFilingPaise),
+    // Re-audit NEW-6: a payment dated after the planned filing date is not deducted (234B ignores it too).
+    ...(late.length
+      ? [
+          {
+            item: `Not deducted: ₹${formatInr(a.advance.paidAfterFilingPaise / 100)} of tax paid after the planned filing date ${formatDayKey(planned)} (${late.map((l) => `${formatDayKey(l.date)} ₹${formatInr(l.amountPaise / 100)}`).join("; ")}). It does not reduce the amount payable on filing, and interest u/s 234B ignores it too. Move the filing date or the payment if either is wrong.`,
+            chosen: null,
+            old: null,
+            new: null,
+          },
+        ]
+      : []),
     fixed("Add: interest u/s 234A", a.i234A),
     fixed("Add: interest u/s 234B", a.advance.i234B),
     fixed("Add: interest u/s 234C", a.advance.i234C),
@@ -216,7 +228,7 @@ export function taxDeliverables(x: TaxExtract, results: ChecklistResultItem[]): 
       type: "xlsx",
       title: TAX_WORKBOOK_TITLE,
       sheets: [
-        computationSheet(a),
+        computationSheet(a, x.organiser.profile.plannedFilingDate),
         tdsSheet(a),
         aisSheet(a),
         advanceSheet(a),

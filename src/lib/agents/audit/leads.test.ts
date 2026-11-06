@@ -66,6 +66,10 @@ describe("grouping map", () => {
       ["Non-Current Liability", "L-Q"],
       ["Non Current Liabilities", "L-Q"],
       ["Overseas Tax Payable", "L-D"],
+      // Formula re-audit NEW-7: "Long Term Liability" carries the partner note like the other Zoho mappings
+      // (before: mapped to L-B with no note). The pattern is unchanged, so the lead area is too.
+      ["Long Term Liability", "L-B"],
+      ["Long-term Liabilities", "L-B"],
     ])("%s → %s", (group, wp) => {
       // Before the fix every one of these was unmapped (null), except Deferred Tax Liability, which the
       // catch-all "liabilit" put in L-D (other current liabilities).
@@ -100,7 +104,6 @@ describe("grouping map", () => {
       ["Other Current Liability", "L-D"],
       ["Other Liability", "L-D"],
       ["Current Liabilities", "L-D"],
-      ["Long Term Liability", "L-B"],
       ["Provisions", "L-D"],
       ["Intangible Asset", "L-E"],
       ["Accounts Receivable", "L-H"],
@@ -133,8 +136,24 @@ describe("grouping map", () => {
       ]);
       for (const n of r.groupingNotes) expect(n.verify).toMatch(/partner to confirm Schedule III grouping\.$/);
     });
+    it("re-audit NEW-7: a Zoho Long Term Liability term loan ties in L-B and lists the partner note (it had none)", () => {
+      const r = buildLeads(tb("HDFC term loan,Long Term Liability,,700\nBank,Bank,700,"), null);
+      expect(r.schedules.map((s) => [s.wp, s.cyPaise])).toEqual([
+        ["L-B", -70000],
+        ["L-I", 70000],
+      ]);
+      expect(r.unmapped).toEqual([]);
+      expect(r.tie.cyLeadsPaise).toBe(r.tie.cyTbNetPaise);
+      expect(r.groupingNotes).toEqual([
+        {
+          group: "Long Term Liability",
+          wp: "L-B",
+          verify: 'Zoho "Long Term Liability" → long-term borrowings, non-current (term loans; a long-term liability that is not a borrowing, such as a security deposit received, belongs in L-Q) — partner to confirm Schedule III grouping.',
+        },
+      ]);
+    });
     it("every conditional pattern carries a verify note; the grouping notes of a run are listed once per group", () => {
-      expect(LEAD_GROUPING_NOTES).toHaveLength(13);
+      expect(LEAD_GROUPING_NOTES).toHaveLength(14);
       for (const n of LEAD_GROUPING_NOTES) expect(n.verify).toMatch(/^Zoho ".+" .+ — partner to confirm Schedule III grouping\.$/);
       const r = buildLeads(tb("Machine,Fixed Asset,100,\nVan,Fixed Asset,50,\nGST In,Input Tax,10,\nCapital,Equity,,160"), null);
       expect(r.groupingNotes.map((n) => [n.group, n.wp])).toEqual([
