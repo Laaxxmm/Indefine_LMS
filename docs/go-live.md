@@ -27,6 +27,10 @@ The final QA gate that must be green before this checklist is used: `docs/qa/pha
       `internal-due`) does not suppress the reconciler's same-day "filed but not closed" reminder
       (reason `close-loop`) — `tests/chaos/duplicate-cron-concurrent.test.ts` green after Phase 11.
 - [ ] PR `firm-os/phase-0-inventory → main` reviewed by the owner (the agent never merges).
+- [ ] **Deploy path checked (incident 06 Nov 2026, see §9.1):** the Railway Start / Pre-deploy command
+      is `npm start` only — no `prisma db push` (the boot script `scripts/migrate.mjs` runs
+      `prisma migrate deploy`); every new migration has been applied to a copy of the production
+      database (staging) before merging; the CI step "Firm OS migrations re-run cleanly" is green.
 
 ## 2. Railway environment variables (production service)
 
@@ -255,6 +259,27 @@ on the build machine).
 - **In-flight work after rollback:** jobs mid-close stay in CLOSING; when Firm OS is re-enabled the
   reconciler resumes (it never reopens DONE jobs). Onboardings left RUNNING by a crash are taken over
   after 10 minutes on Retry (`tests/chaos/db-restart-saga.test.ts`; see the UI note there).
+
+### 9.1 Incident 06 Nov 2026 — boot crash loop after the Firm OS merge (resolved)
+
+- **What happened:** PR #70 merged 09:33 IST; Railway deployed `main`. Its start path ran
+  `prisma db push` before `npm start`, which created the Firm OS tables and enums straight from
+  `schema.prisma` without recording migrations. `npm start` then ran `prisma migrate deploy`, and the
+  first Firm OS migration failed on `CREATE TYPE "ModelProviderId"` (already exists). The boot script
+  marks a half-applied migration rolled back and retries it, so every restart failed the same way.
+  lms.indefine.in returned 502 from about 09:44 to 10:15 IST. No LMS data was changed or lost (only
+  new, empty Firm OS objects were created).
+- **Fix (PR #71, merged 10:15):** every Firm OS migration is re-runnable (enums and constraints in
+  DO blocks that ignore only the duplicate error; `CREATE TABLE / INDEX IF NOT EXISTS`;
+  `ADD COLUMN IF NOT EXISTS`). The next boot recorded the migrations over the existing objects and
+  started; Firm OS stays off (`FIRM_OS_ENABLED` unset). `tests/unit/migrations-rerunnable.test.ts`
+  enforces the pattern and CI re-applies every Firm OS migration with psql on Postgres 16.
+- **Why a rollback would not have helped:** the previous release would also run `db push`, now with
+  the old schema, which tries to drop the new tables (refused without `--accept-data-loss`, so the
+  boot fails). Fix forward instead.
+- **Lessons (now preconditions in §1):** remove `prisma db push` from the Railway start path; apply
+  every migration to a copy of the production database before merging; check how the platform
+  actually starts the app, not only `package.json`.
 
 ## 10. Sign-off
 
