@@ -95,10 +95,10 @@ describe("concurrency limiter", () => {
     expect(await lim.run(async () => 1)).toEqual({ ok: true, value: 1 });
   });
 
-  it("agent-run defaults: 2 at once, 6 waiting, 90 s; env overrides; bad values ignored; one process-wide limiter", () => {
-    expect(AGENT_RUN_DEFAULTS).toEqual({ max: 2, maxQueue: 6, maxWaitMs: 90_000 });
+  it("agent-run defaults: 2 at once, 6 waiting, 90 s, 1 + 1 per person; env overrides; bad values ignored; one process-wide limiter", () => {
+    expect(AGENT_RUN_DEFAULTS).toEqual({ max: 2, maxQueue: 6, maxWaitMs: 90_000, perKeyActive: 1, perKeyQueued: 1 });
     expect(agentRunOptions({})).toEqual(AGENT_RUN_DEFAULTS);
-    expect(agentRunOptions({ AGENT_RUN_CONCURRENCY: "1", AGENT_RUN_QUEUE: "0", AGENT_RUN_QUEUE_WAIT_MS: "5000" })).toEqual({ max: 1, maxQueue: 0, maxWaitMs: 5000 });
+    expect(agentRunOptions({ AGENT_RUN_CONCURRENCY: "1", AGENT_RUN_QUEUE: "0", AGENT_RUN_QUEUE_WAIT_MS: "5000", AGENT_RUN_PER_USER: "2", AGENT_RUN_PER_USER_QUEUE: "0" })).toEqual({ max: 1, maxQueue: 0, maxWaitMs: 5000, perKeyActive: 2, perKeyQueued: 0 });
     expect(agentRunOptions({ AGENT_RUN_CONCURRENCY: "0", AGENT_RUN_QUEUE: "-1", AGENT_RUN_QUEUE_WAIT_MS: "soon" })).toEqual(AGENT_RUN_DEFAULTS);
     expect(agentRunSlots()).toBe(agentRunSlots());
     expect(agentRunBusyMessage({ ok: false, reason: "queue-full", retryAfterSec: 60 }, 2)).toBe("2 agent runs are already in progress on the server and others are waiting. The system is busy — try again in a minute.");

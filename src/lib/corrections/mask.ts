@@ -13,7 +13,7 @@
 // anonymizer (src/lib/ai/anonymizer.ts) with the client's names as its dictionary, and the token
 // map is thrown away: the audit keeps ⟨PAN_1⟩ / ⟨NAME_1⟩, never the value. Pure module: no I/O.
 import { createHash } from "node:crypto";
-import { mask as anonymize } from "@/lib/ai/anonymizer";
+import { mask as anonymize, withTextNames } from "@/lib/ai/anonymizer";
 import type { DictionaryEntry } from "@/lib/ai/types";
 
 export type PiiKind = "pan" | "aadhaar" | "phone" | "email" | "gstin" | "name" | "place" | "text";
@@ -74,7 +74,10 @@ export function maskForAudit(kind: PiiKind | undefined, value: unknown): AuditVa
  * too (⟨ORG_1⟩, ⟨NAME_1⟩). The token map is thrown away, so the stored text never holds the value.
  */
 export function scrubFreeText(text: string, dictionary: readonly DictionaryEntry[] = []): string {
-  return anonymize(text.trim(), dictionary.length ? { dictionary: [...dictionary] } : {}).masked;
+  const t = text.trim();
+  // Re-audit NEW-1: names typed in the text itself join the dictionary (the surname alone is masked too).
+  const names = withTextNames(dictionary, t);
+  return anonymize(t, names.length ? { dictionary: names } : {}).masked;
 }
 
 export type ClientNames = { name?: string | null; contactName?: string | null; entityType?: string | null };

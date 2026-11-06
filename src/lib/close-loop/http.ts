@@ -8,6 +8,7 @@ import { isActive } from "@/lib/access";
 import { JOB_TASK_STATES } from "@/lib/agents/core/state";
 import { TuriaConfirmError } from "@/lib/integrations/turia/errors";
 import { USER_MESSAGES, validationMessage } from "@/lib/errors";
+import { BODY_TOO_LARGE, bodyTooLargeResponse, readJsonOrMarker } from "@/lib/hardening/json-body";
 import { CloseLoopError } from "./errors";
 
 export const jobIdZ = z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9_-]+$/, "That job link is not complete. Open the job again from your list.");
@@ -41,13 +42,15 @@ export function guard(session: Session | null): Guarded {
 
 /** Parse with a schema; 400 with the first message on failure. */
 export function parse<T>(schema: z.ZodType<T>, value: unknown): { ok: true; data: T } | { ok: false; res: NextResponse } {
+  if (value === BODY_TOO_LARGE) return { ok: false, res: bodyTooLargeResponse() };
   const parsed = schema.safeParse(value);
   if (parsed.success) return { ok: true, data: parsed.data };
   return { ok: false, res: NextResponse.json({ error: validationMessage(parsed.error) }, { status: 400 }) };
 }
 
+/** The JSON body, capped at 1 MB as it streams in (re-audit NEW-6); over the cap, parse() answers 413. */
 export async function readJson(req: Request): Promise<unknown> {
-  return req.json().catch(() => null);
+  return readJsonOrMarker(req);
 }
 
 const STATUS: Record<string, number> = {

@@ -387,7 +387,8 @@ export function createGuardrailSession(deps: GuardrailSessionDeps) {
     const messages: Msg[] = [{ role: "user", content: `${question}\n\nDocuments:\n${fenceUntrusted(shown)}` }];
     // Checklist documents are client data: masked before any cloud call, or local-only when the task says so.
     const privacy: Privacy = spec.privacy === "local-only" ? "local-only" : "anonymize-then-cloud";
-    const o: CallOpts<unknown> = { privacy, difficulty: spec.difficulty ?? "judgement", validateWith: shown };
+    // Verdicts are stored (ChecklistResult): identifiers in them stay placeholders (re-audit NEW-7).
+    const o: CallOpts<unknown> = { privacy, difficulty: spec.difficulty ?? "judgement", validateWith: shown, unmask: "findings" };
     stats.judgements += 1;
     const first = await callSpec<unknown>(spec, messages, o);
     let verdict: unknown = first;

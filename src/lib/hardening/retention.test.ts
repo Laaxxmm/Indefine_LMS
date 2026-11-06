@@ -116,7 +116,8 @@ describe("free text in ModelCall and AuditEvent (ADR-006: no raw client text)", 
     const r = await sweepFreeText(w.db, NOW, { auditFreeText: null, modelCallErrors: null });
     expect(r).toEqual({ auditNotesMasked: 2, modelErrorsMasked: 1, cursors: { auditFreeText: NOW.toISOString(), modelCallErrors: NOW.toISOString() } });
     const audit = Object.fromEntries(w.audits.map((a) => [a.id, a]));
-    expect(audit["a-comment"]).toMatchObject({ action: "comment", entity: "AgentRun", entityId: "run-1", meta: { text: "Kiran Kumar PAN ⟨PAN_1⟩ is wrong" } });
+    // Re-audit NEW-1: a name typed in the note is masked too (the free-text name extractor).
+    expect(audit["a-comment"]).toMatchObject({ action: "comment", entity: "AgentRun", entityId: "run-1", meta: { text: "⟨NAME_1⟩ PAN ⟨PAN_1⟩ is wrong" } });
     expect(audit["a-retract"].meta).toEqual({ from: "FILED_BY_HUMAN", to: "APPROVED", eventId: "ev-1", note: "wrong ARN, call ⟨PHONE_1⟩" });
     expect(audit["a-plain"].meta).toEqual({ text: "Check INV-3" }); // nothing to mask: not rewritten
     expect(audit["a-close"].meta).toEqual({ evidence: { sha256: "9876543210ab" } }); // not a free-text action

@@ -29,9 +29,10 @@ import type { FirmService, JobTaskState, PrismaClient } from "@prisma/client";
 import { z, type ZodType, type ZodTypeDef } from "zod";
 import type { AgentName, AgentTask, DictionaryEntry, ModelRequest, RouterResult } from "@/lib/ai/router";
 import { issueSummary } from "@/lib/ai/call-errors";
-import { dedupeDictionary, partyEntry, type NameDirectory } from "@/lib/ai/names";
+import { dedupeDictionary, fileNameText, partyEntry, personNames, type NameDirectory } from "@/lib/ai/names";
 import { validateScope, type AgentScope } from "./guardrails/scope";
 import { createGuardrailSession, type GuardrailSession, type ModelCallRequest } from "./guardrails/session";
+import { storedRunError, zodIssueText } from "./run-errors";
 import type { ItemScreen } from "./guardrails/untrusted";
 import type { DeliverableStore, StoredFile } from "@/lib/integrations/sharepoint/deliverable-store";
 import { deliverablePath, parsePeriod, type DeliverableKind, type DeliverablePath } from "@/lib/integrations/sharepoint/paths";
@@ -277,7 +278,6 @@ const JOB_SELECT = {
   firmClient: { select: { clientCode: true, lmsClientId: true, client: { select: { name: true } } } },
 } as const;
 
-const errText = (e: unknown) => (e instanceof Error ? e.message : String(e)).slice(0, 2000);
 
 /** An unscoped (internal) agent's call as the router takes it: `source` is a scoped-agent field. */
 function legacyRequest<T>({ source, ...rest }: ModelCallRequest<T>): Omit<ModelRequest<T>, "runId"> {
@@ -315,7 +315,26 @@ export async function buildRunDictionary<I>(
       problem ??= "the names in the input files could not be read";
     }
   }
+  // Re-audit NEW-1: a generic pass for every agent — names typed anywhere in a text input (CSV, JSON,
+  // notes) or in a file name, whichever column they are in.
+  entries.push(...inputFileNames(files));
   return { entries: dedupeDictionary(entries), problem };
+}
+
+/** Text inputs read for the generic name pass (larger files are covered by the agent's own harvest and the router's per-message pass). */
+const NAME_SCAN_MAX_BYTES = 5 * 1024 * 1024;
+
+/** Names in the input files' names and in every text-like input file (no NUL byte in the first 8 KB). */
+export function inputFileNames(files: readonly Pick<InputFile, "name" | "bytes">[]): DictionaryEntry[] {
+  const out: DictionaryEntry[] = [];
+  for (const f of files) {
+    out.push(...personNames(fileNameText(f.name)));
+    if (f.bytes.length === 0 || f.bytes.length > NAME_SCAN_MAX_BYTES || f.bytes.subarray(0, 8192).includes(0)) continue;
+    // Binary office files (xlsx / docx are zip) are read by the agent's own parse and harvest.
+    if ((f.bytes[0] === 0x50 && f.bytes[1] === 0x4b) || f.bytes.subarray(0, 5).toString("latin1") === "%PDF-") continue;
+    out.push(...personNames(f.bytes.toString("utf8")));
+  }
+  return out;
 }
 
 /** Path A folder of a job: CL-{Code}/Compliance/FY…/{Service}/{Period}/{Kind}. Throws PathError on bad parts. */
@@ -398,6 +417,8 @@ export async function runAgent<I, E>(def: AgentDefinition<I, E>, jobTaskId: stri
     if (!t.ok) return fail(`The agent could not start: ${t.reason}`);
   }
 
+  // Names the stored failure text is masked with (the client's, then the whole run dictionary).
+  let errorNames: DictionaryEntry[] = clientDictionary({ name: job.clientName });
   try {
     let needsPartnerReview = false;
     const unwrap = <T>(res: RouterResult<T>): T => {
@@ -450,11 +471,13 @@ export async function runAgent<I, E>(def: AgentDefinition<I, E>, jobTaskId: stri
     // Wrong-department input stops here, before any model call (ADR-008 §7).
     await session?.sniff(files);
     const parsed = def.inputSchema.safeParse(files);
-    if (!parsed.success) throw new AgentRunError(`Inputs incomplete: ${parsed.error.issues.map((i) => i.message).join("; ")}`);
+    // zodIssueText: never the value an enum / literal check received (it can be client data).
+    if (!parsed.success) throw new AgentRunError(`Inputs incomplete: ${parsed.error.issues.map(zodIssueText).join("; ")}`);
     const input = parsed.data;
     session?.setInput(input);
     const dictionary = await buildRunDictionary(def, input, files, job, deps.names);
     runDictionary = dictionary.entries;
+    errorNames = dedupeDictionary([...errorNames, ...dictionary.entries]);
     session?.setDictionary(dictionary.entries, dictionary.problem);
 
     // Extract (model), compute (code), check (engine).
@@ -475,6 +498,7 @@ export async function runAgent<I, E>(def: AgentDefinition<I, E>, jobTaskId: stri
             privacy: "anonymize-then-cloud",
             difficulty: "judgement",
             schema: LlmVerdictOutputSchema,
+            unmask: "findings", // stored as a ChecklistResult: identifiers stay placeholders (re-audit NEW-7)
             messages: [
               { role: "system", content: LLM_CHECK_SYSTEM },
               {
@@ -568,6 +592,7 @@ export async function runAgent<I, E>(def: AgentDefinition<I, E>, jobTaskId: stri
       needsPartnerReview,
     };
   } catch (e) {
-    return fail(errText(e));
+    // Re-audit NEW-5: never the thrown message as it is (it can quote a cell, a PAN, a name).
+    return fail(storedRunError(e, errorNames));
   }
 }

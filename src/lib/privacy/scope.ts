@@ -76,11 +76,15 @@ export function staffDuties(s: StaffScope, now: Date): DutyInForce[] {
   return holdUntil.getTime() > now.getTime() ? [duty("staff-records", holdUntil)] : [];
 }
 
-/** Created-at dates of certificates and engagement letters issued for the client (ICAI records). */
+/**
+ * Created-at dates of certificates and engagement letters issued for the client (ICAI records),
+ * linked by the client record id (re-audit NEW-8: never by the typed name, which another entity
+ * can share; name-only records are a manual check in the erasure plan).
+ */
 export async function attestDatesFor(db: PrivacyReadDb, client: Row): Promise<Date[]> {
-  const name = String(client.name);
-  const certs = await db.certificateIssue.findMany({ where: { clientName: name }, select: { createdAt: true } });
-  const letters = await db.engagementLetter.findMany({ where: { clientName: name }, select: { createdAt: true } });
+  const clientId = String(client.id);
+  const certs = await db.certificateIssue.findMany({ where: { clientId }, select: { createdAt: true } });
+  const letters = await db.engagementLetter.findMany({ where: { clientId }, select: { createdAt: true } });
   return [...certs, ...letters].map((r) => r.createdAt);
 }
 

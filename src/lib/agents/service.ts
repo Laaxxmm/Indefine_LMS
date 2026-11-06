@@ -46,9 +46,10 @@ const fail = (status: 400 | 403 | 404 | 409 | 502 | 503, error: string) => ({ ok
  * Runs `fn` (a run, or a transition + run) in an agent-run slot. When the slots and the queue are
  * full, or the wait runs out, nothing runs and the person gets 503 + Retry-After with a plain message.
  */
-async function withRunSlot<T>(deps: AgentServiceDeps, fn: () => Promise<ServiceResult<T>>): Promise<ServiceResult<T>> {
+async function withRunSlot<T>(deps: AgentServiceDeps, user: SessionUser, fn: () => Promise<ServiceResult<T>>): Promise<ServiceResult<T>> {
   const slots = deps.runSlots ?? agentRunSlots();
-  const r = await slots.run(fn);
+  // Re-audit NEW-14: keyed by the person, so one person cannot fill every slot and the whole queue.
+  const r = await slots.run(fn, user?.id ? `user:${user.id}` : undefined);
   if (r.ok) return r.value;
   console.warn(`[agents] run refused: ${r.reason} (${slots.active} running, ${slots.waiting} waiting, max ${slots.options.max})`);
   return { ok: false, status: 503, error: agentRunBusyMessage(r, slots.options.max), retryAfterSec: r.retryAfterSec };
@@ -186,7 +187,7 @@ export async function startAgentRun(user: SessionUser, agentKey: string, jobTask
   const latest = await latestRunId(deps.db, jobTaskId);
   const actions = reviewActions(user, job, latest ? await blockingFailuresOf(deps.db, latest) : 0, deps.now());
   if (!actions.run) return fail(403, "Only the person the job is assigned to, a manager or a partner can run the agent, and only while the job is assigned or in preparation.");
-  return withRunSlot(deps, () => runAndAudit(user, def, jobTaskId, deps, "agent-run"));
+  return withRunSlot(deps, user, () => runAndAudit(user, def, jobTaskId, deps, "agent-run"));
 }
 
 /** "Submit for review": AGENT_DONE → IN_REVIEW, on the job's latest run. */
@@ -225,7 +226,7 @@ async function backToPrepAndRun(
   // The slot is taken before the transition, so a refused (busy) request leaves the job as it was.
   // The stored copies (event note, review note, audit) are masked; the new run gets the note as typed.
   const stored = storedNote(v.data, note);
-  return withRunSlot(deps, async () => {
+  return withRunSlot(deps, user, async () => {
     const t = await transitionJobTask(deps.db, v.data.jobTaskId, "IN_PREP", actorOf(user)!, { expectedState: from, note: stored, now: deps.now() });
     if (!t.ok) return fail(t.code === "FORBIDDEN" ? 403 : t.code === "NOTE_REQUIRED" ? 400 : 409, t.reason);
     if (from === "IN_REVIEW") await deps.db.agentRun.update({ where: { id: runId }, data: { status: "CHANGES_REQUESTED", reviewNotes: stored } });

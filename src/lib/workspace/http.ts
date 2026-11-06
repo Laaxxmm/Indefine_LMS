@@ -7,6 +7,7 @@ import { auth } from "@/lib/auth";
 import { canManageWorkspace } from "@/lib/rbac/policy";
 import { ADMIN_ONLY, type AdminResult } from "./admin";
 import { MODULE_KEYS } from "./registry";
+import { readJsonCapped } from "@/lib/hardening/json-body";
 
 export const SIGN_IN = "Your session has ended. Sign in again to continue.";
 const UNREADABLE = "The settings could not be read. Reload the page and try again.";
@@ -31,7 +32,9 @@ export const roleDefaultZ = z.object({ modules: moduleList, focusMode: z.boolean
 export const userSettingZ = z.object({ modules: moduleList.nullable(), focusMode: z.boolean().nullable(), companionEnabled: z.boolean() }).strict();
 
 export async function readBody<T>(schema: ZodSchema<T>, req: Request): Promise<{ data: T; res?: undefined } | { data?: undefined; res: NextResponse }> {
-  const parsed = schema.safeParse(await req.json().catch(() => null));
+  const jsonBody = await readJsonCapped(req); // re-audit NEW-6: capped as it streams in
+  if (!jsonBody.ok) return { res: jsonBody.res };
+  const parsed = schema.safeParse(jsonBody.value);
   return parsed.success ? { data: parsed.data } : { res: NextResponse.json({ error: UNREADABLE }, { status: 400 }) };
 }
 

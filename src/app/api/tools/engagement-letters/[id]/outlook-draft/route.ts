@@ -7,6 +7,7 @@ import { MAIL_SCOPES } from "@/lib/graph-scopes";
 import { createOutlookDraft } from "@/lib/integrations/outlook/drafts";
 import { fileName, isEmail } from "@/lib/office-tools/engagement-letters";
 import { WAITING, can } from "@/lib/office-tools/engagement-letter-flow";
+import { readJsonCapped } from "@/lib/hardening/json-body";
 
 export const maxDuration = 60;
 
@@ -29,7 +30,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const letter = await prisma.engagementLetter.findUnique({ where: { id } });
   if (!letter) return NextResponse.json({ error: "That letter wasn't found. Go back to the letters list and open it again." }, { status: 404 });
 
-  const body = (await req.json().catch(() => null)) as { kind?: string; to?: unknown; cc?: unknown; subject?: string; text?: string } | null;
+  const jsonBody = await readJsonCapped(req); // re-audit NEW-6: capped as it streams in
+  if (!jsonBody.ok) return jsonBody.res;
+  const body = (jsonBody.value) as { kind?: string; to?: unknown; cc?: unknown; subject?: string; text?: string } | null;
   const kind = body?.kind === "draft" ? "draft" : "signed";
   const step = kind === "draft" ? "sendDraft" : "sendSigned";
   const itemId = kind === "draft" ? letter.draftItemId : letter.signedItemId;

@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { canUseNeoCentra } from "@/lib/neo-centra/access";
 import { TuriaSessionError, storeTuriaCookie, turiaStatus } from "@/lib/neo-centra/turia";
 import { bearerUnauthorized } from "@/lib/cron-auth";
+import { readJsonCapped } from "@/lib/hardening/json-body";
 
 // Store / inspect the firm's Turia session cookie. Two callers:
 //  - a director in the LMS (session-gated), pasting the cookie manually, or
@@ -21,7 +22,9 @@ export async function POST(req: NextRequest) {
     byName = session.user.name ?? undefined;
   }
 
-  const parsed = z.object({ cookie: z.string().min(10).max(16_384) }).safeParse(await req.json().catch(() => null));
+  const jsonBody = await readJsonCapped(req); // re-audit NEW-6: capped as it streams in
+  if (!jsonBody.ok) return jsonBody.res;
+  const parsed = z.object({ cookie: z.string().min(10).max(16_384) }).safeParse(jsonBody.value);
   if (!parsed.success) return NextResponse.json({ error: "Paste the Turia session cookie first." }, { status: 400 });
 
   try {

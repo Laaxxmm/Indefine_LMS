@@ -35,9 +35,11 @@ export interface ModelRequest<T = unknown> {
    * Which placeholders in the answer are restored (security audit #25, unmask-policy.ts):
    * "grounded" (default) — free-text fields stay masked and other strings are restored only when
    * the restored text occurs in the documents sent; "all" — every string value (for rewrites the
-   * caller checks fact by fact, e.g. comms polish / translate).
+   * caller checks fact by fact, e.g. comms polish / translate); "findings" — for answers stored as
+   * findings (LLM checklist verdicts): identifiers never come back, names only in a quote that is a
+   * whole document line or cell (re-audit NEW-7).
    */
-  unmask?: "grounded" | "all";
+  unmask?: "grounded" | "all" | "findings";
   /** Per-call output token cap (default 4096). */
   maxTokens?: number;
   /** Version of a registered prompt (ADR-008): ModelCall.task records `<task>@<taskVersion>`. */

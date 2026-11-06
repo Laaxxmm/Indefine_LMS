@@ -11,7 +11,7 @@
 // sent when masking cannot cover it (the detector still finds client data, or numbers are spoken
 // as words — "nine eight seven six…" — which no masker can see). Video / audio uploads cannot be
 // masked at all; their callers park them (src/lib/auto-quiz.ts). Pure: no I/O.
-import { detectPii, mask, unmask, type PiiKind } from "./anonymizer";
+import { detectPii, mask, unmask, withTextNames, type PiiKind } from "./anonymizer";
 import type { DictionaryEntry } from "./types";
 
 /** A legacy Gemini call refused because client details could not be hidden (nothing was sent). */
@@ -36,8 +36,11 @@ export interface GatedPrompt {
 
 /** Mask a legacy Gemini prompt and gate it with the independent detector (throws LegacyGateError). */
 export function gateForGemini(prompt: string, opts: { dictionary?: DictionaryEntry[]; what?: string } = {}): GatedPrompt {
-  const { masked, map } = mask(prompt, { dictionary: opts.dictionary, literals: "all" });
-  const kinds: PiiKind[] = detectPii(masked, { dictionary: opts.dictionary });
+  // Re-audit NEW-1: names typed in the prompt join the dictionary (all their variants are masked), and a
+  // probable person name the masker still left stops the call like any identifier.
+  const dictionary = withTextNames(opts.dictionary, prompt);
+  const { masked, map } = mask(prompt, { dictionary, literals: "all" });
+  const kinds: PiiKind[] = detectPii(masked, { dictionary, names: true });
   if (kinds.length) throw new LegacyGateError(kinds, opts.what);
   return { prompt: masked, restore: (text) => unmask(text, map), masked: map.byToken.size };
 }

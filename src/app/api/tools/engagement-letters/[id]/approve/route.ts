@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canUseOfficeTools } from "@/lib/office-tools/access";
 import { WAITING, can } from "@/lib/office-tools/engagement-letter-flow";
+import { readJsonCapped } from "@/lib/hardening/json-body";
 
 // Record that the client approved the draft (they reply by email; staff mark it here).
 // Unlocks signing. The note says who approved and how, for the history.
@@ -16,7 +17,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!letter) return NextResponse.json({ error: "That letter wasn't found. Go back to the letters list and open it again." }, { status: 404 });
   if (!can("approve", letter.status)) return NextResponse.json({ error: WAITING.approve }, { status: 409 });
 
-  const body = (await req.json().catch(() => null)) as { note?: string } | null;
+  const jsonBody = await readJsonCapped(req); // re-audit NEW-6: capped as it streams in
+  if (!jsonBody.ok) return jsonBody.res;
+  const body = (jsonBody.value) as { note?: string } | null;
   const note = String(body?.note ?? "").trim().slice(0, 300);
   if (!note) return NextResponse.json({ error: "Say who approved it and how, for example: Ravi Kumar, by email on 30 Sep." }, { status: 400 });
 

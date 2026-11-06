@@ -10,12 +10,16 @@ import { PlaceholderLeakError } from "@/lib/certificates/render/compose";
 import { DOCX_MIME, certificateFilename } from "@/lib/certificates/download";
 import { SUGGESTIBLE_FIELD_KEYS } from "@/lib/certificates/suggestible";
 import { failureSentence } from "@/lib/errors";
+import { readJsonCapped } from "@/lib/hardening/json-body";
+import { clientLinkFor } from "@/lib/privacy/client-link";
 
 const Body = z.object({
   formatId: z.string(),
   clientName: z.string().min(1).max(300),
   acknowledged: z.boolean(),
   payload: z.record(z.unknown()),
+  /** The client record this certificate is issued from (re-audit NEW-8: stored as clientId). */
+  clientId: z.string().max(64).optional(),
 });
 
 export async function POST(req: Request) {
@@ -23,9 +27,13 @@ export async function POST(req: Request) {
   if (!session?.user) return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
   if (!canUseCertificateTool(session.user)) return NextResponse.json({ error: "You don't have access to the certificate generator. Ask an admin to give you access." }, { status: 403 });
 
-  const parsed = Body.safeParse(await req.json().catch(() => null));
+  const jsonBody = await readJsonCapped(req); // re-audit NEW-6: capped as it streams in
+  if (!jsonBody.ok) return jsonBody.res;
+  const parsed = Body.safeParse(jsonBody.value);
   if (!parsed.success) return NextResponse.json({ error: "Some details were missing or not in the right format. Check the form and try again." }, { status: 400 });
   const { formatId, clientName, acknowledged, payload } = parsed.data;
+  const link = await clientLinkFor(prisma, parsed.data.clientId, clientName);
+  if (!link.ok) return NextResponse.json({ error: link.error }, { status: link.status });
   if (JSON.stringify(payload).length > 200_000) return NextResponse.json({ error: "The form is too large to save. Shorten the longest entries and try again." }, { status: 413 });
 
   // §0.8 — the illustrative-format acknowledgment must be ticked.
@@ -55,6 +63,7 @@ export async function POST(req: Request) {
       templateVersion: template.version,
       templateHash: template.hash,
       clientName,
+      clientId: link.clientId,
       payload: payload as object,
       acknowledged,
       createdById: session.user.id,

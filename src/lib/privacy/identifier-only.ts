@@ -38,8 +38,8 @@ export function runIdentifiers(r: Row): Map<IdentifierKind, Set<string>> {
   return out;
 }
 
-/** Whether some combination of the row's identifiers is exactly what the request was logged with. */
-export function matchesIdentifierHash(r: Row, hash: string, hashKey?: string): boolean {
+/** The combination of the row's identifiers that is exactly what the request was logged with (the person's own), or null. */
+export function matchingIdentifiers(r: Row, hash: string, hashKey?: string): Identifier[] | null {
   let combos: Identifier[][] = [[]];
   for (const [kind, values] of runIdentifiers(r)) {
     const next: Identifier[][] = [];
@@ -49,7 +49,12 @@ export function matchesIdentifierHash(r: Row, hash: string, hashKey?: string): b
     }
     combos = next.slice(0, COMBINATIONS_MAX);
   }
-  return combos.some((c) => c.length > 0 && identifierHash(c, hashKey) === hash);
+  return combos.find((c) => c.length > 0 && identifierHash(c, hashKey) === hash) ?? null;
+}
+
+/** Whether some combination of the row's identifiers is exactly what the request was logged with. */
+export function matchesIdentifierHash(r: Row, hash: string, hashKey?: string): boolean {
+  return matchingIdentifiers(r, hash, hashKey) !== null;
 }
 
 /**

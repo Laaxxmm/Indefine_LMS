@@ -3,7 +3,7 @@
 // and GSTR-2B trade names. Harvested deterministically from the same parse extract() uses
 // (loadGstDataOnce: one parse per run's input object, shared by the hook and extract).
 import type { DictionaryEntry } from "@/lib/ai/types";
-import { partyEntries } from "@/lib/ai/names";
+import { fileNameText, freeTextNames, partyEntries } from "@/lib/ai/names";
 import type { JobContext } from "@/lib/agents/core/runner";
 import { loadGstData } from "./input";
 import type { GstExtract, GstInput } from "./types";
@@ -28,5 +28,13 @@ export async function gstDictionaryTerms(input: GstInput, job: Pick<JobContext, 
     ...partyEntries(d.purchases.map((p) => p.supplier)),
     ...partyEntries(d.payables.map((p) => p.supplier)),
     ...partyEntries(d.gstr2b.map((b) => b.tradeName)),
+    // Re-audit NEW-1: names typed in free-text columns ("Rent - Ravindra Hegde", "Consultancy by …").
+    ...freeTextNames([
+      ...d.purchases.map((p) => p.ledger),
+      ...d.purchases.flatMap((p) => p.lines.map((l) => l.description)),
+      ...d.sales.flatMap((s) => s.lines.map((l) => l.description)),
+      ...d.gstr2b.map((b) => b.reason),
+      ...input.files.map((f) => fileNameText(f.name)),
+    ]),
   ];
 }

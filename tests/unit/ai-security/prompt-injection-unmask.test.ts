@@ -39,8 +39,8 @@ function obeyingProvider() {
       const docs = req.messages[0].content;
       const tokens = [...new Set(docs.match(/⟨[A-Z_]+_\d+⟩/g) ?? [])];
       // "Obeys": repeats every placeholder it saw (plus made-up ones) in the free-text message, and also
-      // smuggles them into the evidence location; cites a real (masked) line so grounding passes.
-      const quote = (docs.match(/INV-2 \| ⟨ORG_\d+⟩/) ?? ["INV-2"])[0];
+      // smuggles them into the evidence location; cites a real (masked) whole line so grounding passes.
+      const quote = (docs.match(/INV-2 \| ⟨ORG_\d+⟩ \| [^\n]*/) ?? ["INV-2"])[0];
       const output = {
         status: "fail",
         message: `${tokens.join(" ")} ⟨PAN_99⟩ ⟨AADHAAR_7⟩ ⟨NAME_3⟩`.slice(0, 300),
@@ -72,7 +72,7 @@ describe("#25 end-to-end: injected instruction → model repeats placeholders �
     const persisted = JSON.stringify(rp);
     for (const s of [PAN, AADHAAR, "9876543210", "Rajesh Kumar"]) expect(persisted).not.toContain(s);
     expect(rp.message).toContain("⟨PAN_99⟩"); // foreign tokens stay literal
-    expect(rp.evidence?.quote).toBe("INV-2 | Bright Supplies"); // the grounded quote is restored
+    expect(rp.evidence?.quote).toMatch(/^INV-2 \| Bright Supplies \| 2026-10-06 \| /); // a whole document line: its names are restored (re-audit NEW-7)
 
     expect(JSON.stringify(rows(w.db, "auditEvent"))).not.toContain(PAN);
     const mc = JSON.stringify(modelCalls);

@@ -21,6 +21,7 @@
 import { createHash } from "node:crypto";
 import type { ZodTypeAny } from "zod";
 import { createTokenMap, detectPii, mask, type PiiKind, type TokenMap } from "./anonymizer";
+import { dedupeDictionary, personNames } from "./names";
 import { createResponseCache, createRouterCacheHook, type ResponseCache } from "./cache";
 import { providerErrorCode, storedError, validatorCode, zodCodes } from "./call-errors";
 import { unmaskOutput } from "./unmask-policy";
@@ -238,6 +239,18 @@ export function maskContent(text: string, dictionary: DictionaryEntry[] | undefi
   return mask(text, { dictionary, map, literals: "all" }).masked;
 }
 
+/**
+ * Re-audit NEW-1: the request's dictionary plus every name the free-text extractor (names.ts
+ * personNames) finds in its client messages (user / assistant; the system prompt is firm text), so
+ * a name typed in a description or note in one message is masked — with all its variants — in every
+ * message of the request, and the leak gate checks for it too.
+ */
+export function withMessageNames(dictionary: DictionaryEntry[] | undefined, messages: readonly Msg[]): DictionaryEntry[] | undefined {
+  const found = messages.filter((m) => m.role !== "system").flatMap((m) => personNames(m.content));
+  if (!found.length) return dictionary;
+  return dedupeDictionary([...(dictionary ?? []), ...found]);
+}
+
 /** Everything a request sent (unmasked, system included): the text a grounded answer may restore values from. */
 export function documentsOf(messages: readonly Msg[]): string {
   return messages.map((m) => m.content).join("\n");
@@ -249,11 +262,13 @@ export const LEAK_GATE_REASON =
 
 /**
  * Post-mask leak gate: the INDEPENDENT detector (detectPii, its own broader patterns) over exactly
- * what would be sent. Any kind found means masking failed, and the call must not go out.
+ * what would be sent. Any kind found means masking failed, and the call must not go out. Client
+ * messages are also read for names (re-audit NEW-1): a probable person name that survived masking
+ * stops the call; the system prompt (fixed firm text) is checked for identifiers and dictionary names.
  */
 export function leakGateKinds(preq: Pick<ProviderRequest, "system" | "messages">, dictionary?: DictionaryEntry[]): PiiKind[] {
   const kinds = new Set<PiiKind>(detectPii(preq.system ?? "", { dictionary }));
-  for (const m of preq.messages) for (const k of detectPii(m.content, { dictionary })) kinds.add(k);
+  for (const m of preq.messages) for (const k of detectPii(m.content, { dictionary, names: true })) kinds.add(k);
   return [...kinds].sort();
 }
 
@@ -288,9 +303,11 @@ export function createRouter(deps: RouterDeps): Router {
       grok: await providers.grok.isAvailable(),
     };
     const map: TokenMap = createTokenMap();
-    const maskText = (s: string) => maskContent(s, req.dictionary, map);
+    // Re-audit NEW-1: names typed in any client message join the request's dictionary.
+    const dictionary = withMessageNames(req.dictionary, req.messages);
+    const maskText = (s: string) => maskContent(s, dictionary, map);
     // The masked copy is always built: it is what cloud providers get and what we hash.
-    const maskedMessages: Msg[] = maskMessages(req.messages, req.dictionary, map);
+    const maskedMessages: Msg[] = maskMessages(req.messages, dictionary, map);
     const jsonSchema = routerOutputJsonSchema(req.schema as ZodTypeAny | undefined);
     const maxTokens = req.maxTokens ?? config.defaultMaxTokens;
     const priceCtx = { usdInr: config.usdInr, grokPriceUsdPerMTok: config.grokPriceUsdPerMTok };
@@ -348,7 +365,7 @@ export function createRouter(deps: RouterDeps): Router {
 
       // Leak gate (fail closed): nothing leaves if the independent detector still finds PII.
       if (d.anonymize) {
-        const leaked = leakGateKinds(preq, req.dictionary);
+        const leaked = leakGateKinds(preq, dictionary);
         if (leaked.length) {
           await record({ ...callRow, status: "QUEUED_FOR_HUMAN", error: `leak-gate: ${leaked.join(", ")} found after masking; nothing was sent` });
           return { status: "queued", reason: LEAK_GATE_REASON, needsPartnerReview: true, runId: req.runId, attempts: 0 };

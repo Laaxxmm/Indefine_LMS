@@ -261,11 +261,11 @@ export function privacyWorld(now: () => Date = () => T0): MemoryDb {
     { id: "doc-co", clientId: "c-co", jobId: null, docType: "PAN", name: "Zenith PAN.pdf", graphDriveId: "d", graphItemId: "i2", webUrl: "https://example.sharepoint.test/zpan.pdf", sizeBytes: 10, uploadedById: USERS.staff.id },
   ]);
   db.seed("certificateIssue", [
-    { id: "cert-prop", formatId: "i-ufce", formatTitle: "Net worth certificate", templateVersion: "1", templateHash: "h", clientName: "Kumar Traders", payload: { pan: PAN_PROP, netWorth: 1500000 }, acknowledged: false, createdById: USERS.partner.id },
-    { id: "cert-co", formatId: "i-ufce", formatTitle: "Turnover certificate", templateVersion: "1", templateHash: "h", clientName: "Zenith Components Pvt Ltd", payload: { pan: PAN_CO }, acknowledged: false, createdById: USERS.partner.id },
+    { id: "cert-prop", formatId: "i-ufce", formatTitle: "Net worth certificate", templateVersion: "1", templateHash: "h", clientName: "Kumar Traders", clientId: "c-prop", payload: { pan: PAN_PROP, netWorth: 1500000 }, acknowledged: false, createdById: USERS.partner.id },
+    { id: "cert-co", formatId: "i-ufce", formatTitle: "Turnover certificate", templateVersion: "1", templateHash: "h", clientName: "Zenith Components Pvt Ltd", clientId: "c-co", payload: { pan: PAN_CO }, acknowledged: false, createdById: USERS.partner.id },
   ]);
   db.seed("engagementLetter", [
-    { id: "el-co", clientName: "Zenith Components Pvt Ltd", fy: "26-27", data: { signatory: "Zara Iyer" }, status: "SENT", sentTo: ZENITH_SIGNATORY, createdById: USERS.partner.id, createdByName: "Lakshmi", updatedByName: "Lakshmi" },
+    { id: "el-co", clientName: "Zenith Components Pvt Ltd", clientId: "c-co", fy: "26-27", data: { signatory: "Zara Iyer" }, status: "SENT", sentTo: ZENITH_SIGNATORY, createdById: USERS.partner.id, createdByName: "Lakshmi", updatedByName: "Lakshmi" },
   ]);
   db.seed("attendanceRecord", [
     { id: "att-1", userId: USERS.staff.id, periodMonth: new Date("2026-10-01T00:00:00.000Z"), workingDays: 22, presentDays: 21, lateMarks: 1, attendancePct: 95.45, points: 9, source: "greytHR" },

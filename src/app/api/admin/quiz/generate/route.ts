@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { generateQuiz, type Difficulty } from "@/lib/quiz-gen";
 import { NAMES_UNAVAILABLE, legacyDictionary } from "@/lib/auto-quiz";
 import { isActive, isAdmin } from "@/lib/access";
+import { readJsonCapped } from "@/lib/hardening/json-body";
 
 export const dynamic = "force-dynamic";
 
@@ -13,17 +14,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Only admins can do this. Sign in with an admin account, or ask an admin." }, { status: 401 });
   }
 
-  let body: {
+  // Re-audit NEW-6: the body is capped as it streams in (413 over 1 MB).
+  const jsonBody = await readJsonCapped(req);
+  if (!jsonBody.ok) return jsonBody.res;
+  if (!jsonBody.value || typeof jsonBody.value !== "object") {
+    return NextResponse.json({ ok: false, error: "The request could not be read. Reload the page and try again." }, { status: 400 });
+  }
+  const body = jsonBody.value as {
     videoId?: string;
     sourceText?: string;
     count?: number;
     difficulty?: Difficulty;
   };
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ ok: false, error: "The request could not be read. Reload the page and try again." }, { status: 400 });
-  }
 
   const videoId = String(body.videoId ?? "").trim();
   const sourceText = String(body.sourceText ?? "");

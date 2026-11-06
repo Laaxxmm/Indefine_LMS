@@ -18,16 +18,25 @@
 //      layout), UPI handles (name@okhdfcbank), passport and voter-ID numbers, bank accounts with
 //      or without an "account" label, dates of birth with the label before or after, addresses
 //      with a door number, payee names in bank narrations, and dictionary names with their usual
-//      variants ("Kumar, Rajesh", "R. Kumar", the first name alone).
+//      variants ("Kumar, Rajesh", "R. Kumar", the first name or surname alone, an organisation's
+//      acronym "AWPL"), written with "_", "-" or "." between the words, in camelCase
+//      ("RajeshKumarSharma"), glued ("RAJESHKUMARSHARMA") or in Devanagari / Kannada script
+//      (transliterate.ts). Re-audit NEW-1: in "full" scope the free-text name extractor
+//      (names.ts personNameSpans: honorifics, `Name of …:` labels, UPI / NEFT payees, runs of
+//      capitalised non-business words) masks what is left in place; callers add the names it
+//      finds to the dictionary first (withTextNames, the router's withMessageNames, the runner's
+//      run dictionary) so every variant of such a name is masked too.
 //   3. Text that already looks like a token ("⟨PAN_1⟩" typed into a document) can never collide
 //      with a real token of the run: the router masks it as ⟨LITERAL_n⟩ (literals: "all"); by
 //      default it is kept as written and its number reserved, so re-masking stored text is stable.
 //
 // detectPii() is an INDEPENDENT, stricter detector (its own patterns and its own dictionary
 // check, run over the masked text): the router uses it as a post-mask leak gate and refuses to
-// send a payload in which it finds anything.
+// send a payload in which it finds anything. With `names: true` it also runs the free-text name
+// extractor over the masked text: a probable person name that survived masking stops the call.
 import type { DictionaryEntry } from "./types";
-import { narrationNameSpans, ORG_GENERIC_WORDS, HONORIFICS, NAME_STOPWORDS } from "./names";
+import { dedupeDictionary, isBusinessWord, ORG_GENERIC_WORDS, HONORIFICS, NAME_STOPWORDS, personNames, personNameSpans } from "./names";
+import { INDIC_LETTER, INDIC_WORD, indicKey, phoneticKey } from "./transliterate";
 
 export type PiiKind =
   | "PAN"
@@ -349,13 +358,15 @@ const M = {
 } as const;
 
 const CONTEXT = {
-  DOB: /\b(?:dob|d\.o\.b|date\s+of\s+birth|birth\s*date|born(?:\s+on)?|birthday)\b/i,
+  // Re-audit NEW-15: the Hindi and Kannada labels too (जन्म तिथि / जन्मतिथि / जन्म दिनांक / जन्म की तारीख, ಜನ್ಮ ದಿನಾಂಕ).
+  DOB: /\b(?:dob|d\.o\.b|date\s+of\s+birth|birth\s*date|born(?:\s+on)?|birthday)\b|जन्म\s*(?:की\s*)?(?:तिथि|तारीख|दिनांक)|ಜನ್ಮ\s*(?:ದಿನಾಂಕ|ದಿನ)/i,
   DOB_AFTER: /^\s{0,3}[([]?\s{0,2}(?:dob|d\.o\.b\.?|date\s+of\s+birth|birth\s*date|born)\b/i,
   LLP: /\bLLP(?:IN)?\b/i,
   AADHAAR: /\b(?:aadh?aa?r|uid|uidai|uin)\b/i,
   ACCOUNT: /(?:\ba\/c|\bacct|\baccount|\bac\s*no\b|\bbank\b|\bsb\s*a\/?c)/i,
   DIN: /\bDIN\b|director\s+identification|\bdirector\b/i,
-  PASSPORT: /\bpass\s?port\b|\bppt\s*no\b/i,
+  // Re-audit NEW-15: "PP No Z1234567" (the short label on forms and KYC sheets).
+  PASSPORT: /\bpass\s?port\b|\bppt\s*no\b|\bpp\.?\s*(?:no|number|#)/i,
   VOTER: /\bvoter\b|\bepic\b|\belection\s+(?:id|card|commission)\b/i,
   CURRENCY_END: /(?:₹|\brs\.?|\binr)\s{0,2}$/i,
   /** A labelled document number, not an account: invoice, bill, e-way bill, IRN, ARN, order… */
@@ -452,7 +463,21 @@ const NAME_KINDS: ReadonlySet<PiiKind> = new Set(["NAME", "ORG", "ADDRESS"]);
 const valueKey = (kind: PiiKind, value: string) =>
   NAME_KINDS.has(kind) ? `${kind}\u0000${normalizeForMatching(value).toLowerCase().replace(/[\s,.]+/g, " ").trim()}` : `${kind}\u0000${value}`;
 
+/** Raw text → token per map, so a value repeated thousands of times is normalised once. */
+const rawTokens = new WeakMap<TokenMap, Map<string, string>>();
+
 function tokenFor(map: TokenMap, kind: PiiKind, value: string): string {
+  let raw = rawTokens.get(map);
+  if (!raw) rawTokens.set(map, (raw = new Map()));
+  const rawKey = `${kind}\u0000${value}`;
+  const seen = raw.get(rawKey);
+  if (seen && map.byToken.has(seen)) return seen;
+  const token = tokenForKey(map, kind, value);
+  if (raw.size < 50_000) raw.set(rawKey, token);
+  return token;
+}
+
+function tokenForKey(map: TokenMap, kind: PiiKind, value: string): string {
   const key = valueKey(kind, value);
   const existing = map.byValue.get(key);
   if (existing) return existing;
@@ -494,15 +519,58 @@ function atPass(work: Work) {
 // ---------------------------------------------------------------- dictionary (word trie)
 
 type TrieNode = { next: Map<string, TrieNode>; kind?: PiiKind };
-type CompiledDictionary = { root: TrieNode; phrases: Map<string, PiiKind> };
+type CompiledDictionary = {
+  /** Lower-case word sequences of every entry and variant. */
+  root: TrieNode;
+  /** Full names and multi-word variants, words joined by one space (the leak gate's list). */
+  phrases: Map<string, PiiKind>;
+  /** Full names and multi-word variants written without separators ("rajeshkumarsharma"), ≥ 6 letters. */
+  glued: Map<string, PiiKind>;
+  /** Organisation acronyms ("AWPL" for Acme Widgets Pvt Ltd), 4–8 capitals. */
+  acronyms: Map<string, PiiKind>;
+  /** Phonetic keys of the entries' words (transliterate.ts), for Devanagari / Kannada text. */
+  indic: TrieNode;
+  /** Multi-word phonetic key phrases (the leak gate's Indic list). */
+  indicPhrases: Map<string, PiiKind>;
+  maxWords: number;
+};
 
 const WORD_RE = /[\p{L}\p{M}\p{N}]+/gu;
-const wordsOf = (s: string) => normalizeForMatching(s).toLowerCase().match(WORD_RE) ?? [];
-/** Separators allowed between the words of one dictionary name in the text. */
-const NAME_SEPARATOR = /^[\s,.'’&\-/]{1,12}$/;
+/** A word as the dictionary matches it: lower case; `glue` = split from the previous word at a camelCase boundary. */
+type DictWord = { s: number; e: number; lw: string; glue: boolean };
+/** Lower→upper ("rajeshKumar", "RajeshKumar") is a word boundary inside one run of letters. */
+const CAMEL_BOUNDARY = /(?<=[a-z])(?=[A-Z])/;
+
+/** Words of `w` for dictionary matching: letter / digit runs, camelCase parts split off (glued to the previous part). */
+function dictWords(w: string): DictWord[] {
+  const out: DictWord[] = [];
+  const re = new RegExp(WORD_RE.source, "gu");
+  for (let m = re.exec(w); m; m = re.exec(w)) {
+    const word = m[0];
+    if (word.length <= 64 && CAMEL_BOUNDARY.test(word)) {
+      let p = m.index;
+      word.split(CAMEL_BOUNDARY).forEach((part, k) => {
+        out.push({ s: p, e: p + part.length, lw: part.toLowerCase(), glue: k > 0 });
+        p += part.length;
+      });
+    } else out.push({ s: m.index, e: m.index + word.length, lw: word.toLowerCase(), glue: false });
+  }
+  return out;
+}
+const wordsOf = (s: string) => dictWords(normalizeForMatching(s)).map((x) => x.lw);
+/** Separators allowed between the words of one dictionary name in the text ("_" for file names). */
+const NAME_SEPARATOR = /^[\s,.'’&\-/_]{1,12}$/;
+/** Separators the leak gate accepts between the words of a full name. */
+const GATE_SEPARATOR = /^(?:\s{1,3}|[_.-]{1,2})$/;
 const COMMON_FIRST_WORDS: ReadonlySet<string> = new Set(["state", "national", "central", "union", "indian", "india", "new", "general", "united", "first", "global", "royal", "city", "the", "sri", "shree", "om", "sai"]);
 
-/** The word sequences one entry masks: the name itself plus, for a person, "Last, First", initials and the first name alone; for an organisation, its distinctive core. */
+/** May one word of a person's name be masked on its own (a first name, a middle name, the surname)? */
+const soloWord = (w: string) => w.length >= 3 && /^\p{L}+$/u.test(w) && !NAME_STOPWORDS.has(w.toUpperCase()) && !isBusinessWord(w) && !COMMON_FIRST_WORDS.has(w) && !HONORIFICS.has(w.toUpperCase());
+
+/**
+ * The word sequences one entry masks: the name itself plus, for a person, "Last, First", initials
+ * and each name word alone (first name, middle name, surname); for an organisation, its distinctive core.
+ */
 function variantsOf(e: DictionaryEntry): string[][] {
   const words: string[] = [...wordsOf(e.value)];
   if (!words.length) return [];
@@ -512,13 +580,12 @@ function variantsOf(e: DictionaryEntry): string[][] {
     while (core.length > 1 && HONORIFICS.has((core[0] ?? "").toUpperCase())) core = core.slice(1);
     if (core !== words) out.push(core);
     if (core.length >= 2 && core.every((w) => /^\p{L}+$/u.test(w))) {
-      const first = core[0] ?? "";
       const last = core[core.length - 1] ?? "";
       const rest = core.slice(0, -1);
       out.push([last, ...rest]); // "Kumar, Rajesh"
       if (rest.some((w) => w.length > 1)) out.push([...rest.map((w) => w.charAt(0)), last]); // "R. Kumar", "R K Sharma"
       if (last.length > 1) out.push([...rest, last.charAt(0)]); // "Rajesh K"
-      if (first.length >= 3 && !NAME_STOPWORDS.has(first.toUpperCase()) && !COMMON_FIRST_WORDS.has(first)) out.push([first]); // first name alone
+      for (const w of core) if (soloWord(w)) out.push([w]); // "Rajesh", "Sharma" (a name split across cells, the surname alone)
     }
   } else if (e.kind === "ORG") {
     // The distinctive core ("HDFC Bank Ltd" → "HDFC"): several words, or one all-capitals acronym.
@@ -530,13 +597,42 @@ function variantsOf(e: DictionaryEntry): string[][] {
   return out;
 }
 
+/** Acronyms of an organisation ("Acme Widgets Pvt Ltd" → AWPL; its core "Acme Widgets Logistics Pvt Ltd" → AWL too), 4–8 letters, never a business word. */
+function acronymsOf(e: DictionaryEntry): string[] {
+  if (e.kind !== "ORG") return [];
+  const words = (normalizeForMatching(e.value).match(/\p{L}+/gu) ?? []).filter((w) => /^[A-Za-z]/.test(w));
+  const core = words.filter((w) => !ORG_GENERIC_WORDS.has(w.toUpperCase()));
+  const out = new Set<string>();
+  for (const list of [words, core]) {
+    if (list.length < 3) continue;
+    const a = list.map((w) => w[0].toUpperCase()).join("");
+    if (a.length >= 4 && a.length <= 8 && !isBusinessWord(a)) out.add(a);
+  }
+  return [...out];
+}
+
 const compiledCache = new WeakMap<readonly DictionaryEntry[], CompiledDictionary>();
+
+function insert(root: TrieNode, words: readonly string[], kind: PiiKind) {
+  let node = root;
+  for (const w of words) {
+    let next = node.next.get(w);
+    if (!next) node.next.set(w, (next = { next: new Map() }));
+    node = next;
+  }
+  node.kind ??= kind;
+}
 
 function compileDictionary(entries: readonly DictionaryEntry[]): CompiledDictionary {
   const cached = compiledCache.get(entries);
   if (cached) return cached;
   const root: TrieNode = { next: new Map() };
+  const indic: TrieNode = { next: new Map() };
   const phrases = new Map<string, PiiKind>();
+  const glued = new Map<string, PiiKind>();
+  const acronyms = new Map<string, PiiKind>();
+  const indicPhrases = new Map<string, PiiKind>();
+  let maxWords = 1;
   const sorted = entries
     .map((e) => ({ ...e, value: e.value.trim() }))
     .filter((e) => e.value.length >= 2)
@@ -545,46 +641,81 @@ function compileDictionary(entries: readonly DictionaryEntry[]): CompiledDiction
   const all = [...sorted.map((e) => ({ e, words: wordsOf(e.value), full: true })), ...sorted.flatMap((e) => variantsOf(e).slice(1).map((words) => ({ e, words, full: false })))];
   for (const { e, words, full } of all) {
     if (!words.length || (!full && words.join("").length < 3)) continue;
-    let node = root;
-    for (const w of words) {
-      let next = node.next.get(w);
-      if (!next) node.next.set(w, (next = { next: new Map() }));
-      node = next;
-    }
-    node.kind ??= e.kind;
+    insert(root, words, e.kind);
     if (full || words.length > 1) {
       const key = words.join(" ");
       if (!phrases.has(key)) phrases.set(key, e.kind);
+      maxWords = Math.max(maxWords, words.length);
+    }
+    if (words.length > 1 && words.every((w) => /^\p{L}+$/u.test(w))) {
+      const g = words.join("");
+      if (g.length >= 6 && !glued.has(g)) glued.set(g, e.kind);
+    }
+    // Devanagari / Kannada: the same words as phonetic keys (a lone word needs a key of 4+ letters).
+    const keys = words.map(phoneticKey);
+    if (keys.every((k) => k.length > 0) && (keys.length > 1 ? keys.join("").length >= 5 : keys[0].length >= 4)) {
+      insert(indic, keys, e.kind);
+      if (keys.length > 1 || full) indicPhrases.set(keys.join(" "), e.kind);
     }
   }
-  const compiled = { root, phrases };
+  for (const e of sorted) for (const a of acronymsOf(e)) if (!acronyms.has(a)) acronyms.set(a, e.kind);
+  const compiled = { root, phrases, glued, acronyms, indic, indicPhrases, maxWords };
   compiledCache.set(entries, compiled);
   return compiled;
 }
 
+/** Longest trie match starting at words[i]; `sep(j)` says whether words[j] and words[j+1] may belong to one name. */
+function longestMatch(root: TrieNode, words: readonly { lw: string }[], i: number, sep: (j: number) => boolean): { end: number; kind: PiiKind } | null {
+  let node = root.next.get(words[i].lw);
+  let best: { end: number; kind: PiiKind } | null = null;
+  let j = i;
+  while (node) {
+    if (node.kind) best = { end: j, kind: node.kind };
+    if (j + 1 >= words.length || !sep(j)) break;
+    j++;
+    node = node.next.get(words[j].lw);
+  }
+  return best;
+}
+
+/** Devanagari / Kannada words of `w` as phonetic keys. */
+function indicWords(w: string): { s: number; e: number; lw: string }[] {
+  if (!INDIC_LETTER.test(w)) return [];
+  const out: { s: number; e: number; lw: string }[] = [];
+  const re = new RegExp(INDIC_WORD.source, "g");
+  for (let m = re.exec(w); m; m = re.exec(w)) {
+    const key = indicKey(m[0]);
+    if (key) out.push({ s: m.index, e: m.index + m[0].length, lw: key });
+  }
+  return out;
+}
+
 function dictionaryPass(work: Work, dict: CompiledDictionary) {
   const w = work.w;
-  const words: { s: number; e: number; lw: string }[] = [];
-  WORD_RE.lastIndex = 0;
-  for (let m = WORD_RE.exec(w); m; m = WORD_RE.exec(w)) words.push({ s: m.index, e: m.index + m[0].length, lw: m[0].toLowerCase() });
   const found: Claim[] = [];
+  const words = dictWords(w);
   for (let i = 0; i < words.length; i++) {
-    let node = dict.root.next.get(words[i].lw);
-    let best = -1;
-    let kind: PiiKind | undefined;
-    let j = i;
-    while (node) {
-      if (node.kind) {
-        best = j;
-        kind = node.kind;
-      }
-      if (j + 1 >= words.length || !NAME_SEPARATOR.test(w.slice(words[j].e, words[j + 1].s))) break;
-      j++;
-      node = node.next.get(words[j].lw);
+    const m = longestMatch(dict.root, words, i, (j) => words[j + 1].glue || NAME_SEPARATOR.test(w.slice(words[j].e, words[j + 1].s)));
+    if (m) {
+      found.push({ start: words[i].s, end: words[m.end].e, kind: m.kind });
+      i = m.end;
     }
-    if (best >= 0 && kind) {
-      found.push({ start: words[i].s, end: words[best].e, kind });
-      i = best;
+  }
+  // Glued names ("RAJESHKUMARSHARMA", "rajeshkumarsharma2526") and organisation acronyms ("AWPL").
+  if (dict.glued.size || dict.acronyms.size) {
+    const re = /[A-Za-z]{4,}/g; // glued keys are 6+ letters and acronyms 4+, both Latin script
+    for (let m = re.exec(w); m; m = re.exec(w)) {
+      const g = dict.glued.get(m[0].toLowerCase()) ?? (/^[A-Z]{4,8}$/.test(m[0]) ? dict.acronyms.get(m[0]) : undefined);
+      if (g) found.push({ start: m.index, end: m.index + m[0].length, kind: g });
+    }
+  }
+  // The same names written in Devanagari / Kannada (transliterate.ts).
+  const indic = indicWords(w);
+  for (let i = 0; i < indic.length; i++) {
+    const m = longestMatch(dict.indic, indic, i, (j) => /^[\s,.]{1,3}$/.test(w.slice(indic[j].e, indic[j + 1].s)));
+    if (m) {
+      found.push({ start: indic[i].s, end: indic[m.end].e, kind: m.kind });
+      i = m.end;
     }
   }
   work.apply(found);
@@ -619,7 +750,10 @@ const freeAccountDecider: Decide = (m, w) => {
 
 const dinDecider: Decide = (m, w) => {
   const b = before(w, m.index, 30);
-  return CONTEXT.DIN.test(b) && !CONTEXT.CURRENCY_END.test(b) ? "DIN" : null;
+  if (CONTEXT.DIN.test(b) && !CONTEXT.CURRENCY_END.test(b)) return "DIN";
+  // Re-audit NEW-15: the long label can sit further back ("Director Identification Number of the person: 01234567").
+  const far = before(w, m.index, 80);
+  return /director\s+identification\s+(?:number|no\b)/i.test(far) && !/\n/.test(far.slice(far.search(/director\s+identification/i))) && !CONTEXT.CURRENCY_END.test(b) ? "DIN" : null;
 };
 
 /** A PIN code in an address; with a door number earlier on the line, the whole address is one ADDRESS. */
@@ -636,6 +770,13 @@ const pinDecider: Decide = (m, w) => {
   CONTEXT.DOOR.lastIndex = 0;
   const door = CONTEXT.DOOR.exec(seg);
   if (door) return { kind: "ADDRESS", start: segStart + door.index, end: m.index + m[0].length };
+  // Re-audit NEW-15: a whole address line ending in the PIN, with no door number ("4th Cross,
+  // Jayanagar, Bengaluru - 560041"): from after any "Address:" label to the PIN is one ADDRESS.
+  const label = /^[^,\n:]{0,40}:\s*/.exec(seg);
+  const from = label ? label[0].length : 0;
+  const line = seg.slice(from);
+  const lead = line.length - line.trimStart().length;
+  if (line.includes(",") && /[A-Za-z]{3}/.test(line) && CONTEXT.ADDRESS.test(readable(line))) return { kind: "ADDRESS", start: segStart + from + lead, end: m.index + m[0].length };
   return "PIN";
 };
 
@@ -648,8 +789,9 @@ const nameKeyDecider: Decide = (m) => {
   return { kind: /\b(?:pvt|private|ltd|limited|llp|co|company|corp|corporation|inc|traders|enterprises|industries|bank|trust)\b/i.test(value) ? "ORG" : "NAME", start, end: start + value.length };
 };
 
-function narrationPass(work: Work) {
-  work.apply(narrationNameSpans(work.w).map((s) => ({ start: s.start, end: s.end, kind: s.kind })));
+/** Narration payees and (re-audit NEW-1) every other name the free-text extractor still finds in what is left: labels, honorifics, UPI / NEFT payees, capitalised runs. */
+function personNamePass(work: Work) {
+  work.apply(personNameSpans(work.w).map((s) => ({ start: s.start, end: s.end, kind: s.kind })));
 }
 
 // ---------------------------------------------------------------- mask / unmask
@@ -717,7 +859,7 @@ export function mask(input: string, ctx: MaskContext = {}): MaskResult {
   regexPass(work, M.BANK_AC_FREE, freeAccountDecider);
   regexPass(work, M.DIN, dinDecider);
   regexPass(work, M.PIN, pinDecider);
-  if (full) narrationPass(work);
+  if (full) personNamePass(work);
 
   // Render: the original text with every claimed span replaced by its token.
   const claims = [...work.claims].sort((a, b) => a.start - b.start);
@@ -733,6 +875,17 @@ export function mask(input: string, ctx: MaskContext = {}): MaskResult {
   }
   parts.push(text.slice(pos));
   return { masked: parts.join(""), map, truncated };
+}
+
+/**
+ * Re-audit NEW-1: `dictionary` plus the names the free-text extractor finds in `texts`, so every
+ * variant of a name typed in free text (the surname alone, "R K Sharma", the glued form) is masked
+ * wherever it appears, not only where the extractor saw it. The router does this per request
+ * (withMessageNames); single-text callers (stored notes, the legacy Gemini gate) call it directly.
+ */
+export function withTextNames(dictionary: readonly DictionaryEntry[] | undefined, ...texts: string[]): DictionaryEntry[] {
+  const found = texts.flatMap((t) => personNames(t));
+  return found.length ? dedupeDictionary([...(dictionary ?? []), ...found]) : [...(dictionary ?? [])];
 }
 
 /** Put the original values back. Unknown tokens (not in this map) are left as they are. */
@@ -771,16 +924,25 @@ const G = {
   IFSC: /(?<![A-Za-z0-9])[A-Za-z]{4}0[A-Za-z0-9]{6}(?![A-Za-z0-9])/,
   AADHAAR: /(?<![\d.])[2-9]\d{3}([\s.-]?)\d{4}\1\d{4}(?![\d]|\.\d)/g,
   PHONE: /(?<![\d+.])(?:(?:\+|00)\s?91[\s.-]?|0[\s-]?)?(?:[6-9](?:[\s-]?\d){9}|[6-9]\d{4}\.\d{5})(?![\d]|\.\d)/,
-  DOB_LABEL: /\b(?:dob|d\.o\.b|date\s+of\s+birth|birth\s*date|born)\b/gi,
+  DOB_LABEL: /\b(?:dob|d\.o\.b|date\s+of\s+birth|birth\s*date|born)\b|जन्म\s*(?:की\s*)?(?:तिथि|तारीख|दिनांक)|ಜನ್ಮ\s*(?:ದಿನಾಂಕ|ದಿನ)/gi,
   DATE: new RegExp(DATE_SOURCE, "i"),
-  PASSPORT_LABEL: /\bpass\s?port\b[^\n]{0,20}?(?<![A-Za-z0-9])[A-Za-z][\s-]?\d{7}(?![A-Za-z0-9])/i,
+  PASSPORT_LABEL: /(?:\bpass\s?port\b|\bppt\s*no\b|\bpp\.?\s*(?:no|number|#))[^\n]{0,20}?(?<![A-Za-z0-9])[A-Za-z][\s-]?\d{7}(?![A-Za-z0-9])/i,
   VOTER_LABEL: /\b(?:voter|epic)\b[^\n]{0,20}?(?<![A-Za-z0-9])[A-Za-z]{3}[\s-]?\d{7}(?![A-Za-z0-9])/i,
-  DIN_LABEL: /\bDIN\b[^\n\d]{0,12}(?<![\d.])\d{8}(?![\d]|\.\d)/,
+  DIN_LABEL: /(?:\bDIN\b[^\n\d]{0,12}|director\s+identification\s+(?:number|no\b)[^\n\d]{0,50})(?<![\d.])\d{8}(?![\d]|\.\d)/i,
 };
 
 export interface DetectOptions {
-  /** Client-master names: a full name still present (whitespace-separated words) is a leak. */
+  /**
+   * Client-master names: a full name still present is a leak — words separated by spaces, "_",
+   * "-" or ".", in camelCase or glued, an organisation's acronym, or the name in Devanagari / Kannada.
+   */
   dictionary?: DictionaryEntry[];
+  /**
+   * Re-audit NEW-1: also run the free-text name extractor (names.ts personNameSpans) — a probable
+   * person or firm name still in the text is a leak. For client text masked in "full" scope (the
+   * router's user / assistant messages, the legacy Gemini gate), never for fixed firm text.
+   */
+  names?: boolean;
 }
 
 /**
@@ -811,27 +973,38 @@ export function detectPii(text: string, opts: DetectOptions = {}): PiiKind[] {
   if (G.VOTER_LABEL.test(plain)) found.add("VOTER_ID");
   if (G.DIN_LABEL.test(plain)) found.add("DIN");
   if (opts.dictionary?.length) for (const k of dictionaryLeaks(plain, opts.dictionary)) found.add(k);
+  if (opts.names) for (const s of personNameSpans(plain)) found.add(s.kind);
   return [...found];
 }
 
-/** Dictionary names still present as whitespace-separated word sequences (n-gram lookup, not the masker's trie). */
-function dictionaryLeaks(plain: string, dictionary: readonly DictionaryEntry[]): PiiKind[] {
-  const { phrases } = compileDictionary(dictionary);
-  if (!phrases.size) return [];
-  let maxWords = 1;
-  for (const k of phrases.keys()) maxWords = Math.max(maxWords, k.split(" ").length);
-  const words: { s: number; e: number; lw: string }[] = [];
-  const re = new RegExp(WORD_RE.source, "gu");
-  for (let m = re.exec(plain); m; m = re.exec(plain)) words.push({ s: m.index, e: m.index + m[0].length, lw: m[0].toLowerCase() });
-  const out = new Set<PiiKind>();
+/** n-gram lookup of `phrases` over `words` (the separator test decides which neighbours join). */
+function phraseLeaks(words: readonly { s: number; e: number; lw: string; glue?: boolean }[], phrases: Map<string, PiiKind>, maxWords: number, sep: (gap: string) => boolean, plain: string, out: Set<PiiKind>) {
   for (let i = 0; i < words.length; i++) {
     let key = "";
     for (let n = 0; n < maxWords && i + n < words.length; n++) {
-      if (n > 0 && !/^\s+$/.test(plain.slice(words[i + n - 1].e, words[i + n].s))) break;
+      if (n > 0 && !words[i + n].glue && !sep(plain.slice(words[i + n - 1].e, words[i + n].s))) break;
       key = n === 0 ? words[i].lw : `${key} ${words[i + n].lw}`;
       const kind = phrases.get(key);
       if (kind && (n > 0 || key.length >= 3)) out.add(kind);
     }
   }
+}
+
+/**
+ * Dictionary names still present (n-gram lookup, not the masker's trie): full names and multi-word
+ * variants with spaces, "_", "-" or "." between the words or in camelCase, glued names, acronyms,
+ * and the same names in Devanagari / Kannada.
+ */
+function dictionaryLeaks(plain: string, dictionary: readonly DictionaryEntry[]): PiiKind[] {
+  const d = compileDictionary(dictionary);
+  const out = new Set<PiiKind>();
+  if (d.phrases.size) phraseLeaks(dictWords(plain), d.phrases, d.maxWords, (g) => GATE_SEPARATOR.test(g), plain, out);
+  if (d.glued.size || d.acronyms.size) {
+    for (const m of plain.matchAll(/[A-Za-z]{4,}/g)) {
+      const k = d.glued.get(m[0].toLowerCase()) ?? (/^[A-Z]{4,8}$/.test(m[0]) ? d.acronyms.get(m[0]) : undefined);
+      if (k) out.add(k);
+    }
+  }
+  if (d.indicPhrases.size) phraseLeaks(indicWords(plain), d.indicPhrases, d.maxWords, (g) => /^\s{1,3}$/.test(g), plain, out);
   return [...out];
 }

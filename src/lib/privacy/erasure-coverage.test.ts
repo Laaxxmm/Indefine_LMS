@@ -44,7 +44,7 @@ function seedShadowCopies(db: MemoryDb) {
   ]);
   // A failed onboarding run never linked to a FirmClient (the saga failed before createOrLinkClient).
   db.seed("onboardingRun", [{ id: "ob-old-failed", createdById: USERS.partner.id, prompt: `Onboard ${NAME}, PAN ${PAN}, contact ${CONTACT} ${PHONE}`, spec: { legalName: NAME, pan: PAN, contactName: CONTACT, contactPhone: PHONE, contactEmail: EMAIL }, plan: null, status: "FAILED", steps: null, error: "site creation failed", firmClientId: null }]);
-  db.seed("certificateIssue", [{ id: "cert-old", formatId: "i-ufce", formatTitle: "Net worth", templateVersion: "1", templateHash: "h", clientName: NAME, payload: { pan: PAN }, acknowledged: false, createdById: USERS.partner.id, createdAt: new Date("2016-05-01T00:00:00.000Z") }]);
+  db.seed("certificateIssue", [{ id: "cert-old", formatId: "i-ufce", formatTitle: "Net worth", templateVersion: "1", templateHash: "h", clientName: NAME, clientId: "c-old", payload: { pan: PAN }, acknowledged: false, createdById: USERS.partner.id, createdAt: new Date("2016-05-01T00:00:00.000Z") }]);
   db.seed("modelCall", [{ id: "mc-old", runId: "run-old", agent: "tax", task: "analyse", provider: "claude", model: "x", tier: "SMART", privacy: "anonymize-then-cloud", difficulty: "sop", escalated: false, escalationLevel: 0, anonymized: true, status: "OK", promptHash: "abc", error: `Provider rejected: assessee ${NAME} PAN ${PAN}` }]);
 }
 
@@ -104,9 +104,11 @@ describe("erasure completeness (audit finding #5)", () => {
 
     // Every row changed is audited, by row, with masked values only.
     const anonymised = new Set(db.tables.auditEvent.filter((e) => e.action === "anonymise").map((e) => `${String(e.entity)}:${String(e.entityId)}`));
-    for (const k of ["AuditEvent:ae-comment", "AuditEvent:ae-approve", "AgentRun:run-old", "ChecklistResult:cr-old", "JobTaskEvent:jte-old", "TuriaSync:ts-old", "MistakeLog:ml-old", "CoachEvent:ce-old", "ModelCall:mc-old", "OnboardingRun:ob-old-failed", "Deliverable:dl-old", "PrivacyRequest:" + id, "CommsDraft:d-old-nojob"]) {
+    for (const k of ["AuditEvent:ae-comment", "AuditEvent:ae-approve", "AgentRun:run-old", "ChecklistResult:cr-old", "JobTaskEvent:jte-old", "TuriaSync:ts-old", "MistakeLog:ml-old", "CoachEvent:ce-old", "ModelCall:mc-old", "OnboardingRun:ob-old-failed", "Deliverable:dl-old", "CommsDraft:d-old-nojob"]) {
       expect(anonymised.has(k), k).toBe(true);
     }
+    // Re-audit NEW-1: the request's own notes never held the caller's name (masked when typed), so there is nothing left to erase there.
+    expect(String(find(db, "privacyRequest", id).notes)).not.toContain(CONTACT);
   });
 
   it("plans the residue per dataset, with the onboarding run that never reached a client record", async () => {

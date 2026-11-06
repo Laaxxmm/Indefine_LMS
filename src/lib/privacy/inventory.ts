@@ -343,7 +343,8 @@ export const DATASETS: readonly DataSet[] = [
     erasure: { kind: "anonymise", duties: "client", set: () => ({ clientName: ERASED, payload: erasedJson }), applies: (r) => r.clientName !== ERASED },
     rows: async (db, s) => {
       const c = clientOf(s);
-      return c ? finder(db, "certificateIssue").findMany({ where: { clientName: String(c.client.name) }, orderBy: { createdAt: "asc" } }) : [];
+      // Re-audit NEW-8: by the client record id, never the typed name (another entity can share it).
+      return c ? finder(db, "certificateIssue").findMany({ where: { clientId: String(c.client.id) }, orderBy: { createdAt: "asc" } }) : [];
     },
   },
   {
@@ -361,7 +362,8 @@ export const DATASETS: readonly DataSet[] = [
     },
     rows: async (db, s) => {
       const c = clientOf(s);
-      return c ? finder(db, "engagementLetter").findMany({ where: { clientName: String(c.client.name) }, orderBy: { createdAt: "asc" } }) : [];
+      // Re-audit NEW-8: by the client record id, never the typed name.
+      return c ? finder(db, "engagementLetter").findMany({ where: { clientId: String(c.client.id) }, orderBy: { createdAt: "asc" } }) : [];
     },
   },
   // ------------------------------------------------------------------ staff (class B)
@@ -501,7 +503,6 @@ async function ownIdentifiers(db: PrivacyReadDb, s: ClientScope): Promise<Scrubb
 async function loadLinked(db: PrivacyReadDb, s: ClientScope): Promise<Linked> {
   const fc = s.firmClient;
   const jobIds = ids(s.jobTasks);
-  const name = String(s.client.name);
   const runs = jobIds.length ? await finder(db, "agentRun").findMany({ where: { jobTaskId: { in: jobIds } }, orderBy: { startedAt: "asc" } }) : [];
   const runIds = ids(runs);
   const turiaWhere = [...(jobIds.length ? [{ jobTaskId: { in: jobIds } }] : []), ...(fc ? [{ firmClientId: fc.id }] : [])];
@@ -519,8 +520,8 @@ async function loadLinked(db: PrivacyReadDb, s: ClientScope): Promise<Linked> {
     turia: turiaWhere.length ? await finder(db, "turiaSync").findMany({ where: { OR: turiaWhere }, orderBy: { createdAt: "asc" } }) : [],
     deliverables: jobIds.length ? await finder(db, "deliverable").findMany({ where: { jobTaskId: { in: jobIds } }, orderBy: { createdAt: "asc" } }) : [],
     requests: await finder(db, "privacyRequest").findMany({ where: { principalRef: String(s.client.id) }, orderBy: { createdAt: "asc" } }),
-    certificates: await finder(db, "certificateIssue").findMany({ where: { clientName: name }, select: { id: true } }),
-    letters: await finder(db, "engagementLetter").findMany({ where: { clientName: name }, select: { id: true } }),
+    certificates: await finder(db, "certificateIssue").findMany({ where: { clientId: String(s.client.id) }, select: { id: true } }),
+    letters: await finder(db, "engagementLetter").findMany({ where: { clientId: String(s.client.id) }, select: { id: true } }),
   };
 }
 
@@ -735,6 +736,30 @@ export const RESIDUE_DATASETS: readonly DataSet[] = [
     },
   },
 ];
+
+/**
+ * Re-audit NEW-8: certificates and engagement letters typed with this client's name but NOT linked
+ * to the client record (clientId empty: issued before the link existed, or for another entity with
+ * the same name). They are never exported or erased automatically: the plan and the export name them
+ * as a manual check for a partner.
+ */
+export async function nameOnlyRecords(db: PrivacyReadDb, client: Row): Promise<{ certificates: number; letters: number }> {
+  const name = String(client.name ?? "").trim();
+  if (!name) return { certificates: 0, letters: 0 };
+  const where = { clientName: name, clientId: null };
+  const [certificates, letters] = await Promise.all([
+    finder(db, "certificateIssue").findMany({ where, select: { id: true } }),
+    finder(db, "engagementLetter").findMany({ where, select: { id: true } }),
+  ]);
+  return { certificates: certificates.length, letters: letters.length };
+}
+
+/** The manual-check sentence for name-only records (null when there are none). */
+export function nameOnlySentence(n: { certificates: number; letters: number }): string | null {
+  const parts = [n.certificates ? `${n.certificates} certificate${n.certificates === 1 ? "" : "s"}` : "", n.letters ? `${n.letters} engagement letter${n.letters === 1 ? "" : "s"}` : ""].filter(Boolean);
+  if (!parts.length) return null;
+  return `${parts.join(" and ")} carry this client's name but are not linked to the client record, so they may belong to another person or business with the same name. They are not included or changed automatically: a partner should open them in the certificate and letter tools and decide by hand.`;
+}
 
 /** Systems outside Firm OS that also hold the client's data. Firm OS never deletes in them. */
 export const EXTERNAL_SYSTEMS = [

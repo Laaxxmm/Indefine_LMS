@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { NextRequest } from "next/server";
 import { describe, expect, it } from "vitest";
 import { middleware, config } from "@/middleware";
-import { BODY_LIMITS, LARGE_BODY_ROUTES, MAX_LARGE_BODY, bodyLimitFor, checkBody, hasBearerToken, hasSessionCookie } from "./body-limits";
+import { BODY_LIMITS, LARGE_BODY_ROUTES, MAX_LARGE_BODY, SERVER_ACTION_BODY_LIMIT, bodyLimitFor, checkBody, hasBearerToken, hasSessionCookie } from "./body-limits";
 import { MULTIPART_FRAMING_BYTES, precheckContentLength, readFormDataCapped } from "./uploads";
 
 const ROOT = join(__dirname, "../../..");
@@ -20,13 +20,22 @@ function post(path: string, headers: Record<string, string>) {
 }
 
 describe("server-action ceiling (next.config.ts)", () => {
-  it("is no longer 60 MB: it is the largest legitimate action (the admin handout, 50 MB + framing)", () => {
+  it("re-audit NEW-6: 2 MB — the signed-in tier — now that no server action takes an upload", () => {
     const cfg = readFileSync(join(ROOT, "next.config.ts"), "utf8");
-    expect(cfg).not.toMatch(/bodySizeLimit: "60mb"/);
     const m = /bodySizeLimit: "(\d+)mb"/.exec(cfg);
     expect(m).toBeTruthy();
-    expect(Number(m![1]) * MB).toBeLessThanOrEqual(51 * MB);
-    expect(Number(m![1]) * MB).toBe(MAX_LARGE_BODY);
+    expect(`${m![1]}mb`).toBe(SERVER_ACTION_BODY_LIMIT);
+    expect(Number(m![1]) * MB).toBe(BODY_LIMITS.session);
+  });
+
+  it("the two admin uploads are route handlers that read a capped body, not server actions", () => {
+    const video = readFileSync(join(ROOT, "src/app/admin/video/[id]/page.tsx"), "utf8");
+    const live = readFileSync(join(ROOT, "src/app/admin/live/page.tsx"), "utf8");
+    expect(video).not.toMatch(/formData\.get\("file"\)|arrayBuffer\(\)/);
+    expect(live).not.toMatch(/getAll\("materials"\)|arrayBuffer\(\)/);
+    expect(readFileSync(join(ROOT, "src/app/api/admin/video/[id]/materials/route.ts"), "utf8")).toMatch(/readUploadForm\(/);
+    expect(readFileSync(join(ROOT, "src/app/api/admin/live/schedule/route.ts"), "utf8")).toMatch(/readMultipartUpload\(/);
+    expect(LARGE_BODY_ROUTES.some((r) => r.pattern.test("/admin/video/v1") || r.pattern.test("/admin/live"))).toBe(false);
   });
 });
 
@@ -50,16 +59,26 @@ describe("middleware: refuses oversized bodies before Next reads them", () => {
     expect(middleware(post(docs, { cookie: SESSION, "content-length": String(50 * MB) })).status).not.toBe(413);
     expect(middleware(post(docs, { cookie: SESSION, "content-length": String(52 * MB) })).status).toBe(413);
     expect(middleware(post(docs, { "content-length": String(50 * MB) })).status).toBe(413); // no session: anonymous tier
-    expect(middleware(post("/admin/video/v1", { cookie: SESSION, "content-length": String(50 * MB) })).status).not.toBe(413);
-    expect(middleware(post("/admin/video/v1", { "content-length": String(50 * MB) })).status).toBe(413);
+    expect(middleware(post("/api/admin/video/v1/materials", { cookie: SESSION, "content-length": String(50 * MB) })).status).not.toBe(413);
+    expect(middleware(post("/api/admin/video/v1/materials", { "content-length": String(50 * MB) })).status).toBe(413);
+    // Re-audit NEW-6 PoC: a forged session cookie no longer buys 51 MB on the admin pages (server actions).
+    const forged = "__Secure-authjs.session-token=" + "A".repeat(40);
+    expect(middleware(post("/admin/video/x", { cookie: forged, "content-length": String(51 * MB) })).status).toBe(413);
+    expect(middleware(post("/admin/live", { cookie: forged, "content-length": String(51 * MB) })).status).toBe(413);
     expect(middleware(post("/api/tools/engagement-letters/l1/file", { cookie: SESSION, "content-length": String(5 * MB) })).status).toBe(413);
     expect(middleware(post("/api/tools/statutory/ingest", { authorization: "Bearer 0123456789abcdef0123", "content-length": String(20 * MB) })).status).not.toBe(413);
     expect(middleware(post("/api/tools/statutory/ingest", { cookie: SESSION, "content-length": String(20 * MB) })).status).toBe(413); // needs the relay bearer
   });
 
-  it("an anonymous chunked body (no Content-Length) gets 411; GET is never touched; a junk length is 400", () => {
+  it("a chunked body (no Content-Length) gets 411 off the upload routes, signed in or not; GET is never touched; a junk length is 400", () => {
     expect(middleware(post("/", { "transfer-encoding": "chunked" })).status).toBe(411);
-    expect(middleware(post("/clients", { cookie: SESSION, "transfer-encoding": "chunked" })).status).not.toBe(411);
+    // Re-audit NEW-6 PoC: a (forged) session cookie no longer lets an unmeasured body through.
+    expect(middleware(post("/clients", { cookie: SESSION, "transfer-encoding": "chunked" })).status).toBe(411);
+    expect(middleware(post("/api/firm-os/privacy/requests", { cookie: SESSION, "transfer-encoding": "chunked" })).status).toBe(411);
+    expect(middleware(post("/api/cron/work", { authorization: "Bearer 0123456789abcdef0123", "transfer-encoding": "chunked" })).status).toBe(411);
+    // The upload routes count the bytes themselves, so they may take a streamed body.
+    expect(middleware(post("/api/clients/c1/documents", { cookie: SESSION, "transfer-encoding": "chunked" })).status).not.toBe(411);
+    expect(middleware(post("/api/admin/live/schedule", { cookie: SESSION, "transfer-encoding": "chunked" })).status).not.toBe(411);
     expect(middleware(new NextRequest("https://lms.example/", { method: "GET", headers: { "content-length": String(60 * MB) } })).status).not.toBe(413);
     expect(middleware(post("/", { "content-length": "12abc" })).status).toBe(400);
   });

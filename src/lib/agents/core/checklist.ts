@@ -214,10 +214,43 @@ const LlmVerdictSchema = z.object({
 /** Whitespace runs → one space, trimmed, lower case. The only normalisation applied to quotes. */
 export const normalizeEvidenceText = (text: string) => text.replace(/\s+/g, " ").trim().toLowerCase();
 
-/** Does the quote occur in the documents text (after normalizeEvidenceText on both)? */
+const PLACEHOLDER = /⟨[a-z]+(?:_[a-z]+)*_\d+⟩/g;
+/** Characters a quote must have besides placeholders to be checked with them (re-audit NEW-7). */
+const MIN_LITERAL_WITH_PLACEHOLDERS = 12;
+
+/**
+ * Does the quote occur in the documents text (after normalizeEvidenceText on both)? A stored
+ * finding keeps identifiers as placeholders (unmask-policy "findings", re-audit NEW-7): each
+ * placeholder then stands for one value of up to 64 characters, and the rest of the quote — at
+ * least 12 characters of it — must be in the documents as written.
+ */
 export function quoteInContext(quote: string, context: string): boolean {
   const q = normalizeEvidenceText(quote);
-  return q.length > 0 && normalizeEvidenceText(context).includes(q);
+  if (q.length === 0) return false;
+  const ctx = normalizeEvidenceText(context);
+  if (!q.includes("⟨")) return ctx.includes(q);
+  const pieces = q.split(PLACEHOLDER);
+  if (pieces.length > 5 || pieces.join("").replace(/\s+/g, "").length < MIN_LITERAL_WITH_PLACEHOLDERS) return false;
+  // Pieces in order, each placeholder 1–64 characters wide; a bounded search (no regex backtracking).
+  const leading = pieces[0] === "";
+  if (leading) pieces.shift(); // the quote starts with a placeholder: anything before the first piece
+  let budget = 20_000;
+  const from = (k: number, at: number): boolean => {
+    if (--budget < 0) return false;
+    if (k === pieces.length) return true;
+    const piece = pieces[k];
+    if (k === 0) {
+      for (let i = ctx.indexOf(piece, leading ? 1 : 0); i >= 0; i = ctx.indexOf(piece, i + 1)) if (from(1, i + piece.length)) return true;
+      return false;
+    }
+    for (let gap = 1; gap <= 64 && at + gap <= ctx.length; gap++) {
+      if (ctx[at + gap - 1] === "\n") return false;
+      if (ctx.startsWith(piece, at + gap) && from(k + 1, at + gap + piece.length)) return true;
+      if (budget < 0) return false;
+    }
+    return false;
+  };
+  return from(0, 0);
 }
 
 export const defaultLlmContext = (input: unknown): string => (typeof input === "string" ? input : (JSON.stringify(input, null, 2) ?? ""));

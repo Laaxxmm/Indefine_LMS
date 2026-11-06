@@ -4,7 +4,8 @@
 // (after "Request changes" with no note for that call, or after a run failed on SharePoint).
 //
 //   key    sha256 of: scope, task@version (+ #2 for an agreement re-ask), forced tier, privacy,
-//          difficulty, output token cap, the output JSON schema, the MASKED messages, and the
+//          difficulty, unmask mode (re-audit NEW-10: an "all"-unmasked answer must never serve a
+//          "grounded" or "findings" request), output token cap, the output JSON schema, the MASKED messages, and the
 //          sha256 of the raw messages — so two requests share an entry only when the text sent
 //          is byte-identical and the expected answer has the same shape. The router passes the
 //          scope: the JobTask of the run (one client), else the run itself. Never across clients.
@@ -114,6 +115,8 @@ export type CacheKeyParts = {
   forceTier: string | null;
   privacy: string;
   difficulty: string;
+  /** The request's unmask mode (default "grounded"): the cached output was unmasked under it. */
+  unmask: string;
   maxTokens: number;
   jsonSchema: unknown;
   maskedMessages: readonly Msg[];
@@ -124,12 +127,13 @@ export type CacheKeyParts = {
 export function responseCacheKey(p: CacheKeyParts): string {
   return sha(
     JSON.stringify([
-      "router-cache/1",
+      "router-cache/2",
       p.scope,
       p.task,
       p.forceTier,
       p.privacy,
       p.difficulty,
+      p.unmask,
       p.maxTokens,
       sha(JSON.stringify(p.jsonSchema)),
       sha(JSON.stringify(p.maskedMessages)),
@@ -198,6 +202,7 @@ export function createRouterCacheHook(cache: ResponseCache, scopeOf: (runId: str
         forceTier: req.forceTier ?? null,
         privacy: req.privacy,
         difficulty: req.difficulty,
+        unmask: req.unmask ?? "grounded",
         maxTokens: parts.maxTokens,
         jsonSchema: parts.jsonSchema,
         maskedMessages: parts.maskedMessages,

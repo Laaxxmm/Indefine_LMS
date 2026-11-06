@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canUseCertificateTool } from "@/lib/certificates/access";
 import { SUGGESTIBLE_FIELD_KEYS, isSuggestible } from "@/lib/certificates/suggestible";
+import { readJsonCapped } from "@/lib/hardening/json-body";
 
 // Firm-wide saved values for reusable signing fields. Shared across all internal users.
 
@@ -31,7 +32,9 @@ export async function POST(req: Request) {
   if (!session?.user) return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
   if (!canUseCertificateTool(session.user)) return NextResponse.json({ error: "You don't have access to the certificate generator. Ask an admin to give you access." }, { status: 403 });
 
-  const parsed = Body.safeParse(await req.json().catch(() => null));
+  const jsonBody = await readJsonCapped(req); // re-audit NEW-6: capped as it streams in
+  if (!jsonBody.ok) return jsonBody.res;
+  const parsed = Body.safeParse(jsonBody.value);
   if (!parsed.success) return NextResponse.json({ error: "Some details were missing or not in the right format. Check the form and try again." }, { status: 400 });
   const { fieldKey, value } = parsed.data;
   if (!isSuggestible(fieldKey)) return NextResponse.json({ error: "Suggestions can't be saved for this field." }, { status: 400 });

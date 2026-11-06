@@ -6,6 +6,7 @@ import { JOB_PII, auditEdit, maskedChanges } from "@/lib/clients/audit";
 import { logAudit } from "@/lib/audit/log";
 import { scheduleWorkbookRebuild } from "@/lib/clients/workbook";
 import { validationMessage } from "@/lib/errors";
+import { readJsonCapped } from "@/lib/hardening/json-body";
 
 // Inline edits (handler / status / due / fees / notes): management, the client's primary handler
 // or the job's own handler (canEditClientJob). Each change is an AuditEvent with masked
@@ -24,7 +25,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ jobId:
   if (!canEditClientJob(session.user, job)) {
     return NextResponse.json({ error: "Only the client's handler, the job's handler, an admin or a partner can change this job. Ask one of them." }, { status: 403 });
   }
-  const parsed = jobPatchZ.safeParse(await req.json().catch(() => null));
+  const jsonBody = await readJsonCapped(req); // re-audit NEW-6: capped as it streams in
+  if (!jsonBody.ok) return jsonBody.res;
+  const parsed = jobPatchZ.safeParse(jsonBody.value);
   if (!parsed.success) return NextResponse.json({ error: validationMessage(parsed.error, "Some details are missing or in the wrong format. Check them and try again.") }, { status: 400 });
   if (parsed.data.handlerId) {
     const h = await prisma.user.findUnique({ where: { id: parsed.data.handlerId }, select: { active: true } });

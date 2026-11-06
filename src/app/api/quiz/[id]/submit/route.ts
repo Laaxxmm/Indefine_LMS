@@ -5,6 +5,7 @@ import { gradeAttempt } from "@/lib/quiz";
 import { refreshQuizAssignments } from "@/lib/assignments";
 import { z } from "zod";
 import { isActive } from "@/lib/access";
+import { readJsonCapped } from "@/lib/hardening/json-body";
 
 const Body = z.object({
   attemptId: z.string().max(100),
@@ -21,7 +22,9 @@ export async function POST(
   const userId = session.user.id;
   const { id: quizId } = await params;
 
-  const parsed = Body.safeParse(await req.json().catch(() => null));
+  const jsonBody = await readJsonCapped(req); // re-audit NEW-6: capped as it streams in
+  if (!jsonBody.ok) return jsonBody.res;
+  const parsed = Body.safeParse(jsonBody.value);
   if (!parsed.success) return NextResponse.json({ error: "Your answers could not be read. Reload the page and take the quiz again." }, { status: 400 });
   const { attemptId, answers } = parsed.data;
 

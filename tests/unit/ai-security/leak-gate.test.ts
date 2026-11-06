@@ -52,6 +52,23 @@ describe("leak gate: a masked payload in which the independent detector still fi
     for (const v of ["ABCDE1234F", "9876543210", "Zorvan", "okhdfcbank"]) expect(t.rows[0].error).not.toContain(v);
   });
 
+  it("re-audit NEW-1: a person's name no dictionary knows (a Form 16 line, a description) is caught by the name-aware gate", async () => {
+    const t = setup();
+    const res = await t.router.run({
+      task: "gst.x",
+      privacy: "anonymize-then-cloud",
+      difficulty: "sop",
+      runId: "r",
+      messages: [{ role: "user", content: "Name of Employee: RAJESH KUMAR SHARMA\nConsultancy by Yashwanth Gowda Patil for Oct" }],
+    });
+    expect(res).toMatchObject({ status: "queued", reason: LEAK_GATE_REASON });
+    expect(t.calls).toHaveLength(0);
+    expect(t.rows[0].error).toBe("leak-gate: NAME found after masking; nothing was sent");
+    for (const v of ["RAJESH", "Yashwanth", "Patil"]) expect(t.rows[0].error).not.toContain(v);
+    // The system prompt is fixed firm text: capitalised phrases there are not read as names.
+    expect(leakGateKinds({ system: "You are the Firm OS Books Agent", messages: [] })).toEqual([]);
+  });
+
   it("local-only work never reaches the gate (and never the cloud)", async () => {
     const t = setup();
     const res = await t.router.run({ task: "gst.x", privacy: "local-only", difficulty: "sop", runId: "r", messages: [{ role: "user", content: "PAN ABCDE1234F" }] });

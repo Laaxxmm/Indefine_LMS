@@ -46,9 +46,10 @@ function initialPayload(t: CertificateTemplate): Payload {
   return p;
 }
 
-export function CertificateForm({ template }: { template: CertificateTemplate }) {
+/** linkedClient: the client record this certificate is issued from (opened with ?clientId=); its id is stored with the issue (re-audit NEW-8). */
+export function CertificateForm({ template, linkedClient = null }: { template: CertificateTemplate; linkedClient?: { id: string; name: string } | null }) {
   const [payload, setPayload] = useState<Payload>(() => initialPayload(template));
-  const [clientName, setClientName] = useState("");
+  const [clientName, setClientName] = useState(linkedClient?.name ?? "");
   const [acknowledged, setAcknowledged] = useState(false);
   const [busy, setBusy] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
@@ -125,7 +126,8 @@ export function CertificateForm({ template }: { template: CertificateTemplate })
       const res = await fetch("/api/tools/certificate-generator/issue", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ formatId: template.id, clientName, acknowledged, payload }),
+        // The client record link is sent only while the name is still the record's own (an edited name is a different entity).
+        body: JSON.stringify({ formatId: template.id, clientName, acknowledged, payload, ...(linkedClient && clientName.trim() === linkedClient.name ? { clientId: linkedClient.id } : {}) }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));

@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { canUseAgents } from "@/lib/agents/access";
 import type { ServiceResult } from "@/lib/agents/service";
 import { USER_MESSAGES, validationMessage } from "@/lib/errors";
+import { readJsonCapped } from "@/lib/hardening/json-body";
 
 export type Guarded = { user: Session["user"]; res?: undefined } | { user?: undefined; res: NextResponse };
 
@@ -17,8 +18,11 @@ export async function requireAgentUser(): Promise<Guarded> {
   return { user: session.user };
 }
 
+/** The JSON body (capped at 1 MB as it streams in, re-audit NEW-6) through `schema`: the data, or a 413 / 400. */
 export async function parseJson<T>(schema: ZodSchema<T>, req: Request): Promise<{ data: T; res?: undefined } | { data?: undefined; res: NextResponse }> {
-  const parsed = schema.safeParse(await req.json().catch(() => null));
+  const body = await readJsonCapped(req);
+  if (!body.ok) return { res: body.res };
+  const parsed = schema.safeParse(body.value);
   if (parsed.success) return { data: parsed.data };
   return { res: NextResponse.json({ error: validationMessage(parsed.error) }, { status: 400 }) };
 }

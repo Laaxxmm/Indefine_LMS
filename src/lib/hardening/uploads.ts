@@ -40,6 +40,20 @@ export type UploadTypes = Readonly<Record<string, readonly string[]>>;
 export const DOCUMENT_TYPES: UploadTypes = { ...UPLOAD_TYPES, jpg: ["image/jpeg", "image/pjpeg"], jpeg: ["image/jpeg", "image/pjpeg"], png: ["image/png"] };
 /** PDF only (returns, signed letters). */
 export const PDF_TYPES: UploadTypes = { pdf: UPLOAD_TYPES.pdf };
+/**
+ * Training materials (course handouts, live-session materials): the office documents and images
+ * above plus slides (pptx, ppt), Word 97 (doc) and plain text. Re-audit NEW-6: these used to arrive
+ * through server actions with no type screen; the route handlers now screen them strictly.
+ */
+export const MATERIAL_TYPES: UploadTypes = {
+  ...DOCUMENT_TYPES,
+  pptx: ["application/vnd.openxmlformats-officedocument.presentationml.presentation"],
+  ppt: ["application/vnd.ms-powerpoint"],
+  doc: ["application/msword"],
+  txt: ["text/plain"],
+};
+/** Largest training-material file (as the old server actions allowed). */
+export const MATERIAL_MAX_BYTES = 50 * 1024 * 1024;
 /** MIME types that say nothing about the content (the extension and the sniff decide). */
 const GENERIC_MIME = new Set(["", "application/octet-stream", "binary/octet-stream", "application/x-download"]);
 
@@ -77,11 +91,16 @@ export function sniffMatches(ext: string, bytes: Uint8Array): boolean {
       return starts([0x25, 0x50, 0x44, 0x46, 0x2d]); // %PDF-
     case "xlsx":
     case "docx":
+    case "pptx":
       return starts([0x50, 0x4b, 0x03, 0x04]); // ZIP (OOXML)
     case "xls":
       // OLE compound file; an "xls" that is really CSV/HTML (common bank exports) is text.
       return starts([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]) || isText(bytes);
+    case "doc":
+    case "ppt":
+      return starts([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]); // OLE (Office 97)
     case "csv":
+    case "txt":
       return isText(bytes);
     case "jpg":
     case "jpeg":
@@ -299,6 +318,24 @@ export async function readUploadForm(req: Request, opts: ScreenOptions & { field
   const file = r.files[0];
   if (!file) return { ok: false, res: NextResponse.json({ error: "Attach a file", code: "empty" }, { status: 400 }) };
   return { ok: true, file, form: r.form };
+}
+
+/**
+ * A browser form posted from another site (re-audit NEW-6: the admin uploads moved from server
+ * actions, which check the origin themselves, to route handlers that take a plain form post).
+ * Refuses when the browser says the request is cross-site, or the Origin's host is not this host.
+ */
+export function crossSiteRefusal(req: Request): NextResponse | null {
+  const refuse = () => NextResponse.json({ error: "This upload must be sent from the Firm OS page itself. Open the page and try again." }, { status: 403 });
+  if ((req.headers.get("sec-fetch-site") ?? "").toLowerCase() === "cross-site") return refuse();
+  const origin = req.headers.get("origin");
+  if (!origin || origin === "null") return origin === "null" ? refuse() : null;
+  const host = (req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "").split(",")[0].trim().toLowerCase();
+  try {
+    return new URL(origin).host.toLowerCase() === host ? null : refuse();
+  } catch {
+    return refuse();
+  }
 }
 
 // ------------------------------------------------------------------ body size for routes with their own form handling
