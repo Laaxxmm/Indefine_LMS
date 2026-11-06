@@ -4,7 +4,7 @@ export const AGENT_HELP: HelpEntry[] = [
   // Source: src/app/agents/page.tsx, src/app/agents/parts.tsx, src/lib/agents/views.ts (listMyJobs, listRuns), src/lib/agents/access.ts, src/lib/workspace/guard.ts, src/lib/hardening/rate-limit.ts
   {
     route: "/agents",
-    title: "Agent runs",
+    title: "Agents",
     purpose:
       "Your agent work queue and the list of agent runs. An agent prepares a draft pack, a person checks every finding, approves it and files it; the app never files or sends anything.",
     steps: [
@@ -21,9 +21,9 @@ export const AGENT_HELP: HelpEntry[] = [
           "Jobs where you are the preparer or the reviewer and there is something for you to do now. A job with nothing for you to do, such as one you prepared that is now in review, is left out.",
       },
       {
-        term: "My agent runs",
+        term: "Whose runs you see",
         meaning:
-          "The title staff see: runs on jobs assigned to you or that you review. Managers, partners and admins see every run, under the title Agent runs.",
+          "Staff see the runs on jobs assigned to them or that they review; the line under the title says so. Managers, partners and admins see every run.",
       },
       { term: "Internal due", meaning: "The firm's own target date for the job." },
       {
@@ -321,7 +321,7 @@ export const AGENT_HELP: HelpEntry[] = [
     purpose:
       "Staff record Turia closes by hand, so about one in ten is picked for a partner to check. You check the task ref and the minutes in Turia and record it here.",
     steps: [
-      "Open Spot checks from the More menu in the Firm OS header.",
+      "Open Spot checks from the More menu in the Firm OS header, or from Menu on a phone. Only partners see it.",
       "Under To check, read the job, the client, the Turia task ref, the minutes logged and who confirmed the close.",
       "Open that task in Turia and check that the task ref and the minutes logged match.",
       "Select \"Checked in Turia\", add a note if you want, then select \"Confirm check\".",

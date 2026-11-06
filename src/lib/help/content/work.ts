@@ -301,7 +301,7 @@ export const WORK_HELP: HelpEntry[] = [
   {
     route: "/search",
     title: "Search",
-    purpose: "Finds clients, jobs, agent runs, deliverables, comms drafts and onboarding records that you are allowed to open. The Search button in the header, or Ctrl+K (Cmd+K on a Mac), opens the same search over any page.",
+    purpose: "Finds clients, jobs, agent runs, deliverables, comms drafts and onboarding records that you are allowed to open. The search icon (the magnifying glass) in the header, or Ctrl+K (Cmd+K on a Mac), opens the same search over any page.",
     steps: [
       "Type a client name or code, a job title, a period or a file name; results appear as you type.",
       "To find a client by PAN, GSTIN, phone or email, type the full value and press Enter.",

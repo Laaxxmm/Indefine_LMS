@@ -188,7 +188,7 @@ describe("the header", () => {
     expect(await header(PARTNER)).not.toMatch(/aria-haspopup="dialog"/); // no help for this path
     state.pathname = "/agents";
     const html = await header(PARTNER);
-    expect(html).toMatch(/<button type="button" aria-haspopup="dialog" aria-expanded="false" title="Help for Agent runs"/);
+    expect(html).toMatch(/<button type="button" aria-haspopup="dialog" aria-expanded="false" title="Help for Agents"/);
     expect(html).toMatch(/<span class="sr-only lg:not-sr-only">Help<\/span>/); // an icon on a phone, still named Help
   });
 

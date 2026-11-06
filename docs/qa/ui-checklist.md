@@ -17,6 +17,9 @@ The bar comes from the orchestrator spec, section DESIGN:
 | **One primary action** | Exactly one primary (filled) button visible for the person's current step. | Visual. |
 | **Firm OS conventions** | Status chips use the JobTask state names (DRAFT … DONE); ₹ amounts in Indian grouping (1,23,456.00); dates `DD MMM YYYY` (Sep, not Sept); times IST; no emoji, no gamification. | Visual. |
 | **No portal / send** | No button or link submits to a government portal or sends anything to a client (Outlook *draft* only). | Visual + `Ctrl+F` "submit", "send", "file". |
+| **Same header** | The Firm OS header has the same width, position and labels as on every other Firm OS page, and the page title starts at the same left edge (a page may narrow its content, never the header). From 1024 px: Next task · Agents · My day · Client messages · More · Search · Help · Dashboard on one row; below, logo · Search · Help · Menu. Dashboard bar on one row from 640 px, Home · Menu below. No header nav scrolls sideways. | Switch between pages at the same width: nothing in the header moves. `node tests/regression/visual-check.mjs` prints the header box and title edge per width and fails a page that differs. |
+| **Menus** | More / Learn / Firm OS / Menu open with Enter, Space or ArrowDown; arrows move between the links; Escape closes and puts focus back on the button; they close when you Tab away, click outside or open a page. Each place shows only when its module is on and the role allows it. | Keyboard only, then as a person with fewer modules. |
+| **Help** | The page has a Help button; it opens a side panel for this page (what it is for, how to use it, the words, if you're stuck, who to ask); Escape and Close shut it, Tab stays inside, focus returns to Help. The words match the page. | Keyboard; read it against the page. |
 
 Widths: **1280** and **1440** (desktop, Lighthouse "Desktop"), **390** (phone, Lighthouse "Mobile";
 DevTools device toolbar → 390 × 844).
@@ -150,6 +153,27 @@ Summary: 71 rows · 67 pass · 0 fail · 4 n/a (Run review CLOSING and DONE need
 | 21 Admin — Breach register | 1440 | ✅ | ✅* | ✅ | ✅ 22 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — |  |
 | 21 Admin — Breach register | 390 | ✅ | ✅ | ✅ | ✅ 5 stops | ✅ axe 0 | ✅ | ✅ | ✅ | montage-390-*.png |  |
 
+### Header, menus and help pass (06 Nov 2026)
+
+Owner report from production: `/focus` drew the header in a narrow column (menu cut off, Companion /
+Search / Dashboard hidden) while `/agents` used the full width; the menus were long and inconsistent;
+no page explained itself. Branch `worktree-agent-aff770eced60ed70b`. The visual render now switches
+every module on and keeps the Firm OS switch on while React renders, so the header shows every place
+(before, the render's header was empty and could not show the problem).
+
+* **Same header** — 17 Firm OS renders × 3 widths: header box `0+390` / `0+1280` / `80+1280` and title
+  edge 16 / 32 / 112 on every one (before: `/focus` 256+768 with its title at 288 at 1280, the workspace
+  title at 57). The 6 admin renders share one title edge per width (24 / 280 / 296) in the admin layout.
+* **Menus** — keyboard steps checked in Chrome on the built components (open, arrows, wrap, Escape back
+  to the button, Tab away, outside click, route change); markup asserted in the header and dashboard tests.
+* **Help** — 25 entries (all 22 Firm OS pages, the dashboard, Tools and Clients); panel checked in Chrome
+  (focus on Close, Tab trapped, Escape returns focus to Help, route change closes).
+* `node tests/regression/visual-check.mjs`: 82 / 84 page × width checks pass, axe 0 on every page; the 2
+  fails are the client page's own LMS Jobs table head (33 px) at 1280 and 1440, listed below as an LMS debt.
+* Not rendered locally (need records the render world does not have): `/comms/[id]`,
+  `/admin/firm-os/privacy/[id]`, `/admin/firm-os/breaches/[id]`. They use the same layouts, so the same
+  header and title edge; their help entries are covered by the registry test.
+
 ## Known before the staging pass
 
 From the UI audit (PROGRESS "UI audit", "Known gaps") and the design consistency pass (06 Nov 2026,
@@ -159,6 +183,9 @@ From the UI audit (PROGRESS "UI audit", "Known gaps") and the design consistency
 - Fixed in the design pass: `/clients`, `/work`, `/tools` headers wrap at 390 px and mark the current section
   (AreaHeader + NavLink); `ink-faint` text is AA (token remapped to #6c6a82, the shared h2 uses ink-mute); "Sept" from
   en-IN in `src/lib/ist.ts` (fixed month list); `/tools` card "Open" text and the client page's unlabelled selects.
+- The Clients area bar keeps "Firm OS onboarding" beside its own "Onboard" (`/clients/new`): two links
+  called "Onboard" and "Onboard client" would read as the same thing. The Firm OS header calls `/onboard`
+  "Onboard client". Owner to confirm.
 - LMS debts left as they are (owner decisions or LMS look, not Firm OS fails): emoji and gamification on
   `/dashboard` (👋 🎉 🔥 ⚡ 🎬 🏅 🚀 📡 💬 ✨ 🕑 💼 ✅), `/` (sign-in), `/leaderboard`, `/recap`, `/team/[userId]`,
   `/initiatives`, `/tools/neo-centra` (+ how-it-works), `/admin/auto-quiz`, `/admin/live`, `/admin/trajectory`;

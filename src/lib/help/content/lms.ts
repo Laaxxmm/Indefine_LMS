@@ -8,7 +8,7 @@ export const LMS_HELP: HelpEntry[] = [
     purpose:
       "Your home page: your courses and assignments, live sessions, your streak and growth, and quick links to attendance. If your firm uses Firm OS, it can also open on your next task.",
     steps: [
-      "Use the top bar to move around: Home, the Learn menu, Tools, Clients, the Firm OS menu and Work, then Search, Help, your streak and your account menu.",
+      "Use the top bar to move around: Home, the Learn menu, Tools, Clients, the Firm OS menu and Work, then Search, Help, your streak and your account menu. On a phone the same links are under Menu.",
       "To carry on with training, select Continue on the Pick up where you left off card, or open a course under Your courses.",
       "Check Next deadline and My assignments, and select Open or Open module on anything still pending.",
       "Join a live session from its card with Join or Join now when one is scheduled for you.",

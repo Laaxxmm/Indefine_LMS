@@ -23,10 +23,10 @@ import { renderHtml } from "../unit/routes/harness";
 import { echoWorld, user, type World } from "../fakes/agent-world";
 import { MODULE_KEYS } from "@/lib/workspace/registry";
 
-const state = vi.hoisted(() => ({ world: null as unknown as World, session: null as unknown }));
+const state = vi.hoisted(() => ({ world: null as unknown as World, session: null as unknown, pathname: "/" }));
 
 vi.mock("@/lib/auth", () => ({ auth: vi.fn(async () => state.session), signIn: vi.fn(), signOut: vi.fn(), handlers: {} }));
-vi.mock("next/navigation", async () => (await import("../unit/routes/harness")).navigationMock);
+vi.mock("next/navigation", async () => ({ ...(await import("../unit/routes/harness")).navigationMock, usePathname: () => state.pathname }));
 vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined, getAll: () => [], has: () => false }), headers: async () => new Headers() }));
 vi.mock("@/lib/ai/db", () => ({
   loadModelCalls: async () => [
@@ -87,6 +87,7 @@ const HOOKS = /reading '(useState|useContext|useRef|useEffect|useReducer|useMemo
 
 async function render(e: Entry): Promise<string> {
   state.session = as(e.session);
+  state.pathname = e.title.split(" ")[0]; // the page's path, for the current-section marks and Help
   // Firm OS switched on (FIRM_OS_ENABLED defaults off: src/lib/workspace/flag.ts); without it every
   // Firm OS layout redirects to the dashboard and nothing renders.
   vi.stubEnv("FIRM_OS_ENABLED", "1");
@@ -101,8 +102,13 @@ async function render(e: Entry): Promise<string> {
     el = createElement(mod.default as never, props as never);
   }
   if (e.layout) el = await ((await e.layout()).default as (p: unknown) => unknown)({ children: el });
-  vi.unstubAllEnvs();
-  return (await renderHtml(el as ReactElement)).replace(/<!-- -->/g, "");
+  // The switches stay on while React renders: async server components (the Firm OS header) read
+  // them then, not when the layout function returns.
+  try {
+    return (await renderHtml(el as ReactElement)).replace(/<!-- -->/g, "");
+  } finally {
+    vi.unstubAllEnvs();
+  }
 }
 
 // next/font sets --font-sans / --font-display on <html> in the app; without them the font stacks in
