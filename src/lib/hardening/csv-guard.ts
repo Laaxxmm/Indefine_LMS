@@ -28,10 +28,7 @@ function limitError(problem: XlsxProblem, limits: CsvLimits): XlsxLimitError {
   return new XlsxLimitError("cells", `This CSV file has more than ${fmtInt(limits.maxCells)} filled cells in all. ${SPLIT}`);
 }
 
-/**
- * One linear pass over the text (quotes respected): the first cap passed, or null. Shared by the
- * main thread and the worker source below (kept as plain JS so both run the same code).
- */
+/** One linear pass over the text (quotes respected): the first cap passed, or null. Plain JS for the worker. */
 const SHAPE_SOURCE = `function csvShapeProblem(text, delim, limits) {
   let rows = 0, cols = 0, cells = 0, filled = false, quoted = false, fieldStart = true;
   const endField = () => { cols++; if (filled) cells++; filled = false; fieldStart = true; };
@@ -51,7 +48,7 @@ const SHAPE_SOURCE = `function csvShapeProblem(text, delim, limits) {
   return null;
 }`;
 
-/** RFC 4180-style cells; the same code runs inline and in the worker. */
+/** RFC 4180-style cells. Plain JS for the worker (the main-thread copy is `cells` below). */
 const PARSE_SOURCE = `function csvCells(text, delim) {
   const rows = [];
   let row = [], field = "", quoted = false;
@@ -67,10 +64,102 @@ const PARSE_SOURCE = `function csvCells(text, delim) {
   return rows;
 }`;
 
-// One definition, two runtimes: the inline functions are built from the same constant source the
-// worker evaluates (no input ever reaches new Function).
-const shapeProblem = new Function(`${SHAPE_SOURCE}; return csvShapeProblem;`)() as (text: string, delim: string, limits: CsvLimits) => XlsxProblem | null;
-const cells =new Function(`${PARSE_SOURCE}; return csvCells;`)() as (text: string, delim: string) => string[][];
+// The main-thread versions of the two functions above (the worker evaluates the plain-JS copies;
+// csv-guard.test.ts checks that both give the same answers). Code is never built from strings here.
+function shapeProblem(text: string, delim: string, limits: CsvLimits): XlsxProblem | null {
+  let rows = 0;
+  let cols = 0;
+  let cells = 0;
+  let filled = false;
+  let quoted = false;
+  let fieldStart = true;
+  const endField = () => {
+    cols++;
+    if (filled) cells++;
+    filled = false;
+    fieldStart = true;
+  };
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (quoted) {
+      if (c === '"') {
+        if (text[i + 1] === '"') {
+          i++;
+          filled = true;
+        } else quoted = false;
+      } else filled = true;
+      continue;
+    }
+    if (c === '"' && fieldStart) {
+      quoted = true;
+      fieldStart = false;
+      continue;
+    }
+    if (c === delim) {
+      endField();
+      if (cols > limits.maxColumns) return "columns";
+      if (cells > limits.maxCells) return "cells";
+      continue;
+    }
+    if (c === "\n" || c === "\r") {
+      if (c === "\r" && text[i + 1] === "\n") i++;
+      endField();
+      rows++;
+      if (cols > limits.maxColumns) return "columns";
+      if (cells > limits.maxCells) return "cells";
+      if (rows > limits.maxRows) return "rows";
+      cols = 0;
+      continue;
+    }
+    if (c !== " " && c !== "\t") filled = true;
+    if (c !== " ") fieldStart = false;
+  }
+  if (!fieldStart || cols > 0 || filled) {
+    endField();
+    rows++;
+  }
+  if (cols > limits.maxColumns) return "columns";
+  if (cells > limits.maxCells) return "cells";
+  if (rows > limits.maxRows) return "rows";
+  return null;
+}
+
+function cells(text: string, delim: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (quoted) {
+      if (c === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else quoted = false;
+      } else field += c;
+      continue;
+    }
+    if (c === '"' && field.trim() === "") {
+      quoted = true;
+      field = "";
+    } else if (c === delim) {
+      row.push(field.trim());
+      field = "";
+    } else if (c === "\n" || c === "\r") {
+      if (c === "\r" && text[i + 1] === "\n") i++;
+      row.push(field.trim());
+      rows.push(row);
+      row = [];
+      field = "";
+    } else field += c;
+  }
+  if (field !== "" || row.length) {
+    row.push(field.trim());
+    rows.push(row);
+  }
+  return rows;
+}
 
 /** Throws XlsxLimitError when the CSV passes a cap (nothing is built). */
 export function checkCsvShape(text: string, delim: string, limits: CsvLimits = CSV_LIMITS): void {

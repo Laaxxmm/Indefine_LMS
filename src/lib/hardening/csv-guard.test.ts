@@ -83,6 +83,10 @@ describe("NEW-11: CSV caps", () => {
     expect(inWorker).toEqual(parseCsvCells(text, ","));
     expect((await parseCsvSafe(text)).length).toBe(40_000);
     await expect(parseCsvInWorker("a,b\n".repeat(60_000), ",")).rejects.toThrow(/more than 50,000 rows/);
+    // The worker's plain-JS copies and the main-thread functions agree, refusals included.
+    await expect(parseCsvInWorker(`${"x,".repeat(CSV_LIMITS.maxColumns)}x\n`, ",")).rejects.toThrow(/more than 256 columns/);
+    await expect(parseCsvInWorker("a,b,c,d,e,f,g,h,i,j\n".repeat(31_000), ",")).rejects.toThrow(/filled cells/);
+    for (const t of ['a,"b ""q"" c",d\r\nx,,y', ' "lead" , trail ,\n', "only", "a\n\n\nb"]) expect(await parseCsvInWorker(t, ","), t).toEqual(parseCsvCells(t, ","));
   }, 60_000);
 
   it("results are unchanged: every fixture CSV parses exactly as before", () => {
