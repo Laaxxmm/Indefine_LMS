@@ -9,7 +9,7 @@ import { canViewJob } from "@/lib/agents/access";
 import { ChecklistPackSchema, type RuleDefinition } from "@/lib/agents/core/checklist";
 import { formatDate, formatDateTimeIst } from "@/lib/agents/core/format";
 import { jobFolder, latestPackQuery, type AnyAgent, type FirmDb } from "@/lib/agents/core/runner";
-import { visibleAgents } from "@/lib/agents/registry";
+import { agentForJob, visibleAgents } from "@/lib/agents/registry";
 import type { DeliverableView } from "@/lib/agents/views";
 import { ackRefFor } from "@/lib/close-loop/review";
 import { istDayStart } from "@/lib/ist";
@@ -35,6 +35,10 @@ export type WorkspaceView = {
     internalDue: string | null;
     statutoryDue: string | null;
     overdue: boolean;
+    /** A Turia task no rule maps (ADR-003 amendment): no agent, prepared by hand. Present only when true. */
+    agentless?: true;
+    /** The Turia task disappeared or was cancelled: the job is flagged, never removed. Present only when set. */
+    turiaNote?: string;
   };
   /** The one action this person can take now, or null with `waitingOn` saying who acts next. */
   action: NextTaskAction | null;
@@ -81,6 +85,8 @@ export async function loadWorkspaceView(db: WorkspaceViewDb, user: SessionUser, 
       lmsJobId: true,
       internalDueOn: true,
       statutoryDueOn: true,
+      agentless: true,
+      turiaNote: true,
       firmClient: { select: { clientCode: true, lmsClientId: true, client: { select: { name: true } } } },
       agentRuns: {
         orderBy: { startedAt: "desc" },
@@ -104,7 +110,7 @@ export async function loadWorkspaceView(db: WorkspaceViewDb, user: SessionUser, 
   const latest: LatestRun | null = run
     ? { id: run.id, agent: run.agent, reviewNotes: run.reviewNotes, blockFails: run.checklist.filter((c) => c.severity === "block").length, warnFails: run.checklist.filter((c) => c.severity === "warn").length }
     : null;
-  const agent = (run && agents.find((a) => a.key === run.agent)) || agents.find((a) => a.service === job.service) || null;
+  const agent = (run && agents.find((a) => a.key === run.agent)) || agentForJob(job, agents);
 
   const [pack, questions, docs] = await Promise.all([
     agent ? db.sopPack.findFirst({ ...latestPackQuery(agent.sopPackKey), select: { version: true, title: true, checklist: true } }) : Promise.resolve(null),
@@ -163,6 +169,8 @@ export async function loadWorkspaceView(db: WorkspaceViewDb, user: SessionUser, 
       internalDue: job.internalDueOn ? formatDate(job.internalDueOn) : null,
       statutoryDue: job.statutoryDueOn ? formatDate(job.statutoryDueOn) : null,
       overdue: job.state !== "DONE" && ((!!job.internalDueOn && job.internalDueOn < today) || (!!job.statutoryDueOn && job.statutoryDueOn < today)),
+      ...(job.agentless ? { agentless: true as const } : {}),
+      ...(job.turiaNote ? { turiaNote: job.turiaNote } : {}),
     },
     action,
     waitingOn: action ? null : WAITING_ON[job.state],

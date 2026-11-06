@@ -1616,6 +1616,12 @@ model JobTask {
   createdById        String?
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
+  // Turia pull (ADR-003 amendment 2026-11-06). Null / false on jobs made by Firm OS onboarding.
+  source             String? // "turia" when the job came from the read-only Turia pull
+  turiaTaskId        String?      @unique // Turia's internal task id (TuriaTaskMirror.id)
+  agentless          Boolean      @default(false) // no agent runs on this job (unmapped Turia task): prepared by hand
+  turiaMissingAt     DateTime? // the Turia task disappeared or was cancelled: the job is flagged, never deleted
+  turiaNote          String? // plain note shown with that flag
 
   firmClient   FirmClient     @relation(fields: [firmClientId], references: [id])
   engagement   Engagement?    @relation(fields: [engagementId], references: [id])
@@ -1920,4 +1926,120 @@ model CompanionToken {
   revokedAt  DateTime?
 
   @@index([userId])
+}
+
+// ------------------------------------------------------------------ Turia pull (read-only)
+// ADR-003 amendment (owner decision 06 Nov 2026): Firm OS reads Turia's tasks through the Neo Centra
+// session, read-only, and turns them into JobTasks (FIRM_OS_TURIA_PULL = off | dry-run | on).
+// DPDP: only what a job needs. No descriptions, no comments, no client identifiers beyond name/code.
+
+// One row per Turia task, upserted by Turia's task id. `hash` covers the mapped fields, so an
+// unchanged task costs no write beyond lastSeenAt. Never deleted: a task missing from a complete
+// scan gets missingSince.
+model TuriaTaskMirror {
+  id             String    @id // Turia's internal task id
+  identity       String? // Turia's task number as shown, e.g. TSK03683
+  taskName       String
+  clientName     String
+  clientKey      String // normalised client name (TuriaClientLink.key)
+  clientCode     String?
+  department     String?
+  status         String? // Turia's status code as given ("3" = completed)
+  statusName     String?
+  dueOn          DateTime?
+  completedOn    DateTime?
+  turiaCreatedOn DateTime?
+  assignees      Json // [{ id, name }]
+  reviewers      Json // [{ id, name }]
+  hash           String
+  appliedHash    String? // hash last applied to the job (on mode)
+  firstSeenAt    DateTime  @default(now())
+  lastSeenAt     DateTime
+  lastChangedAt  DateTime
+  missingSince   DateTime?
+  closeCheckedAt DateTime? // last time the time logged on this completed task was read from Turia
+  jobTaskId      String?   @unique
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([clientKey])
+  @@index([lastSeenAt])
+}
+
+// Turia user -> LMS user. Matched by email, then by exact normalised name; an admin's pick is kept.
+model TuriaPersonLink {
+  turiaUserId String   @id
+  turiaName   String
+  turiaEmail  String?
+  userId      String?
+  matchedBy   String // email | name | manual | none
+  updatedById String?
+  lastSeenAt  DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// Turia client (by normalised name) -> LMS Client / FirmClient. An admin's pick or "ignore" is kept.
+model TuriaClientLink {
+  key          String   @id // normalised Turia client name
+  turiaName    String
+  turiaCode    String?
+  lmsClientId  String?
+  firmClientId String?
+  status       String // matched | manual | unmatched | ignored
+  updatedById  String?
+  lastSeenAt   DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([lmsClientId])
+}
+
+// Admin-editable rules: Turia department / task name words -> Firm OS service, job title, frequency.
+// The first active rule by position wins. Switched off, never deleted.
+model TuriaTaskRule {
+  id             String      @id @default(cuid())
+  position       Int
+  label          String
+  department     String? // words the department must contain (any of, "|" separated); empty = any
+  namePattern    String // words the task name must contain (any of, "|" separated)
+  service        FirmService
+  title          String // JobTask title, e.g. "GSTR-3B"
+  frequency      String // MONTHLY | QUARTERLY | ANNUAL
+  useAgent       Boolean     @default(true)
+  calendarRuleId String? // statutory calendar rule for the statutory due date
+  active         Boolean     @default(true)
+  seeded         Boolean     @default(false)
+  updatedById    String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@index([position])
+}
+
+// One row per sync run: counts and the preview (dry-run) or what was applied (on). Kept.
+model TuriaPullRun {
+  id          String    @id @default(cuid())
+  mode        String // dry-run | on
+  trigger     String // cron | manual
+  startedById String?
+  status      String // running | ok | partial | session | failed
+  message     String?
+  complete    Boolean   @default(false) // the scan reached the end of Turia's task list
+  counts      Json?
+  preview     Json?
+  startedAt   DateTime  @default(now())
+  finishedAt  DateTime?
+
+  @@index([startedAt])
+}
+
+// Single-row lease so at most one sync runs at a time (id = 1). A crashed run frees it at lockUntil.
+model TuriaPullLock {
+  id        Int       @id @default(1)
+  holder    String?
+  lockUntil DateTime?
+  updatedAt DateTime  @updatedAt
 }

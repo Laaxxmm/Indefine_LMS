@@ -166,6 +166,54 @@ export const ADMIN_HELP: HelpEntry[] = [
     ask: "Ask the partner who runs the service about a slow stage, and IT if the page does not open.",
   },
 
+  // Source: src/app/admin/firm-os/turia-sync/page.tsx, src/app/admin/firm-os/turia-sync/TuriaSyncForms.tsx, src/lib/integrations/turia/pull/*.ts, docs/turia-bridge.md
+  {
+    route: "/admin/firm-os/turia-sync",
+    title: "Turia sync",
+    purpose:
+      "Firm OS reads the firm's tasks from Turia, read only, and turns them into jobs for the people they are assigned to in Turia. This page shows how the sync is set, whether the Turia sign-in works, what the last run did, and how Turia people, clients and tasks are matched.",
+    steps: [
+      "Read the mode at the top. Off reads nothing. Dry run reads Turia and shows a preview but changes no job. On creates and updates jobs.",
+      "Check the Turia sign-in. If it is missing or old, open Turia in Chrome with the Neo Centra extension signed in.",
+      "Select Sync now to read Turia straight away, or wait for the scheduled run every 15 minutes, Monday to Saturday, 9:00 to 20:00 IST.",
+      "In dry run, read the preview: each row says which job would be created or changed, for whom, and why a task is waiting.",
+      "Under People, pick the firm user for each Turia person who is not matched. Under Clients, pick the client from the client list or choose to ignore it.",
+      "Under Task rules, change the words that decide which service and job title a Turia task becomes, or add a rule. Switch a rule off instead of removing it.",
+      "When the preview looks right, ask IT to set the sync to on.",
+    ],
+    terms: [
+      { term: "Dry run", meaning: "Turia is read and the preview is saved, but no job, client or close record is created or changed." },
+      { term: "Waiting", meaning: "A task that is not made into a job yet because its client or assignee is not matched. It is made on the next run after you match them." },
+      { term: "Without an agent", meaning: "A task no rule matches. It still becomes a job in Next task and My day, and the person prepares it by hand." },
+      { term: "Completed", meaning: "Turia shows the task completed. The time logged in Turia is recorded for the closing checks; the job still closes only when it is filed and its Final file is in SharePoint." },
+      { term: "No longer in Turia", meaning: "A task that dropped out of Turia's task list. Its job is flagged, never removed." },
+      { term: "Match automatically", meaning: "Firm OS matches by email or client code first, then by exact name. Choosing it again undoes a pick made by hand." },
+    ],
+    stuck: [
+      {
+        problem: "Sync now says the Turia sign-in is missing or has expired.",
+        fix: "Open Turia in Chrome with the Neo Centra extension signed in, wait a minute for it to send the sign-in, then select Sync now again.",
+      },
+      {
+        problem: "Sync now cannot be selected.",
+        fix: "The sync is off. Ask IT to set it to dry run first.",
+      },
+      {
+        problem: "A task stays in the preview as waiting.",
+        fix: "Its client or assignee is not matched. Pick them under Clients or People, then select Sync now.",
+      },
+      {
+        problem: "A Turia task became a job without an agent.",
+        fix: "No rule matched its name. Add or change a rule under Task rules; jobs made later follow the new rule.",
+      },
+      {
+        problem: "A completed task says no time is logged in Turia.",
+        fix: "Log the time on the task in Turia, or record the minutes by hand with Record Turia close on the job.",
+      },
+    ],
+    ask: "Ask IT about the sync setting or the sign-in, and the partner who runs the service about the task rules.",
+  },
+
   // Source: src/app/admin/firm-os/workspace/page.tsx, src/app/admin/firm-os/workspace/WorkspaceForms.tsx, src/lib/workspace/registry.ts, src/lib/workspace/settings.ts, src/lib/workspace/admin.ts, src/lib/workspace/access.ts, src/lib/workspace/flag.ts
   {
     route: "/admin/firm-os/workspace",

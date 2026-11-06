@@ -80,7 +80,10 @@ export async function turiaStatus(): Promise<{ present: boolean; encrypted: bool
   };
 }
 
-async function turiaPost(endpoint: string, action: string, data: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
+// Exported for one other caller only: Firm OS's read-only Turia pull, which wraps it in an
+// allowlist of read actions (src/lib/integrations/turia/pull/read-client.ts; ADR-003 amendment).
+// Neo Centra's own calls and behaviour are unchanged.
+export async function turiaPost(endpoint: string, action: string, data: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
   const cookie = await getTuriaCookie();
   if (!cookie) throw new TuriaSessionError("Turia session not available. Push a fresh Turia cookie first.");
 

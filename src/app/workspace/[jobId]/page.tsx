@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ExternalLink } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { card, focusRing, linkText, sectionTitle, type ChipTone } from "@/components/ui";
-import { Chip, PageHeader, RunStatusChip, Section, StateChip } from "@/components/firm-os";
+import { Alert, Chip, PageHeader, RunStatusChip, Section, StateChip } from "@/components/firm-os";
 import { DeliverablesPanel } from "@/app/agents/[agent]/runs/[id]/ReviewPanels";
 import { DOC_TYPES } from "@/lib/clients/core";
 import { loadWorkspaceView, type WorkspaceView, type WorkspaceViewDb } from "@/lib/workspace/view";
@@ -149,11 +149,18 @@ export default async function WorkspacePage({ params }: { params: Promise<{ jobI
             <div className="mt-2">
               <DueLine internalDue={job.internalDue} statutoryDue={job.statutoryDue} overdue={job.overdue} />
             </div>
+            {job.turiaNote && (
+              <Alert tone="warning" className="mt-4">
+                {job.turiaNote}
+              </Alert>
+            )}
             <div className="mt-6 pt-4 border-t border-border">
               <h2 id="ws-next" className={sectionTitle}>
                 Next action
               </h2>
-              {action?.kind === "prepare-by-hand" ? (
+              {action?.kind === "prepare-by-hand" && job.agentless ? (
+                <p className="text-[13px] text-ink-soft">This job came from Turia and no task rule gives it an agent. Prepare the work by hand in the job&apos;s Working folder, following the steps below.</p>
+              ) : action?.kind === "prepare-by-hand" ? (
                 <p className="text-[13px] text-ink-soft">There is no agent for {job.service} yet. Prepare the work by hand in the job&apos;s Working folder, following the steps below.</p>
               ) : action ? (
                 <NextActionButton action={action} jobId={job.id} context={context} />

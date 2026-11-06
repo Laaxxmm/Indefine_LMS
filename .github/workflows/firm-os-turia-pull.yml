@@ -1,0 +1,37 @@
+# Firm OS Turia pull (ADR-003 amendment, owner decision 06 Nov 2026): read-only Turia -> Firm OS
+# task sync, every 15 minutes inside Mon-Sat 09:00-20:00 IST. GitHub cron is UTC; IST = UTC + 5:30:
+#   "30,45 3 * * 1-6"    -> 09:00, 09:15 IST
+#   "*/15 4-13 * * 1-6"  -> 09:30, 09:45 ... 19:15 IST
+#   "0,15,30 14 * * 1-6" -> 19:30, 19:45, 20:00 IST
+# The endpoint checks the IST window itself and answers "skipped" outside it, and while
+# FIRM_OS_ENABLED or FIRM_OS_TURIA_PULL is off. At most one run at a time (a database lease).
+# Base URL: repository variable LMS_BASE_URL (staging), default https://lms.indefine.in.
+# Uses the same CRON_SECRET repo secret as the other cron workflows.
+name: Firm OS Turia pull
+
+on:
+  schedule:
+    - cron: "30,45 3 * * 1-6"
+    - cron: "*/15 4-13 * * 1-6"
+    - cron: "0,15,30 14 * * 1-6"
+  workflow_dispatch: {}
+
+concurrency:
+  group: firm-os-turia-pull
+  cancel-in-progress: false
+
+jobs:
+  pull:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call Turia pull cron endpoint
+        env:
+          BASE_URL: ${{ vars.LMS_BASE_URL || 'https://lms.indefine.in' }}
+        run: |
+          if [ -z "${{ secrets.CRON_SECRET }}" ]; then
+            echo "CRON_SECRET repo secret not set - skipping."
+            exit 0
+          fi
+          curl -fsS --max-time 330 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${BASE_URL%/}/api/cron/firm-os/turia-pull"

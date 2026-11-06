@@ -125,6 +125,12 @@ export const EXPECTED_POLICIES: ExpectedPolicy[] = [
   { route: "/api/cron/firm-os/close-loop", method: "GET", policies: ["cronUnauthorized"], why: "system cron: CRON_SECRET" },
   { route: "/api/cron/firm-os/retention", method: "GET", policies: ["cronUnauthorized"], why: "system cron: CRON_SECRET" },
   { route: "/api/cron/firm-os/coach", method: "GET", policies: ["cronUnauthorized"], why: "system cron: CRON_SECRET" },
+  // Turia read-only pull (ADR-003 amendment 2026-11-06).
+  { route: "/api/cron/firm-os/turia-pull", method: "GET", policies: ["cronUnauthorized"], why: "system cron: CRON_SECRET" },
+  { route: "/api/firm-os/turia-sync/run", method: "POST", policies: ["canManageTuriaSync"], why: "Turia sync now: active admins and partners" },
+  { route: "/api/firm-os/turia-sync/people", method: "POST", policies: ["canManageTuriaSync"], why: "Turia people mapping: active admins and partners" },
+  { route: "/api/firm-os/turia-sync/clients", method: "POST", policies: ["canManageTuriaSync"], why: "Turia client mapping: active admins and partners" },
+  { route: "/api/firm-os/turia-sync/rules", method: "POST", policies: ["canManageTuriaSync"], why: "Turia task rules: active admins and partners" },
 ];
 
 export type RbacResult = {

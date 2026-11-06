@@ -10,7 +10,7 @@ import { openQuestions, type OpenQuestion } from "@/lib/agents/core/guardrails/r
 import { INJECTION_FLAG } from "@/lib/agents/core/guardrails/untrusted";
 import { diffPacks, type PackDiff } from "@/lib/agents/core/mistakes";
 import { latestPackQuery, type AnyAgent, type FirmDb } from "@/lib/agents/core/runner";
-import { getAgent } from "@/lib/agents/registry";
+import { agentForJob, getAgent } from "@/lib/agents/registry";
 import { httpsLink } from "@/lib/hardening/net";
 import { auditRead } from "@/lib/audit/reads";
 import { runFailureMessage } from "@/lib/errors";
@@ -73,10 +73,10 @@ export async function listRunnableJobs(db: FirmDb, user: SessionUser, def: AnyAg
     where: { AND: [jobScopeWhere(user), { service: def.service, state: { in: ["ASSIGNED", "IN_PREP"] } }] },
     orderBy: [{ internalDueOn: "asc" }, { createdAt: "asc" }],
     take: 50,
-    select: { id: true, title: true, period: true, fy: true, state: true, service: true, assigneeId: true, reviewerId: true, internalDueOn: true, firmClient: { select: { clientCode: true } } },
+    select: { id: true, title: true, period: true, fy: true, state: true, service: true, assigneeId: true, reviewerId: true, internalDueOn: true, agentless: true, firmClient: { select: { clientCode: true } } },
   });
   return jobs
-    .filter((j) => reviewActions(user, j, 0, now).run)
+    .filter((j) => !j.agentless && reviewActions(user, j, 0, now).run) // an agentless job (unmapped Turia task) is prepared by hand
     .map((j) => ({ id: j.id, title: j.title, period: j.period, fy: j.fy, clientCode: j.firmClient.clientCode, state: j.state, internalDue: j.internalDueOn ? formatDate(j.internalDueOn) : "—" }));
 }
 
@@ -123,6 +123,7 @@ export async function listMyJobs(db: FirmDb, user: SessionUser, agents: AnyAgent
       assigneeId: true,
       reviewerId: true,
       internalDueOn: true,
+      agentless: true,
       firmClient: { select: { clientCode: true, client: { select: { name: true } } } },
       agentRuns: { orderBy: { startedAt: "desc" }, take: 1, select: { id: true, agent: true, checklist: { where: { status: "fail", severity: "block" }, select: { id: true } } } },
     },
@@ -131,7 +132,7 @@ export async function listMyJobs(db: FirmDb, user: SessionUser, agents: AnyAgent
   for (const j of jobs) {
     const latest = j.agentRuns[0] ?? null;
     const can = reviewActions(user, j, latest?.checklist.length ?? 0, now);
-    const agent = (latest && agents.find((a) => a.key === latest.agent)) ?? agents.find((a) => a.service === j.service) ?? null;
+    const agent = (latest && agents.find((a) => a.key === latest.agent)) ?? agentForJob(j, agents);
     let action: MyJobAction | null = null;
     if (can.run) action = agent ? { kind: "run", agent: agent.key } : { kind: "no-agent" };
     else if (latest && can.submit) action = { kind: "open", agent: latest.agent, runId: latest.id, label: "Open pack to submit" };

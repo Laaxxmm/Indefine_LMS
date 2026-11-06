@@ -19,6 +19,7 @@ import {
   Cpu,
   BookCheck,
   Timer,
+  RefreshCw,
   type LucideIcon,
 } from "lucide-react";
 
@@ -39,6 +40,7 @@ const ICONS: Record<string, LucideIcon> = {
   Radio,
   BookCheck,
   Timer,
+  RefreshCw,
 };
 
 export type AdminNavItem = { href: string; label: string; icon: string };

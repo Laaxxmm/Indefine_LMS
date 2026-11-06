@@ -32,6 +32,7 @@ const FIRM_OS_ITEMS: AdminNavItem[] = [
   { href: "/admin/firm-os/models", label: "Model usage", icon: "Cpu" },
   { href: "/admin/firm-os/mistakes", label: "Mistake log", icon: "BookCheck" },
   { href: "/admin/firm-os/cycle-time", label: "Cycle time", icon: "Timer" },
+  { href: "/admin/firm-os/turia-sync", label: "Turia sync", icon: "RefreshCw" },
   { href: "/admin/firm-os/workspace", label: "Workspace settings", icon: "Settings" },
   { href: "/admin/firm-os/privacy", label: "Privacy requests", icon: "Fingerprint" },
   { href: "/admin/firm-os/breaches", label: "Breach register", icon: "CalendarClock" },
