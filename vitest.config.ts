@@ -27,6 +27,9 @@ export default defineConfig({
     // keeps a genuinely hung test visible while not failing on CPU contention.
     testTimeout: 20_000,
     hookTimeout: 20_000,
+    // Timing tests (tests/unit/ai-security/mask-performance.test.ts) allow more time under v8
+    // coverage instrumentation; `npm test` keeps the strict budget.
+    env: { FIRM_OS_COVERAGE_RUN: process.argv.some((a) => a === "--coverage" || a.startsWith("--coverage.")) ? "1" : "" },
     coverage: {
       provider: "v8",
       reporter: ["text-summary", "json-summary"],

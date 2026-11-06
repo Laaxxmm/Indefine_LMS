@@ -69,11 +69,19 @@ function bestMs(f: () => void): number {
   return Math.round(best);
 }
 
-describe("mask(): linear time on 200 KB adversarial inputs (< 200 ms each)", () => {
+/**
+ * 200 ms in `npm test` (run three times at every gate). Under `npm run test:coverage` the v8
+ * instrumentation slows these regex-heavy loops (207 ms seen on a 79–85 ms input at the Phase 12
+ * gate), so that run allows 1 s: still 40× below the quadratic bug (40–75 s), which is what this
+ * file guards. FIRM_OS_COVERAGE_RUN is set by vitest.config.ts only when --coverage is passed.
+ */
+const BUDGET_MS = process.env.FIRM_OS_COVERAGE_RUN === "1" ? 1_000 : 200;
+
+describe(`mask(): linear time on 200 KB adversarial inputs (< ${BUDGET_MS} ms each)`, () => {
   it.each(INPUTS)("%s", (_name, text) => {
     expect(text.length).toBeGreaterThanOrEqual(size);
     const ms = bestMs(() => mask(text, { dictionary: DICT }));
-    expect(ms).toBeLessThan(200);
+    expect(ms).toBeLessThan(BUDGET_MS);
   });
 
   it("every exported PATTERN is linear on its worst probe (PoC 03 'individual pattern worst cases')", () => {
@@ -84,7 +92,7 @@ describe("mask(): linear time on 200 KB adversarial inputs (< 200 ms each)", () 
         const r = new RegExp(re.source, re.flags);
         for (let m = r.exec(text); m; m = r.exec(text)) if (m[0].length === 0) r.lastIndex++;
       });
-      expect(ms, k).toBeLessThan(200);
+      expect(ms, k).toBeLessThan(BUDGET_MS);
     }
   });
 
@@ -108,7 +116,7 @@ describe("mask(): linear time on 200 KB adversarial inputs (< 200 ms each)", () 
   it("a 64 KB CSV cell of digits (an oversized register cell) masks quickly, cut and flagged (PoC 03b)", () => {
     const text = "ref,party,amount\nINV-1," + "7".repeat(64 * KB) + ",100.00";
     const ms = bestMs(() => mask(text));
-    expect(ms).toBeLessThan(200);
+    expect(ms).toBeLessThan(BUDGET_MS);
     const r = mask(text);
     expect(r.truncated).toEqual({ runs: 1, chars: 64 * KB - MAX_RUN_CHARS });
     expect(r.masked).toContain("characters not sent]");
