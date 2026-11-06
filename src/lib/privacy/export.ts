@@ -7,7 +7,7 @@
 import { formatDateTimeIst } from "@/lib/agents/core/format";
 import { fail, ok, type ServiceResult } from "@/lib/corrections/result";
 import type { SessionUser } from "@/lib/access";
-import { DATASETS, EXTERNAL_SYSTEMS, RESIDUE_DATASETS, SHARED_WITH, type PrivacyDb, type Row } from "./inventory";
+import { DATASETS, EXTERNAL_SYSTEMS, RESIDUE_DATASETS, SHARED_WITH, nameOnlyRecords, nameOnlySentence, type PrivacyDb, type Row } from "./inventory";
 import { PRINCIPAL_LABELS, type PrincipalType } from "./policy";
 import { guardRegister, requireResolved, requireVerified, resolutionOf, step, writeAudit, type PrivacyDeps } from "./register";
 import { loadScopes } from "./scope";
@@ -29,6 +29,8 @@ export interface AccessExport {
   sharedWith: readonly string[];
   otherSystems: { label: string; detail: string }[];
   notIncluded: string[];
+  /** Records a partner must check by hand before anything is shared (re-audit NEW-8: name-only matches). */
+  manualChecks: string[];
 }
 
 const NOT_INCLUDED = [
@@ -80,6 +82,13 @@ export async function buildAccessExport(db: PrivacyDb, requestId: string, now: D
       else datasets.push({ key: ds.key, label: ds.label, purpose: ds.purpose, fields, records });
     }
   }
+  // Re-audit NEW-8: certificates / letters that match the client by typed name only are named, never included.
+  const manualChecks: string[] = [];
+  for (const scope of scopes) {
+    if (scope.kind !== "client") continue;
+    const sentence = nameOnlySentence(await nameOnlyRecords(db, scope.client));
+    if (sentence) manualChecks.push(sentence);
+  }
   const held = datasets.filter((d) => d.records.length > 0);
   const total = held.reduce((n, d) => n + d.records.length, 0);
   const summary = [
@@ -99,6 +108,7 @@ export async function buildAccessExport(db: PrivacyDb, requestId: string, now: D
     sharedWith: SHARED_WITH,
     otherSystems: EXTERNAL_SYSTEMS.filter((s) => s.key !== "audit-log").map((s) => ({ label: s.label, detail: s.detail })),
     notIncluded: NOT_INCLUDED,
+    manualChecks,
   };
 }
 

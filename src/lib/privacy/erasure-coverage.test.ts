@@ -44,7 +44,7 @@ function seedShadowCopies(db: MemoryDb) {
   ]);
   // A failed onboarding run never linked to a FirmClient (the saga failed before createOrLinkClient).
   db.seed("onboardingRun", [{ id: "ob-old-failed", createdById: USERS.partner.id, prompt: `Onboard ${NAME}, PAN ${PAN}, contact ${CONTACT} ${PHONE}`, spec: { legalName: NAME, pan: PAN, contactName: CONTACT, contactPhone: PHONE, contactEmail: EMAIL }, plan: null, status: "FAILED", steps: null, error: "site creation failed", firmClientId: null }]);
-  db.seed("certificateIssue", [{ id: "cert-old", formatId: "i-ufce", formatTitle: "Net worth", templateVersion: "1", templateHash: "h", clientName: NAME, payload: { pan: PAN }, acknowledged: false, createdById: USERS.partner.id, createdAt: new Date("2016-05-01T00:00:00.000Z") }]);
+  db.seed("certificateIssue", [{ id: "cert-old", formatId: "i-ufce", formatTitle: "Net worth", templateVersion: "1", templateHash: "h", clientName: NAME, clientId: "c-old", payload: { pan: PAN }, acknowledged: false, createdById: USERS.partner.id, createdAt: new Date("2016-05-01T00:00:00.000Z") }]);
   db.seed("modelCall", [{ id: "mc-old", runId: "run-old", agent: "tax", task: "analyse", provider: "claude", model: "x", tier: "SMART", privacy: "anonymize-then-cloud", difficulty: "sop", escalated: false, escalationLevel: 0, anonymized: true, status: "OK", promptHash: "abc", error: `Provider rejected: assessee ${NAME} PAN ${PAN}` }]);
 }
 

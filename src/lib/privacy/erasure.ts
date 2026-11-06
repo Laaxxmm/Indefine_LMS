@@ -28,7 +28,7 @@ import type { SessionUser } from "@/lib/access";
 import { formatDate } from "@/lib/agents/core/format";
 import { Refusal, fail, ok, type ServiceResult } from "@/lib/corrections/result";
 import { canDecideErasure } from "./access";
-import { DATASETS, EXTERNAL_SYSTEMS, RESIDUE_DATASETS, eraseOnboardingRun, scrubberOf, type DataSet, type ModelName, type PrivacyReadDb, type Row } from "./inventory";
+import { DATASETS, EXTERNAL_SYSTEMS, RESIDUE_DATASETS, eraseOnboardingRun, nameOnlyRecords, nameOnlySentence, scrubberOf, type DataSet, type ModelName, type PrivacyReadDb, type Row } from "./inventory";
 import type { DutyId, RequestStatus } from "./policy";
 import { guardRegister, loadOpen, requireResolved, requireVerified, resolutionOf, writeAudit, type PrivacyDeps, type Tx } from "./register";
 import { restrictInTx } from "./consent";
@@ -257,6 +257,23 @@ export async function planErasure(db: PrivacyReadDb, requestId: string, now: Dat
       if (withSet.length) items.push(residueItem(ds, scopeRef, withSet, relevant));
     }
     if (scope.kind === "client") {
+      // Re-audit NEW-8: records that match by typed name only are a partner's manual check, never erased here.
+      const nameOnly = nameOnlySentence(await nameOnlyRecords(db, scope.client));
+      if (nameOnly) {
+        items.push({
+          key: `name-only:${String(scope.client.id)}`,
+          dataset: "name-only-records",
+          label: "Certificates and engagement letters that match by name only",
+          model: null,
+          recordId: null,
+          fields: [],
+          action: "manual",
+          basis: [],
+          holdUntil: null,
+          holdUntilLabel: null,
+          consequence: nameOnly,
+        });
+      }
       for (const sys of EXTERNAL_SYSTEMS) {
         const relevant = sys.key === "audit-log" || (sys.key === "turia" ? !!scope.firmClient?.turiaClientRef : !!(scope.firmClient?.clSiteUrl || scope.client.graphFolderId));
         if (!relevant) continue;
