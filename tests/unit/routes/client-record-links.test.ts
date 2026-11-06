@@ -65,7 +65,7 @@ describe("the client record carries its id to the certificate generator and the 
     expect(links).toContain("/tools/office-tools/engagement-letter/editor?clientId=c1");
   });
 
-  it("someone who cannot use the tools does not get the links", async () => {
+  it("the links follow the tools' own access rules (an active account, as the client page itself needs)", async () => {
     const { canUseCertificateTool } = await import("@/lib/certificates/access");
     const { canUseOfficeTools } = await import("@/lib/office-tools/access");
     expect(canUseCertificateTool(activeSession({ active: false }).user)).toBe(false);
