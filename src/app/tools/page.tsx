@@ -12,7 +12,7 @@ const AA_TEXT: Record<string, string> = { "#17b978": "#047857", "#e84a8a": "#be1
 // onboard module is on for them (its role rule, the Firm OS master switch and the workspace settings).
 const FIRM_OS_ONBOARD = {
   href: "/onboard",
-  title: "Firm OS onboarding",
+  title: "Onboard client (Firm OS)",
   tag: "Firm OS · Partners and managers",
   blurb:
     "Describe a new client in one sentence. Answer only what is missing, review the plan, then create the client record, Turia checklist, SharePoint site and the year's jobs in one go.",

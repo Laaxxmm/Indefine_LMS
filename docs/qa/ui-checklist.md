@@ -183,9 +183,7 @@ From the UI audit (PROGRESS "UI audit", "Known gaps") and the design consistency
 - Fixed in the design pass: `/clients`, `/work`, `/tools` headers wrap at 390 px and mark the current section
   (AreaHeader + NavLink); `ink-faint` text is AA (token remapped to #6c6a82, the shared h2 uses ink-mute); "Sept" from
   en-IN in `src/lib/ist.ts` (fixed month list); `/tools` card "Open" text and the client page's unlabelled selects.
-- The Clients area bar keeps "Firm OS onboarding" beside its own "Onboard" (`/clients/new`): two links
-  called "Onboard" and "Onboard client" would read as the same thing. The Firm OS header calls `/onboard`
-  "Onboard client". Owner to confirm.
+- The Clients area bar, the Tools card and Workspace settings call `/onboard` "Onboard client (Firm OS)", beside the LMS "Onboard" (`/clients/new`); the Firm OS header calls it "Onboard client" (owner decision 06 Nov 2026).
 - LMS debts left as they are (owner decisions or LMS look, not Firm OS fails): emoji and gamification on
   `/dashboard` (👋 🎉 🔥 ⚡ 🎬 🏅 🚀 📡 💬 ✨ 🕑 💼 ✅), `/` (sign-in), `/leaderboard`, `/recap`, `/team/[userId]`,
   `/initiatives`, `/tools/neo-centra` (+ how-it-works), `/admin/auto-quiz`, `/admin/live`, `/admin/trajectory`;

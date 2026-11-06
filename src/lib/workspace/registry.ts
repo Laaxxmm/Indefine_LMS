@@ -72,7 +72,7 @@ export const MODULES: readonly ModuleDef[] = [
   },
   {
     key: "onboard",
-    label: "Firm OS onboarding",
+    label: "Onboard client (Firm OS)",
     description: "Plain-English onboarding of a new client. Partners, managers and admins only.",
     routes: ["/onboard"],
     apiRoutes: ["/firm-os/onboard"],

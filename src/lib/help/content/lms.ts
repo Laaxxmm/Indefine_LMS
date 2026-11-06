@@ -87,7 +87,7 @@ export const LMS_HELP: HelpEntry[] = [
       "Select All tools in the header at any time to go back to the list of tools.",
     ],
     terms: [
-      { term: "All tools", meaning: "The list of every tool you can open. Firm OS onboarding and Neo Centra show only to the people allowed to use them." },
+      { term: "All tools", meaning: "The list of every tool you can open. Onboard client (Firm OS) and Neo Centra show only to the people allowed to use them." },
       { term: "Soon", meaning: "A tool that is not ready yet. Its card cannot be opened." },
       { term: "History", meaning: "The record of certificates or documents made earlier, with who made them and when." },
       {

@@ -136,7 +136,7 @@ and Mistake log, on agent pages only.
 
 * "Agents" is the name of `/agents` in every menu, as its page title and in every back link to it
   (`AGENTS_LABEL`); whose runs staff see is said by the page's lead, not by a different title.
-  "Spot checks" is always plural; "Firm OS onboarding" is "Onboard client" in the header.
+  "Spot checks" is always plural; `/onboard` is "Onboard client" in the Firm OS header and "Onboard client (Firm OS)" in the Clients bar, the Tools card and Workspace settings (beside the LMS "Onboard", which is `/clients/new`).
 * Each link still shows only when its module is on and the role may use it: `firmOsNav()` and
   `dashboardLinks()` decide; `dashboardNav()` only groups `dashboardLinks()`. A group left with one link
   is that link on its own; a group with none is not drawn — with Firm OS switched off there is no

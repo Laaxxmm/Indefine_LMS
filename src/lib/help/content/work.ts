@@ -451,8 +451,8 @@ export const WORK_HELP: HelpEntry[] = [
         fix: "Only the person who started an onboarding or a partner can open it. Ask them to carry it on.",
       },
       {
-        problem: "You were sent to the dashboard with a note that Firm OS onboarding is turned off for your account.",
-        fix: "Ask an admin to turn Firm OS onboarding on for you in Workspace settings.",
+        problem: "You were sent to the dashboard with a note that Onboard client (Firm OS) is turned off for your account.",
+        fix: "Ask an admin to turn Onboard client (Firm OS) on for you in Workspace settings.",
       },
     ],
     ask: "Ask IT about a blocked Microsoft 365 or Turia step, and a partner about a client that already exists or is restricted.",
