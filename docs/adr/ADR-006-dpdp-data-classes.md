@@ -1,6 +1,6 @@
 # ADR-006: DPDP data classes and anonymization
 
-- **Status:** Accepted, 2026-11-05
+- **Status:** Accepted, 2026-11-05; amended 2026-11-06 (retention lines, owner-approved)
 - **Deciders:** Lakshmanan A (owner); Firm OS lead engineer
 - **Related:** ADR-002 (router), Phase 2 `src/lib/ai/anonymizer.ts`, Phase 9 (break nudge), Phase 11 (DPDP inventory)
 
@@ -50,6 +50,22 @@ names from the client master. `unmask()` restores values in the response.
 
 The purge of cached inputs removes derived copies. It is not a deletion of client records or files,
 which the no-delete rule still protects.
+
+**Amendment 2026-11-06 (owner-approved): retention lines added by the DPDP data-coverage work**
+
+These rows join the retention table above. They were introduced by the privacy data-coverage fix
+(security audit finding #20, "retention narrower than documented") and the integration pass, and are
+implemented in `src/lib/hardening/retention.ts` (daily job, `docs/dpdp/retention.md`).
+
+| Data | Kept | Then |
+|---|---|---|
+| `OnboardingRun` copies: the typed request (`prompt`), the extracted details (`spec`) and the `plan` | **30 days** after the run last changed (`updatedAt`), whatever its status (done, failed, blocked, abandoned) | Cleared: `prompt` → `[cleared by retention]`, `spec` → `{ "cleared": true }`, `plan` → null. The run row, its status, steps, error and audit trail stay; the client master holds the client's details. An update, not a delete |
+| Free text in `ModelCall.error` and in typed `AuditEvent` notes (comment text; the note of request-changes, re-run, approve, retract-filing, manual prep, spot-check) | Masked when written by Firm OS; older rows and other writers on the **nightly** run | PAN, GSTIN, Aadhaar, phone, email and account numbers replaced by anonymizer tokens (`⟨PAN_1⟩`); every other value stays. This keeps the promise above that `ModelCall` and `AuditEvent` hold no raw client text |
+| `RateLimitBucket` rows (request counters: key, window start, count; no personal data, no business record) | Until **a day after** the bucket's window ends | Deleted. An expired bucket limits nothing (the next request starts a new window), so deleting it changes no limit and only stops the table growing. The no-delete guard allows exactly one function for this and the heartbeat delete (`purgeExpiredRows`, `scripts/lib/guards.ts` `NO_DELETE_EXEMPTIONS`) |
+
+Changing any of these windows is a threshold change (partner approval and an amendment here). The
+30-day onboarding window and the legal periods in `src/lib/privacy/policy.ts` remain subject to the
+DPDP legal confirmation listed in PROGRESS "Blocked / needs human".
 
 **Break-nudge data (Phase 9).** Break nudges need to know whether someone has been working
 continuously for 100 minutes. The LMS has no live punch data (greytHR arrives as a monthly CSV,

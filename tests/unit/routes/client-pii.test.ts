@@ -8,8 +8,8 @@ import { activeSession, prismaCalls, redirectTarget, renderHtml } from "./harnes
 
 const CLIENT = vi.hoisted(() => ({
   id: "c-kumar", name: "Kumar Traders", active: true, entityType: "PROPRIETORSHIP", pan: "ABCPK1234F", gstin: "29ABCPK1234F1Z5", cin: null, industry: null, city: "Hubballi",
-  contactName: "Kiran Kumar", contactPhone: "9876543210", contactEmail: "kiran@kumartraders.test", referralSource: null, turnover: 1_500_000, turnoverBand: "UNDER_40L",
-  growthGoal: "MAINTAIN", growthNote: null, onboardedOn: new Date("2026-04-01T00:00:00+05:30"), primaryHandlerId: "u1",
+  contactName: "Kiran Kumar", contactPhone: "9876543210", contactEmail: "kiran@kumartraders.test", referralSource: "Rotary club, Hubballi", turnover: 1_500_000, turnoverBand: "UNDER_40L",
+  growthGoal: "MAINTAIN", growthNote: "Owner going through a divorce", onboardedOn: new Date("2026-04-01T00:00:00+05:30"), primaryHandlerId: "u1",
   primaryHandler: { name: "Priya", email: "priya@indefine.test" }, graphFolderId: null, folderName: "Kumar Traders", folderStatus: "READY", documents: [], jobs: [],
 }));
 const audits = vi.hoisted(() => [] as Record<string, unknown>[]);
@@ -73,10 +73,16 @@ describe("/clients/[id] identifiers", () => {
     expect(dl).toContain("29XXXXXXXXXF1Z5");
     expect(dl).toContain("XXXXXX3210");
     expect(dl).toContain("k***@kumartraders.test");
-    expect(dl).toContain("Kiran Kumar");
-    for (const full of [CLIENT.pan, CLIENT.gstin, CLIENT.contactPhone, CLIENT.contactEmail]) expect(html).not.toContain(full);
+    // The contact person as initials; the referral source and the growth note are not shown at all.
+    expect(dl).toContain("K. K.");
+    for (const full of [CLIENT.pan, CLIENT.gstin, CLIENT.contactPhone, CLIENT.contactEmail, CLIENT.contactName, CLIENT.referralSource, CLIENT.growthNote]) expect(html).not.toContain(full);
+    expect(dl).not.toContain(">Referral<");
     expect(dl).not.toMatch(/>Show</);
-    expect(audits).toEqual([]); // opening the page records nothing
+    // Opening the page is a read audit: one "view" (ids and code only, no identifier), at most once an hour.
+    expect(audits).toEqual([{ actorId: "u-staff", action: "view", entity: "Client", entityId: CLIENT.id, meta: { clientCode: null } }]);
+    await render();
+    expect(audits).toHaveLength(1);
+    expect(JSON.stringify(audits)).not.toMatch(/ABCPK|9876543210|kiran@/);
   });
 
   it("managers (not management) see masked values too; admins and partners see them masked with a Show per value", async () => {
@@ -89,6 +95,29 @@ describe("/clients/[id] identifiers", () => {
       expect(dl).not.toContain(CLIENT.pan);
       expect(dl.match(/>Show</g)).toHaveLength(4);
       expect(dl).toContain('aria-label="Show the full PAN (recorded)"');
+      // Management sees the contact person, referral and growth note (the page view itself is audited).
+      expect(dl).toContain("Kiran Kumar");
+      expect(dl).toContain(CLIENT.growthNote);
+    }
+  });
+
+  it("the edit form gets no personal field with the page: it loads them when opened (admins and partners)", async () => {
+    const { EditClient } = await import("@/app/clients/[id]/EditClient");
+    const find = (node: unknown): { props: { client: Record<string, unknown> } } | null => {
+      if (!node || typeof node !== "object") return null;
+      if (Array.isArray(node)) return node.map(find).find(Boolean) ?? null;
+      const el = node as { type?: unknown; props?: { children?: unknown } };
+      if (el.type === EditClient) return el as never;
+      return find(el.props?.children);
+    };
+    for (const who of [{ id: "u-partner", level: "PARTNER" }, { id: "u-admin", role: "ADMIN" as const }]) {
+      as(who);
+      const tree = await ClientPage({ params: Promise.resolve({ id: CLIENT.id }) });
+      const edit = find(tree);
+      expect(edit, "EditClient is on the page for management").not.toBeNull();
+      const props = JSON.stringify(edit!.props);
+      for (const full of [CLIENT.pan, CLIENT.gstin, CLIENT.contactPhone, CLIENT.contactEmail, CLIENT.contactName, CLIENT.referralSource, CLIENT.growthNote]) expect(props).not.toContain(full);
+      expect(edit!.props.client).toMatchObject({ name: "Kumar Traders", pan: "", gstin: "", contactPhone: "", contactEmail: "", contactName: "", referralSource: "", growthNote: "", city: "Hubballi" });
     }
   });
 });
@@ -104,6 +133,33 @@ describe("POST /api/clients/[id]/reveal", () => {
     expect(JSON.stringify(audits)).not.toContain(CLIENT.pan);
     await reveal(post({ field: "email" }), params);
     expect(audits.map((a) => (a.meta as { field: string }).field)).toEqual(["pan", "email"]);
+  });
+
+  it("{ purpose: 'edit' }: management gets every personal field for the form, with one AuditEvent naming the fields and no value", async () => {
+    as({ id: "u-admin", role: "ADMIN" });
+    const r = await reveal(post({ purpose: "edit" }), params);
+    expect(r.status).toBe(200);
+    expect(r.headers.get("cache-control")).toContain("no-store");
+    expect(await r.json()).toEqual({
+      values: { pan: CLIENT.pan, gstin: CLIENT.gstin, contactPhone: CLIENT.contactPhone, contactEmail: CLIENT.contactEmail, contactName: CLIENT.contactName, referralSource: CLIENT.referralSource, growthNote: CLIENT.growthNote },
+    });
+    expect(audits).toEqual([
+      {
+        actorId: "u-admin",
+        action: "client-pii-view",
+        entity: "Client",
+        entityId: CLIENT.id,
+        meta: { purpose: "edit", fields: ["pan", "gstin", "contactPhone", "contactEmail", "contactName", "referralSource", "growthNote"], summary: `opened the edit form of client ${CLIENT.id}` },
+      },
+    ]);
+    expect(JSON.stringify(audits)).not.toMatch(/ABCPK|9876543210|kiran@|Kiran|divorce|Rotary/);
+    for (const who of [{ id: "u-staff" }, { id: "u-mgr", level: "MANAGER" }]) {
+      as(who);
+      expect((await reveal(post({ purpose: "edit" }), params)).status).toBe(403);
+    }
+    as({ id: "u-partner", level: "PARTNER" });
+    expect((await reveal(post({ purpose: "edit" }), { params: Promise.resolve({ id: "nope" }) })).status).toBe(404);
+    expect(audits).toHaveLength(1);
   });
 
   it("refuses staff and managers (403, plain sentence, nothing recorded), signed-out visitors, unknown fields and clients", async () => {

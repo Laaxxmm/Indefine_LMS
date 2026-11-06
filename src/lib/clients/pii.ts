@@ -8,6 +8,24 @@ export const PII_FIELDS = ["pan", "gstin", "phone", "email"] as const;
 export type PiiField = (typeof PII_FIELDS)[number];
 export const PII_LABELS: Record<PiiField, string> = { pan: "PAN", gstin: "GSTIN", phone: "phone", email: "email" };
 
+/**
+ * The client form fields that hold personal data. The page never sends their full values to the
+ * browser; the edit form loads them when it is opened, through the audited reveal route
+ * ({ purpose: "edit" }, one AuditEvent per opening).
+ */
+export const EDIT_PRIVATE_FIELDS = ["pan", "gstin", "contactPhone", "contactEmail", "contactName", "referralSource", "growthNote"] as const;
+export type EditPrivateField = (typeof EDIT_PRIVATE_FIELDS)[number];
+
+/** A person's name as initials, "Kiran Kumar" → "K. K." (same form as src/lib/corrections/mask.ts). */
+export function maskName(value: string): string {
+  return value
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => `${w[0].toUpperCase()}.`)
+    .join(" ");
+}
+
 /** The masked form a person sees; null when the client has no value. */
 export function maskClientPii(field: PiiField, value: string | null | undefined): string | null {
   const v = value?.trim();

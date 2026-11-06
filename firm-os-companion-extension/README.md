@@ -75,7 +75,8 @@ This writes `firm-os-companion-extension/dist/` (not committed) with the address
   task, client details or amounts are written to storage; the panel keeps them in memory only.
 - **Fetched:** your current task from Firm OS — one read-only request
   (`GET /api/firm-os/companion/next-task`) about once a minute while the panel is open. It sends
-  the pairing token and nothing else; no cookies.
+  the pairing token and, while a task is on screen, that answer's ETag (`If-None-Match`) so an
+  unchanged task comes back as an empty "not modified" answer; nothing else, no cookies.
 - **Firm OS keeps:** only a fingerprint (sha256) of the token, its name, when it was created and
   last used, and when it was revoked.
 - **Never:** reads, fills or submits any web page; looks at the sites you visit; talks to any

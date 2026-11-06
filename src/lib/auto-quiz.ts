@@ -39,6 +39,9 @@ export async function isParkedForAdmin(entity: "LiveSession" | "Video", entityId
   return (await prisma.auditEvent.count({ where: { action: GEMINI_PARKED_ACTION, entity, entityId } })) > 0;
 }
 
+/** What a person is told when the name dictionary cannot be loaded (nothing is sent to Gemini). */
+export const NAMES_UNAVAILABLE = "The list of client and staff names to hide from the AI could not be loaded, so nothing was sent. Try again later.";
+
 /** Client master + staff names for masking legacy Gemini text; null when they cannot be read (callers then send nothing). */
 export async function legacyDictionary(): Promise<DictionaryEntry[] | null> {
   try {
@@ -106,7 +109,7 @@ export async function autoQuizFromVideo(
 
   const dictionary = opts.dictionary ?? (await legacyDictionary());
   if (!dictionary) {
-    return { ok: false, videoId, error: "The list of client and staff names to hide from the AI could not be loaded, so nothing was sent. Try again later." };
+    return { ok: false, videoId, error: NAMES_UNAVAILABLE };
   }
   // A live-session recording may discuss a client (ADR-002 known gap, closed here).
   const live = await prisma.liveSession.findFirst({ where: { recordedVideoId: videoId }, select: { id: true } });

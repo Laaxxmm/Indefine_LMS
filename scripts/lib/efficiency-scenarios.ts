@@ -15,6 +15,7 @@ import { closeJob, verifyDeliverable, type GateEvidence } from "@/lib/close-loop
 import { reconcile } from "@/lib/close-loop/reconcile";
 import { graphDeliverableVerifier } from "@/lib/close-loop/verifier";
 import { runRetention } from "@/lib/hardening/retention";
+import { createContentRegistry } from "@/lib/integrations/sharepoint/content-registry";
 import { createDeliverableStore } from "@/lib/integrations/sharepoint/deliverable-store";
 import { createSharePointClient } from "@/lib/integrations/sharepoint/graph-client";
 import { deliverablePath } from "@/lib/integrations/sharepoint/paths";
@@ -181,13 +182,22 @@ type ScaleWorld = { w: CloseLoopWorld; fake: FakeSharePoint; graphBytes: OpCount
  * written by this process through the deliverable store (as copyToFinal does); otherwise they were
  * already there (e.g. after a restart).
  */
-async function closeLoopAtScale(uploadedHere: boolean): Promise<ScaleWorld> {
+/**
+ * external          files put in SharePoint by someone else (no fingerprint on the row, nothing in memory)
+ * uploaded          files this process uploaded (copyToFinal): fingerprint in process memory and on the row
+ * uploaded-restart  files this app uploaded before a restart: fingerprint on the row only
+ */
+type ScaleMode = "external" | "uploaded" | "uploaded-restart";
+
+async function closeLoopAtScale(mode: ScaleMode): Promise<ScaleWorld> {
+  const uploadedHere = mode !== "external";
   const w = new CloseLoopWorld();
   w.clock = () => SCALE_NOW;
   const fake = new FakeSharePoint();
   const graphBytes: OpCounts = {};
   const client = createSharePointClient({ fetch: meteredFetch(fake, graphBytes), graphToken: async () => "token", sleep: async () => {} });
-  const store = createDeliverableStore(client);
+  // Before a restart the upload's memory is lost: a registry that the measured run never sees.
+  const store = createDeliverableStore(client, mode === "uploaded-restart" ? { registry: createContentRegistry() } : {});
   w.users = STAFF.map((s, i) => ({ id: s.id, name: s.id, managerId: i >= 5 ? STAFF[2].id : i >= 2 ? STAFF[0].id : null, level: s.level, active: true }));
   const drives = new Map<number, string>();
   const driveFor = (idx: number) => {
@@ -222,15 +232,17 @@ async function closeLoopAtScale(uploadedHere: boolean): Promise<ScaleWorld> {
     const content = `final pack ${j.id} `.repeat(400); // ~8 KB, a typical small workbook
     const driveId = driveFor(j.clientIdx);
     let itemId: string;
+    let fingerprint: { quickXorHash: string | null; cTag: string | null } = { quickXorHash: null, cTag: null };
     if (uploadedHere) {
       const stored = await store.putNew(driveId, folder.path, name, Buffer.from(content));
       itemId = stored.item.id;
+      fingerprint = { quickXorHash: stored.quickXorHash, cTag: stored.cTag };
     } else {
       const drive = [...fake.sites.values()].flatMap((s) => [...s.drives.values()]).find((d) => d.id === driveId)!;
       fake.addFile(drive, `${folder.path}/${name}`, content);
       itemId = drive.items.get(`${folder.path}/${name}`)!.id;
     }
-    const d: DeliverableRec = { id: `del-${j.id}`, jobTaskId: j.id, kind: "Final", name, spPath: folder.serverRelativeUrl, driveId, driveItemId: itemId, sha256: sha(content), sizeBytes: Buffer.byteLength(content), verifiedAt: null, createdAt: filedAt };
+    const d: DeliverableRec = { id: `del-${j.id}`, jobTaskId: j.id, kind: "Final", name, spPath: folder.serverRelativeUrl, driveId, driveItemId: itemId, sha256: sha(content), ...fingerprint, sizeBytes: Buffer.byteLength(content), verifiedAt: null, createdAt: filedAt };
     w.deliverables.push(d);
     w.addFiledHistory(j.id, filedAt);
     const held = j.state === "CLOSING" && Number(j.id.slice(4)) % 2 === 0;
@@ -254,12 +266,19 @@ async function closeLoopAtScale(uploadedHere: boolean): Promise<ScaleWorld> {
 
 export async function measureReconciler(): Promise<Record<string, Measured>> {
   const out: Record<string, Measured> = {};
-  for (const uploadedHere of [false, true]) {
-    const s = await closeLoopAtScale(uploadedHere);
+  for (const mode of ["external", "uploaded", "uploaded-restart"] as const) {
+    const s = await closeLoopAtScale(mode);
     const c = newCounter();
     instrument(s.w.db, c);
-    const deps = () => ({ db: s.w.db, verifier: graphDeliverableVerifier(() => s.clientOf("")), turia: new ManualBridge(s.w.turiaRepo), now: () => SCALE_NOW });
-    const label = uploadedHere ? "files written by this process (copyToFinal)" : "files already in SharePoint (first run after a restart)";
+    // A restarted process: an empty content registry (the verifier then has only the Deliverable rows).
+    const registry = mode === "uploaded" ? undefined : createContentRegistry();
+    const deps = () => ({ db: s.w.db, verifier: graphDeliverableVerifier(() => s.clientOf(""), registry ? { registry } : {}), turia: new ManualBridge(s.w.turiaRepo), now: () => SCALE_NOW });
+    const label =
+      mode === "uploaded"
+        ? "files written by this process (copyToFinal)"
+        : mode === "external"
+          ? "files already in SharePoint (first run after a restart)"
+          : "files this app uploaded, fingerprint on the row (first run after a restart)";
     const run = async (name: string, now: Date) => {
       c.ops = {};
       c.sql = 0;

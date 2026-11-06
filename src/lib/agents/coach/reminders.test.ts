@@ -211,6 +211,22 @@ describe("reminders cron", () => {
     expect(await runReminders(deps(w))).toMatchObject({ checked: 0 });
   });
 
+  it("a later run skips nudges already sent with one read, not one failed insert each", async () => {
+    const w = world();
+    w.addJob({ state: "IN_PREP", internalDueOn: day("2026-11-04") });
+    w.addJob({ state: "IN_PREP", internalDueOn: day("2026-11-03") });
+    vi.setSystemTime(ist("2026-11-04", "16:00"));
+    expect(await runReminders(deps(w))).toMatchObject({ reminders: 1, escalations: 1 });
+    const inserts = vi.spyOn(w.db.coachEvent, "createMany");
+    const reads = vi.spyOn(w.db.coachEvent, "findMany");
+    vi.setSystemTime(ist("2026-11-04", "16:30"));
+    expect(await runReminders(deps(w))).toMatchObject({ reminders: 0, escalations: 0 });
+    expect(inserts).not.toHaveBeenCalled();
+    expect(reads).toHaveBeenCalledTimes(1);
+    expect(w.events("reminder")).toHaveLength(1);
+    expect(w.events("escalation")).toHaveLength(1);
+  });
+
   it("dedupeKey idempotency: two runs at the same moment write one reminder and one escalation", async () => {
     const w = world();
     w.addJob({ state: "IN_PREP", internalDueOn: day("2026-11-04") });

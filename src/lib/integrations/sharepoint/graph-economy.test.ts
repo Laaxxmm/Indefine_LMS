@@ -5,7 +5,9 @@
 // and hashed as before.
 import { describe, expect, it } from "vitest";
 import { FakeSharePoint } from "../../../../tests/fakes/fake-sharepoint";
-import { graphDeliverableVerifier, sha256Hex } from "@/lib/close-loop/verifier";
+import { graphDeliverableVerifier, recordedSha256, sha256Hex } from "@/lib/close-loop/verifier";
+import { finalFolder, verifyDeliverable } from "@/lib/close-loop/gate";
+import type { DeliverableRow } from "@/lib/close-loop/db";
 import { createClFolders } from "./clfolders";
 import { readSharePointConfig } from "./config";
 import { createContentRegistry, factsFromBytes, liveFingerprint } from "./content-registry";
@@ -138,6 +140,32 @@ describe("close-gate verifier", () => {
     expect(downloads()).toBe(1);
     fake.replaceFile(drive, ref.path, "final bytes, edited in SharePoint");
     expect((await v2.getItem(ref)).sha256).toBeNull(); // cTag changed: the gate downloads and compares
+  });
+
+  it("after a restart no download is needed: the Deliverable row's fingerprint verifies the Final file (gate unchanged)", async () => {
+    const { fake, drive, client, store, downloads } = setup();
+    const s = await store.putNew(drive.id, F, "ACME_Pack_v1.xlsx", Buffer.from("approved pack"));
+    // The store reports SharePoint's fingerprint of exactly these bytes, for the Deliverable row.
+    expect(s.quickXorHash).toBe(quickXorHash(Buffer.from("approved pack")));
+    expect(s.cTag).toMatch(/^"c:/);
+    const job = { fy: "2026-27", service: "GST", period: "2026-10", firmClient: { clientCode: "ACME01" } } as const;
+    const folder = finalFolder(job);
+    if (!folder.ok) throw new Error(folder.reason);
+    const row: DeliverableRow = { id: "d1", kind: "Final", name: s.fileName, spPath: folder.folder.serverRelativeUrl, driveId: drive.id, driveItemId: s.item.id, sha256: s.sha256, quickXorHash: s.quickXorHash, cTag: s.cTag, sizeBytes: s.sizeBytes, verifiedAt: null };
+    const restarted = () => graphDeliverableVerifier(() => client, { registry: createContentRegistry() }); // nothing in process memory
+
+    expect(await verifyDeliverable(job, row, restarted())).toMatchObject({ ok: true, evidence: { sha256: s.sha256 } });
+    expect(downloads()).toBe(0);
+    // An older row without the fingerprint: downloaded and hashed once, exactly as before.
+    expect(await verifyDeliverable(job, { ...row, quickXorHash: null, cTag: null }, restarted())).toMatchObject({ ok: true });
+    expect(downloads()).toBe(1);
+    // A row whose fingerprint does not match the live item (size, quickXorHash) is not trusted.
+    expect(recordedSha256({ ...row, sizeBytes: 1 }, { size: s.sizeBytes, cTag: s.cTag!, file: { hashes: { quickXorHash: s.quickXorHash! } } })).toBeNull();
+    expect(recordedSha256({ ...row, quickXorHash: "x" }, { size: s.sizeBytes, cTag: s.cTag!, file: { hashes: { quickXorHash: s.quickXorHash! } } })).toBeNull();
+    // Edited in SharePoint: the cTag changes, so the gate downloads, hashes and refuses.
+    fake.replaceFile(drive, `${F}/${s.fileName}`, "approved pack, edited");
+    expect(await verifyDeliverable(job, row, restarted())).toMatchObject({ ok: false, check: { code: "final-hash" } });
+    expect(downloads()).toBe(2);
   });
 
   it("never trusts quickXorHash alone: no cTag, a size or quickXorHash that differs, or bytes that are not the described content", () => {

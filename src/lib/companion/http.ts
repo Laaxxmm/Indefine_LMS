@@ -5,11 +5,14 @@
 //            when set — config.ts), never with Access-Control-Allow-Credentials. A request from any other browser origin
 //            is refused with 403; one with no Origin header (not a browser page) is treated like
 //            the extension, because the token is the gate.
-//   limit    per token (by its hash), before any database work.
-//   order    origin → token present → rate limit → token valid → person active → companion access
+//   limit    per token (by its hash), counted only once the token is known and live (a malformed
+//            token never reaches the database; an unknown one costs one indexed lookup and adds
+//            no RateLimitBucket row).
+//   order    origin → token present → token valid → rate limit → person active → companion access
 //            → provider.nextTask. Every refusal is one plain sentence in { error }.
 //
 // CORS lives here, in the route handler, not in next.config.ts (which belongs to hardening).
+import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import type { PrismaClient } from "@prisma/client";
 import { isActive } from "@/lib/access";
@@ -17,7 +20,7 @@ import { hasCompanionAccess, type CompanionUser } from "./access";
 import { MSG } from "./messages";
 import type { CompanionProvider } from "./provider";
 import type { RateLimiter } from "./rate-limit";
-import { hashToken, isTokenShape, readBearer, verifyPairing, type VerifyFailure } from "./tokens";
+import { hashToken, readBearer, verifyPairing, type VerifyFailure } from "./tokens";
 
 // ------------------------------------------------------------------ CORS
 
@@ -32,7 +35,7 @@ function json(body: unknown, status: number, allowOrigin: string | null, extra: 
   const headers: Record<string, string> = { "cache-control": "no-store", vary: "Origin", ...extra };
   if (allowOrigin) {
     headers["access-control-allow-origin"] = allowOrigin;
-    headers["access-control-expose-headers"] = "Retry-After";
+    headers["access-control-expose-headers"] = "Retry-After, ETag";
   }
   return NextResponse.json(body, { status, headers });
 }
@@ -46,7 +49,7 @@ export function handlePreflight(req: Request, origins: readonly string[]): Respo
     headers: {
       "access-control-allow-origin": allowed,
       "access-control-allow-methods": "GET, OPTIONS",
-      "access-control-allow-headers": "Authorization",
+      "access-control-allow-headers": "Authorization, If-None-Match",
       "access-control-max-age": "600",
       vary: "Origin",
     },
@@ -87,18 +90,22 @@ export async function handleNextTask(req: Request, deps: NextTaskDeps): Promise<
 
   const raw = readBearer(req.headers.get("authorization"));
   if (!raw) return send({ error: MSG.tokenMissing }, 401, { "www-authenticate": "Bearer" });
-  // Malformed tokens never reach the database (verifyPairing refuses them without a query).
-  if (isTokenShape(raw)) {
-    const decision = await deps.limiter.hit(`companion:${hashToken(raw)}`, now);
-    if (!decision.ok) return send({ error: MSG.rateLimited }, 429, { "retry-after": String(decision.retryAfterSec) });
-  }
   try {
+    // Malformed tokens never reach the database (verifyPairing refuses them on shape, without a
+    // query); a well-formed one costs one indexed lookup by hash. Only a known, live token is then
+    // counted in the rate-limit table, so random tokens add no RateLimitBucket rows.
     const verified = await verifyPairing(deps.db, raw, now);
     if (!verified.ok) return send({ error: REFUSED[verified.reason] }, 401, { "www-authenticate": "Bearer" });
+    const decision = await deps.limiter.hit(`companion:${hashToken(raw)}`, now);
+    if (!decision.ok) return send({ error: MSG.rateLimited }, 429, { "retry-after": String(decision.retryAfterSec) });
     const user = await loadCompanionUser(deps.db, verified.userId);
     if (!user || !isActive(user)) return send({ error: MSG.accountInactive }, 403);
     if (!(await hasCompanionAccess(deps.db, user))) return send({ error: MSG.noAccess }, 403);
-    return send(await deps.provider.nextTask(user, now), 200);
+    const body = await deps.provider.nextTask(user, now);
+    // Weak ETag over everything but the timestamp: an unchanged task is a 304 with no body.
+    const etag = `W/"${createHash("sha256").update(JSON.stringify({ ...(body as object), generatedAt: undefined })).digest("base64url").slice(0, 27)}"`;
+    if (req.headers.get("if-none-match") === etag) return new Response(null, { status: 304, headers: { etag, "cache-control": "no-store", vary: "Origin", ...(cors.allowed ? { "access-control-allow-origin": cors.allowed, "access-control-expose-headers": "Retry-After, ETag" } : {}) } });
+    return send(body, 200, { etag });
   } catch (e) {
     console.error("[companion] next-task failed", e);
     return send({ error: MSG.serverError }, 500);

@@ -27,6 +27,20 @@ export class GraphError extends Error {
   }
 }
 
+/**
+ * A request the client refused to send because its address is not where the credential belongs
+ * (a Graph token to a non-Graph host, a SharePoint token to another host, an upload URL off
+ * Microsoft's hosts). Only the host is named: the full URL may carry a credential.
+ */
+export class UnsafeUrlError extends Error {
+  readonly host: string;
+  constructor(host: string, what: string) {
+    super(`Refused to send ${what} to ${host || "an invalid address"}: it is not a Microsoft Graph or SharePoint address for this tenant.`);
+    this.name = "UnsafeUrlError";
+    this.host = host;
+  }
+}
+
 /** The site or library an operation needs does not exist yet (run the matching ensure-* first). */
 export class NotProvisionedError extends Error {
   constructor(message: string) {

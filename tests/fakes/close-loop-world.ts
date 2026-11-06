@@ -39,6 +39,9 @@ export type DeliverableRec = {
   driveId: string | null;
   driveItemId: string | null;
   sha256: string;
+  /** SharePoint fingerprint recorded at upload (optional: older rows and most tests have none). */
+  quickXorHash?: string | null;
+  cTag?: string | null;
   sizeBytes: number;
   verifiedAt: Date | null;
   createdAt: Date;
@@ -256,13 +259,18 @@ export class CloseLoopWorld {
         this.events.push(e);
         return { id: e.id };
       },
-      findMany: async ({ where }) =>
-        this.events.filter((e) => e.jobTaskId === where.jobTaskId).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()),
+      findMany: (async ({ where }: { where: { jobTaskId: string | { in: string[] }; toState?: string } }) =>
+        this.events
+          .filter((e) => (typeof where.jobTaskId === "string" ? e.jobTaskId === where.jobTaskId : where.jobTaskId.in.includes(e.jobTaskId)) && (!where.toState || e.toState === where.toState))
+          .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())) as never,
     },
     agentRun: { findFirst: async () => null },
     checklistResult: { count: async () => 0 },
     deliverable: {
-      findMany: async ({ where }) => this.deliverables.filter((d) => d.jobTaskId === where.jobTaskId && d.kind === where.kind).map((d) => ({ ...d })),
+      findMany: (async ({ where }: { where: { jobTaskId: string | { in: string[] }; kind: string } }) =>
+        this.deliverables
+          .filter((d) => (typeof where.jobTaskId === "string" ? d.jobTaskId === where.jobTaskId : where.jobTaskId.in.includes(d.jobTaskId)) && d.kind === where.kind)
+          .map((d) => ({ ...d }))) as never,
       updateMany: async ({ where, data }) => {
         const hit = this.deliverables.filter((d) => where.id.in.includes(d.id));
         hit.forEach((d) => Object.assign(d, data));
@@ -298,6 +306,10 @@ export class CloseLoopWorld {
         const a = { id: this.id("audit"), ...data, createdAt: this.clock() };
         this.audits.push(a);
         return { id: a.id };
+      },
+      findFirst: async ({ where }) => {
+        const hit = this.audits.filter((a) => a.entity === where.entity && a.entityId === where.entityId && a.action === where.action).at(-1);
+        return hit ? { meta: hit.meta ?? null } : null;
       },
     },
     user: {

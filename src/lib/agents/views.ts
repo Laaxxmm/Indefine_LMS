@@ -376,6 +376,13 @@ async function packJson(db: FirmDb, key: string, version?: string): Promise<Chec
 /** PROPOSED (with the diff it would make to the active pack) and decided rows (with the diff they made). */
 export async function listMistakes(db: FirmDb, user: SessionUser): Promise<{ canDecide: boolean; proposed: MistakeRow[]; decided: MistakeRow[] }> {
   const logs = await db.mistakeLog.findMany({ orderBy: { createdAt: "desc" }, take: 200 });
+  // One read per pack version, not one per mistake row (packs are immutable per version).
+  const packs = new Map<string, Promise<ChecklistPack | null>>();
+  const pack = (key: string, version?: string) => {
+    const k = `${key}@${version ?? "latest"}`;
+    if (!packs.has(k)) packs.set(k, packJson(db, key, version));
+    return packs.get(k)!;
+  };
   const rows: MistakeRow[] = [];
   for (const m of logs) {
     const def = getAgent(m.agent);
@@ -384,7 +391,7 @@ export async function listMistakes(db: FirmDb, user: SessionUser): Promise<{ can
     let problem: string | null = null;
     if (def) {
       if (m.status === "PROPOSED") {
-        const current = await packJson(db, def.sopPackKey);
+        const current = await pack(def.sopPackKey);
         if (current) {
           try {
             diff = diffPacks(current, withPromotedRule(current, m.ruleProposal, m.id));
@@ -393,7 +400,7 @@ export async function listMistakes(db: FirmDb, user: SessionUser): Promise<{ can
           }
         } else problem = `No active SOP pack "${def.sopPackKey}"`;
       } else if (m.status === "APPROVED" && m.promotedToVersion) {
-        const after = await packJson(db, def.sopPackKey, m.promotedToVersion);
+        const after = await pack(def.sopPackKey, m.promotedToVersion);
         if (after) {
           const before = { ...after, rules: after.rules.filter((r) => r.origin?.mistakeLogId !== m.id) };
           diff = diffPacks(before, after);

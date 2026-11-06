@@ -94,6 +94,14 @@ export const LEAD_AREAS: LeadArea[] = [
   // Deferred tax (Schedule III: non-current, shown net). Before L-D, whose catch-all "liabilit" took "Deferred Tax Liability".
   { wp: "L-O", name: "Deferred tax assets (net)", side: "dr", groups: [zoho("^deferred tax assets?$", "Zoho \"Deferred Tax Asset\" → Deferred tax assets (net), non-current")] },
   { wp: "L-P", name: "Deferred tax liabilities (net)", side: "cr", groups: [zoho("^deferred tax liabilit(y|ies)$", "Zoho \"Deferred Tax Liability\" → Deferred tax liabilities (net), non-current (it fell to L-D before)")] },
+  // Zoho account type "Non Current Liability" (Schedule III non-current: other long-term liabilities and
+  // long-term provisions). Before L-D, whose catch-all "liabilit" put it in current liabilities.
+  {
+    wp: "L-Q",
+    name: "Other non-current liabilities and long-term provisions",
+    side: "cr",
+    groups: [zoho("^non[- ]?current liabilit(y|ies)$", "Zoho \"Non Current Liability\" → other long-term liabilities and long-term provisions, non-current (it fell to L-D, current liabilities, before; long-term borrowings belong in L-B)")],
+  },
   {
     wp: "L-D",
     name: "Other current liabilities and provisions",
@@ -105,6 +113,7 @@ export const LEAD_AREAS: LeadArea[] = [
       "other liabilit",
       "liabilit",
       zoho("^output tax$", "Zoho \"Output Tax\" (GST payable) → other current liabilities (duties and taxes)"),
+      zoho("^overseas tax payable$", "Zoho \"Overseas Tax Payable\" (tax collected for a foreign tax authority) → other current liabilities (duties and taxes payable); it was unmapped and blocked before"),
       zoho("^credit card$", "Zoho \"Credit Card\" → other current liabilities (short-term borrowings if the card is a bank credit facility the entity draws on)"),
       zoho("^payment clearing$", "Zoho \"Payment Clearing\" with a credit balance → other current liabilities (a debit balance goes to L-J)", "cr"),
     ],

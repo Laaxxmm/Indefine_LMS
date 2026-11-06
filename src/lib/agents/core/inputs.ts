@@ -10,6 +10,7 @@
 // ZIP-based files (xlsx, docx) are also inspected for decompression bombs and oversized sheets
 // (src/lib/hardening/xlsx-guard.ts: 64 MB unpacked, 50,000 rows, column IV, 300,000 cells).
 import type { DeliverableStore } from "@/lib/integrations/sharepoint/deliverable-store";
+import { GraphError } from "@/lib/integrations/sharepoint/errors";
 import type { SharePointClient } from "@/lib/integrations/sharepoint/graph-client";
 import { screenUpload, type ScreenOptions, type UploadLogEntry } from "@/lib/hardening/uploads";
 import { XlsxLimitError, inspectXlsx, isZipBytes } from "@/lib/hardening/xlsx-guard";
@@ -92,12 +93,18 @@ export function clientDocsInputSource(client: SharePointClient, store: Deliverab
   return {
     async gather(req: InputRequest) {
       const driveId = await store.complianceDrive(req.clientCode);
-      const folder = await client.getItemByPath(driveId, req.clientDocsFolder);
-      if (!folder) return [];
+      // One children GET; a folder that does not exist yet is a 404 (no separate item GET).
+      let listed: Awaited<ReturnType<SharePointClient["listChildren"]>>;
+      try {
+        listed = await client.listChildren(driveId, req.clientDocsFolder);
+      } catch (e) {
+        if (e instanceof GraphError && e.status === 404) return [];
+        throw e;
+      }
       const files: InputFile[] = [];
       let total = 0;
       // Name order, so a run sees the same files in the same order every time.
-      const items = (await client.listChildren(driveId, req.clientDocsFolder)).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+      const items = listed.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
       for (const item of items) {
         if (!item.file) continue;
         total += item.size ?? 0;

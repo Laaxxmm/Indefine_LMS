@@ -15,6 +15,7 @@ import {
   isInFinalFolder,
   isSpotCheckSelected,
   parseGateEvidence,
+  sameReasons,
   type GateEvidence,
 } from "./gate";
 import { graphDeliverableVerifier, type DeliverableVerifier } from "./verifier";
@@ -342,6 +343,30 @@ describe("closeJob — filing condition (c) and state", () => {
     const r = await closeJob("nope", { kind: "system", name: "close-loop-reconciler" }, deps);
     expect(r).toEqual({ ok: false, state: null, reasons: ["That job wasn't found. Reload the page and try again."], missing: { finalFile: false, turiaClose: false, filing: false } });
     expect(w.audits[0]).toMatchObject({ action: "close-refused", actorId: "system:close-loop-reconciler" });
+  });
+});
+
+describe("closeJob — refusal audit option", () => {
+  it("'every' (default) audits each refusal; 'on-change' only when the reasons differ from the last close-refused", async () => {
+    const { w, deps } = setup();
+    const job = w.addJob();
+    w.addFiledHistory(job.id);
+    const robot = { kind: "system", name: "close-loop-reconciler" } as const;
+    await closeJob(job.id, robot, deps, { refusalAudit: "on-change" });
+    await closeJob(job.id, robot, deps, { refusalAudit: "on-change" });
+    expect(w.audits.filter((a) => a.action === "close-refused")).toHaveLength(1);
+    await closeJob(job.id, staff, deps);
+    await closeJob(job.id, staff, deps);
+    expect(w.audits.filter((a) => a.action === "close-refused")).toHaveLength(3);
+    w.addCloseSync(job.id); // one reason fewer
+    await closeJob(job.id, robot, deps, { refusalAudit: "on-change" });
+    expect(w.audits.filter((a) => a.action === "close-refused")).toHaveLength(4);
+  });
+
+  it("sameReasons ignores order and needs a previous refusal", () => {
+    expect(sameReasons(["a", "b"], ["b", "a"])).toBe(true);
+    expect(sameReasons(["a"], ["a", "b"])).toBe(false);
+    expect(sameReasons(null, [])).toBe(false);
   });
 });
 

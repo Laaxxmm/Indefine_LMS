@@ -215,18 +215,27 @@ export function whyText(c: NextTaskCandidate, now: Date, rankReason: string | nu
 
 export type SopFacts = Pick<SopContext, "agentTitle" | "requiredInputs" | "packVersion" | "ruleCount">;
 
+/** Rule count per published pack version ("key@version"). Versions are immutable, so this never goes stale. */
+const RULE_COUNTS = new Map<string, number | null>();
+
 /** The agent for the service and its active SOP pack (version, rule count; built-in pack when none is published). */
 export async function sopFacts(db: FirmDb, service: FirmService, agentKey: string | null, agents: readonly AnyAgent[]): Promise<SopFacts & { agent: AnyAgent | null }> {
   const agent = (agentKey && agents.find((a) => a.key === agentKey)) || agents.find((a) => a.service === service) || null;
   if (!agent) return { agent: null, agentTitle: null, requiredInputs: [], packVersion: null, ruleCount: null };
-  const pack = await db.sopPack.findFirst({ ...latestPackQuery(agent.sopPackKey), select: { version: true, checklist: true } });
-  const parsed = ChecklistPackSchema.safeParse(pack?.checklist);
+  // The version alone first: the pack's checklist JSON is read once per version per process, not on every render.
+  const pack = await db.sopPack.findFirst({ ...latestPackQuery(agent.sopPackKey), select: { version: true } });
+  const key = pack ? `${agent.sopPackKey}@${pack.version}` : null;
+  if (key && !RULE_COUNTS.has(key)) {
+    const full = await db.sopPack.findFirst({ where: { key: agent.sopPackKey, version: pack!.version }, select: { checklist: true } });
+    const parsed = ChecklistPackSchema.safeParse(full?.checklist);
+    RULE_COUNTS.set(key, parsed.success ? parsed.data.rules.length : null);
+  }
   return {
     agent,
     agentTitle: agent.title,
     requiredInputs: agent.requiredInputs ?? [],
     packVersion: pack?.version ?? null,
-    ruleCount: parsed.success ? parsed.data.rules.length : pack ? null : agent.defaultChecklist.rules.length,
+    ruleCount: key ? (RULE_COUNTS.get(key) ?? null) : agent.defaultChecklist.rules.length,
   };
 }
 

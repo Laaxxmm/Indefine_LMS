@@ -65,7 +65,7 @@ describe("nudges for held CLOSING jobs", () => {
     const s = await reconcile(deps);
     expect(s).toMatchObject({ open: 1, reminders: 0, escalations: 0 });
     expect(w.coach).toEqual([]);
-    expect(w.audits.map((a) => a.action)).toEqual(["close-refused"]);
+    expect(w.audits.map((a) => a.action)).toEqual(["close-refused"]); // the first refusal of the job
   });
 
   it("after 15 minutes the assignee gets one reminder, however often the cron fires that day", async () => {
@@ -135,6 +135,61 @@ describe("nudges for held CLOSING jobs", () => {
     vi.setSystemTime(at(30 * MIN));
     await reconcile(deps);
     expect((w.coach[0].payload as { missing: string[] }).missing).toEqual(["the filing confirmation"]);
+  });
+});
+
+describe("close-refused audit (owner decision 2026-11-06: only when the reasons change)", () => {
+  const person = { kind: "human", userId: "u-priya", roles: ["staff"] } as const;
+  const refusals = (w: CloseLoopWorld) => w.audits.filter((a) => a.action === "close-refused");
+
+  it("automated retries on a held job write one close-refused until the reasons change, then one more", async () => {
+    const { w, deps } = setup();
+    const job = heldJob(w);
+    vi.setSystemTime(at(5 * MIN));
+    await reconcile(deps);
+    vi.setSystemTime(at(35 * MIN));
+    await reconcile(deps);
+    vi.setSystemTime(at(65 * MIN));
+    await reconcile(deps);
+    expect(refusals(w)).toHaveLength(1);
+    expect(refusals(w)[0]).toMatchObject({ actorId: "system:close-loop-reconciler", entityId: job.id, meta: { reasons: ["The Turia task is not closed yet. Close it in Turia, then enter its task reference and the minutes logged."], state: "CLOSING" } });
+
+    // The Final file disappears from SharePoint: the reasons change, so the next run records them.
+    w.loseFile(w.deliverables.find((d) => d.jobTaskId === job.id)!.driveItemId!);
+    vi.setSystemTime(at(95 * MIN));
+    await reconcile(deps);
+    expect(refusals(w)).toHaveLength(2);
+    expect((refusals(w)[1].meta as { reasons: string[] }).reasons).toHaveLength(2);
+    vi.setSystemTime(at(125 * MIN));
+    await reconcile(deps);
+    expect(refusals(w)).toHaveLength(2);
+    expect(w.job(job.id).state).toBe("CLOSING");
+  });
+
+  it("a person's close attempt is audited every time, even with the same reasons the reconciler recorded", async () => {
+    const { w, deps } = setup();
+    const job = heldJob(w);
+    vi.setSystemTime(at(5 * MIN));
+    await reconcile(deps);
+    expect(refusals(w)).toHaveLength(1);
+    await closeJob(job.id, person, deps);
+    await closeJob(job.id, person, deps);
+    expect(refusals(w).map((a) => a.actorId)).toEqual(["system:close-loop-reconciler", "u-priya", "u-priya"]);
+    // The reconciler compares with the last event (the person's, same reasons): nothing new.
+    vi.setSystemTime(at(35 * MIN));
+    await reconcile(deps);
+    expect(refusals(w)).toHaveLength(3);
+  });
+
+  it("a held job that becomes ready closes as before (the close itself is always audited)", async () => {
+    const { w, deps } = setup();
+    const job = heldJob(w);
+    vi.setSystemTime(at(5 * MIN));
+    await reconcile(deps);
+    w.addCloseSync(job.id);
+    vi.setSystemTime(at(35 * MIN));
+    expect((await reconcile(deps)).closed).toEqual([job.id]);
+    expect(w.audits.map((a) => a.action)).toEqual(["close-refused", "close"]);
   });
 });
 

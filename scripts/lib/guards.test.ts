@@ -285,21 +285,23 @@ describe("no-delete: the one ADR-006 retention exemption", () => {
   const P = "src/lib/hardening/retention.ts";
   const DM = DOT + "deleteMany(";
   const purge = (body: string[] = ["  const r = await db" + DOT + "activityHeartbeat" + DM + "{ where: { at: { lt: cutoff } } });", "  return r.count;"]) => [
-    "export async function purgeExpiredHeartbeats(db: Db, now: Date): Promise<number> {",
+    "export async function purgeExpiredRows(db: Db, now: Date): Promise<number> {",
     ...body,
     "}",
   ];
   const nd = (path: string, ...lines: string[]) => rules(checkNoDelete([file(path, ...lines)]));
 
-  it("is exactly one function in one file, for one model, citing ADR-006", () => {
+  it("is exactly one function in one file, for two models (heartbeats, rate-limit buckets), citing ADR-006", () => {
     expect(NO_DELETE_EXEMPTIONS).toHaveLength(1);
-    expect(NO_DELETE_EXEMPTIONS[0]).toMatchObject({ path: P, fn: "purgeExpiredHeartbeats", model: "activityHeartbeat", adr: "ADR-006" });
+    expect(NO_DELETE_EXEMPTIONS[0]).toMatchObject({ path: P, fn: "purgeExpiredRows", models: ["activityHeartbeat", "rateLimitBucket"], adr: "ADR-006" });
     expect(NO_DELETE_EXEMPTIONS[0].why).toMatch(/7 days/);
+    expect(NO_DELETE_EXEMPTIONS[0].why).toMatch(/no personal data/);
     expect(FIRM_OS_DIRS).toContain("src/lib/hardening");
   });
 
-  it("allows that function's declaration and its heartbeat delete", () => {
+  it("allows that function's declaration and its heartbeat and rate-limit bucket deletes", () => {
     expect(nd(P, ...purge())).toEqual([]);
+    expect(nd(P, ...purge(["  await db" + DOT + "activityHeartbeat" + DM + "{});", "  await db" + DOT + "rateLimitBucket" + DM + "{ where: { windowStart: { lt: cutoff } } });"]))).toEqual([]);
     // Without the exemption the same file fails twice: the export name and the delete.
     expect(rules(checkNoDelete([file(P, ...purge())], []))).toEqual(["no-delete:prisma-delete", "no-delete:exported-destructive-fn"]);
   });
@@ -317,20 +319,25 @@ describe("no-delete: the one ADR-006 retention exemption", () => {
 
   it("fails closed when the function is missing or declared twice", () => {
     expect(nd(P, ...purge(), ...purge())).toHaveLength(4);
-    expect(exportedFunctionRange(purge().join("\n"), "purgeExpiredHeartbeats")).toEqual([1, 4]);
-    expect(exportedFunctionRange([...purge(), ...purge()].join("\n"), "purgeExpiredHeartbeats")).toBeNull();
-    expect(exportedFunctionRange("export const purgeExpiredHeartbeats = () => {};", "purgeExpiredHeartbeats")).toBeNull();
+    expect(exportedFunctionRange(purge().join("\n"), "purgeExpiredRows")).toEqual([1, 4]);
+    expect(exportedFunctionRange([...purge(), ...purge()].join("\n"), "purgeExpiredRows")).toBeNull();
+    expect(exportedFunctionRange("export const purgeExpiredRows = () => {};", "purgeExpiredRows")).toBeNull();
     expect(exportedFunctionRange("export function f(a: (x: number) => void) {\n  a(1);\n}", "f")).toEqual([1, 3]);
   });
 
-  it("the real retention module passes with exactly one delete call, inside the exempt function", () => {
+  it("the real retention module passes with exactly two delete calls (heartbeats, rate-limit buckets), inside the exempt function", () => {
     const content = readFileSync(join(__dirname, "..", "..", P), "utf8");
     expect(checkNoDelete([{ path: P, content }])).toEqual([]);
-    expect(content.split(DM).length - 1).toBe(1);
-    const range = exportedFunctionRange(content, "purgeExpiredHeartbeats")!;
-    const line = content.split(/\r?\n/).findIndex((l) => l.includes(DM)) + 1;
-    expect(line).toBeGreaterThan(range[0]);
-    expect(line).toBeLessThanOrEqual(range[1]);
+    expect(content.split(DM).length - 1).toBe(2);
+    const range = exportedFunctionRange(content, "purgeExpiredRows")!;
+    const lines = content.split(/\r?\n/);
+    const deletes = lines.map((l, i) => (l.includes(DM) ? i + 1 : 0)).filter(Boolean);
+    expect(deletes).toHaveLength(2);
+    for (const line of deletes) {
+      expect(line).toBeGreaterThan(range[0]);
+      expect(line).toBeLessThanOrEqual(range[1]);
+    }
+    expect(deletes.map((n) => lines[n - 1].match(/\.(\w+)\.deleteMany/)?.[1])).toEqual(["activityHeartbeat", "rateLimitBucket"]);
   });
 });
 

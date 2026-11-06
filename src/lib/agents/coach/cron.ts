@@ -16,7 +16,7 @@ import { formatDate } from "@/lib/agents/core/format";
 import { addDays, istDayKey, istDayStart, istWeekStart, istWeekday } from "@/lib/ist";
 import { DEFAULT_CALENDAR, SUMMARY_SCHEDULE, type CoachCalendar } from "./config";
 import { toRankInputs } from "./board";
-import { COACH_ACTOR, COACH_JOB_SELECT, MAX_ROWS, audit, createOnce, dedupeKey, jobLabel, type CoachDb, type CoachJobRow } from "./db";
+import { COACH_ACTOR, COACH_JOB_SELECT, MAX_ROWS, audit, createOnce, dedupeKey, jobLabel, sentKeys, type CoachDb, type CoachJobRow } from "./db";
 import { POST_FILING_STATES, PRE_FILING_STATES, buildBoard, stepHolder, type RankOptions, type RankedBoard, type RankedItem } from "./rank";
 import { dueReminderSlot, escalationMessage, escalationTarget, isInternalOverdue, reminderMessage } from "./reminders";
 import { weeklySummary } from "./summary";
@@ -153,6 +153,15 @@ export async function runReminders(deps: CoachCronDeps): Promise<ReminderRunSumm
   const managerOf = (id: string) => users.get(id)?.managerId ?? null;
   const day = istDayKey(now);
   const opts = { calendar };
+  // Nudges already sent (an earlier run today): skip them with one read, not one failed insert each.
+  const keyOf = (r: CoachJobRow): string | null => {
+    if (!r.internalDueOn) return null;
+    if (isInternalOverdue(r.internalDueOn, now, opts)) return dedupeKey.escalation(r.id, day);
+    const slot = dueReminderSlot(r.internalDueOn, now, opts);
+    const holder = stepHolder(r);
+    return slot && holder ? dedupeKey.reminder(r.id, holder.userId, slot.key) : null;
+  };
+  const sent = await sentKeys(deps.db, rows.map(keyOf).filter((k): k is string => !!k));
 
   for (const r of rows) {
     if (!r.internalDueOn) continue;
@@ -162,6 +171,7 @@ export async function runReminders(deps: CoachCronDeps): Promise<ReminderRunSumm
     if (!isInternalOverdue(r.internalDueOn, now, opts)) {
       const slot = dueReminderSlot(r.internalDueOn, now, opts);
       if (!slot || !holder || !users.has(holder.userId)) continue;
+      if (sent.has(dedupeKey.reminder(r.id, holder.userId, slot.key))) continue;
       const payload = { reason: "internal-due", slot: slot.label, dueAt: slot.dueAt.toISOString(), state: r.state, message: reminderMessage(label, slot) };
       const created = await createOnce(deps.db, {
         userId: holder.userId,
@@ -178,6 +188,7 @@ export async function runReminders(deps: CoachCronDeps): Promise<ReminderRunSumm
       s.unescalated.push(r.id);
       continue;
     }
+    if (sent.has(dedupeKey.escalation(r.id, day))) continue;
     const holderName = holder ? users.get(holder.userId)?.name ?? null : null;
     const payload = {
       reason: "internal-overdue",

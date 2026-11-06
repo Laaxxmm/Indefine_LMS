@@ -10,7 +10,9 @@
 //       acknowledgement reference is stored where the service has one (never checked against a portal).
 // closeJob() re-reads the database facts inside one transaction, mints a token and asks the state
 // machine for CLOSING → DONE as `system:close-gate`, with the evidence as JSON in the event note.
-// Every attempt, passing or not, writes an AuditEvent. A refused job stays CLOSING.
+// Every attempt by a person, passing or not, writes an AuditEvent. Automated retries (the
+// reconciler, refusalAudit "on-change") write a refusal only when its reasons differ from the
+// job's last `close-refused` event (owner decision 2026-11-06). A refused job stays CLOSING.
 import { createHash } from "node:crypto";
 import type { JobTaskState } from "@prisma/client";
 import { ACK_REF_REQUIRED, actorRef, registerCloseGate, type Actor } from "@/lib/agents/core/state";
@@ -19,6 +21,7 @@ import { deliverablePath, isServiceFolder, type DeliverablePath } from "@/lib/in
 import {
   audit,
   joinTransaction,
+  lastRefusalReasons,
   loadCloseSyncs,
   loadEvents,
   loadFinalDeliverables,
@@ -171,7 +174,13 @@ export async function verifyDeliverable(
   if (!d.driveItemId) return fail("final-missing", "Firm OS has no record of where this file is in SharePoint. Use \"Copy to Final\" on the approved pack.");
 
   const expectedPath = `${f.folder.path}/${d.name}`;
-  const ref: DeliverableRef = { clientCode: job.firmClient.clientCode, driveId: d.driveId, driveItemId: d.driveItemId, path: expectedPath };
+  const ref: DeliverableRef = {
+    clientCode: job.firmClient.clientCode,
+    driveId: d.driveId,
+    driveItemId: d.driveItemId,
+    path: expectedPath,
+    recorded: { sha256: d.sha256, quickXorHash: d.quickXorHash ?? null, cTag: d.cTag ?? null, sizeBytes: d.sizeBytes },
+  };
   try {
     const live = await verifier.getItem(ref);
     if (!live.exists) return fail("final-missing", `not found in SharePoint at ${f.folder.serverRelativeUrl}. It may have been moved or deleted — put it back, or copy the approved pack to Final again.`);
@@ -343,15 +352,33 @@ async function recheck(tx: CloseLoopTx, jobTaskId: string, ev: GateEvidence): Pr
   return null;
 }
 
+export type CloseJobOptions = {
+  /**
+   * "every" (default): each refusal writes a `close-refused` AuditEvent — a person's attempt.
+   * "on-change": only when the reasons differ from the job's last `close-refused` event — the
+   * reconciler's automated retries, so a held job does not add a row every 30 minutes.
+   */
+  refusalAudit?: "every" | "on-change";
+};
+
+/** Same reasons, in any order. */
+export function sameReasons(a: readonly string[] | null, b: readonly string[]): boolean {
+  if (!a || a.length !== b.length) return false;
+  const x = [...a].sort();
+  const y = [...b].sort();
+  return x.every((r, i) => r === y[i]);
+}
+
 /**
  * Closes the job if, and only if, canClose passes. `triggeredBy` is who asked (a person or the
  * reconciler); the transition itself is always made by `system:close-gate`.
  */
-export async function closeJob(jobTaskId: string, triggeredBy: Actor, deps: GateDeps): Promise<CloseJobResult> {
+export async function closeJob(jobTaskId: string, triggeredBy: Actor, deps: GateDeps, opts: CloseJobOptions = {}): Promise<CloseJobResult> {
   const now = deps.now?.() ?? new Date();
   const actorId = actorRef(triggeredBy);
   const refuse = async (state: JobTaskState | null, reasons: string[], missing: CanCloseResult["missing"]): Promise<CloseJobResult> => {
-    await audit(deps.db, { actorId, action: "close-refused", entity: "JobTask", entityId: jobTaskId, meta: { reasons, state } });
+    const unchanged = opts.refusalAudit === "on-change" && sameReasons(await lastRefusalReasons(deps.db, jobTaskId), reasons);
+    if (!unchanged) await audit(deps.db, { actorId, action: "close-refused", entity: "JobTask", entityId: jobTaskId, meta: { reasons, state } });
     return { ok: false, state, reasons, missing };
   };
 

@@ -304,6 +304,9 @@ export async function finalizeRun(user: SessionUser, runId: string, deps: AgentS
           driveId,
           driveItemId: copy.item.id,
           sha256: copy.sha256,
+          // SharePoint's content fingerprint at upload: the close gate verifies from metadata, also after a restart.
+          quickXorHash: copy.quickXorHash,
+          cTag: copy.cTag,
           sizeBytes: copy.sizeBytes,
           version: copy.version,
           verifiedAt: deps.now(),

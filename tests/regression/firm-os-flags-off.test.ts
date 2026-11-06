@@ -104,7 +104,14 @@ describe("Firm OS surface on LMS pages with every FIRM_OS_* flag off", () => {
     expect(textOf(detail)).toContain("Acme Pvt Ltd");
     expect(textOf(detail)).not.toMatch(/Firm OS jobs|CL-[A-Z0-9]{3,10}/);
     expect(firmOsHrefs(detail)).toEqual([]);
-    expect(firmOsQueries()).toEqual([]);
+    // The one write allowed: the client-data read audit (security, DPDP breach runbook §2), which
+    // stays on with Firm OS off like the PII reveal and report export audits.
+    const readAudit = (c: (typeof prismaCalls)[number]) => {
+      const data = (c.args as { data?: { action?: string; entity?: string } } | undefined)?.data;
+      return c.model === "auditEvent" && c.method === "create" && data?.action === "view" && data.entity === "Client";
+    };
+    expect(prismaCalls.filter(readAudit)).toHaveLength(1);
+    expect([...new Set(prismaCalls.filter((c) => FIRM_OS_MODELS.has(c.model) && !readAudit(c)).map((c) => `${c.model}.${c.method}`))]).toEqual([]);
     expect(settingsReads()).toEqual([]);
   });
 

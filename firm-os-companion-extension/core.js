@@ -92,6 +92,7 @@ export function isTaskResponse(body) {
 export function interpret(result) {
   if (!result || result.kind === "network") return { view: "offline", message: TEXT.offline };
   const { status, body } = result;
+  if (status === 304) return { view: "unchanged" };
   if (status === 200) {
     if (isTaskResponse(body)) return { view: "task", data: body };
     if (body && body.status === "none") return { view: "none", message: TEXT.caughtUp };
@@ -101,6 +102,16 @@ export function interpret(result) {
   if (status === 403) return { view: "noaccess", message: cleanMessage(body, TEXT.noAccess) };
   if (status === 429) return { view: "busy", message: cleanMessage(body, TEXT.busy) };
   return { view: "error", message: TEXT.serverError };
+}
+
+/**
+ * A 304 answer (the task whose ETag the panel sent is unchanged) becomes the task already on
+ * screen. The panel sends If-None-Match only while it shows a task, so a 304 without one is not
+ * trusted.
+ */
+export function resolveUnchanged(next, lastTask) {
+  if (next.view !== "unchanged") return next;
+  return lastTask ? { view: "task", data: lastTask } : { view: "error", message: TEXT.unexpected };
 }
 
 /** Plain label for where a step happens. */
