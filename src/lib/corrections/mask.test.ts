@@ -12,7 +12,8 @@ import { clientDictionary, scrubFreeText } from "./mask";
 describe("scrubFreeText with a client dictionary", () => {
   it("masks identifiers always, and the client's names when they are given", () => {
     const note = "Kiran Kumar says PAN ABCPK1234F is wrong; Kiran will call from 9876543210 (Kumar Traders)";
-    expect(scrubFreeText(note)).toBe("Kiran Kumar says PAN ⟨PAN_1⟩ is wrong; Kiran will call from ⟨PHONE_1⟩ (Kumar Traders)");
+    // Re-audit NEW-1: names typed in free text are masked even with no dictionary (the free-text name extractor).
+    expect(scrubFreeText(note)).toBe("⟨NAME_1⟩ says PAN ⟨PAN_1⟩ is wrong; ⟨NAME_2⟩ will call from ⟨PHONE_1⟩ (⟨ORG_1⟩)");
     const dict = clientDictionary({ name: "Kumar Traders", contactName: "Kiran Kumar", entityType: "PROPRIETORSHIP" });
     expect(scrubFreeText(note, dict)).toBe("⟨NAME_1⟩ says PAN ⟨PAN_1⟩ is wrong; ⟨NAME_2⟩ will call from ⟨PHONE_1⟩ (⟨ORG_1⟩)");
   });

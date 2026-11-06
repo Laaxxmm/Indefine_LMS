@@ -38,6 +38,12 @@ const INPUTS: [string, string][] = [
   ["fullwidth digits", rep("９")],
   ["door numbers + PIN context", rep("No. 1, road 560001 ")],
   ["boxed PAN-ish 'A B C D E '", rep("A B C D E ")],
+  // Re-audit NEW-1: shapes aimed at the free-text name extractor and the dictionary normalisation.
+  ["labelled names 'name: Ab Cd'", rep("name: Ab Cd\n")],
+  ["honorifics 'Mr Mr '", rep("Mr Mr ")],
+  ["UPI narrations", rep("UPI/P2A/123456789012/Ab Cd/")],
+  ["capitalised runs 'Ab Cd Ef '", rep("Ab Cd Ef ")],
+  ["camelCase runs 'AbCdEfGh '", rep("AbCdEfGh ")],
 ];
 
 const DICT = [
@@ -84,6 +90,13 @@ describe("mask(): linear time on 200 KB adversarial inputs (< 200 ms each)", () 
     });
     const small = Math.max(1, run(25));
     expect(run(100)).toBeLessThan(small * 8 + 20);
+  });
+
+  it("re-audit NEW-1: Devanagari text with a transliterated dictionary scales linearly (100 KB ≤ ~4× 25 KB)", () => {
+    const text = (n: number) => "भुगतान राजेश कुमार को ".repeat(Math.ceil((n * KB) / 22));
+    const run = (n: number) => bestMs(() => mask(text(n), { dictionary: DICT }));
+    const small = Math.max(1, run(25));
+    expect(run(100)).toBeLessThan(small * 8 + 40);
   });
 
   it("a 64 KB CSV cell of digits (an oversized register cell) masks quickly, cut and flagged (PoC 03b)", () => {

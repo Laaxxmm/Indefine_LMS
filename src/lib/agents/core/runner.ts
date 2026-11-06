@@ -29,7 +29,7 @@ import type { FirmService, JobTaskState, PrismaClient } from "@prisma/client";
 import { z, type ZodType, type ZodTypeDef } from "zod";
 import type { AgentName, AgentTask, DictionaryEntry, ModelRequest, RouterResult } from "@/lib/ai/router";
 import { issueSummary } from "@/lib/ai/call-errors";
-import { dedupeDictionary, partyEntry, type NameDirectory } from "@/lib/ai/names";
+import { dedupeDictionary, fileNameText, partyEntry, personNames, type NameDirectory } from "@/lib/ai/names";
 import { validateScope, type AgentScope } from "./guardrails/scope";
 import { createGuardrailSession, type GuardrailSession, type ModelCallRequest } from "./guardrails/session";
 import type { ItemScreen } from "./guardrails/untrusted";
@@ -314,7 +314,26 @@ export async function buildRunDictionary<I>(
       problem ??= "the names in the input files could not be read";
     }
   }
+  // Re-audit NEW-1: a generic pass for every agent — names typed anywhere in a text input (CSV, JSON,
+  // notes) or in a file name, whichever column they are in.
+  entries.push(...inputFileNames(files));
   return { entries: dedupeDictionary(entries), problem };
+}
+
+/** Text inputs read for the generic name pass (larger files are covered by the agent's own harvest and the router's per-message pass). */
+const NAME_SCAN_MAX_BYTES = 5 * 1024 * 1024;
+
+/** Names in the input files' names and in every text-like input file (no NUL byte in the first 8 KB). */
+export function inputFileNames(files: readonly Pick<InputFile, "name" | "bytes">[]): DictionaryEntry[] {
+  const out: DictionaryEntry[] = [];
+  for (const f of files) {
+    out.push(...personNames(fileNameText(f.name)));
+    if (f.bytes.length === 0 || f.bytes.length > NAME_SCAN_MAX_BYTES || f.bytes.subarray(0, 8192).includes(0)) continue;
+    // Binary office files (xlsx / docx are zip) are read by the agent's own parse and harvest.
+    if ((f.bytes[0] === 0x50 && f.bytes[1] === 0x4b) || f.bytes.subarray(0, 5).toString("latin1") === "%PDF-") continue;
+    out.push(...personNames(f.bytes.toString("utf8")));
+  }
+  return out;
 }
 
 /** Path A folder of a job: CL-{Code}/Compliance/FY…/{Service}/{Period}/{Kind}. Throws PathError on bad parts. */

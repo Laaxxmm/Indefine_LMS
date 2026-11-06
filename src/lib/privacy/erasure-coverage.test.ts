@@ -104,9 +104,11 @@ describe("erasure completeness (audit finding #5)", () => {
 
     // Every row changed is audited, by row, with masked values only.
     const anonymised = new Set(db.tables.auditEvent.filter((e) => e.action === "anonymise").map((e) => `${String(e.entity)}:${String(e.entityId)}`));
-    for (const k of ["AuditEvent:ae-comment", "AuditEvent:ae-approve", "AgentRun:run-old", "ChecklistResult:cr-old", "JobTaskEvent:jte-old", "TuriaSync:ts-old", "MistakeLog:ml-old", "CoachEvent:ce-old", "ModelCall:mc-old", "OnboardingRun:ob-old-failed", "Deliverable:dl-old", "PrivacyRequest:" + id, "CommsDraft:d-old-nojob"]) {
+    for (const k of ["AuditEvent:ae-comment", "AuditEvent:ae-approve", "AgentRun:run-old", "ChecklistResult:cr-old", "JobTaskEvent:jte-old", "TuriaSync:ts-old", "MistakeLog:ml-old", "CoachEvent:ce-old", "ModelCall:mc-old", "OnboardingRun:ob-old-failed", "Deliverable:dl-old", "CommsDraft:d-old-nojob"]) {
       expect(anonymised.has(k), k).toBe(true);
     }
+    // Re-audit NEW-1: the request's own notes never held the caller's name (masked when typed), so there is nothing left to erase there.
+    expect(String(find(db, "privacyRequest", id).notes)).not.toContain(CONTACT);
   });
 
   it("plans the residue per dataset, with the onboarding run that never reached a client record", async () => {

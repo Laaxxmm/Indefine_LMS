@@ -3,7 +3,7 @@
 // narration columns). Harvested deterministically from the same parse extract() uses
 // (parseAuditFilesOnce: one parse per run's input object, shared by the hook and extract).
 import type { DictionaryEntry } from "@/lib/ai/types";
-import { narrationNames, partyEntries } from "@/lib/ai/names";
+import { fileNameText, freeTextNames, narrationNames, partyEntries } from "@/lib/ai/names";
 import type { JobContext } from "@/lib/agents/core/runner";
 import { parseAuditFiles, type AuditExtract, type AuditInput } from "./inputs";
 
@@ -22,5 +22,17 @@ export function parseAuditFilesOnce(input: AuditInput, job: Pick<JobContext, "cl
 export async function auditDictionaryTerms(input: AuditInput, job: Pick<JobContext, "clientCode" | "fy">): Promise<DictionaryEntry[]> {
   const x = await parseAuditFilesOnce(input, job);
   const parties = x.populations.flatMap((p) => p.items.map((i) => i.party));
-  return [...partyEntries([x.profile?.name], "ORG"), ...partyEntries(parties), ...parties.flatMap((p) => narrationNames(p))];
+  return [
+    ...partyEntries([x.profile?.name], "ORG"),
+    ...partyEntries(parties),
+    ...parties.flatMap((p) => narrationNames(p)),
+    // Re-audit NEW-1: names in free text — ledgers, management explanations, disclosure notes, file names.
+    ...freeTextNames([
+      ...parties,
+      ...[...(x.tb?.rows ?? []), ...(x.priorTb?.rows ?? [])].map((r) => r.ledger),
+      ...x.explanations.map((e) => e.text),
+      ...(x.notes?.lines ?? []),
+      ...input.files.map((f) => fileNameText(f.name)),
+    ]),
+  ];
 }
