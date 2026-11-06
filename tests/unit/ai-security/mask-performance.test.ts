@@ -44,6 +44,12 @@ const INPUTS: [string, string][] = [
   ["UPI narrations", rep("UPI/P2A/123456789012/Ab Cd/")],
   ["capitalised runs 'Ab Cd Ef '", rep("Ab Cd Ef ")],
   ["camelCase runs 'AbCdEfGh '", rep("AbCdEfGh ")],
+  // Round 3: Aadhaar last-4 and vehicle registration marks.
+  ["masked runs 'XXXX XXXX '", rep("XXXX XXXX ")],
+  ["'Aadhaar no. ' labels without digits", rep("Aadhaar no. ending XX-")],
+  ["plate-ish 'KA 01 AB ' (never four digits)", rep("KA 01 AB ")],
+  ["plate-ish 'KA-1-A-B-' runs", rep("KA-1-A-B-")],
+  ["Bharat-ish '22 BH '", rep("22 BH ")],
 ];
 
 const DICT = [

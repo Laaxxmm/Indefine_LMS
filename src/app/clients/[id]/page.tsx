@@ -1,7 +1,9 @@
 import { auth } from "@/lib/auth";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, FolderOpen } from "lucide-react";
+import { ArrowLeft, FileBadge, FileSignature, FolderOpen } from "lucide-react";
+import { canUseCertificateTool } from "@/lib/certificates/access";
+import { canUseOfficeTools } from "@/lib/office-tools/access";
 import { prisma } from "@/lib/prisma";
 import { ENTITY_TYPES, GROWTH_GOALS, TURNOVER_BANDS, canManageClients, canViewClients, fyOptions } from "@/lib/clients/core";
 import { listHandlers, listServiceTypes } from "@/lib/clients/services";
@@ -81,11 +83,19 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
           <p className="text-[10.5px] font-extrabold tracking-[0.14em] text-ink-faint uppercase">Client{!client.active && " · inactive"}</p>
           <h1 className="font-display font-extrabold text-3xl tracking-[-0.03em] mt-1">{client.name}</h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {siteLink ? (
             <a href={siteLink.href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[12.5px] text-brand-600 font-semibold"><FolderOpen className="w-4 h-4" /> SharePoint: {siteLink.label}</a>
           ) : client.graphFolderId && (
             <span className="inline-flex items-center gap-1.5 text-[12.5px] text-ink-mute"><FolderOpen className="w-4 h-4" /> SharePoint: Clients / {client.folderName}</span>
+          )}
+          {/* Re-audit NEW-8: started from the client record, the certificate / letter is linked to it by id (src/lib/privacy/client-link.ts). */}
+          {canUseCertificateTool(session.user) && (
+            <Link href={`/tools/certificate-generator?clientId=${encodeURIComponent(client.id)}`} className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-border bg-card text-sm font-semibold hover:bg-muted transition"><FileBadge className="w-4 h-4" /> Issue certificate</Link>
+          )}
+          {canUseOfficeTools(session.user) && (
+            // A plain link, as on the letters register: the generator is a whole HTML page served by a route, not a React page.
+            <a href={`/tools/office-tools/engagement-letter/editor?clientId=${encodeURIComponent(client.id)}`} className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-border bg-card text-sm font-semibold hover:bg-muted transition"><FileSignature className="w-4 h-4" /> New engagement letter</a>
           )}
           {canManage && (
             <EditClient

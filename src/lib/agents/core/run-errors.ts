@@ -40,10 +40,10 @@ const XLSX_PROBLEM: Record<XlsxProblem, string> = {
 
 const MAX_STORED = 2000;
 
-/** A detail as it may be stored: masked, or withheld when the detector still finds client data in it. */
-export function safeDetail(text: string, dictionary: readonly DictionaryEntry[] = []): string {
+/** A detail as it may be stored: masked, or `withheld` when the detector still finds client data in it. */
+export function safeDetail(text: string, dictionary: readonly DictionaryEntry[] = [], withheld: string = RUN_ERROR_WITHHELD): string {
   const scrubbed = scrubFreeText(text.slice(0, 4000), dictionary).slice(0, MAX_STORED);
-  return detectPii(scrubbed, { dictionary: [...dictionary], names: true }).length ? RUN_ERROR_WITHHELD : scrubbed;
+  return detectPii(scrubbed, { dictionary: [...dictionary], names: true }).length ? withheld : scrubbed;
 }
 
 /** A zod issue without the value it received ("Invalid enum value. Expected 'A' | 'B', received 'Rajesh …'" → "entity: must be one of A, B"). */

@@ -13,7 +13,7 @@
 import { z } from "zod";
 import type { InputFile } from "@/lib/agents/core/runner";
 import { wrongDepartment } from "@/lib/agents/core/guardrails/shared";
-import { isDayKey, optPaise, parseCsv, rupeesToPaise, yes } from "@/lib/agents/core/util";
+import { NO_CSV_AHEAD, csvRecords, isDayKey, optPaise, readCsvAhead, rupeesToPaise, yes, type CsvAhead } from "@/lib/agents/core/util";
 import { causeSentence } from "@/lib/errors";
 
 const Day = z.string().refine(isDayKey, "date must be YYYY-MM-DD");
@@ -192,8 +192,8 @@ export function parseOrganiser(file: InputFile): Organiser {
 
 const TAN_RE = /^[A-Z]{4}\d{5}[A-Z]$/;
 
-export function parse26As(file: InputFile): Tds26As[] {
-  return parseCsv(file.bytes.toString("utf8")).map((r, i) => {
+export function parse26As(file: InputFile, ahead: CsvAhead = NO_CSV_AHEAD): Tds26As[] {
+  return csvRecords(file, ahead).map((r, i) => {
     const at = `${file.name} row ${i + 2}`;
     const tan = (r.tan ?? "").toUpperCase();
     if (!TAN_RE.test(tan)) throw new Error(`${at}: TAN must look like BLRA00000A`);
@@ -201,8 +201,8 @@ export function parse26As(file: InputFile): Tds26As[] {
   });
 }
 
-export function parseAis(file: InputFile): AisLine[] {
-  return parseCsv(file.bytes.toString("utf8")).map((r, i) => {
+export function parseAis(file: InputFile, ahead: CsvAhead = NO_CSV_AHEAD): AisLine[] {
+  return csvRecords(file, ahead).map((r, i) => {
     const at = `${file.name} row ${i + 2}`;
     if (!r.id) throw new Error(`${at}: id is required`);
     if (!r.category) throw new Error(`${at}: category is required`);
@@ -210,8 +210,8 @@ export function parseAis(file: InputFile): AisLine[] {
   });
 }
 
-export function parseCapitalGains(file: InputFile): CgRow[] {
-  return parseCsv(file.bytes.toString("utf8")).map((r, i) => {
+export function parseCapitalGains(file: InputFile, ahead: CsvAhead = NO_CSV_AHEAD): CgRow[] {
+  return csvRecords(file, ahead).map((r, i) => {
     const at = `${file.name} row ${i + 2}`;
     const type = (r.asset_type ?? "").toLowerCase();
     if (type !== "listed-equity" && type !== "other") throw new Error(`${at}: asset_type must be listed-equity or other`);
@@ -231,8 +231,8 @@ export function parseCapitalGains(file: InputFile): CgRow[] {
 
 const MSME_CATS = new Set(["micro", "small", "medium", "trader"]);
 
-export function parseMsme(file: InputFile): MsmeRow[] {
-  return parseCsv(file.bytes.toString("utf8")).map((r, i) => {
+export function parseMsme(file: InputFile, ahead: CsvAhead = NO_CSV_AHEAD): MsmeRow[] {
+  return csvRecords(file, ahead).map((r, i) => {
     const at = `${file.name} row ${i + 2}`;
     const category = (r.category ?? "").toLowerCase();
     if (!MSME_CATS.has(category)) throw new Error(`${at}: category must be micro, small, medium or trader`);
@@ -259,7 +259,11 @@ export function parsePriorItr(file: InputFile): PriorItr {
 
 const byName = (files: InputFile[], name: string) => files.find((f) => f.name.toLowerCase() === name);
 
-export function parseTaxFiles(files: InputFile[]): TaxInput {
+/** The CSV inputs, read ahead in a worker thread when large (readCsvAhead). */
+export const TAX_CSV_FILES = ["26as.csv", "ais.csv", "capital-gains.csv", "msme.csv"] as const;
+
+/** Gathered files → TaxInput. `ahead`: large CSVs already read (readCsvAhead). */
+export function parseTaxFiles(files: InputFile[], ahead: CsvAhead = NO_CSV_AHEAD): TaxInput {
   // Wrong-department input fails closed before any model call (ADR-008).
   const elsewhere = wrongDepartment(files, "tax");
   if (elsewhere) throw new Error(elsewhere);
@@ -279,10 +283,10 @@ export function parseTaxFiles(files: InputFile[]): TaxInput {
   const orgF = byName(files, "organiser.json");
   if (!orgF) problems.push("organiser.json is missing from the client documents");
   const organiser = orgF ? attempt(() => parseOrganiser(orgF)) : null;
-  const form26as = opt("26as.csv", parse26As);
-  const ais = opt("ais.csv", parseAis);
-  const capitalGains = opt("capital-gains.csv", parseCapitalGains);
-  const msme = opt("msme.csv", parseMsme);
+  const form26as = opt("26as.csv", (f) => parse26As(f, ahead));
+  const ais = opt("ais.csv", (f) => parseAis(f, ahead));
+  const capitalGains = opt("capital-gains.csv", (f) => parseCapitalGains(f, ahead));
+  const msme = opt("msme.csv", (f) => parseMsme(f, ahead));
   const priorItr = opt("prior-itr.json", parsePriorItr);
   if (problems.length || !organiser) throw new Error(problems.join("; "));
   return { organiser, form26as, ais, capitalGains, msme, priorItr, files: files.map((f) => f.name).sort() };
@@ -290,9 +294,10 @@ export function parseTaxFiles(files: InputFile[]): TaxInput {
 
 const InputFileZ = z.object({ name: z.string(), source: z.string(), bytes: z.instanceof(Buffer) }).passthrough();
 
-export const taxInputSchema = z.array(InputFileZ).transform((files, ctx): TaxInput => {
+// Async: a large CSV is read in a worker thread first (the runner parses inputs with safeParseAsync).
+export const taxInputSchema = z.array(InputFileZ).transform(async (files, ctx): Promise<TaxInput> => {
   try {
-    return parseTaxFiles(files as InputFile[]);
+    return parseTaxFiles(files as InputFile[], await readCsvAhead(files, TAX_CSV_FILES));
   } catch (e) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: causeSentence(e) ?? "The income tax documents could not be read. Check the files and upload them again." });
     return z.NEVER;

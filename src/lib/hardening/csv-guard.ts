@@ -6,10 +6,17 @@
 //
 //   checkCsvShape(text, delim)  throws XlsxLimitError (plain sentence) when a row, column or
 //                               filled-cell cap is passed; allocates nothing
-//   parseCsvCells(text, delim)  RFC 4180-style cells (quoted fields, doubled quotes, CRLF / LF)
-//   parseCsvInWorker(text)      the same parse in a worker (CSV_WORKER_BYTES and up)
+//   readCsvCells(text, delim)   RFC 4180-style cells (quoted fields, doubled quotes, CRLF / LF), and
+//                               whether a quoted field was left open at the end
+//   readCsvGuarded(text, delim) the two above inline for a small text, in a worker (CSV_WORKER_BYTES
+//                               and up) for a large one
 //
-// Results are unchanged for any file within the caps: books/table.ts parseCsv is this parser.
+// The agents' three CSV readers differ only in their dialect (CsvDialect): when a `"` opens a quoted
+// field and whether cells are trimmed. BOOKS_CSV is books/table.ts (Books Close, Audit Assist),
+// GST_CSV is gst/tabular.ts, RECORDS_CSV is core/util.ts (ROC, Tax). The shape check follows the
+// same dialect exactly, so the cells it counts are the cells the reader builds: a quote the reader
+// does not open can never hide rows or cells from the count. Results are unchanged for any file
+// within the caps (csv-guard.test.ts and csv-parity.test.ts parse every fixture CSV both ways).
 import { Worker } from "node:worker_threads";
 import { XLSX_LIMITS, XLSX_PARSE_TIMEOUT_MS, XLSX_WORKER_HEAP_MB, XlsxLimitError, type XlsxProblem } from "./xlsx-guard";
 
@@ -18,6 +25,23 @@ export type CsvLimits = { maxRows: number; maxColumns: number; maxCells: number 
 export const CSV_LIMITS: Readonly<CsvLimits> = { maxRows: XLSX_LIMITS.maxRowsPerSheet, maxColumns: XLSX_LIMITS.maxColumns, maxCells: XLSX_LIMITS.maxCells };
 /** CSV text this long and longer is parsed in a worker thread. */
 export const CSV_WORKER_BYTES = 2 * 1024 * 1024;
+
+/**
+ * How a reader reads a field.
+ *   quote  when a `"` outside quotes opens a quoted field:
+ *          "blank"  the field so far is only whitespace, which is dropped (books/table.ts)
+ *          "empty"  nothing has been read into the field yet (gst/tabular.ts)
+ *          "any"    anywhere in the field, keeping what came before it (core/util.ts)
+ *   trim   cells are trimmed (books) or kept as read (GST, ROC, Tax)
+ * A filled cell is one whose value, as the reader returns it, is not empty.
+ */
+export type CsvDialect = { readonly quote: "blank" | "empty" | "any"; readonly trim: boolean };
+export const BOOKS_CSV: CsvDialect = Object.freeze({ quote: "blank", trim: true });
+export const GST_CSV: CsvDialect = Object.freeze({ quote: "empty", trim: false });
+export const RECORDS_CSV: CsvDialect = Object.freeze({ quote: "any", trim: false });
+
+/** The cells, and whether the text ended inside a quoted field (GST refuses that file). */
+export type CsvRead = { rows: string[][]; openQuote: boolean };
 
 const SPLIT = "Split it into smaller files (for example one month per file) and try again.";
 const fmtInt = (n: number) => n.toLocaleString("en-IN");
@@ -28,56 +52,66 @@ function limitError(problem: XlsxProblem, limits: CsvLimits): XlsxLimitError {
   return new XlsxLimitError("cells", `This CSV file has more than ${fmtInt(limits.maxCells)} filled cells in all. ${SPLIT}`);
 }
 
-/** One linear pass over the text (quotes respected): the first cap passed, or null. Plain JS for the worker. */
-const SHAPE_SOURCE = `function csvShapeProblem(text, delim, limits) {
-  let rows = 0, cols = 0, cells = 0, filled = false, quoted = false, fieldStart = true;
-  const endField = () => { cols++; if (filled) cells++; filled = false; fieldStart = true; };
+/** One linear pass over the text, the reader's own quote rule: the first cap passed, or null. Plain JS for the worker. */
+const SHAPE_SOURCE = `function csvShapeProblem(text, delim, limits, dialect) {
+  const quote = dialect.quote, trim = dialect.trim;
+  let rows = 0, cols = 0, cells = 0, quoted = false, empty = true, blank = true;
+  const take = (c) => { empty = false; if (blank && c.trim() !== "") blank = false; };
+  const endField = () => { cols++; if (trim ? !blank : !empty) cells++; empty = true; blank = true; };
   for (let i = 0; i < text.length; i++) {
     const c = text[i];
-    if (quoted) { if (c === '"') { if (text[i + 1] === '"') { i++; filled = true; } else quoted = false; } else filled = true; continue; }
-    if (c === '"' && fieldStart) { quoted = true; fieldStart = false; continue; }
+    if (quoted) { if (c === '"') { if (text[i + 1] === '"') { i++; take(c); } else quoted = false; } else take(c); continue; }
+    if (c === '"' && (quote === "any" || (quote === "empty" ? empty : blank))) { quoted = true; if (quote === "blank") { empty = true; blank = true; } continue; }
     if (c === delim) { endField(); if (cols > limits.maxColumns) return "columns"; if (cells > limits.maxCells) return "cells"; continue; }
     if (c === "\\n" || c === "\\r") { if (c === "\\r" && text[i + 1] === "\\n") i++; endField(); rows++; if (cols > limits.maxColumns) return "columns"; if (cells > limits.maxCells) return "cells"; if (rows > limits.maxRows) return "rows"; cols = 0; continue; }
-    if (c !== " " && c !== "\\t") filled = true;
-    if (c !== " ") fieldStart = false;
+    take(c);
   }
-  if (!fieldStart || cols > 0 || filled) { endField(); rows++; }
+  if (!empty || cols > 0) { endField(); rows++; }
   if (cols > limits.maxColumns) return "columns";
   if (cells > limits.maxCells) return "cells";
   if (rows > limits.maxRows) return "rows";
   return null;
 }`;
 
-/** RFC 4180-style cells. Plain JS for the worker (the main-thread copy is `cells` below). */
-const PARSE_SOURCE = `function csvCells(text, delim) {
+/** RFC 4180-style cells in the given dialect. Plain JS for the worker (the main-thread copy is `cells` below). */
+const PARSE_SOURCE = `function csvCells(text, delim, dialect) {
+  const quote = dialect.quote, trim = dialect.trim;
+  const fin = (s) => (trim ? s.trim() : s);
   const rows = [];
   let row = [], field = "", quoted = false;
   for (let i = 0; i < text.length; i++) {
     const c = text[i];
     if (quoted) { if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else quoted = false; } else field += c; continue; }
-    if (c === '"' && field.trim() === "") { quoted = true; field = ""; }
-    else if (c === delim) { row.push(field.trim()); field = ""; }
-    else if (c === "\\n" || c === "\\r") { if (c === "\\r" && text[i + 1] === "\\n") i++; row.push(field.trim()); rows.push(row); row = []; field = ""; }
+    if (c === '"' && (quote === "any" || (quote === "empty" ? field === "" : field.trim() === ""))) { quoted = true; if (quote === "blank") field = ""; }
+    else if (c === delim) { row.push(fin(field)); field = ""; }
+    else if (c === "\\n" || c === "\\r") { if (c === "\\r" && text[i + 1] === "\\n") i++; row.push(fin(field)); rows.push(row); row = []; field = ""; }
     else field += c;
   }
-  if (field !== "" || row.length) { row.push(field.trim()); rows.push(row); }
-  return rows;
+  const openQuote = quoted;
+  if (field !== "" || row.length) { row.push(fin(field)); rows.push(row); }
+  return { rows, openQuote };
 }`;
 
 // The main-thread versions of the two functions above (the worker evaluates the plain-JS copies;
 // csv-guard.test.ts checks that both give the same answers). Code is never built from strings here.
-function shapeProblem(text: string, delim: string, limits: CsvLimits): XlsxProblem | null {
+function shapeProblem(text: string, delim: string, limits: CsvLimits, dialect: CsvDialect): XlsxProblem | null {
+  const { quote, trim } = dialect;
   let rows = 0;
   let cols = 0;
   let cells = 0;
-  let filled = false;
   let quoted = false;
-  let fieldStart = true;
+  // The field read so far: nothing at all (`empty`), or only whitespace (`blank`, String.trim's set).
+  let empty = true;
+  let blank = true;
+  const take = (c: string) => {
+    empty = false;
+    if (blank && c.trim() !== "") blank = false;
+  };
   const endField = () => {
     cols++;
-    if (filled) cells++;
-    filled = false;
-    fieldStart = true;
+    if (trim ? !blank : !empty) cells++;
+    empty = true;
+    blank = true;
   };
   for (let i = 0; i < text.length; i++) {
     const c = text[i];
@@ -85,14 +119,17 @@ function shapeProblem(text: string, delim: string, limits: CsvLimits): XlsxProbl
       if (c === '"') {
         if (text[i + 1] === '"') {
           i++;
-          filled = true;
+          take(c);
         } else quoted = false;
-      } else filled = true;
+      } else take(c);
       continue;
     }
-    if (c === '"' && fieldStart) {
+    if (c === '"' && (quote === "any" || (quote === "empty" ? empty : blank))) {
       quoted = true;
-      fieldStart = false;
+      if (quote === "blank") {
+        empty = true;
+        blank = true;
+      }
       continue;
     }
     if (c === delim) {
@@ -111,10 +148,9 @@ function shapeProblem(text: string, delim: string, limits: CsvLimits): XlsxProbl
       cols = 0;
       continue;
     }
-    if (c !== " " && c !== "\t") filled = true;
-    if (c !== " ") fieldStart = false;
+    take(c);
   }
-  if (!fieldStart || cols > 0 || filled) {
+  if (!empty || cols > 0) {
     endField();
     rows++;
   }
@@ -124,7 +160,9 @@ function shapeProblem(text: string, delim: string, limits: CsvLimits): XlsxProbl
   return null;
 }
 
-function cells(text: string, delim: string): string[][] {
+function cells(text: string, delim: string, dialect: CsvDialect): CsvRead {
+  const { quote, trim } = dialect;
+  const fin = (s: string) => (trim ? s.trim() : s);
   const rows: string[][] = [];
   let row: string[] = [];
   let field = "";
@@ -140,55 +178,75 @@ function cells(text: string, delim: string): string[][] {
       } else field += c;
       continue;
     }
-    if (c === '"' && field.trim() === "") {
+    if (c === '"' && (quote === "any" || (quote === "empty" ? field === "" : field.trim() === ""))) {
       quoted = true;
-      field = "";
+      if (quote === "blank") field = "";
     } else if (c === delim) {
-      row.push(field.trim());
+      row.push(fin(field));
       field = "";
     } else if (c === "\n" || c === "\r") {
       if (c === "\r" && text[i + 1] === "\n") i++;
-      row.push(field.trim());
+      row.push(fin(field));
       rows.push(row);
       row = [];
       field = "";
     } else field += c;
   }
+  const openQuote = quoted;
   if (field !== "" || row.length) {
-    row.push(field.trim());
+    row.push(fin(field));
     rows.push(row);
   }
-  return rows;
+  return { rows, openQuote };
 }
 
 /** Throws XlsxLimitError when the CSV passes a cap (nothing is built). */
-export function checkCsvShape(text: string, delim: string, limits: CsvLimits = CSV_LIMITS): void {
-  const p = shapeProblem(text, delim, limits);
+export function checkCsvShape(text: string, delim: string, limits: CsvLimits = CSV_LIMITS, dialect: CsvDialect = BOOKS_CSV): void {
+  const p = shapeProblem(text, delim, limits, dialect);
   if (p) throw limitError(p, limits);
 }
 
+/** The cells of a CSV already within the caps, and whether it ended inside a quoted field. */
+export function readCsvCells(text: string, delim: string, dialect: CsvDialect = BOOKS_CSV): CsvRead {
+  return cells(text, delim, dialect);
+}
+
 /** The cells of a CSV already within the caps. */
-export function parseCsvCells(text: string, delim: string): string[][] {
-  return cells(text, delim);
+export function parseCsvCells(text: string, delim: string, dialect: CsvDialect = BOOKS_CSV): string[][] {
+  return cells(text, delim, dialect).rows;
 }
 
 const WORKER_SOURCE = `
 const { parentPort, workerData: d } = require("node:worker_threads");
 ${SHAPE_SOURCE}
 ${PARSE_SOURCE}
-const problem = csvShapeProblem(d.text, d.delim, d.limits);
-parentPort.postMessage(problem ? { ok: false, problem } : { ok: true, rows: csvCells(d.text, d.delim) });
+const problem = csvShapeProblem(d.text, d.delim, d.limits, d.dialect);
+if (problem) parentPort.postMessage({ ok: false, problem });
+else { const r = csvCells(d.text, d.delim, d.dialect); parentPort.postMessage({ ok: true, rows: r.rows, openQuote: r.openQuote }); }
 `;
 
+export type CsvWorkerOptions = { dialect?: CsvDialect; limits?: CsvLimits; timeoutMs?: number };
+
 /** Shape check and parse in a worker thread with a heap limit and the XLSX time budget. Falls back to inline when no worker can start. */
-export function parseCsvInWorker(text: string, delim: string, limits: CsvLimits = CSV_LIMITS, timeoutMs: number = XLSX_PARSE_TIMEOUT_MS): Promise<string[][]> {
+export function readCsvInWorker(text: string, delim: string, opts: CsvWorkerOptions = {}): Promise<CsvRead> {
+  const dialect = opts.dialect ?? BOOKS_CSV;
+  const limits = opts.limits ?? CSV_LIMITS;
+  const timeoutMs = opts.timeoutMs ?? XLSX_PARSE_TIMEOUT_MS;
   return new Promise((resolve, reject) => {
     let worker: Worker;
     try {
-      worker = new Worker(WORKER_SOURCE, { eval: true, workerData: { text, delim, limits }, resourceLimits: { maxOldGenerationSizeMb: XLSX_WORKER_HEAP_MB, maxYoungGenerationSizeMb: 32 } });
+      worker = new Worker(WORKER_SOURCE, {
+        eval: true,
+        workerData: { text, delim, limits, dialect: { quote: dialect.quote, trim: dialect.trim } },
+        resourceLimits: { maxOldGenerationSizeMb: XLSX_WORKER_HEAP_MB, maxYoungGenerationSizeMb: 32 },
+      });
     } catch {
-      checkCsvShape(text, delim, limits);
-      resolve(parseCsvCells(text, delim));
+      try {
+        checkCsvShape(text, delim, limits, dialect);
+        resolve(readCsvCells(text, delim, dialect));
+      } catch (e) {
+        reject(e);
+      }
       return;
     }
     let done = false;
@@ -200,10 +258,30 @@ export function parseCsvInWorker(text: string, delim: string, limits: CsvLimits 
       fn();
     };
     const timer = setTimeout(() => finish(() => reject(new XlsxLimitError("timeout", `This CSV file took too long to read, so reading stopped. ${SPLIT}`))), timeoutMs);
-    worker.on("message", (m: { ok: true; rows: string[][] } | { ok: false; problem: XlsxProblem }) => finish(() => (m.ok ? resolve(m.rows) : reject(limitError(m.problem, limits)))));
+    worker.on("message", (m: { ok: true; rows: string[][]; openQuote: boolean } | { ok: false; problem: XlsxProblem }) =>
+      finish(() => (m.ok ? resolve({ rows: m.rows, openQuote: m.openQuote }) : reject(limitError(m.problem, limits)))),
+    );
     worker.on("error", (e: Error & { code?: string }) =>
       finish(() => reject(e.code === "ERR_WORKER_OUT_OF_MEMORY" ? new XlsxLimitError("memory", `This CSV file needs more memory to read than is allowed. ${SPLIT}`) : e)),
     );
     worker.on("exit", (code) => finish(() => reject(new Error(`CSV reader stopped (exit ${code})`))));
   });
+}
+
+/** readCsvInWorker's cells only (the books reader's entry point). */
+export async function parseCsvInWorker(
+  text: string,
+  delim: string,
+  limits: CsvLimits = CSV_LIMITS,
+  timeoutMs: number = XLSX_PARSE_TIMEOUT_MS,
+  dialect: CsvDialect = BOOKS_CSV,
+): Promise<string[][]> {
+  return (await readCsvInWorker(text, delim, { dialect, limits, timeoutMs })).rows;
+}
+
+/** Shape check, then cells: inline below CSV_WORKER_BYTES, in a worker thread from there up. */
+export async function readCsvGuarded(text: string, delim: string, dialect: CsvDialect = BOOKS_CSV, limits: CsvLimits = CSV_LIMITS): Promise<CsvRead> {
+  if (text.length >= CSV_WORKER_BYTES) return readCsvInWorker(text, delim, { dialect, limits });
+  checkCsvShape(text, delim, limits, dialect);
+  return readCsvCells(text, delim, dialect);
 }

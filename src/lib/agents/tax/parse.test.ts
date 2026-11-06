@@ -40,9 +40,9 @@ describe("failures and department sniff", () => {
     const files = patchedFiles("clean-salaried-new", undefined, { "26as.csv": "tan,deductor,section,amount_paid,tds_deposited\nBAD,X,192,1,1\n", "ais.csv": "id,category,source,description,amount\n,x,y,z,1\n" });
     expect(() => parseTaxFiles(files)).toThrow(/TAN must look like.*; ais\.csv row 2: id is required/);
   });
-  it("the zod schema reports issues", () => {
-    expect(taxInputSchema.safeParse(fixtureFiles("clean-salaried-new")).success).toBe(true);
-    const r = taxInputSchema.safeParse([]);
+  it("the zod schema reports issues", async () => {
+    expect((await taxInputSchema.safeParseAsync(fixtureFiles("clean-salaried-new"))).success).toBe(true);
+    const r = await taxInputSchema.safeParseAsync([]);
     expect(r.success).toBe(false);
   });
 });

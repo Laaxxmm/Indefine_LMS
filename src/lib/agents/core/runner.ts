@@ -470,7 +470,8 @@ export async function runAgent<I, E>(def: AgentDefinition<I, E>, jobTaskId: stri
     });
     // Wrong-department input stops here, before any model call (ADR-008 §7).
     await session?.sniff(files);
-    const parsed = def.inputSchema.safeParse(files);
+    // Async-capable: ROC and Tax read a large CSV in a worker thread inside their schema (csv-guard.ts).
+    const parsed = await def.inputSchema.safeParseAsync(files);
     // zodIssueText: never the value an enum / literal check received (it can be client data).
     if (!parsed.success) throw new AgentRunError(`Inputs incomplete: ${parsed.error.issues.map(zodIssueText).join("; ")}`);
     const input = parsed.data;

@@ -182,7 +182,8 @@ describe("onboarding saga under a Graph outage", () => {
 
     const failed = await w.saga().execute(w.runId, "u-partner");
     expect(failed.status).toBe("FAILED");
-    expect(failed.error).toMatch(/^SharePoint site and FY folders failed: POST .* 503/); // what the Progress card shows
+    // Stored as a classification for IT (onboarding/run-errors.ts): method and status, never the site path.
+    expect(failed.error).toBe("SharePoint site and FY folders failed: Microsoft 365: POST request failed: 503");
     const steps = normalizeSteps(failed.steps);
     expect(steps.find((s) => s.key === "sharepoint")).toMatchObject({ status: "failed", attempts: 1 });
     expect(await w.stepStatuses()).toMatchObject({ lmsClient: "done", turia: "waiting", jobs: "pending", assignment: "pending" });

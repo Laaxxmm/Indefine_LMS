@@ -136,7 +136,7 @@ describe("finding #1: the run dictionary reaches every task-agent model call", (
         },
       };
       await runFixtureOnce(def, fx, pack, router);
-      const parsed = def.inputSchema.safeParse(fx.inputFiles);
+      const parsed = await def.inputSchema.safeParseAsync(fx.inputFiles);
       if (!parsed.success) continue;
       const job: JobContext = { jobTaskId: "fixture-job", title: def.title, service: def.service, fy: fx.expected.job?.fy ?? "2026-27", period: fx.expected.job?.period ?? "2026-10", clientCode: "ACCURACY", clientName: `Fixture ${fx.id}`, assigneeId: null, reviewerId: null };
       const { entries } = await buildRunDictionary(def, parsed.data, fx.inputFiles, job, undefined);

@@ -16,7 +16,9 @@
 //      maskers cannot match across or inside it. Shapes are tolerant: PAN / GSTIN / Aadhaar /
 //      phone with space, dot or hyphen separators (and the letter-spaced PAN-card / Form 16
 //      layout), UPI handles (name@okhdfcbank), passport and voter-ID numbers, bank accounts with
-//      or without an "account" label, dates of birth with the label before or after, addresses
+//      or without an "account" label, an Aadhaar shown by its last four digits ("XXXX XXXX 1234",
+//      "Aadhaar ending 1234"), vehicle registration marks ("KA 01 AB 1234", "22 BH 1234 AA"),
+//      dates of birth with the label before or after, addresses
 //      with a door number, payee names in bank narrations, and dictionary names with their usual
 //      variants ("Kumar, Rajesh", "R. Kumar", the first name or surname alone, an organisation's
 //      acronym "AWPL"), written with "_", "-" or "." between the words, in camelCase
@@ -54,6 +56,7 @@ export type PiiKind =
   | "DOB"
   | "PASSPORT"
   | "VOTER_ID"
+  | "VEHICLE"
   | "NAME"
   | "ORG"
   | "ADDRESS"
@@ -320,6 +323,32 @@ export const PATTERNS = {
   PIN: new RegExp(`${NUM_START}[1-9]\\d{2}\\s?\\d{3}${NUM_END}`, "g"),
 } as const;
 
+// Round-3 maskers (shared by mask() and the leak gate so they agree; the gate must never be broader).
+/** An Aadhaar shown by its last four digits only: "XXXX XXXX 1234", "xxxx-xxxx-1234", "XXXXXXXX1234", "**** **** 1234". */
+const AADHAAR_LAST4_MASKED_SOURCE = "(?<![A-Za-z0-9*•])[Xx*•]{4}[\\s.-]?[Xx*•]{4}[\\s.-]?\\d{4}(?![\\d]|[.,]\\d)";
+/**
+ * "Aadhaar ending 1234", "Aadhaar no. ****1234", "Aadhar last 4 digits: 1234": the Aadhaar label, then
+ * only "card / no. / number", "ending (in / with)" or "last 4 digits", then at most a few masked
+ * characters and four digits that do not run on into a longer number. Group 1 is what is masked.
+ */
+const AADHAAR_LAST4_LABEL_SOURCE =
+  "\\b(?:aadh?aa?r|uidai)\\b(?:\\s{0,2}(?:card|no\\.?|number|num\\.?|#)){0,2}[\\s:.#-]{0,4}" +
+  "(?:(?:ending|ends)(?:\\s{1,2}(?:in|with))?|last\\s{0,2}(?:4|four)(?:\\s{1,2}digits)?(?:\\s{1,2}(?:is|are))?)?[\\s:.#-]{0,4}" +
+  "((?:[Xx*•]{1,8}[\\s.-]?){0,3}\\d{4})(?![\\d]|[\\s.-]\\d|[.,]\\d)";
+/** RTO state codes (Motor Vehicles Act registration marks, incl. TG and the older OR / UA). */
+const VEHICLE_STATES = "AN|AP|AR|AS|BR|CG|CH|DD|DL|DN|GA|GJ|HP|HR|JH|JK|KA|KL|LA|LD|MH|ML|MN|MP|MZ|NL|OD|OR|PB|PY|RJ|SK|TG|TN|TR|TS|UA|UK|UP|WB";
+/** "KA 01 AB 1234", "KA01AB1234", "MH-12-DE-1433", "DL 3C AB 1234": state, RTO number, series, number. Capitals only. */
+const VEHICLE_SOURCE = `(?<![A-Za-z0-9])(?:${VEHICLE_STATES})[ -]?\\d{1,2}[ -]?[A-Z]{1,3}(?:[ -][A-Z]{1,3})?[ -]?\\d{4}(?![A-Za-z0-9])`;
+/** Bharat series: "22 BH 1234 AA". */
+const VEHICLE_BH_SOURCE = "(?<![A-Za-z0-9])\\d{2}[ -]?BH[ -]?\\d{4}[ -]?[A-Z]{1,2}(?![A-Za-z0-9])";
+const MONTH3 = new Set(["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]);
+/** A registration mark, not a date written in capitals after a state-code word ("AS 31 MAR 2026"). */
+function isVehicleMark(text: string): boolean {
+  const parts = text.match(/[A-Z]+|\d+/g) ?? [];
+  const last = parts[parts.length - 1] ?? "";
+  return !(parts.slice(2, -1).some((p) => MONTH3.has(p)) && /^(?:19|20)\d{2}$/.test(last));
+}
+
 /** Five-letter words that start an ordinary "MARCH 2026 A" phrase, not a spaced PAN (shared by mask() and the leak gate so they agree). */
 const NOT_PAN_WORD = "(?!(?:MARCH|APRIL|TOTAL|SALES|BATCH|CLASS|PHASE|BLOCK|LEVEL|FLOOR|SHEET|STAGE|GRADE|TABLE|FORMS|ITEMS|UNITS|NOTES|ROUND)[\\s.-])";
 
@@ -347,6 +376,10 @@ const M = {
   PASSPORT: /(?<![A-Za-z0-9])[A-Za-z][\s-]?\d{7}(?![A-Za-z0-9])/g,
   VOTER_ID: /(?<![A-Za-z0-9])[A-Za-z]{3}[\s-]?\d{7}(?![A-Za-z0-9])/g,
   AADHAAR: new RegExp(`${CELL_START}[2-9]\\d{3}([\\s.-]?)\\d{4}\\1\\d{4}${CELL_END}`, "g"),
+  AADHAAR_LAST4_MASKED: new RegExp(AADHAAR_LAST4_MASKED_SOURCE, "g"),
+  AADHAAR_LAST4_LABEL: new RegExp(AADHAAR_LAST4_LABEL_SOURCE, "gi"),
+  VEHICLE: new RegExp(VEHICLE_SOURCE, "g"),
+  VEHICLE_BH: new RegExp(VEHICLE_BH_SOURCE, "g"),
   BANK_AC: new RegExp(`${CELL_START}\\d(?:[ -]?\\d){8,17}${CELL_END}`, "g"),
   PHONE: new RegExp(`(?<![\\d+.])(?:(?:\\+|00)\\s?91[\\s.-]?|\\(\\+?91\\)\\s?|0[\\s-]?)?(?:[6-9](?:[\\s-]?\\d){9}|[6-9]\\d{4}\\.\\d{5})${CELL_END}`, "g"),
   /** 11–18 digits, no label: a bank account unless the context says invoice / e-way bill / amount. */
@@ -851,9 +884,13 @@ export function mask(input: string, ctx: MaskContext = {}): MaskResult {
   regexPass(work, M.PAN_BOXED, always("PAN"));
   regexPass(work, M.PAN_SPACED, always("PAN"));
   regexPass(work, M.PAN, always("PAN"));
+  regexPass(work, M.VEHICLE_BH, always("VEHICLE"));
+  regexPass(work, M.VEHICLE, (m) => (isVehicleMark(m[0]) ? "VEHICLE" : null));
   regexPass(work, M.VOTER_ID, inContext("VOTER_ID", CONTEXT.VOTER, 40));
   regexPass(work, M.PASSPORT, inContext("PASSPORT", CONTEXT.PASSPORT, 40));
   regexPass(work, M.AADHAAR, aadhaarDecider);
+  regexPass(work, M.AADHAAR_LAST4_MASKED, always("AADHAAR"));
+  regexPass(work, M.AADHAAR_LAST4_LABEL, (m) => ({ kind: "AADHAAR", start: m.index + m[0].length - m[1].length, end: m.index + m[0].length }));
   regexPass(work, M.BANK_AC, inContext("BANK_AC", CONTEXT.ACCOUNT, 50));
   regexPass(work, M.PHONE, always("PHONE"));
   regexPass(work, M.BANK_AC_FREE, freeAccountDecider);
@@ -929,6 +966,10 @@ const G = {
   PASSPORT_LABEL: /(?:\bpass\s?port\b|\bppt\s*no\b|\bpp\.?\s*(?:no|number|#))[^\n]{0,20}?(?<![A-Za-z0-9])[A-Za-z][\s-]?\d{7}(?![A-Za-z0-9])/i,
   VOTER_LABEL: /\b(?:voter|epic)\b[^\n]{0,20}?(?<![A-Za-z0-9])[A-Za-z]{3}[\s-]?\d{7}(?![A-Za-z0-9])/i,
   DIN_LABEL: /(?:\bDIN\b[^\n\d]{0,12}|director\s+identification\s+(?:number|no\b)[^\n\d]{0,50})(?<![\d.])\d{8}(?![\d]|\.\d)/i,
+  AADHAAR_LAST4_MASKED: new RegExp(AADHAAR_LAST4_MASKED_SOURCE),
+  AADHAAR_LAST4_LABEL: new RegExp(AADHAAR_LAST4_LABEL_SOURCE, "i"),
+  VEHICLE: new RegExp(VEHICLE_SOURCE, "g"),
+  VEHICLE_BH: new RegExp(VEHICLE_BH_SOURCE),
 };
 
 export interface DetectOptions {
@@ -964,6 +1005,9 @@ export function detectPii(text: string, opts: DetectOptions = {}): PiiKind[] {
   if (G.IFSC.test(plain)) found.add("IFSC");
   if (G.PAN.test(plain) || G.PAN_SPACED.test(plain) || G.PAN_BOXED.test(plain)) found.add("PAN");
   for (const m of plain.matchAll(G.AADHAAR)) if (m[1] || verhoeffValid(m[0].replace(/[\s.-]/g, ""))) found.add("AADHAAR");
+  if (G.AADHAAR_LAST4_MASKED.test(plain) || G.AADHAAR_LAST4_LABEL.test(plain)) found.add("AADHAAR");
+  if (G.VEHICLE_BH.test(plain)) found.add("VEHICLE");
+  for (const m of plain.matchAll(G.VEHICLE)) if (isVehicleMark(m[0])) found.add("VEHICLE");
   if (G.PHONE.test(plain)) found.add("PHONE");
   for (const m of plain.matchAll(G.DOB_LABEL)) {
     const end = (m.index ?? 0) + m[0].length;

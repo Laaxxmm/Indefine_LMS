@@ -62,11 +62,11 @@ describe("parseRocFiles failures", () => {
     expect(() => parseRocFiles(replace(files, "company.json", "{"))).toThrow(/company\.json is not a valid \.json file/);
     expect(() => parseRocFiles(replace(files, "auditor.json", JSON.stringify({ name: "X", type: "llp", termStartFy: "2022-23" })))).toThrow(/auditor\.json: type/);
   });
-  it("the zod schema reports the problem as an issue", () => {
-    const r = rocInputSchema.safeParse([]);
+  it("the zod schema reports the problem as an issue", async () => {
+    const r = await rocInputSchema.safeParseAsync([]);
     expect(r.success).toBe(false);
     if (!r.success) expect(r.error.issues[0].message).toMatch(/company\.json is missing/);
-    expect(rocInputSchema.safeParse(files).success).toBe(true);
+    expect((await rocInputSchema.safeParseAsync(files)).success).toBe(true);
   });
 });
 

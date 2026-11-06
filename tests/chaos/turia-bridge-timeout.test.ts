@@ -70,7 +70,8 @@ describe("onboarding: Turia bridge timeout", () => {
     const w = await onboardingWorld();
     const failed = await w.saga({ turia: timeoutOn(w.manual, "addService", "before", 2) }).execute(w.runId, "u-partner");
     expect(failed.status).toBe("FAILED");
-    expect(failed.error).toBe(`Turia client and services failed: Turia bridge timed out after ${TIMEOUT_MS} ms`);
+    // Stored as a classification for IT (onboarding/run-errors.ts); the page shows a plain sentence for it.
+    expect(failed.error).toBe("Turia client and services failed: Turia: timed out");
     expect(await w.stepStatuses()).toMatchObject({ lmsClient: "done", turia: "failed", sharepoint: "pending", jobs: "pending" });
     expect(w.repo.rows.map((r) => r.operation)).toEqual(["createClient", "addService"]); // what landed before the timeout
 
@@ -94,7 +95,7 @@ describe("onboarding: Turia bridge timeout", () => {
   it("timeout on a first-period Turia task (assignment step): jobs are kept, Retry issues the remaining tasks once", async () => {
     const w = await onboardingWorld();
     const failed = await w.saga({ turia: timeoutOn(w.manual, "createTask", "after", 2) }).execute(w.runId, "u-partner");
-    expect(failed.error).toMatch(/^Assignment, deadlines and Turia tasks failed: Turia bridge timed out/);
+    expect(failed.error).toBe("Assignment, deadlines and Turia tasks failed: Turia: timed out");
     expect(await w.stepStatuses()).toMatchObject({ jobs: "done", assignment: "failed", summary: "pending" });
     expect(w.store.jobTasks).toHaveLength(w.plan.jobs.length);
     expect((await w.saga().resume(w.runId, "u-partner")).status).toBe("DONE");

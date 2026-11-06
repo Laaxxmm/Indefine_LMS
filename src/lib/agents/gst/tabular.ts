@@ -3,6 +3,7 @@
 // Header rows are found by content, not position: Tally and Zoho exports put company name,
 // report title and period above the column headings.
 import ExcelJS from "exceljs";
+import { CSV_LIMITS, GST_CSV, checkCsvShape, readCsvCells, readCsvGuarded, type CsvRead } from "@/lib/hardening/csv-guard";
 import { GstParseError } from "./money";
 
 export type Cell = string | number | Date | null;
@@ -10,44 +11,32 @@ export type Grid = Cell[][];
 /** A sheet with its header row located. `rowNumbers[i]` is the 1-based source row of rows[i]. */
 export type Table = { file: string; sheet?: string; headers: string[]; headerRow: number; rows: Cell[][]; rowNumbers: number[] };
 
-export function parseCsv(text: string): Grid {
-  const src = text.replace(/^﻿/, "");
+// CSV entry points (re-audit NEW-11 follow-up): the XLSX caps (rows, columns, filled cells) are
+// checked before any cell is built, and a large file is read in a worker thread, as for books
+// (src/lib/hardening/csv-guard.ts, GST_CSV: a quote opens a field only at its very start, cells
+// are not trimmed). Cells are unchanged for every file within the caps (csv-parity.test.ts).
+function gstDelimiter(src: string): string {
   const firstLine = src.split(/\r?\n/, 1)[0] ?? "";
   const counts = [",", ";", "\t"].map((d) => ({ d, n: firstLine.split(d).length }));
-  const delim = counts.sort((a, b) => b.n - a.n)[0].d;
-  const rows: Grid = [];
-  let row: Cell[] = [];
-  let field = "";
-  let quoted = false;
-  for (let i = 0; i < src.length; i++) {
-    const c = src[i];
-    if (quoted) {
-      if (c === '"') {
-        if (src[i + 1] === '"') {
-          field += '"';
-          i++;
-        } else quoted = false;
-      } else field += c;
-      continue;
-    }
-    if (c === '"' && field === "") quoted = true;
-    else if (c === delim) {
-      row.push(field);
-      field = "";
-    } else if (c === "\n" || c === "\r") {
-      if (c === "\r" && src[i + 1] === "\n") i++;
-      row.push(field);
-      rows.push(row);
-      row = [];
-      field = "";
-    } else field += c;
-  }
-  if (quoted) throw new GstParseError("CSV has an unterminated quoted field");
-  if (field !== "" || row.length) {
-    row.push(field);
-    rows.push(row);
-  }
-  return rows.filter((r) => r.some((v) => String(v ?? "").trim() !== ""));
+  return counts.sort((a, b) => b.n - a.n)[0].d;
+}
+
+function gstGrid(read: CsvRead): Grid {
+  if (read.openQuote) throw new GstParseError("CSV has an unterminated quoted field");
+  return read.rows.filter((r) => r.some((v) => String(v ?? "").trim() !== ""));
+}
+
+export function parseCsv(text: string): Grid {
+  const src = text.replace(/^﻿/, "");
+  const delim = gstDelimiter(src);
+  checkCsvShape(src, delim, CSV_LIMITS, GST_CSV);
+  return gstGrid(readCsvCells(src, delim, GST_CSV));
+}
+
+/** parseCsv, in a worker thread for a large file (CSV_WORKER_BYTES and up). */
+export async function parseCsvSafe(text: string): Promise<Grid> {
+  const src = text.replace(/^﻿/, "");
+  return gstGrid(await readCsvGuarded(src, gstDelimiter(src), GST_CSV));
 }
 
 function flatten(v: ExcelJS.CellValue): Cell {

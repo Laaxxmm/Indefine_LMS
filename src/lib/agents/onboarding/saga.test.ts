@@ -234,7 +234,7 @@ describe("onboarding saga — guards", () => {
     ctx.store.people = ctx.store.people.filter((p) => p.id !== "u-priya");
     const run = await ctx.saga().execute(ctx.runId, "u-partner");
     expect(run.status).toBe("FAILED");
-    expect(normalizeSteps(run.steps).find((s) => s.key === "assignment")!.error).toMatch(/no longer an active LMS user/);
+    expect(normalizeSteps(run.steps).find((s) => s.key === "assignment")!.error).toMatch(/no longer an active user/);
   });
 
   it("assignment fails loudly when a planned JobTask is missing", async () => {
