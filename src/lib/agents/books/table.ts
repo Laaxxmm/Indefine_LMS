@@ -13,6 +13,7 @@
 import type ExcelJS from "exceljs";
 import type { InputFile } from "@/lib/agents/core/runner";
 import { readWorkbookGrid, type GridOptions } from "@/lib/hardening/xlsx-guard";
+import { CSV_WORKER_BYTES, checkCsvShape, parseCsvCells, parseCsvInWorker } from "@/lib/hardening/csv-guard";
 import { causeSentence } from "@/lib/errors";
 
 export type Cells = string[][];
@@ -31,44 +32,23 @@ function sniffDelimiter(text: string): string {
   return counts[0][1] > 0 ? counts[0][0] : ",";
 }
 
-/** RFC 4180-style CSV: quoted fields, doubled quotes, CRLF/LF, BOM stripped. */
+/**
+ * RFC 4180-style CSV: quoted fields, doubled quotes, CRLF/LF, BOM stripped. Re-audit NEW-11: the
+ * XLSX caps (rows, columns, filled cells) apply first — a file over them throws XlsxLimitError with a
+ * plain sentence before any cell is built (src/lib/hardening/csv-guard.ts).
+ */
 export function parseCsv(input: string): Cells {
   const text = input.replace(/^﻿/, "");
   const delim = sniffDelimiter(text);
-  const rows: Cells = [];
-  let row: string[] = [];
-  let field = "";
-  let quoted = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (quoted) {
-      if (c === '"') {
-        if (text[i + 1] === '"') {
-          field += '"';
-          i++;
-        } else quoted = false;
-      } else field += c;
-      continue;
-    }
-    if (c === '"' && field.trim() === "") {
-      quoted = true;
-      field = "";
-    } else if (c === delim) {
-      row.push(field.trim());
-      field = "";
-    } else if (c === "\n" || c === "\r") {
-      if (c === "\r" && text[i + 1] === "\n") i++;
-      row.push(field.trim());
-      rows.push(row);
-      row = [];
-      field = "";
-    } else field += c;
-  }
-  if (field !== "" || row.length) {
-    row.push(field.trim());
-    rows.push(row);
-  }
-  return rows;
+  checkCsvShape(text, delim);
+  return parseCsvCells(text, delim);
+}
+
+/** parseCsv, in a worker thread for a large file (CSV_WORKER_BYTES and up), like a large workbook. */
+export async function parseCsvSafe(input: string): Promise<Cells> {
+  const text = input.replace(/^﻿/, "");
+  if (text.length < CSV_WORKER_BYTES) return parseCsv(text);
+  return parseCsvInWorker(text, sniffDelimiter(text));
 }
 
 // ------------------------------------------------------------------ XLSX
@@ -107,7 +87,7 @@ export const isXlsx = (f: Pick<InputFile, "name" | "bytes">) => /\.xlsx$/i.test(
 /** CSV or XLSX → string cells. A file that cannot be read gives no rows and an issue. */
 export async function readTable(file: Pick<InputFile, "name" | "bytes">): Promise<{ table: RawTable; issues: ParseIssue[] }> {
   try {
-    const rows = isXlsx(file) ? await parseXlsx(file.bytes) : parseCsv(file.bytes.toString("utf8"));
+    const rows = isXlsx(file) ? await parseXlsx(file.bytes) : await parseCsvSafe(file.bytes.toString("utf8"));
     return { table: { file: file.name, rows }, issues: [] };
   } catch (e) {
     return { table: { file: file.name, rows: [] }, issues: [{ file: file.name, row: 0, message: `could not read the file: ${causeSentence(e) ?? "it is not a readable spreadsheet or CSV file."}` }] };
