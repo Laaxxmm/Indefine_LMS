@@ -1,0 +1,26 @@
+{
+  "profile": {
+    "name": "Fixture Salaried",
+    "status": "individual",
+    "dateOfBirth": "1985-06-15",
+    "residentialStatus": "resident",
+    "regimeClaimed": "new",
+    "businessKind": "none",
+    "plannedFilingDate": "2026-07-20",
+    "itrFormPlanned": "ITR-1",
+    "notes": "Salaried employee of Fixture Tech Pvt Ltd, Bengaluru. No foreign assets, accounts or income."
+  },
+  "salary": {
+    "gross": "10,00,000",
+    "professionalTax": "0",
+    "basicDa": "5,00,000"
+  },
+  "otherSources": [],
+  "tdsInBooks": [
+    {
+      "tan": "BLRF00001A",
+      "deductor": "Fixture Tech Pvt Ltd",
+      "amount": "60,000"
+    }
+  ]
+}

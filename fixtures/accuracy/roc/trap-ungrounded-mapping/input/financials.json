@@ -1,0 +1,97 @@
+{
+  "trialBalance": [
+    {
+      "ledger": "Share Capital",
+      "debit": 0,
+      "credit": "10,00,000"
+    },
+    {
+      "ledger": "Profit and Loss Account (opening)",
+      "debit": 0,
+      "credit": "26,00,000"
+    },
+    {
+      "ledger": "Loan from Director",
+      "debit": 0,
+      "credit": "5,00,000"
+    },
+    {
+      "ledger": "Sundry Creditors",
+      "debit": 0,
+      "credit": "12,00,000"
+    },
+    {
+      "ledger": "Provision for Tax",
+      "debit": 0,
+      "credit": "3,00,000"
+    },
+    {
+      "ledger": "Plant and Machinery",
+      "debit": "20,00,000",
+      "credit": 0
+    },
+    {
+      "ledger": "Closing Stock",
+      "debit": "15,00,000",
+      "credit": 0
+    },
+    {
+      "ledger": "Sundry Debtors",
+      "debit": "18,00,000",
+      "credit": 0
+    },
+    {
+      "ledger": "HDFC Bank Current Account",
+      "debit": "7,00,000",
+      "credit": 0
+    },
+    {
+      "ledger": "GST Input Credit",
+      "debit": "5,00,000",
+      "credit": 0
+    },
+    {
+      "ledger": "Sales",
+      "debit": 0,
+      "credit": "2,40,00,000"
+    },
+    {
+      "ledger": "Interest Received",
+      "debit": 0,
+      "credit": "2,00,000"
+    },
+    {
+      "ledger": "Purchases (net of stock change)",
+      "debit": "1,80,00,000",
+      "credit": 0
+    },
+    {
+      "ledger": "Salaries and Wages",
+      "debit": "50,00,000",
+      "credit": 0
+    },
+    {
+      "ledger": "Income Tax Expense",
+      "debit": "3,00,000",
+      "credit": 0
+    }
+  ],
+  "previous": {
+    "shareCapital": "10,00,000",
+    "reservesSurplus": "26,00,000",
+    "longTermBorrowings": "0",
+    "shortTermBorrowings": "4,00,000",
+    "tradePayables": "10,00,000",
+    "otherLiabilities": "2,00,000",
+    "fixedAssets": "18,00,000",
+    "investments": "0",
+    "inventories": "12,00,000",
+    "tradeReceivables": "14,00,000",
+    "cashAndBank": "5,00,000",
+    "otherAssets": "3,00,000",
+    "revenueFromOperations": "2,00,00,000",
+    "otherIncome": "1,00,000",
+    "totalExpenses": "1,92,00,000",
+    "taxExpense": "2,50,000"
+  }
+}

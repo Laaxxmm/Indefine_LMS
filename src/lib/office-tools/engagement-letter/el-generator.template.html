@@ -540,6 +540,11 @@ $('loadFile').onchange = async e => {
 
 // ===== register (LMS): save the form; the server keeps every saved version =====
 const PRELOAD = __PRELOAD__;   // { id, version, data, restoredFrom? } when editing a saved letter
+// { id, name } when the letter is started from a client record (?clientId=): the letter is linked to
+// that record by id while the client name is still the record's own, compared as the save route
+// compares it (spacing and case ignored; src/lib/privacy/client-link.ts).
+const CLIENT_LINK = __CLIENT_LINK__;
+const sameName = (a, b) => String(a || '').replace(/\s+/g, ' ').trim().toLowerCase() === String(b || '').replace(/\s+/g, ' ').trim().toLowerCase();
 let letterId = PRELOAD ? PRELOAD.id : null;
 const REGISTER = '/tools/office-tools/engagement-letter';
 function saveMsg(html) { $('saveMsg').innerHTML = html; }
@@ -549,7 +554,7 @@ async function saveToRegister(overwrite = false) {
   try {
     const res = await fetch('/api/tools/engagement-letters', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: letterId, data: state(), overwrite }),
+      body: JSON.stringify({ id: letterId, data: state(), overwrite, ...(CLIENT_LINK && sameName(f.client.value, CLIENT_LINK.name) ? { clientId: CLIENT_LINK.id } : {}) }),
     });
     const j = await res.json().catch(() => ({}));
     if (res.status === 409 && j.existingId && !letterId) {
@@ -626,6 +631,17 @@ if (PRELOAD) {
   $('banner').textContent = PRELOAD.restoredFrom
     ? `Showing ${PRELOAD.restoredFrom} of ${PRELOAD.data.client}. Save to register to make it the latest version (v${PRELOAD.version + 1}).`
     : `Editing ${PRELOAD.data.client} (v${PRELOAD.version}). Save to register after changes.`;
+} else if (CLIENT_LINK) {
+  // The banner says whether the save will link the letter (the name must still be the record's own).
+  const linkBanner = () => {
+    if (letterId) return;
+    $('banner').textContent = sameName(f.client.value, CLIENT_LINK.name)
+      ? `New letter for ${CLIENT_LINK.name}, linked to the client record. Nothing is stored until you click Save to register.`
+      : `The client name no longer matches ${CLIENT_LINK.name}, so this letter will not be linked to that client record.`;
+  };
+  f.client.addEventListener('input', linkBanner);
+  f.client.value = CLIENT_LINK.name;
+  f.client.dispatchEvent(new Event('input', { bubbles: true })); // the reference, the preview and the banner follow the name
 }
 
 // Self-check: open the file with #test on the end of the URL; the tab title reads SELF-CHECK PASSED.

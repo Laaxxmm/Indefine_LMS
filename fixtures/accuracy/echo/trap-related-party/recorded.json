@@ -1,0 +1,10 @@
+{
+  "echo.check:echo.related-party": {
+    "status": "fail",
+    "message": "Mehta Holdings is described as the director's company",
+    "evidence": {
+      "quote": "Mehta Holdings (director's company)",
+      "location": "register.csv row 3"
+    }
+  }
+}

@@ -1,0 +1,140 @@
+{
+  "description": "Trap (verified boundary): preceding-year turnover Rs40,00,00,001 is Rs1 over the verified Rs40 crore small-company limit (Companies (Specification of Definitions Details) Amendment Rules 2022: paid-up <= Rs4 cr AND turnover <= Rs40 cr) -> not small -> MGT-7 applies, but MGT-7A declared (block roc.annual-return-form). Under the UNVERIFIED Rs10 cr / Rs100 cr limits (entry from 01-12-2025, not applied) paid-up Rs10,00,000 and turnover Rs40,00,00,001 would be small -> classification differs -> warn roc.small-company-pending-verification. Preceding-year PBT = 40,00,00,001 + 1,00,000 - 39,01,00,001 = 1,00,00,000 (< Rs5 cr); turnover 40 cr (< Rs1,000 cr); net worth 10,00,000 + 1,16,00,000 = 1,26,00,000 (< Rs500 cr) -> no CSR. turnoverPreviousPaise = Rs40,00,00,001 = 400000001 rupees x 100 = 40000000100 paise. Current year unchanged from the clean case (paid-up 1e8 paise, turnover 2,40,00,000, net worth 45L, PBT 12L, assets 65L, AGM 25-09-2026 -> AOC-4 24-10-2026, MGT-7 23-11-2026, fee Rs500, auditor year 4, DPT-3 applicable and filed).",
+  "category": "trap",
+  "job": {
+    "fy": "2025-26",
+    "period": "Annual",
+    "title": "ROC annual filing"
+  },
+  "flags": [
+    {
+      "ruleId": "roc.annual-return-form",
+      "severity": "block"
+    },
+    {
+      "ruleId": "roc.small-company-pending-verification",
+      "severity": "warn"
+    }
+  ],
+  "figures": {
+    "paidUpCapitalPaise": 100000000,
+    "shareholdingTotalPaise": 100000000,
+    "shareholdingDiffPaise": 0,
+    "sharesTotal": 100000,
+    "turnoverPaise": 2400000000,
+    "turnoverPreviousPaise": 40000000100,
+    "netWorthPaise": 450000000,
+    "profitBeforeTaxPaise": 120000000,
+    "totalAssetsPaise": 650000000,
+    "balanceSheetDiffPaise": 0,
+    "smallCompany": 0,
+    "mgt7a": 0,
+    "csrApplicable": 0,
+    "csrObligationPaise": 0,
+    "agmDueDate": 20260930,
+    "agmDelayDays": 0,
+    "aoc4DueDate": 20261024,
+    "mgt7DueDate": 20261123,
+    "adt1DueDate": 0,
+    "dir3KycDueDate": 20260930,
+    "aoc4DelayDays": 0,
+    "mgt7DelayDays": 0,
+    "directorsKycPending": 0,
+    "auditorTermYear": 4,
+    "adt1Required": 0,
+    "msme1Applicable": 0,
+    "dpt3Applicable": 1,
+    "normalFeePaise": 50000,
+    "aoc4AdditionalFeePaise": 0,
+    "mgt7AdditionalFeePaise": 0,
+    "adt1AdditionalFeePaise": 0,
+    "dirKycLateFeePaise": 0,
+    "additionalFeeTotalPaise": 0
+  },
+  "deliverables": [
+    {
+      "name": "ROC data sheets",
+      "sheets": [
+        {
+          "name": "AOC-4",
+          "columns": [
+            "Item",
+            "FY 2025-26",
+            "Previous year"
+          ]
+        },
+        {
+          "name": "MGT-7",
+          "columns": [
+            "Item",
+            "Value"
+          ]
+        },
+        {
+          "name": "Shareholding",
+          "columns": [
+            "Folio",
+            "Holder",
+            "Class",
+            "Shares",
+            "Paid up per share",
+            "Paid-up amount"
+          ]
+        },
+        {
+          "name": "DIR-3 KYC",
+          "columns": [
+            "DIN",
+            "Director",
+            "Designation",
+            "DIN status",
+            "KYC completed on",
+            "Action"
+          ]
+        },
+        {
+          "name": "ADT-1 check",
+          "columns": [
+            "Check",
+            "Result"
+          ]
+        },
+        {
+          "name": "Due dates and fees",
+          "columns": [
+            "Form",
+            "Applicable",
+            "Basis",
+            "Statutory due",
+            "Planned filing",
+            "Days late",
+            "Normal fee",
+            "Additional fee",
+            "Note"
+          ]
+        },
+        {
+          "name": "Checklist",
+          "columns": [
+            "Rule",
+            "Severity",
+            "Status",
+            "Finding",
+            "Evidence"
+          ]
+        },
+        {
+          "name": "Verify",
+          "columns": [
+            "Rate / threshold / date",
+            "Partner to verify"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Board and AGM resolutions",
+      "sheets": []
+    }
+  ]
+}

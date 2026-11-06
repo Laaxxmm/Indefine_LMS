@@ -1,0 +1,317 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ManualBridge checklists > addService checklist (snapshot) 1`] = `
+{
+  "confirmWith": {
+    "minutesRequired": false,
+    "turiaRefLabel": "Turia service ref",
+  },
+  "operation": "addService",
+  "steps": [
+    {
+      "n": 1,
+      "text": "Sign in to Turia (practice.turia.in) with your own login.",
+    },
+    {
+      "n": 2,
+      "text": "Open the client.",
+      "values": [
+        {
+          "label": "Client code",
+          "value": "ACME01",
+        },
+        {
+          "label": "Legal name",
+          "value": "Acme Widgets Private Limited",
+        },
+      ],
+    },
+    {
+      "n": 3,
+      "text": "Add the service with this frequency.",
+      "values": [
+        {
+          "label": "Service",
+          "value": "GST",
+        },
+        {
+          "label": "Frequency",
+          "value": "Monthly",
+        },
+      ],
+    },
+    {
+      "n": 4,
+      "text": "Set the first period the firm handles.",
+      "values": [
+        {
+          "label": "First period",
+          "value": "2026-11",
+        },
+      ],
+    },
+    {
+      "n": 5,
+      "text": "Assign the people.",
+      "values": [
+        {
+          "label": "Assignee",
+          "value": "Priya Sharma",
+        },
+        {
+          "label": "Reviewer",
+          "value": "Ravi Kumar",
+        },
+      ],
+    },
+    {
+      "n": 6,
+      "text": "Save. Paste the service reference Turia shows (or the client ref if Turia shows none) and choose "Done in Turia".",
+    },
+  ],
+  "title": "Add GST (monthly) for ACME01",
+}
+`;
+
+exports[`ManualBridge checklists > closeTask checklist requires minutes (snapshot) 1`] = `
+{
+  "confirmWith": {
+    "minutesRequired": true,
+    "turiaRefLabel": "Turia task ref",
+  },
+  "operation": "closeTask",
+  "steps": [
+    {
+      "n": 1,
+      "text": "Sign in to Turia (practice.turia.in) with your own login.",
+    },
+    {
+      "n": 2,
+      "text": "Open the task.",
+      "values": [
+        {
+          "label": "Task ref",
+          "value": "T-991",
+        },
+        {
+          "label": "Client code",
+          "value": "ACME01",
+        },
+        {
+          "label": "Task",
+          "value": "GSTR-3B 2026-11",
+        },
+      ],
+    },
+    {
+      "n": 3,
+      "text": "Log the time spent.",
+      "values": [
+        {
+          "label": "Minutes",
+          "value": "45",
+        },
+      ],
+    },
+    {
+      "n": 4,
+      "text": "Mark the task complete in Turia.",
+    },
+    {
+      "n": 5,
+      "text": "Enter the task ref and the minutes you logged below and choose "Done in Turia".",
+    },
+  ],
+  "title": "Close Turia task T-991",
+}
+`;
+
+exports[`ManualBridge checklists > createClient checklist is exact, numbered and prefilled (snapshot) 1`] = `
+{
+  "confirmWith": {
+    "minutesRequired": false,
+    "turiaRefLabel": "Turia client ref",
+  },
+  "operation": "createClient",
+  "steps": [
+    {
+      "n": 1,
+      "text": "Sign in to Turia (practice.turia.in) with your own login.",
+    },
+    {
+      "n": 2,
+      "text": "Search the client list for this client code. If a client with this code already exists, stop and report it to the partner instead of creating a second one.",
+      "values": [
+        {
+          "label": "Client code",
+          "value": "ACME01",
+        },
+      ],
+    },
+    {
+      "n": 3,
+      "text": "Start a new client record and enter the client's legal name exactly as below.",
+      "values": [
+        {
+          "label": "Legal name",
+          "value": "Acme Widgets Private Limited",
+        },
+      ],
+    },
+    {
+      "n": 4,
+      "text": "Enter the client code.",
+      "values": [
+        {
+          "label": "Client code",
+          "value": "ACME01",
+        },
+      ],
+    },
+    {
+      "n": 5,
+      "text": "Set the constitution / entity type.",
+      "values": [
+        {
+          "label": "Entity type",
+          "value": "Private limited",
+        },
+      ],
+    },
+    {
+      "n": 6,
+      "text": "Enter the PAN.",
+      "values": [
+        {
+          "label": "PAN",
+          "value": "AAACA1234F",
+        },
+      ],
+    },
+    {
+      "n": 7,
+      "text": "Enter each GSTIN.",
+      "values": [
+        {
+          "label": "GSTIN 1",
+          "value": "29AAACA1234F1Z5",
+        },
+        {
+          "label": "GSTIN 2",
+          "value": "33AAACA1234F1Z1",
+        },
+      ],
+    },
+    {
+      "n": 8,
+      "text": "Enter the CIN / LLPIN.",
+      "values": [
+        {
+          "label": "CIN / LLPIN",
+          "value": "U12345KA2020PTC123456",
+        },
+      ],
+    },
+    {
+      "n": 9,
+      "text": "Enter the primary contact.",
+      "values": [
+        {
+          "label": "Contact name",
+          "value": "Meera Rao",
+        },
+        {
+          "label": "Contact email",
+          "value": "meera@acme.test",
+        },
+        {
+          "label": "Contact phone",
+          "value": "9876543210",
+        },
+      ],
+    },
+    {
+      "n": 10,
+      "text": "Record the billing arrangement.",
+      "values": [
+        {
+          "label": "Billing",
+          "value": "Retainer ₹15,000 per month",
+        },
+      ],
+    },
+    {
+      "n": 11,
+      "text": "Save the client. Copy the client reference Turia shows for it, paste it into "Turia client ref" below and choose "Done in Turia".",
+    },
+  ],
+  "title": "Create client ACME01 in Turia",
+}
+`;
+
+exports[`ManualBridge checklists > createTask checklist shows the due date as DD MMM YYYY in IST (snapshot) 1`] = `
+{
+  "confirmWith": {
+    "minutesRequired": false,
+    "turiaRefLabel": "Turia task ref",
+  },
+  "operation": "createTask",
+  "steps": [
+    {
+      "n": 1,
+      "text": "Sign in to Turia (practice.turia.in) with your own login.",
+    },
+    {
+      "n": 2,
+      "text": "Open the client.",
+      "values": [
+        {
+          "label": "Client code",
+          "value": "ACME01",
+        },
+        {
+          "label": "Legal name",
+          "value": "Acme Widgets Private Limited",
+        },
+      ],
+    },
+    {
+      "n": 3,
+      "text": "Create a task under the service with this name.",
+      "values": [
+        {
+          "label": "Service",
+          "value": "GST",
+        },
+        {
+          "label": "Task name",
+          "value": "GSTR-3B — 2026-11 — FY 2026-27",
+        },
+      ],
+    },
+    {
+      "n": 4,
+      "text": "Assign it and set the due date.",
+      "values": [
+        {
+          "label": "Assignee",
+          "value": "Priya Sharma",
+        },
+        {
+          "label": "Reviewer",
+          "value": "Ravi Kumar",
+        },
+        {
+          "label": "Due date",
+          "value": "20 Dec 2026",
+        },
+      ],
+    },
+    {
+      "n": 5,
+      "text": "Save. Paste the task reference Turia shows and choose "Done in Turia".",
+    },
+  ],
+  "title": "Create task GSTR-3B 2026-11 for ACME01",
+}
+`;

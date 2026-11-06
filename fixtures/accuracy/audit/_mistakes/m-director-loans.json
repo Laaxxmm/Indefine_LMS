@@ -1,0 +1,36 @@
+{
+  "id": "m-director-loans",
+  "pattern": "Reviewer: a loan from a director was not highlighted for deposit rules (s.73 / DPT-3) and CARO 3(v).",
+  "ruleProposal": {
+    "id": "audit.m-director-loans",
+    "title": "Loans from directors identified (deposits rules, CARO 3(v))",
+    "severity": "warn",
+    "kind": "deterministic",
+    "check": "audit.ledger-name-present",
+    "evidence": "ledger name and TB row",
+    "params": {
+      "patterns": [
+        "loan from director",
+        "director'?s? loan"
+      ],
+      "verify": "Name patterns for director loans; partner to extend."
+    }
+  },
+  "example": {
+    "runId": "audit-run-0005",
+    "extracted": {
+      "tb": {
+        "file": "trial-balance.csv",
+        "rows": [
+          {
+            "row": 9,
+            "ledger": "Loan from Director - S Rao",
+            "group": "Unsecured Loans",
+            "debitPaise": 0,
+            "creditPaise": 20000000
+          }
+        ]
+      }
+    }
+  }
+}

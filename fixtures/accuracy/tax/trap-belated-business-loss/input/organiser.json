@@ -1,0 +1,41 @@
+{
+  "profile": {
+    "name": "Fixture Traders (proprietor)",
+    "status": "individual",
+    "dateOfBirth": "1980-01-10",
+    "residentialStatus": "resident",
+    "regimeClaimed": "new",
+    "businessKind": "business",
+    "plannedFilingDate": "2026-09-15",
+    "notes": "Salaried, also runs a side trading business. No foreign assets, accounts or income.",
+    "itrFormPlanned": "ITR-3"
+  },
+  "otherSources": [
+    {
+      "id": "B1",
+      "nature": "deposit-interest",
+      "payer": "Union Bank Fixed Deposit",
+      "amount": "1,00,000"
+    }
+  ],
+  "tdsInBooks": [
+    {
+      "tan": "BLRU00004E",
+      "deductor": "Union Bank of India",
+      "amount": "10,000"
+    }
+  ],
+  "salary": {
+    "gross": "9,00,000",
+    "professionalTax": "0",
+    "basicDa": "4,50,000"
+  },
+  "business": {
+    "turnover": "80,00,000",
+    "cashReceipts": "1,00,000",
+    "digitalReceipts": "79,00,000",
+    "booksProfit": "-6,00,000",
+    "cashPayments": "50,000",
+    "totalPayments": "86,00,000"
+  }
+}

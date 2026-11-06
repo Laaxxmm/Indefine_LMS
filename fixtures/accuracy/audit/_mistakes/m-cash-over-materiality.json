@@ -1,0 +1,53 @@
+{
+  "id": "m-cash-over-materiality",
+  "pattern": "Reviewer: year-end cash above overall materiality was not singled out for a cash count.",
+  "ruleProposal": {
+    "id": "audit.m-cash-over-materiality",
+    "title": "Cash balance above overall materiality — cash count",
+    "severity": "warn",
+    "kind": "deterministic",
+    "check": "audit.ledger-over-materiality",
+    "evidence": "cash ledger, balance and TB row",
+    "params": {
+      "ledgerPatterns": [
+        "^cash"
+      ],
+      "groupPatterns": [
+        "cash[- ]in[- ]hand"
+      ],
+      "percentOfMateriality": 100,
+      "verify": "Cash above 100% of overall materiality; partner to confirm."
+    }
+  },
+  "example": {
+    "runId": "audit-run-0008",
+    "extracted": {
+      "tb": {
+        "file": "trial-balance.csv",
+        "rows": [
+          {
+            "row": 4,
+            "ledger": "Cash",
+            "group": "Cash-in-Hand",
+            "debitPaise": 7500000,
+            "creditPaise": 0
+          },
+          {
+            "row": 5,
+            "ledger": "Sales",
+            "group": "Sales Accounts",
+            "debitPaise": 0,
+            "creditPaise": 500000000
+          },
+          {
+            "row": 6,
+            "ledger": "Purchases",
+            "group": "Purchase Accounts",
+            "debitPaise": 492500000,
+            "creditPaise": 0
+          }
+        ]
+      }
+    }
+  }
+}

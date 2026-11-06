@@ -1,0 +1,3 @@
+Date,Particulars,Voucher Type,Voucher No.,Supplier Invoice No.,Supplier Invoice Date,GSTIN/UIN,Supplier State,Place of Supply,Purchase Ledger,Item Description,GST Rate,Taxable Value,IGST,CGST,SGST/UTGST,Cess,Gross Total,Reverse Charge
+09-10-2026,Annapurna Caterers Pvt Ltd,Purchase,PUR-0001,AC/1102,09-10-2026,29AANCA7707A1ZP,,29-Karnataka,Staff Welfare - Food and Beverages,Lunch for staff at the quarterly review,18,50000.00,,4500.00,4500.00,,59000.00,No
+21-10-2026,Shree Banquets and Outdoor Catering,Credit Note,PCN-0001,SB/CN/07,21-10-2026,,29-Karnataka,29-Karnataka,Outdoor Catering - Reverse Charge,Refund for the cancelled September dealer dinner,18,100000.00,,9000.00,9000.00,,118000.00,Yes

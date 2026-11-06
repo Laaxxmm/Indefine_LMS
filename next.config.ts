@@ -1,31 +1,23 @@
 import type { NextConfig } from "next";
+import { securityHeaders } from "./src/lib/hardening/security-headers";
 
 const nextConfig: NextConfig = {
   // pdf-parse (v2) pulls in pdfjs-dist; keep it external so Next doesn't bundle the
   // worker/canvas internals — it runs in the Node runtime on the tax-tool routes.
   serverExternalPackages: ["pdf-parse", "pdfjs-dist"],
   experimental: {
-    // Course handouts (zipped working papers, formats, PDF sets) go up through a
-    // server action, so the cap has to clear a realistic attachment. Anything
-    // over this is refused with a message rather than crashing the page.
-    serverActions: { bodySizeLimit: "60mb" },
+    // Server actions take no file uploads (re-audit NEW-6: the course-handout and live-session
+    // material uploads are route handlers that read the body with a running byte count), so the
+    // ceiling is the signed-in tier. src/middleware.ts already refuses larger bodies by
+    // Content-Length, and bodies with no length, before Next decodes them
+    // (src/lib/hardening/body-limits.ts SERVER_ACTION_BODY_LIMIT; a test keeps the two in step).
+    serverActions: { bodySizeLimit: "2mb" },
   },
-  // Only the CSP directives that can't break anything the app loads (Next's inline
-  // bootstrap, Google Fonts, SharePoint video). A full script-src needs nonces.
+  // Security headers on every path, CSP included (Phase 11). The policy and the reason for each
+  // directive live in src/lib/hardening/security-headers.ts (tested there). Scripts still allow
+  // 'unsafe-inline' because the App Router bootstraps with inline scripts; nonces are the next step.
   async headers() {
-    return [
-      {
-        source: "/:path*",
-        headers: [
-          { key: "Content-Security-Policy", value: "frame-ancestors 'none'; object-src 'none'; base-uri 'self'" },
-          { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
-          { key: "X-Frame-Options", value: "DENY" },
-          { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=()" },
-        ],
-      },
-    ];
+    return [{ source: "/:path*", headers: securityHeaders({ dev: process.env.NODE_ENV === "development" }) }];
   },
   poweredByHeader: false,
 };

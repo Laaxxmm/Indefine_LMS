@@ -4,13 +4,14 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canUseCertificateTool } from "@/lib/certificates/access";
 import { SUGGESTIBLE_FIELD_KEYS, isSuggestible } from "@/lib/certificates/suggestible";
+import { readJsonCapped } from "@/lib/hardening/json-body";
 
 // Firm-wide saved values for reusable signing fields. Shared across all internal users.
 
 export async function GET() {
   const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!canUseCertificateTool(session.user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!session?.user) return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
+  if (!canUseCertificateTool(session.user)) return NextResponse.json({ error: "You don't have access to the certificate generator. Ask an admin to give you access." }, { status: 403 });
 
   const rows = await prisma.certificateFieldOption.findMany({
     where: { fieldKey: { in: [...SUGGESTIBLE_FIELD_KEYS] } },
@@ -28,13 +29,15 @@ const Body = z.object({ fieldKey: z.string(), value: z.string().trim().min(1).ma
 
 export async function POST(req: Request) {
   const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!canUseCertificateTool(session.user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!session?.user) return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
+  if (!canUseCertificateTool(session.user)) return NextResponse.json({ error: "You don't have access to the certificate generator. Ask an admin to give you access." }, { status: 403 });
 
-  const parsed = Body.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Invalid body" }, { status: 400 });
+  const jsonBody = await readJsonCapped(req); // re-audit NEW-6: capped as it streams in
+  if (!jsonBody.ok) return jsonBody.res;
+  const parsed = Body.safeParse(jsonBody.value);
+  if (!parsed.success) return NextResponse.json({ error: "Some details were missing or not in the right format. Check the form and try again." }, { status: 400 });
   const { fieldKey, value } = parsed.data;
-  if (!isSuggestible(fieldKey)) return NextResponse.json({ error: "Field is not saveable" }, { status: 400 });
+  if (!isSuggestible(fieldKey)) return NextResponse.json({ error: "Suggestions can't be saved for this field." }, { status: 400 });
 
   // Idempotent on the [fieldKey, value] unique constraint.
   const row = await prisma.certificateFieldOption.upsert({

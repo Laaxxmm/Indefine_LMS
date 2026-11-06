@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { UserPlus, X, Loader2 } from "lucide-react";
+import { userMessage, responseError } from "@/lib/errors";
 
 interface Editor {
   userId: string;
@@ -28,13 +29,13 @@ export function GrantsManager({ initialEditors, candidates: initialCandidates }:
     try {
       const res = await fetch("/api/tools/sop-builder/grants", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ userId: pick }) });
       const data = await res.json();
-      if (!res.ok) { setError(data.error || "Failed to grant"); return; }
+      if (!res.ok) { setError(responseError(res.status, data)); return; }
       const c = candidates.find((x) => x.id === pick);
       if (c) setEditors((e) => [...e, { userId: c.id, userName: c.name, userEmail: c.email }].sort((a, b) => a.userName.localeCompare(b.userName)));
       setCandidates((cs) => cs.filter((x) => x.id !== pick));
       setPick("");
     } catch (e) {
-      setError((e as Error).message);
+      setError(userMessage(e));
     } finally {
       setBusy(false);
     }

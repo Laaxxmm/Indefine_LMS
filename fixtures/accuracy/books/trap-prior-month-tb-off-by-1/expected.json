@@ -1,0 +1,148 @@
+{
+  "description": "Trap (prior-month TB unbalanced by ₹1): the September trial balance supplied for comparison has Sales credited at ₹2,07,099 against debits Rent 60,000 + Salaries 1,35,000 + Bank Charges 1,100 + Electricity 11,000 = ₹2,07,100, so the prior TB is off by ₹1 (debits 20710000 paise, credits 20709900, difference 100) -> warn books.prior-tb-balanced (owner-approved 2026-11-05: warn only; only the current TB blocks). The October TB itself balances (13,96,600 = 13,96,600) so books.tb-balanced passes. No expense spike: Sales is not an expense ledger and the expense ledgers are as in clean-month. Everything else as clean-month: bank reconciles (7 matched, cheque 452 ₹4,250 unpresented, difference 0), TDS ₹20,000 deposited, GST ties, no reminders.",
+  "category": "trap",
+  "flags": [
+    {
+      "ruleId": "books.prior-tb-balanced",
+      "severity": "warn"
+    }
+  ],
+  "figures": {
+    "tbDebitPaise": 139660000,
+    "tbCreditPaise": 139660000,
+    "tbDifferencePaise": 0,
+    "tbLedgerCount": 17,
+    "priorTbDebitPaise": 20710000,
+    "priorTbCreditPaise": 20709900,
+    "priorTbDifferencePaise": 100,
+    "bankMatchedCount": 7,
+    "bankUnmatchedStatementCount": 0,
+    "bankUnmatchedLedgerCount": 1,
+    "balancePerBankPaise": 34675000,
+    "balancePerBooksPaise": 34250000,
+    "bankReconDifferencePaise": 0,
+    "tdsDeductedPaise": 2000000,
+    "tdsDepositedPaise": 2000000,
+    "tdsShortfallPaise": 0,
+    "gstAbsDifferencePaise": 0,
+    "suspensePaise": 0,
+    "cashBalancePaise": 1825000,
+    "suggestionCount": 0,
+    "classificationQuestionCount": 0,
+    "parseIssueCount": 0
+  },
+  "deliverables": [
+    {
+      "name": "Month-end pack",
+      "sheets": [
+        {
+          "name": "Summary",
+          "columns": [
+            "Item",
+            "Amount",
+            "Count",
+            "Note"
+          ]
+        },
+        {
+          "name": "Trial balance",
+          "columns": [
+            "Ledger",
+            "Group",
+            "Debit",
+            "Credit"
+          ]
+        },
+        {
+          "name": "Bank reconciliation",
+          "columns": [
+            "Particulars",
+            "Amount",
+            "Note"
+          ]
+        },
+        {
+          "name": "Bank matching",
+          "columns": [
+            "Side",
+            "Line",
+            "Date",
+            "Reference",
+            "Narration",
+            "Amount",
+            "Status",
+            "Matched with",
+            "Note"
+          ]
+        },
+        {
+          "name": "Expense suggestions",
+          "columns": [
+            "Line",
+            "Date",
+            "Narration",
+            "Amount",
+            "Suggested ledger",
+            "Confidence",
+            "Reason",
+            "Status"
+          ]
+        },
+        {
+          "name": "Suspense and unreconciled",
+          "columns": [
+            "Item",
+            "Source",
+            "Date",
+            "Amount",
+            "Age (days)",
+            "Note"
+          ]
+        },
+        {
+          "name": "Accrual-prepaid reminders",
+          "columns": [
+            "Type",
+            "Item",
+            "Ledger",
+            "Amount",
+            "Note"
+          ]
+        },
+        {
+          "name": "TDS check",
+          "columns": [
+            "Section",
+            "Month",
+            "Deducted",
+            "Deposited",
+            "Shortfall",
+            "Due date",
+            "Last deposit",
+            "Status"
+          ]
+        },
+        {
+          "name": "GST tie-out",
+          "columns": [
+            "Head",
+            "Per books",
+            "Per return",
+            "Difference",
+            "Status"
+          ]
+        },
+        {
+          "name": "Checklist",
+          "columns": [
+            "Rule",
+            "Severity",
+            "Status",
+            "Message",
+            "Evidence"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "description": "Clean: three ordinary invoices, no findings.",
+  "category": "clean",
+  "job": {
+    "fy": "2026-27",
+    "period": "2026-10"
+  },
+  "flags": [],
+  "figures": {
+    "rowCount": 3,
+    "totalPaise": 4745649,
+    "largestPaise": 2345650
+  },
+  "deliverables": [
+    {
+      "name": "Echo register",
+      "sheets": [
+        {
+          "name": "Register",
+          "columns": [
+            "Ref",
+            "Party",
+            "Date",
+            "Amount"
+          ]
+        },
+        {
+          "name": "Summary",
+          "columns": [
+            "Figure",
+            "Amount",
+            "Count"
+          ]
+        }
+      ]
+    }
+  ]
+}

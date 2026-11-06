@@ -1,0 +1,40 @@
+{
+  "tax.check:tax.foreign-asset": {
+    "status": "pass",
+    "evidence": {
+      "quote": "No foreign assets, accounts or income.",
+      "location": "organiser.json profile.notes line 1"
+    }
+  },
+  "tax.match-ais": {
+    "matches": [
+      {
+        "aisId": "A1",
+        "outcome": "matched",
+        "bookId": "B1",
+        "evidence": {
+          "quote": "B1 | savings-interest | SBI Savings Account",
+          "location": "organiser.json otherSources[0]"
+        }
+      },
+      {
+        "aisId": "A2",
+        "outcome": "matched",
+        "bookId": "B2",
+        "evidence": {
+          "quote": "B2 | deposit-interest | HDFC Bank Fixed Deposit",
+          "location": "organiser.json otherSources[1]"
+        }
+      },
+      {
+        "aisId": "A4",
+        "outcome": "not_in_books",
+        "bookId": null,
+        "evidence": {
+          "quote": "A4 | interest-deposit | ICICI Bank Ltd | Interest from term deposit",
+          "location": "ais.csv row 5"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,114 @@
+{
+  "id": "mistake-tax-003",
+  "pattern": "TDS u/s 194N on cash withdrawals in 26AS was claimed without a review of the cash withdrawals",
+  "ruleProposal": {
+    "id": "tax.mistake-194n",
+    "title": "TDS u/s 194N (cash withdrawals) reviewed",
+    "severity": "warn",
+    "kind": "deterministic",
+    "check": "tax.tds-section-listed",
+    "evidence": "26AS row with section 194N",
+    "params": {
+      "sections": [
+        "194N"
+      ]
+    }
+  },
+  "example": {
+    "extracted": {
+      "fy": "2025-26",
+      "organiser": {
+        "profile": {
+          "name": "Fixture Salaried",
+          "status": "individual",
+          "isLlp": false,
+          "dateOfBirth": "1985-06-15",
+          "residentialStatus": "resident",
+          "parentsSenior": false,
+          "isDirector": false,
+          "hasUnlistedShares": false,
+          "regimeClaimed": "new",
+          "form10IEAFiledOn": null,
+          "optedBackToNewEarlier": false,
+          "companyRegime": "115BAA",
+          "companyTurnoverPy2Paise": 0,
+          "businessKind": "none",
+          "presumptive": null,
+          "specifiedProfession": false,
+          "commissionOrAgency": false,
+          "presumptiveLock": false,
+          "partnerInAuditedFirm": false,
+          "auditPlanned": false,
+          "itrFormPlanned": "ITR-1",
+          "plannedFilingDate": "2026-07-20",
+          "notes": "Salaried employee of Fixture Tech Pvt Ltd, Bengaluru. No foreign assets, accounts or income."
+        },
+        "salary": {
+          "grossPaise": 150000000,
+          "exemptAllowancesPaise": 0,
+          "professionalTaxPaise": 240000,
+          "basicDaPaise": 75000000,
+          "employerNpsPaise": 0
+        },
+        "houseProperty": null,
+        "business": null,
+        "otherSources": [
+          {
+            "id": "B1",
+            "nature": "savings-interest",
+            "payer": "SBI Savings Account",
+            "amountPaise": 800000
+          },
+          {
+            "id": "B2",
+            "nature": "deposit-interest",
+            "payer": "HDFC Bank Fixed Deposit",
+            "amountPaise": 4200000
+          }
+        ],
+        "tdsInBooks": [
+          {
+            "tan": "BLRF00001A",
+            "deductor": "Fixture Tech Pvt Ltd",
+            "amountPaise": 10110000
+          },
+          {
+            "tan": "MUMH00001B",
+            "deductor": "HDFC Bank Ltd",
+            "amountPaise": 420000
+          }
+        ],
+        "advanceTax": [],
+        "deductions": {
+          "s80C": 0,
+          "s80CCD1B": 0,
+          "s80DSelf": 0,
+          "s80DParents": 0,
+          "s80TTA": 0,
+          "s80TTB": 0,
+          "s80E": 0,
+          "s80G": 0
+        }
+      },
+      "form26as": [
+        {
+          "tan": "BLRS00002C",
+          "deductor": "State Bank of India",
+          "section": "194N",
+          "amountPaidPaise": 1200000000,
+          "tdsPaise": 2000000
+        }
+      ],
+      "ais": [],
+      "capitalGains": null,
+      "msme": null,
+      "priorItr": {
+        "ay": "2025-26",
+        "filedOn": "2025-07-25",
+        "dueDate": "2025-07-31",
+        "lossesCarriedForward": []
+      },
+      "aisMatches": []
+    }
+  }
+}

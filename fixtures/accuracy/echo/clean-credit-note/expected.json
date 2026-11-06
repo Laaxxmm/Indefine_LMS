@@ -1,0 +1,38 @@
+{
+  "description": "Clean: an invoice and its credit note (negative amount) - no round-amount or duplicate finding.",
+  "category": "clean",
+  "job": {
+    "fy": "2026-27",
+    "period": "2026-10"
+  },
+  "flags": [],
+  "figures": {
+    "rowCount": 2,
+    "totalPaise": 800000,
+    "largestPaise": 1000000
+  },
+  "deliverables": [
+    {
+      "name": "Echo register",
+      "sheets": [
+        {
+          "name": "Register",
+          "columns": [
+            "Ref",
+            "Party",
+            "Date",
+            "Amount"
+          ]
+        },
+        {
+          "name": "Summary",
+          "columns": [
+            "Figure",
+            "Amount",
+            "Count"
+          ]
+        }
+      ]
+    }
+  ]
+}

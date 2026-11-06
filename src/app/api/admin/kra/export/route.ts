@@ -20,9 +20,9 @@ function toCsv(rows: (string | number | null | undefined)[][]): string {
 
 export async function GET(req: Request) {
   const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session?.user) return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
   if (!isActive(session.user) || !isAdmin(session.user)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return NextResponse.json({ error: "Only admins can download the KRA report. Ask an admin for a copy." }, { status: 403 });
   }
 
   const url = new URL(req.url);
@@ -31,7 +31,7 @@ export async function GET(req: Request) {
   // Both end up in a Date and in the Content-Disposition filename.
   const DAY = /^\d{4}-\d{2}-\d{2}$/;
   if ((fromStr && !DAY.test(fromStr)) || (toStr && !DAY.test(toStr)))
-    return NextResponse.json({ error: "from/to must be YYYY-MM-DD" }, { status: 400 });
+    return NextResponse.json({ error: "Choose a valid start and end date for the report." }, { status: 400 });
   const fromD = fromStr ? new Date(fromStr) : undefined;
   const toD = toStr ? new Date(toStr) : undefined;
   const toEnd = toD ? new Date(toD.getTime() + 24 * 60 * 60 * 1000 - 1) : undefined;

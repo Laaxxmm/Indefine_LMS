@@ -1,0 +1,150 @@
+{
+  "description": "Clean s.44AD trader: turnover 1,80,00,000 (<= 2 crore), banking-channel receipts 1,50,00,000 at 6% = 9,00,000 + other 30,00,000 at 8% = 2,40,000 = 11,40,000 > books profit 10,50,000. New regime TI 11,40,000: 20,000 + 3,40,000 x 10% = 54,000, fully rebated u/s 87A (TI <= 12L) -> nil. Old (comparison): 12,500 + 1,00,000 + 1,40,000 x 30% = 1,54,500; cess 6,180; 1,60,680. No audit (presumptive), ITR-4, nothing payable.",
+  "category": "clean",
+  "job": {
+    "fy": "2025-26",
+    "period": "Annual",
+    "title": "Income-tax return AY 2026-27"
+  },
+  "flags": [],
+  "figures": {
+    "grossTotalIncomePaise": 114000000,
+    "deductionsAllowedPaise": 0,
+    "totalIncomePaise": 114000000,
+    "taxOldPaise": 16068000,
+    "taxNewPaise": 0,
+    "taxLiabilityPaise": 0,
+    "rebate87APaise": 5400000,
+    "surchargePaise": 0,
+    "cessPaise": 0,
+    "regimeNew": 1,
+    "businessIncomePaise": 114000000,
+    "presumptiveIncomePaise": 114000000,
+    "msmeDisallowancePaise": 0,
+    "capitalGainsPaise": 0,
+    "tdsBooksPaise": 0,
+    "tds26asPaise": 0,
+    "tdsCreditPaise": 0,
+    "aisUnexplainedPaise": 0,
+    "advanceTaxPaidPaise": 0,
+    "interest234APaise": 0,
+    "interest234BPaise": 0,
+    "interest234CPaise": 0,
+    "lateFee234FPaise": 0,
+    "netPayablePaise": 0,
+    "auditRequired": 0,
+    "itrForm": 4,
+    "dueDate139": 20260731,
+    "lossCarriedForwardPaise": 0,
+    "lossLostPaise": 0,
+    "bfLossSetOffPaise": 0
+  },
+  "deliverables": [
+    {
+      "name": "Tax computation",
+      "sheets": [
+        {
+          "name": "Computation",
+          "columns": [
+            "Particulars",
+            "Amount (regime used)",
+            "Old regime",
+            "New regime"
+          ]
+        },
+        {
+          "name": "26AS vs books",
+          "columns": [
+            "TAN",
+            "Deductor",
+            "TDS per books",
+            "TDS per 26AS",
+            "Difference",
+            "Credit claimed"
+          ]
+        },
+        {
+          "name": "AIS vs books",
+          "columns": [
+            "AIS id",
+            "Category",
+            "Source",
+            "AIS amount",
+            "Books ledger",
+            "Not explained",
+            "Result"
+          ]
+        },
+        {
+          "name": "Advance tax",
+          "columns": [
+            "Instalment date",
+            "Cumulative %",
+            "Tax due",
+            "Paid by date",
+            "Shortfall (rounded)",
+            "Months",
+            "Interest"
+          ]
+        },
+        {
+          "name": "Capital gains",
+          "columns": [
+            "Asset",
+            "Type",
+            "Acquired",
+            "Sold",
+            "Sale value",
+            "Cost + expenses",
+            "Gain / (loss)",
+            "Section"
+          ]
+        },
+        {
+          "name": "MSME 43B(h)",
+          "columns": [
+            "Vendor",
+            "Category",
+            "Accepted on",
+            "Paid on",
+            "Days to pay",
+            "Allowed days",
+            "Amount",
+            "Result"
+          ]
+        },
+        {
+          "name": "Audit and ITR",
+          "columns": [
+            "Check",
+            "Result"
+          ]
+        },
+        {
+          "name": "Missing documents",
+          "columns": [
+            "Document or question",
+            "Kind"
+          ]
+        },
+        {
+          "name": "Checklist",
+          "columns": [
+            "Rule",
+            "Severity",
+            "Status",
+            "Finding",
+            "Evidence"
+          ]
+        },
+        {
+          "name": "Verify",
+          "columns": [
+            "Rate / threshold / date",
+            "Partner to verify"
+          ]
+        }
+      ]
+    }
+  ]
+}

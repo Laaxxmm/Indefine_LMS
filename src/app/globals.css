@@ -2,7 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url("https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap");
+/* Fonts (Plus Jakarta Sans, Schibsted Grotesk) come from next/font in src/app/layout.tsx: self-hosted
+   at build time and exposed as --font-sans / --font-display (tailwind.config.ts). A CSS import rule
+   here would land after the Tailwind rules in the built CSS, where browsers ignore it. */
 
 :root {
   --brand: #5b4be6;
@@ -12,7 +14,7 @@
   --amber: #ffb020;
   --mint: #17b978;
   --ink: #15132b;
-  --ink2: #6c6a82;
+  --ink2: #67657d; /* = ink-mute (tailwind.config.ts) */
   --muted: #b7b5c6;
   --card: #ffffff;
   --line: #ececf3;

@@ -56,7 +56,7 @@ export function SopDocView({ c }: { c: SopContent }) {
 
       <style>{`
         .sop-doc { color: #15132b; font-size: 13.5px; line-height: 1.55; }
-        .sop-doc .sop-title { font-family: 'Schibsted Grotesk', sans-serif; font-weight: 800; font-size: 20px; text-align: center; margin: 0 0 14px; letter-spacing: -0.01em; }
+        .sop-doc .sop-title { font-family: var(--font-display), 'Schibsted Grotesk', sans-serif; font-weight: 800; font-size: 20px; text-align: center; margin: 0 0 14px; letter-spacing: -0.01em; }
         .sop-doc .sop-h { font-weight: 700; font-size: 14px; margin: 18px 0 7px; }
         .sop-doc p { margin: 0 0 10px; }
         .sop-doc table { border-collapse: collapse; width: 100%; margin: 6px 0 12px; font-size: 12.5px; }

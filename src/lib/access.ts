@@ -5,6 +5,7 @@
 //   isActive     signed in and not deactivated by the M365 org sync (users-sync.ts)
 //   isAdmin      role = ADMIN — promoted from ADMIN_EMAILS on first sign-in, or in /admin/team
 //   isPartner    level = PARTNER — the firm's directors, set per user in /admin/team
+//   isManager    level = MANAGER or SENIOR_MANAGER (not ASSISTANT_MANAGER), set in /admin/team
 //   isManagement admin or partner
 //
 // Module-specific rules compose these and live next to the module they guard:
@@ -14,6 +15,7 @@
 //   src/lib/certificates/access.ts canUseCertificateTool
 //   src/lib/office-tools/access.ts canUseOfficeTools
 //   src/lib/work/core.ts           canUseWork / isWorkLead (email allow-list, not role)
+//   src/lib/rbac/policy.ts         firmRole / canOnboard (Indefine Firm OS)
 //
 // Admin pages and routes use isAdmin directly. Nothing here touches the database.
 import type { Session } from "next-auth";
@@ -30,6 +32,10 @@ export function isAdmin(user: SessionUser): boolean {
 
 export function isPartner(user: SessionUser): boolean {
   return !!user && user.level === "PARTNER";
+}
+
+export function isManager(user: SessionUser): boolean {
+  return !!user && (user.level === "MANAGER" || user.level === "SENIOR_MANAGER");
 }
 
 export function isManagement(user: SessionUser): boolean {

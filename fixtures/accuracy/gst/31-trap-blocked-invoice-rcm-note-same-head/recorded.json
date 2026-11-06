@@ -1,0 +1,34 @@
+{
+  "gst.classify-ledgers": {
+    "ledgers": [
+      {
+        "ledger": "Outdoor Catering - Reverse Charge",
+        "blockedCategory": "food-beverage",
+        "rcmService": "none",
+        "note": "outdoor catering for a dealer dinner; catering is not one of the listed reverse-charge services",
+        "evidence": {
+          "quote": "Outdoor Catering - Reverse Charge",
+          "location": "purchase-register.csv row 3"
+        }
+      },
+      {
+        "ledger": "Staff Welfare - Food and Beverages",
+        "blockedCategory": "food-beverage",
+        "rcmService": "none",
+        "note": "food and beverages for staff",
+        "evidence": {
+          "quote": "Staff Welfare - Food and Beverages",
+          "location": "purchase-register.csv row 2"
+        }
+      }
+    ]
+  },
+  "gst.check:gst.free-supplies": {
+    "status": "pass",
+    "message": "No free supply, gift, sample or personal use described",
+    "evidence": {
+      "quote": "Lunch for staff at the quarterly review",
+      "location": "purchase-register.csv row 2"
+    }
+  }
+}

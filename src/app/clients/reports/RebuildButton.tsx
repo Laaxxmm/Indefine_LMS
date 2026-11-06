@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
+import { userMessage, responseError } from "@/lib/errors";
 
 export function RebuildButton() {
   const [busy, setBusy] = useState(false);
@@ -12,9 +13,9 @@ export function RebuildButton() {
     try {
       const res = await fetch("/api/clients/workbook", { method: "POST" });
       const data = await res.json().catch(() => ({}));
-      setMsg(res.ok ? "Workbook rebuilt on SharePoint." : `Rebuild failed: ${data.error ?? res.status}`);
+      setMsg(res.ok ? "Workbook rebuilt on SharePoint." : responseError(res.status, data));
     } catch (e) {
-      setMsg(`Rebuild failed: ${(e as Error).message}`);
+      setMsg(userMessage(e));
     } finally {
       setBusy(false);
     }

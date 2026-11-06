@@ -1,0 +1,34 @@
+{
+  "gst.classify-ledgers": {
+    "ledgers": [
+      {
+        "ledger": "Purchase - Computer Parts",
+        "blockedCategory": "none",
+        "rcmService": "none",
+        "note": "ordinary business input",
+        "evidence": {
+          "quote": "Purchase - Computer Parts",
+          "location": "purchase-register.xlsx!Purchase Register row 6"
+        }
+      },
+      {
+        "ledger": "Software Subscription",
+        "blockedCategory": "none",
+        "rcmService": "none",
+        "note": "software licence, an ordinary business input",
+        "evidence": {
+          "quote": "Software Subscription",
+          "location": "purchase-register.xlsx!Purchase Register row 7"
+        }
+      }
+    ]
+  },
+  "gst.check:gst.free-supplies": {
+    "status": "pass",
+    "message": "No free supply, gift, sample or personal use described",
+    "evidence": {
+      "quote": "SSD drives",
+      "location": "purchase-register.xlsx!Purchase Register row 6"
+    }
+  }
+}

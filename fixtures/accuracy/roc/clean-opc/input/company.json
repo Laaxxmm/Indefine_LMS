@@ -1,0 +1,17 @@
+{
+  "name": "Fixture Solo OPC Private Limited",
+  "cin": "U74999KA2019OPC000002",
+  "companyClass": "opc",
+  "authorisedCapital": "50,00,000",
+  "paidUpCapital": "10,00,000",
+  "agmDate": null,
+  "previousAgmDate": null,
+  "declaredAnnualReturnForm": "MGT-7A",
+  "csrNetProfitHistory": [],
+  "deposits": {
+    "depositsOutstanding": "0",
+    "loansNotDeposits": "5,00,000",
+    "dpt3FiledOn": "2026-06-25"
+  },
+  "estimateFilingOn": "2026-09-20"
+}

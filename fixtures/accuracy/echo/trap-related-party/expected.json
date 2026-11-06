@@ -1,0 +1,43 @@
+{
+  "description": "Trap: a director-linked party (LLM rule, warn); 1,00,500.00 is above the floor but not round.",
+  "category": "trap",
+  "job": {
+    "fy": "2026-27",
+    "period": "2026-10"
+  },
+  "flags": [
+    {
+      "ruleId": "echo.related-party",
+      "severity": "warn"
+    }
+  ],
+  "figures": {
+    "rowCount": 2,
+    "totalPaise": 14550000,
+    "largestPaise": 10050000
+  },
+  "deliverables": [
+    {
+      "name": "Echo register",
+      "sheets": [
+        {
+          "name": "Register",
+          "columns": [
+            "Ref",
+            "Party",
+            "Date",
+            "Amount"
+          ]
+        },
+        {
+          "name": "Summary",
+          "columns": [
+            "Figure",
+            "Amount",
+            "Count"
+          ]
+        }
+      ]
+    }
+  ]
+}

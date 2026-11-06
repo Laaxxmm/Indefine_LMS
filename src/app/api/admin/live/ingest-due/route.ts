@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { runIngestSweep } from "@/lib/live/sweep";
 import { isActive, isAdmin } from "@/lib/access";
+import { failureSentence } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -11,11 +12,11 @@ export const maxDuration = 300;
 export async function POST() {
   const session = await auth();
   if (!session?.user || !isActive(session.user) || !isAdmin(session.user)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: "Only admins can do this. Sign in with an admin account, or ask an admin." }, { status: 401 });
   }
   try {
     return NextResponse.json(await runIngestSweep());
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 200 });
+    return NextResponse.json({ error: failureSentence(e, "The recordings could not be brought in.", "Try again in a few minutes.") }, { status: 200 });
   }
 }

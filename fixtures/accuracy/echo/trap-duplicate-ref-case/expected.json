@@ -1,0 +1,43 @@
+{
+  "description": "Trap: the same reference in different letter case (block); 99,999.99 is just under the round-amount floor.",
+  "category": "trap",
+  "job": {
+    "fy": "2026-27",
+    "period": "2026-10"
+  },
+  "flags": [
+    {
+      "ruleId": "echo.duplicate-refs",
+      "severity": "block"
+    }
+  ],
+  "figures": {
+    "rowCount": 3,
+    "totalPaise": 13599999,
+    "largestPaise": 9999999
+  },
+  "deliverables": [
+    {
+      "name": "Echo register",
+      "sheets": [
+        {
+          "name": "Register",
+          "columns": [
+            "Ref",
+            "Party",
+            "Date",
+            "Amount"
+          ]
+        },
+        {
+          "name": "Summary",
+          "columns": [
+            "Figure",
+            "Amount",
+            "Count"
+          ]
+        }
+      ]
+    }
+  ]
+}

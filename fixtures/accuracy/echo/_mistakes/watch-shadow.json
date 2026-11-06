@@ -1,0 +1,29 @@
+{
+  "id": "mistake-echo-001",
+  "pattern": "Shadow Holdings is on the firm's watch list; the agent did not flag it",
+  "ruleProposal": {
+    "id": "echo.watch-shadow",
+    "title": "Watch-list party (Shadow Holdings)",
+    "severity": "warn",
+    "kind": "deterministic",
+    "check": "echo.party-listed",
+    "evidence": "party name and row",
+    "params": {
+      "parties": [
+        "Shadow Holdings"
+      ]
+    }
+  },
+  "example": {
+    "extracted": {
+      "rows": [
+        {
+          "ref": "INV-9",
+          "party": "Shadow Holdings",
+          "date": "2026-10-06",
+          "amountPaise": 990000
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,278 @@
+{
+  "description": "Trap: a credit note with no original invoice reference, and a credit note against a FY 2024-25 invoice issued after the s.34(2) time limit. Owner-approved convention (2026-11-05): a time-barred credit note does not reduce outward liability, so CN/26/012 (Kaveri Retail, 26 Oct 2026, against INV/24/990 of 15 Mar 2025; limit 30 Nov 2025; taxable 10,000, CGST 900, SGST 900, note value 11,800) is left out of 3.1 and GSTR-1 CDNR, stays a block flag and is listed as 'time-barred credit note excluded: CN/26/012, ₹11800.00'. Core 3B figures (hand): outward 2,00,000 - 20,000 (CN/26/011: no original invoice reference, so no time limit can be checked; warn flag) = 1,80,000; CGST 18,000 - 1,800 = 16,200, SGST 16,200; outward tax 32,400. ITC 5,400 + 5,400 = 10,800 (SS/1001 matched to 2B). Cash CGST 16,200 - 5,400 = 10,800, SGST 10,800 = 21,600. CDNR: 1 note (CN/26/011), net taxable -20,000. Table 13 still counts 3 documents (INV/26/601, CN/26/011-012: the time-barred note was issued). No expected filing date after the 20 Nov 2026 due date -> 0 days late, no interest, no late fee. ITC held back 0: no purchase ledger the model answered insufficient_evidence on.",
+  "category": "trap",
+  "job": {
+    "fy": "2026-27",
+    "period": "2026-10",
+    "title": "GSTR-3B"
+  },
+  "flags": [
+    {
+      "ruleId": "gst.credit-note-linked",
+      "severity": "warn"
+    },
+    {
+      "ruleId": "gst.credit-note-time-limit",
+      "severity": "block"
+    }
+  ],
+  "figures": {
+    "outwardTaxablePaise": 18000000,
+    "outwardCgstPaise": 1620000,
+    "outwardSgstPaise": 1620000,
+    "cashCgstPaise": 1080000,
+    "cashSgstPaise": 1080000,
+    "cashTaxPaise": 2160000,
+    "cdnrNoteCount": 1,
+    "cdnrNetTaxablePaise": -2000000,
+    "docsIssuedCount": 3,
+    "outwardIgstPaise": 0,
+    "outwardCessPaise": 0,
+    "outwardTaxPaise": 3240000,
+    "itcAvailablePaise": 1080000,
+    "itcBlockedPaise": 0,
+    "itcOtherReversalPaise": 0,
+    "itcNetPaise": 1080000,
+    "itcHeldBackPaise": 0,
+    "cashIgstPaise": 0,
+    "cashCessPaise": 0,
+    "daysLate": 0,
+    "interestPaise": 0,
+    "lateFeePaise": 0
+  },
+  "deliverables": [
+    {
+      "name": "GSTR-1 draft",
+      "sheets": [
+        {
+          "name": "B2B",
+          "columns": [
+            "GSTIN/UIN of Recipient",
+            "Receiver Name",
+            "Invoice Number",
+            "Invoice Date",
+            "Invoice Value",
+            "Place Of Supply",
+            "Reverse Charge",
+            "Invoice Type",
+            "Rate",
+            "Taxable Value",
+            "IGST",
+            "CGST",
+            "SGST",
+            "Cess",
+            "IRN"
+          ]
+        },
+        {
+          "name": "B2CL",
+          "columns": [
+            "Invoice Number",
+            "Invoice Date",
+            "Invoice Value",
+            "Place Of Supply",
+            "Rate",
+            "Taxable Value",
+            "IGST",
+            "Cess"
+          ]
+        },
+        {
+          "name": "B2CS",
+          "columns": [
+            "Type",
+            "Place Of Supply",
+            "Rate",
+            "Taxable Value",
+            "IGST",
+            "CGST",
+            "SGST",
+            "Cess"
+          ]
+        },
+        {
+          "name": "CDNR",
+          "columns": [
+            "GSTIN/UIN of Recipient",
+            "Receiver Name",
+            "Note Number",
+            "Note Date",
+            "Note Type",
+            "Place Of Supply",
+            "Reverse Charge",
+            "Note Value",
+            "Rate",
+            "Taxable Value",
+            "IGST",
+            "CGST",
+            "SGST",
+            "Cess",
+            "Original Invoice Number",
+            "Original Invoice Date"
+          ]
+        },
+        {
+          "name": "HSN",
+          "columns": [
+            "Supply Type",
+            "HSN",
+            "Description",
+            "UQC",
+            "Total Quantity",
+            "Rate",
+            "Taxable Value",
+            "IGST",
+            "CGST",
+            "SGST",
+            "Cess",
+            "Total Value"
+          ]
+        },
+        {
+          "name": "Docs",
+          "columns": [
+            "Nature of Document",
+            "Sr. No. From",
+            "Sr. No. To",
+            "Total Number",
+            "Cancelled",
+            "Net Issued",
+            "Gaps — to be explained",
+            "Missing numbers (cancelled or not in the register?)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "GSTR-3B computation",
+      "sheets": [
+        {
+          "name": "3.1 Outward",
+          "columns": [
+            "Nature of supplies",
+            "Taxable Value",
+            "IGST",
+            "CGST",
+            "SGST",
+            "Cess"
+          ]
+        },
+        {
+          "name": "4 ITC",
+          "columns": [
+            "Details",
+            "IGST",
+            "CGST",
+            "SGST",
+            "Cess"
+          ]
+        },
+        {
+          "name": "6.1 Payment",
+          "columns": [
+            "Tax head",
+            "Tax payable",
+            "Paid through IGST credit",
+            "Paid through CGST credit",
+            "Paid through SGST credit",
+            "Paid through cess credit",
+            "Tax paid in cash",
+            "Interest",
+            "Late fee"
+          ]
+        },
+        {
+          "name": "Interest and fees",
+          "columns": [
+            "Item",
+            "Detail",
+            "Amount"
+          ]
+        },
+        {
+          "name": "Notes",
+          "columns": [
+            "Topic",
+            "Note"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2B reconciliation",
+      "sheets": [
+        {
+          "name": "Summary",
+          "columns": [
+            "Status",
+            "Documents",
+            "Tax as per books",
+            "Tax as per 2B",
+            "ITC claimed"
+          ]
+        },
+        {
+          "name": "Reconciliation",
+          "columns": [
+            "Status",
+            "Supplier GSTIN",
+            "Supplier",
+            "Doc Type",
+            "Document Number",
+            "Date",
+            "Books Taxable",
+            "Books IGST",
+            "Books CGST",
+            "Books SGST",
+            "Books Cess",
+            "2B Taxable",
+            "2B IGST",
+            "2B CGST",
+            "2B SGST",
+            "2B Cess",
+            "ITC Claimed",
+            "Books location",
+            "2B location"
+          ]
+        },
+        {
+          "name": "Rule 37",
+          "columns": [
+            "Supplier",
+            "GSTIN",
+            "Invoice Number",
+            "Invoice Date",
+            "Days to period end",
+            "Unpaid",
+            "IGST",
+            "CGST",
+            "SGST",
+            "Cess",
+            "Location"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Exceptions",
+      "sheets": [
+        {
+          "name": "Exceptions",
+          "columns": [
+            "Severity",
+            "Rule",
+            "Check",
+            "Status",
+            "Finding",
+            "Evidence",
+            "Location"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Client document requests",
+      "sheets": []
+    }
+  ]
+}

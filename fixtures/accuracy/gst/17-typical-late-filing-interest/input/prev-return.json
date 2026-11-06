@@ -1,0 +1,23 @@
+{
+  "period": "2026-09",
+  "gstr1Liability": {
+    "igst": 8000,
+    "cgst": 9500,
+    "sgst": 9500,
+    "cess": 0
+  },
+  "gstr3bLiability": {
+    "igst": 8000,
+    "cgst": 9500,
+    "sgst": 9500,
+    "cess": 0
+  },
+  "closingCreditBalance": {
+    "igst": 0,
+    "cgst": 0,
+    "sgst": 0,
+    "cess": 0
+  },
+  "filedOn": "2026-10-18",
+  "dueOn": "2026-10-20"
+}
