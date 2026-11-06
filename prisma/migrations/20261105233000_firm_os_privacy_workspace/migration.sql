@@ -1,5 +1,7 @@
+-- Re-runnable: the boot script (scripts/migrate.mjs) retries a half-applied migration, so every
+-- statement is guarded (IF NOT EXISTS, or a DO block that ignores the duplicate). Additive only.
 -- CreateTable
-CREATE TABLE "PrivacyRequest" (
+CREATE TABLE IF NOT EXISTS "PrivacyRequest" (
     "id" TEXT NOT NULL,
     "kind" TEXT NOT NULL,
     "principalType" TEXT NOT NULL,
@@ -21,7 +23,7 @@ CREATE TABLE "PrivacyRequest" (
 );
 
 -- CreateTable
-CREATE TABLE "BreachIncident" (
+CREATE TABLE IF NOT EXISTS "BreachIncident" (
     "id" TEXT NOT NULL,
     "detectedAt" TIMESTAMP(3) NOT NULL,
     "summary" TEXT NOT NULL,
@@ -38,7 +40,7 @@ CREATE TABLE "BreachIncident" (
 );
 
 -- CreateTable
-CREATE TABLE "WorkspaceSetting" (
+CREATE TABLE IF NOT EXISTS "WorkspaceSetting" (
     "userId" TEXT NOT NULL,
     "modules" JSONB,
     "focusMode" BOOLEAN,
@@ -50,7 +52,7 @@ CREATE TABLE "WorkspaceSetting" (
 );
 
 -- CreateTable
-CREATE TABLE "RoleWorkspaceDefault" (
+CREATE TABLE IF NOT EXISTS "RoleWorkspaceDefault" (
     "role" TEXT NOT NULL,
     "modules" JSONB NOT NULL,
     "focusMode" BOOLEAN NOT NULL DEFAULT false,
@@ -61,7 +63,7 @@ CREATE TABLE "RoleWorkspaceDefault" (
 );
 
 -- CreateTable
-CREATE TABLE "CompanionToken" (
+CREATE TABLE IF NOT EXISTS "CompanionToken" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "tokenHash" TEXT NOT NULL,
@@ -74,17 +76,17 @@ CREATE TABLE "CompanionToken" (
 );
 
 -- CreateIndex
-CREATE INDEX "PrivacyRequest_status_dueAt_idx" ON "PrivacyRequest"("status", "dueAt");
+CREATE INDEX IF NOT EXISTS "PrivacyRequest_status_dueAt_idx" ON "PrivacyRequest"("status", "dueAt");
 
 -- CreateIndex
-CREATE INDEX "PrivacyRequest_principalRef_idx" ON "PrivacyRequest"("principalRef");
+CREATE INDEX IF NOT EXISTS "PrivacyRequest_principalRef_idx" ON "PrivacyRequest"("principalRef");
 
 -- CreateIndex
-CREATE INDEX "BreachIncident_status_detectedAt_idx" ON "BreachIncident"("status", "detectedAt");
+CREATE INDEX IF NOT EXISTS "BreachIncident_status_detectedAt_idx" ON "BreachIncident"("status", "detectedAt");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "CompanionToken_tokenHash_key" ON "CompanionToken"("tokenHash");
+CREATE UNIQUE INDEX IF NOT EXISTS "CompanionToken_tokenHash_key" ON "CompanionToken"("tokenHash");
 
 -- CreateIndex
-CREATE INDEX "CompanionToken_userId_idx" ON "CompanionToken"("userId");
+CREATE INDEX IF NOT EXISTS "CompanionToken_userId_idx" ON "CompanionToken"("userId");
 
