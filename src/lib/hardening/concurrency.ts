@@ -58,11 +58,9 @@ export function createConcurrencyLimiter(options: ConcurrencyOptions): Concurren
   const queue: Waiter[] = [];
   const activeBy = new Map<string, number>();
   const queuedBy = new Map<string, number>();
+  // Counts per key; a key at zero keeps its entry (one per person who ever ran an agent: a few dozen).
   const bump = (m: Map<string, number>, key: string | null, d: number) => {
-    if (key === null) return;
-    const n = (m.get(key) ?? 0) + d;
-    if (n > 0) m.set(key, n);
-    else m.delete(key);
+    if (key !== null) m.set(key, Math.max(0, (m.get(key) ?? 0) + d));
   };
   /** May work of this key start now (its own running cap)? */
   const keyFree = (key: string | null) => key === null || opts.perKeyActive === undefined || (activeBy.get(key) ?? 0) < opts.perKeyActive;
