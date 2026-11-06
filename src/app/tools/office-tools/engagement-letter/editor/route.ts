@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canUseOfficeTools } from "@/lib/office-tools/access";
+import { canViewClients } from "@/lib/clients/core";
 
 // The engagement-letter generator is a self-contained HTML page (form + live letter,
 // print-to-PDF and Word export all run in the browser). Served whole rather than as a
@@ -11,6 +12,10 @@ import { canUseOfficeTools } from "@/lib/office-tools/access";
 //   __HEAD__/__FOOT__  letterhead as data URLs (the Word export needs them inline)
 //   __CLIENTS__        client names already in the LMS, suggested in the Client field
 //   __PRELOAD__        the saved letter for ?id= (or an earlier version with &v=<eventId>)
+//   __CLIENT_LINK__    the client record a new letter is started from (?clientId=, opened from
+//                      /clients/[id]): { id, name } or null. Re-audit NEW-8, as the certificate
+//                      generator: the generator fills in the name and sends the id while the name is
+//                      still the record's own; the save route stores it (src/lib/privacy/client-link.ts).
 // See docs/EL-GENERATOR.md.
 const DIR = path.join(process.cwd(), "src/lib/office-tools/engagement-letter");
 
@@ -41,6 +46,12 @@ export async function GET(req: Request) {
         : { id, version: saves.length, data: letter.data };
   }
 
+  const clientId = url.searchParams.get("clientId");
+  let clientLink: { id: string; name: string } | null = null;
+  if (clientId && /^[A-Za-z0-9_-]{1,64}$/.test(clientId) && canViewClients(session.user)) {
+    clientLink = await prisma.client.findUnique({ where: { id: clientId }, select: { id: true, name: true } });
+  }
+
   const [html, head, foot, clients] = await Promise.all([
     readFile(path.join(DIR, "el-generator.template.html"), "utf8"),
     readFile(path.join(DIR, "letterhead-header.jpg")),
@@ -51,7 +62,8 @@ export async function GET(req: Request) {
     .replace("__HEAD__", `data:image/jpeg;base64,${head.toString("base64")}`)
     .replace("__FOOT__", `data:image/jpeg;base64,${foot.toString("base64")}`)
     .replace("__CLIENTS__", () => js(clients.map((c) => c.name)))
-    .replace("__PRELOAD__", () => js(preload));
+    .replace("__PRELOAD__", () => js(preload))
+    .replace("__CLIENT_LINK__", () => js(clientLink));
 
   return new NextResponse(body, {
     headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "private, no-store" },
