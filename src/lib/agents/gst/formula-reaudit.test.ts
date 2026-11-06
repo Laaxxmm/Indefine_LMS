@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import type { CheckOutcome, RuleDefinition } from "@/lib/agents/core/checklist";
 import type { InputFile } from "@/lib/agents/core/runner";
-import { GSTIN, R, extract, line, matched, purchase, twin } from "./__tests__/kit";
+import { GSTIN, R, extract, line, lineTax, matched, purchase, twin } from "./__tests__/kit";
 import { analyse, computeFigures } from "./compute";
 import { gstDeliverables } from "./deliverables";
 import { classifyFiles, loadGstData } from "./input";
@@ -116,23 +116,83 @@ describe("NEW-4 (LOW): Table 4 presentation in mixed-sign heads", () => {
     expect(a.itc.net).toEqual(zeroTax());
     expect(a.setoff.cash).toEqual(T(0, R(9000), R(9000))); // the RCM liability, unchanged
   });
-  it("a negative not-blocked RCM is carried as a3CarryForward, not netted against blocked RCM ITC", () => {
+  it("a negative not-blocked RCM is not netted against blocked RCM ITC; 3.1(d) already used it, so its ITC reduction is applied now in 4(B)(2)", () => {
     // RCM "Legal" (legal) credit note 50,000 (−4,500 / −4,500); RCM "FoodRcm" (blocked) bill 1,00,000 (9,000 / 9,000).
     const legal = purchase({ number: "L-CN", docType: "CRN", gstin: null, reverseCharge: true, ledger: "Legal", lines: [line(R(50000))] });
     const rcm = purchase({ number: "R-2", gstin: null, reverseCharge: true, ledger: "FoodRcm", lines: [line(R(100000))] });
     const x = extract({ purchases: [legal, rcm], ledgers: [cls("Legal", "none", "legal"), cls("FoodRcm", "food-beverage")] });
     const a = analyse(x);
-    // 3.1(d) nets every reverse-charge document: 9,000 − 4,500 = 4,500 per head, paid in cash; nothing to carry there.
+    // 3.1(d) nets every reverse-charge document: L = 9,000 − 4,500 = 4,500 per head, paid in cash; nothing to carry there.
     expect(a.rcm.tax).toEqual(T(0, R(4500), R(4500)));
     expect(a.rcm.carryForward).toEqual(zeroTax());
-    // Before: 4(A)(3) = pos0(−4,500 + 9,000) = 4,500, carry-forward 0, 4(B)(1) 9,000 → 4(C) −4,500 → liability 4,500 (cash 18,000).
+    // N = 4,500 per head; carry min(N, neg0(L)) = 0; apply 4,500 per head now in 4(B)(2).
+    // Before NEW-4: 4(A)(3) 4,500 (netted). First NEW-4 cut: carried 4,500 (cash 9,000, less conservative).
     expect(a.itc.a3).toEqual(T(0, R(9000), R(9000)));
-    expect(a.itc.a3CarryForward).toEqual(T(0, R(4500), R(4500)));
     expect(a.itc.b1).toEqual(T(0, R(9000), R(9000)));
+    expect(a.itc.b2).toEqual(T(0, R(4500), R(4500)));
+    expect(a.itc.rcmNoteReversal).toEqual(T(0, R(4500), R(4500)));
+    expect(a.itc.a3CarryForward).toEqual(zeroTax());
+    expect(net4C(a)).toEqual(T(0, R(-4500), R(-4500)));
     expect(a.itc.net).toEqual(zeroTax());
-    expect(a.setoff.cash).toEqual(T(0, R(4500), R(4500)));
-    expect(computeFigures(x)).toMatchObject({ itcRcmCarryForwardPaise: R(9000), rcmCarryForwardPaise: 0, cashTaxPaise: R(9000) });
-    expect(check("gst.negative-rcm", x).message).toMatch(/Table 3\.1\(d\) excess nil and Table 4\(A\)\(3\) excess CGST ₹4500\.00, SGST ₹4500\.00 \(notes on purchases not blocked u\/s 17\(5\)/);
+    expect(a.liability).toEqual(T(0, R(4500), R(4500))); // the reduction lands this period
+    expect(a.setoff.cash).toEqual(T(0, R(9000), R(9000)));
+    expect(computeFigures(x)).toMatchObject({ itcRcmCarryForwardPaise: 0, rcmCarryForwardPaise: 0, itcOtherReversalPaise: R(9000), cashTaxPaise: R(18000) });
+    expect(check("gst.negative-rcm", x).status).toBe("pass"); // nothing carried on either side
+    const rows = sheetsOf(x)("4 ITC");
+    expect(rows.find((r) => String(r.details).startsWith("(B)(2)"))).toMatchObject({ cgst: 4500, sgst: 4500 });
+    expect(rows.find((r) => String(r.details).includes("applied now in (B)(2)"))).toMatchObject({ cgst: 4500, sgst: 4500 });
+    expect(sheetsOf(x)("Notes").find((r) => r.topic === "Reverse-charge credit notes applied now")?.note).toMatch(/the difference, CGST ₹4,500\.00, SGST ₹4,500\.00, is reversed now in Table 4\(B\)\(2\)/);
+  });
+  it("coordinator case: a not-blocked RCM credit note −9,000 and a held-back RCM bill +18,000 in one head → 3.1(d) 9,000, 9,000 applied now in 4(B)(2), carry 0", () => {
+    // "Labour" bill 1,00,000 (9,000 / 9,000): the model abstained on reverse charge, so its ITC is held back but its liability counts.
+    const held = purchase({ number: "LB/7", gstin: null, reverseCharge: true, ledger: "Labour", lines: [line(R(100000))] });
+    const legal = purchase({ number: "L-CN2", docType: "CRN", gstin: null, reverseCharge: true, ledger: "Legal", lines: [line(R(50000))] }); // −4,500 / −4,500
+    const x = extract({ purchases: [held, legal], ledgers: [cls("Labour", "none", "insufficient_evidence"), cls("Legal", "none", "legal")] });
+    const a = analyse(x);
+    expect(a.rcm.tax).toEqual(T(0, R(4500), R(4500))); // L = 9,000 − 4,500 per head → 3.1(d) 9,000
+    expect(a.itc.heldBack).toEqual(T(0, R(9000), R(9000)));
+    expect(a.itc.a3).toEqual(zeroTax());
+    // N = 4,500 per head; neg0(L) = 0 → carry 0; the ITC reduction 9,000 is applied now.
+    // First NEW-4 cut: carried 9,000 in a3CarryForward (cash 9,000).
+    expect(a.itc.a3CarryForward).toEqual(zeroTax());
+    expect(a.itc.rcmNoteReversal).toEqual(T(0, R(4500), R(4500)));
+    expect(a.itc.b2).toEqual(T(0, R(4500), R(4500)));
+    expect(a.liability).toEqual(T(0, R(4500), R(4500)));
+    expect(a.setoff.cash).toEqual(T(0, R(9000), R(9000)));
+    expect(computeFigures(x)).toMatchObject({ rcmTaxPaise: R(9000), itcHeldBackPaise: R(18000), itcOtherReversalPaise: R(9000), itcRcmCarryForwardPaise: 0, cashTaxPaise: R(18000) });
+  });
+  it("a blocked RCM credit note with a negative not-blocked RCM in one head: L < 0, so the ITC side carries min(N, |L|)", () => {
+    // Legal note −4,500 / −4,500 (not blocked) and a blocked "FoodRcm" note −1,000 / −1,000.
+    const legal = purchase({ number: "L-CN3", docType: "CRN", gstin: null, reverseCharge: true, ledger: "Legal", lines: [line(R(50000))] });
+    const food = purchase({ number: "F-CN3", docType: "CRN", gstin: null, reverseCharge: true, ledger: "FoodRcm", lines: [lineTax(R(11111.11), { cgst: R(1000), sgst: R(1000) })] });
+    const ledgers = [cls("Legal", "none", "legal"), cls("FoodRcm", "food-beverage"), cls("Labour", "none", "insufficient_evidence")];
+    const a = analyse(extract({ purchases: [legal, food], ledgers }));
+    // L = −5,500 per head → 3.1(d) nil, carry 5,500; N = 4,500 ≤ 5,500 → all 4,500 carried, nothing applied now.
+    expect(a.rcm.carryForward).toEqual(T(0, R(5500), R(5500)));
+    expect(a.itc.a3CarryForward).toEqual(T(0, R(4500), R(4500)));
+    expect(a.itc.rcmNoteReversal).toEqual(zeroTax());
+    expect(a.itc.blockedNoteExcess).toEqual(T(0, R(1000), R(1000)));
+    expect(a.itc.b2).toEqual(zeroTax());
+    // Partly covered: add a held-back bill +2,000 / +2,000 → L = −3,500 → carry min(4,500, 3,500) = 3,500, apply 1,000 now.
+    const held = purchase({ number: "LB/8", gstin: null, reverseCharge: true, ledger: "Labour", lines: [lineTax(R(22222.22), { cgst: R(2000), sgst: R(2000) })] });
+    const x = extract({ purchases: [legal, food, held], ledgers });
+    const b = analyse(x);
+    expect(b.rcm.tax).toEqual(T(0, R(-3500), R(-3500)));
+    expect(b.rcm.carryForward).toEqual(T(0, R(3500), R(3500)));
+    expect(b.itc.a3CarryForward).toEqual(T(0, R(3500), R(3500)));
+    expect(b.itc.rcmNoteReversal).toEqual(T(0, R(1000), R(1000)));
+    expect(b.itc.b2).toEqual(T(0, R(1000), R(1000)));
+    expect(b.itc.blockedNoteExcess).toEqual(T(0, R(1000), R(1000)));
+    expect(check("gst.negative-rcm", x).message).toMatch(/^Reverse-charge credit notes exceed this period's reverse-charge bills: Table 3\.1\(d\) excess CGST ₹3500\.00, SGST ₹3500\.00 and Table 4\(A\)\(3\) excess CGST ₹3500\.00, SGST ₹3500\.00 .*; the rest of those notes, CGST ₹1000\.00, SGST ₹1000\.00, is reversed now in Table 4\(B\)\(2\)/);
+  });
+  it("pure negative RCM (round-2 case): both sides still carried in full", () => {
+    const bill = purchase({ number: "KD/91", gstin: null, reverseCharge: true, ledger: "Legal", lines: [line(R(20000))] }); // 1,800 / 1,800
+    const note = purchase({ number: "KD/CN/12", gstin: null, reverseCharge: true, docType: "CRN", ledger: "Legal", lines: [line(R(50000))] }); // −4,500 / −4,500
+    const a = analyse(extract({ purchases: [bill, note], ledgers: [cls("Legal", "none", "legal")] }));
+    expect(a.rcm.carryForward).toEqual(T(0, R(2700), R(2700)));
+    expect(a.itc.a3CarryForward).toEqual(T(0, R(2700), R(2700)));
+    expect(a.itc.rcmNoteReversal).toEqual(zeroTax());
+    expect(a.itc.b2).toEqual(zeroTax());
   });
   it("forward heads too: a not-blocked credit note above the not-blocked ITC goes to 4(B)(2) and does not shrink the blocked 4(A)(5)", () => {
     // Blocked "Food" bill 50,000 (4,500 / 4,500) and a raw-material credit note 30,000 (−2,700 / −2,700), both in 2B.

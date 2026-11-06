@@ -180,7 +180,7 @@ function gstr3bSheets(a: Analysis, x: GstExtract): SheetSpec[] {
         { details: "(A)(4) Inward supplies from ISD", ...taxCells(zero) },
         { details: "(A)(5) All other ITC (2B matched to books, lower of the two)", ...taxCells(a.itc.a5) },
         { details: "(B)(1) Reversed: rules 38, 42, 43 and s.17(5)", ...taxCells(a.itc.b1) },
-        { details: "(B)(2) Reversed: others (rule 37 and net credit notes)", ...taxCells(a.itc.b2) },
+        { details: "(B)(2) Reversed: others (rule 37, net credit notes, and reverse-charge credit notes applied this period)", ...taxCells(a.itc.b2) },
         { details: "(C) Net ITC available (A) − (B)", ...taxCells(a.itc.net) },
         { details: "(D)(1) ITC reclaimed", ...taxCells(zero) },
         { details: "(D)(2) Ineligible ITC (GSTR-2B: ITC not available)", ...taxCells(a.itc.unavailable2b) },
@@ -188,7 +188,8 @@ function gstr3bSheets(a: Analysis, x: GstExtract): SheetSpec[] {
         { details: "Memo: ITC deferred (in books, not in GSTR-2B)", ...taxCells(a.itc.deferred) },
         { details: "Memo: ITC held back (the model could not classify the bill; reviewer question)", ...taxCells(a.itc.heldBack) },
         { details: "Memo: ITC in GSTR-2B not in books (not claimed)", ...taxCells(a.itc.notBooked) },
-        { details: "Memo: reverse-charge credit notes on purchases not blocked u/s 17(5), above this period's reverse-charge bills on such purchases (not in (A)(3); carried forward)", ...taxCells(a.itc.a3CarryForward) },
+        { details: "Memo: reverse-charge credit notes on purchases not blocked u/s 17(5), above the bills on such purchases, carried forward with the 3.1(d) excess (not in (A)(3) or (B)(2))", ...taxCells(a.itc.a3CarryForward) },
+        { details: "Memo: reverse-charge credit notes on purchases not blocked u/s 17(5), above the bills on such purchases, applied now in (B)(2) (3.1(d) already took the matching liability reduction)", ...taxCells(a.itc.rcmNoteReversal) },
         { details: "Memo: credit notes on s.17(5) blocked purchases above this period's blocked ITC of the same kind, forward or reverse charge (kept out of 4(A); never availed)", ...taxCells(a.itc.blockedNoteExcess) },
       ],
     },
@@ -227,10 +228,18 @@ function gstr3bSheets(a: Analysis, x: GstExtract): SheetSpec[] {
           ? [
               {
                 topic: "Reverse charge carried forward",
-                note: `Reverse-charge credit notes exceed this period's reverse-charge bills (warn finding gst.negative-rcm): Table 3.1(d) excess ${taxNote(a.rcm.carryForward)}; Table 4(A)(3) excess ${taxNote(a.itc.a3CarryForward)}. The 3.1(d) excess is where the notes exceed all of the head's reverse-charge bills; the 4(A)(3) excess is where notes on purchases that are not blocked u/s 17(5) exceed the bills on such purchases (credit on a blocked bill is reversed in 4(B)(1) and never absorbs it). Neither table takes a negative figure, so each excess is entered as nil (no reverse-charge cash is paid on it and no 4(A)(3) credit is taken on it). Carry the amounts forward to reduce the same head's reverse-charge liability and its 4(A)(3) credit in a later return — partner to verify the treatment. The notes: ${a.purchases
+                note: `Reverse-charge credit notes exceed this period's reverse-charge bills (warn finding gst.negative-rcm): Table 3.1(d) excess ${taxNote(a.rcm.carryForward)}; Table 4(A)(3) excess ${taxNote(a.itc.a3CarryForward)}. The 3.1(d) excess is where the notes exceed all of the head's reverse-charge bills. A credit note reduces the liability and the matching input tax credit together, so the 4(A)(3) excess carried is only the part of the notes on purchases not blocked u/s 17(5) (above the bills on such purchases) that the 3.1(d) excess carries; any rest is reversed now in 4(B)(2). Neither table takes a negative figure, so each excess is entered as nil (no reverse-charge cash is paid on it and no 4(A)(3) credit is taken on it). Carry the amounts forward to reduce the same head's reverse-charge liability and its 4(A)(3) credit in a later return — partner to verify the treatment. The notes: ${a.purchases
                   .filter((p) => p.rcm && p.docType === "CRN")
                   .map((p) => `${p.number} (${p.supplier || "supplier"}, ${p.date})`)
                   .join("; ")}.`,
+              },
+            ]
+          : []),
+        ...(taxTotal(a.itc.rcmNoteReversal) > 0
+          ? [
+              {
+                topic: "Reverse-charge credit notes applied now",
+                note: `Reverse-charge credit notes on purchases not blocked u/s 17(5) exceed the bills on such purchases, and Table 3.1(d) carries forward less than that (or nothing): the difference, ${taxNote(a.itc.rcmNoteReversal)}, is reversed now in Table 4(B)(2). Table 3.1(d) nets every reverse-charge document of the head, so it already took that liability reduction this period, and the matching input tax credit goes in the same period.`,
               },
             ]
           : []),

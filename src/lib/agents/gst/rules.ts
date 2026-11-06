@@ -298,9 +298,12 @@ function negativeOutward(ci: GstCheckInput): CheckOutcome {
 
 /**
  * Reverse-charge credit notes above this period's reverse-charge bills for a tax head: Table 3.1(d)
- * and 4(A)(3) cannot be negative, so the head is entered as nil in both and the excess is carried
- * forward (compute.ts rcm.carryForward / itc.a3CarryForward; memo rows in Tables 3.1 and 4 and a
- * Notes row) — never dropped silently. Partner to verify the carry-forward treatment.
+ * and 4(A)(3) cannot be negative, so the head is entered as nil and the excess is carried forward
+ * (compute.ts rcm.carryForward / itc.a3CarryForward; memo rows in Tables 3.1 and 4 and a Notes row)
+ * — never dropped silently. The ITC side carries only what the liability side carries (a credit
+ * note reduces both in the same period); any rest of the not-blocked shortfall is reversed now in
+ * 4(B)(2) (itc.rcmNoteReversal), so a 4(A)(3) excess never appears without a 3.1(d) excess.
+ * Partner to verify the carry-forward treatment.
  */
 function negativeRcm(ci: GstCheckInput): CheckOutcome {
   const a = A(ci);
@@ -313,8 +316,9 @@ function negativeRcm(ci: GstCheckInput): CheckOutcome {
   const hits = notes.map((p) => ({ quote: `${p.number}: ${taxText(noteTax(p))}`, loc: p.loc, text: `reverse-charge credit note ${p.number} from ${p.supplier || "supplier"} on "${p.key}" (${taxText(noteTax(p))})` }));
   const amounts = (t: TaxSplit) => heads.filter((h) => t[h] > 0).map((h) => `${h.toUpperCase()} ${inr(t[h])}`).join(", ") || "nil";
   const head =
-    `Reverse-charge credit notes exceed this period's reverse-charge bills: Table 3.1(d) excess ${amounts(cf)} and Table 4(A)(3) excess ${amounts(itcCf)} (notes on purchases not blocked u/s 17(5) above the bills on such purchases) are entered as nil (not paid, not claimed) and carried forward` +
-    ` to reduce the same head's reverse-charge liability and its 4(A)(3) credit in a later return (partner to verify)`;
+    `Reverse-charge credit notes exceed this period's reverse-charge bills: Table 3.1(d) excess ${amounts(cf)} and Table 4(A)(3) excess ${amounts(itcCf)} (notes on purchases not blocked u/s 17(5), as far as the 3.1(d) excess carries them) are entered as nil (not paid, not claimed) and carried forward` +
+    ` to reduce the same head's reverse-charge liability and its 4(A)(3) credit in a later return (partner to verify)` +
+    (taxTotal(a.itc.rcmNoteReversal) > 0 ? `; the rest of those notes, ${amounts(a.itc.rcmNoteReversal)}, is reversed now in Table 4(B)(2)` : "");
   return hits.length ? listFail(hits, head) : fail(head, heads.map((h) => `${h.toUpperCase()} ${plainRupees(cf[h] || itcCf[h])}`).join(", "), ci.extracted.sources.purchases.file);
 }
 
@@ -544,7 +548,10 @@ export const GST_CHECKLIST: ChecklistPack = {
       kind: "deterministic",
       check: "gst.negative-rcm",
       evidence: "tax head, amounts carried forward (3.1(d) and 4(A)(3)) and the credit notes",
-      params: { verify: "Table 3.1(d) / 4(A)(3) cannot take a negative figure: the head is entered as nil and the excess carried forward to a later period's reverse-charge liability and 4(A)(3) credit of the same head. Partner to verify the treatment (carry forward vs. adjusting the earlier return's figures)." },
+      params: {
+        verify:
+          "Table 3.1(d) / 4(A)(3) cannot take a negative figure: the head is entered as nil and the excess carried forward to a later period's reverse-charge liability and 4(A)(3) credit of the same head. A credit note reduces the liability and the matching credit in the same period, so the 4(A)(3) side carries only what the 3.1(d) side carries; the rest is reversed now in 4(B)(2). Partner to verify the treatment (carry forward vs. adjusting the earlier return's figures).",
+      },
     },
     {
       id: "gst.prior-carry-forward",
