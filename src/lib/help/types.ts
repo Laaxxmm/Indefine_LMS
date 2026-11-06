@@ -1,7 +1,7 @@
 // The shape of one page's help (src/lib/help/pages.ts is the registry; the Help panel in the
 // headers shows the entry for the page you are on). Every string here is read by people in the
 // firm, so it follows the plain-language rules (src/lib/errors/rules.ts), checked by
-// tests/unit/help-registry.test.ts.
+// tests/unit/help-registry.test.tsx.
 import type { JobTaskState } from "@prisma/client";
 
 /** A word, label or status on the page, and what it means. */

@@ -26,7 +26,6 @@ export function NavMenu({
   className = "",
   align = "right",
   icon,
-  tour,
 }: {
   /** The button's text ("More", "Learn", "Menu"); the panel is named after it. */
   label: string;
@@ -38,8 +37,6 @@ export function NavMenu({
   align?: "left" | "right";
   /** An icon before the label (the phone menu's bars). */
   icon?: React.ReactNode;
-  /** The onboarding tour's anchor, when one of the links had it. */
-  tour?: string;
 }) {
   const id = useId();
   const pathname = usePathname();
@@ -117,7 +114,6 @@ export function NavMenu({
         type="button"
         aria-expanded={open}
         aria-controls={id}
-        data-tour={tour}
         onClick={() => setOpen((o) => !o)}
         className={cx(buttonClassName, "inline-flex items-center gap-2", current && navActive)}
       >

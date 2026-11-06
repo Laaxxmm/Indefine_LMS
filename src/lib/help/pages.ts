@@ -1,7 +1,7 @@
 // The help registry: one entry per page, keyed by the page's route pattern (the folder under
-// src/app). The Help button in the headers (src/components/help/HelpButton.tsx) shows the entry for
+// src/app). The Help button in the headers (src/components/HelpButton.tsx) shows the entry for
 // the page you are on. Every Firm OS page has one, and every entry's route is a real page
-// (tests/unit/help-registry.test.ts); the words follow the plain-language rules (same test).
+// (tests/unit/help-registry.test.tsx); the words follow the plain-language rules (same test).
 //
 // The content is grouped by area in ./content; this file is the only place that reads it.
 import { ADMIN_HELP } from "./content/admin";

@@ -75,7 +75,7 @@ const TOUR_STEPS: TourStep[] = [
   {
     selector: "[data-tour='leaderboard']",
     title: "Leaderboard",
-    body: "The Leaderboard, Check-in and Recap are in the Learn menu. See how you rank: points come from videos watched, quizzes passed, deadlines and attendance.",
+    body: "The Leaderboard, Check-in and Recap are in the Learn menu (under Menu on a phone). See how you rank: points come from videos watched, quizzes passed, deadlines and attendance.",
   },
   {
     title: "You're all set 🎉",
@@ -335,7 +335,8 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
         {/* One link per module that is on for the person (the same rule as each area's guard), the
             learning pages under Learn and the Firm OS places under Firm OS (src/lib/workspace/nav.ts).
             From 640 px the bar shows them all; on a phone Home and one Menu with the same entries. */}
-        <nav aria-label="Main" className="flex items-center gap-1 bg-card p-1.5 rounded-full border border-border max-w-full">
+        {/* The tour's Leaderboard step points at the whole bar: Learn is a menu, and on a phone it sits inside Menu. */}
+        <nav aria-label="Main" data-tour={bar.some((e) => e.kind === "menu" && e.items.some((i) => i.tour)) ? "leaderboard" : undefined} className="flex items-center gap-1 bg-card p-1.5 rounded-full border border-border max-w-full">
           <span aria-current="page" className="shrink-0 px-4 py-2 rounded-full bg-brand-50 text-brand-600 font-bold text-[13.5px]">Home</span>
           {bar.map((e) =>
             e.kind === "link" ? (
@@ -343,7 +344,7 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
                 {e.item.label}
               </Link>
             ) : (
-              <NavMenu key={e.group} label={e.label} sections={[{ items: e.items }]} buttonClassName={navLink} className="hidden sm:block" align="left" tour={e.items.find((i) => i.tour)?.tour} />
+              <NavMenu key={e.group} label={e.label} sections={[{ items: e.items }]} buttonClassName={navLink} className="hidden sm:block" align="left" />
             ),
           )}
           {bar.length > 0 && (

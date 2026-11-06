@@ -6,10 +6,11 @@
 // no button. The panel is a modal dialog named by its heading: Escape or Close shuts it, Tab stays
 // inside it, focus goes back to the Help button, and it closes when the page changes.
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
 import { CircleHelp, X } from "lucide-react";
 import { StateChip } from "@/components/firm-os/StatusChip";
-import { body, cx, eyebrow, focusRing, sectionTitle } from "@/components/ui";
+import { body, cardTitle, cx, eyebrow, focusRing, sectionTitle } from "@/components/ui";
 import { trapTab } from "@/lib/help/focus-trap";
 import { findHelp, type HelpEntry } from "@/lib/help/pages";
 
@@ -49,7 +50,9 @@ export function HelpButton({ className, labelClassName = "" }: { className: stri
         <CircleHelp className="w-4 h-4" aria-hidden="true" />
         <span className={labelClassName}>Help</span>
       </button>
-      {open && <HelpPanel id={panelId} entry={entry} onClose={close} />}
+      {/* Into <body>: the headers have backdrop-blur, and a backdrop filter makes the header the box a
+          fixed element is placed in, so in place the panel would be clipped to the header's 64 px. */}
+      {open && createPortal(<HelpPanel id={panelId} entry={entry} onClose={close} />, document.body)}
     </>
   );
 }
@@ -97,7 +100,7 @@ export function HelpPanel({ id, entry, onClose }: { id?: string; entry: HelpEntr
         <div className="sticky top-0 z-10 flex items-start justify-between gap-4 bg-card border-b border-border px-6 py-4">
           <div className="min-w-0">
             <p className={`${eyebrow} mb-1`}>Help</p>
-            <h2 id={titleId} className="font-display font-bold text-xl leading-7 text-ink break-words">
+            <h2 id={titleId} className={`${cardTitle} text-ink break-words`}>
               {entry.title}
             </h2>
           </div>

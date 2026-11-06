@@ -121,7 +121,7 @@ describe("/dashboard", () => {
       // Grouped on the bar: the learning pages under Learn, the Firm OS places under Firm OS; a phone gets one Menu with the same links.
       expect(barOf(html)).toEqual(["Learn ▾", "Tools", "Firm OS ▾"]);
       expect(phoneMenuOf(html)).toEqual(await navOf(html));
-      expect(html).toMatch(/<button type="button" aria-expanded="false" aria-controls="[^"]+" data-tour="leaderboard"/); // the tour points at Learn
+      expect(html).toContain('<nav aria-label="Main" data-tour="leaderboard"'); // the tour points at the bar, seen at every width
     });
 
     it("built-in manager modules add Clients and Client messages; the work tracker still needs its allow-list", async () => {

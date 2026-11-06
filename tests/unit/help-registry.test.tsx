@@ -8,7 +8,7 @@
 //   3. lookup     a path finds its page's entry, the most specific pattern first, then its area's
 //   4. the panel  a modal dialog named by its heading, the five parts in order, a Close button; the
 //                 Help button only where there is help; Tab stays inside (trapTab)
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { JobTaskState } from "@prisma/client";
@@ -163,6 +163,12 @@ describe("4. the panel", () => {
     expect(html).toMatch(/<button type="button" aria-haspopup="dialog" aria-expanded="false" title="Help for [^"]+" class="x inline-flex items-center gap-2">/);
     expect(html).toContain('<span class="sr-only lg:not-sr-only">Help</span>');
     expect(html).not.toContain('role="dialog"'); // closed until pressed
+  });
+
+  it("opens into <body>: the headers' backdrop-blur would clip a fixed panel rendered in place to the header's 64 px", () => {
+    const src = readFileSync(join(process.cwd(), "src", "components", "HelpButton.tsx"), "utf8");
+    expect(src).toMatch(/createPortal\(<HelpPanel [^>]*\/>, document\.body\)/);
+    for (const header of ["FirmOsHeader.tsx", "AreaHeader.tsx"]) expect(readFileSync(join(process.cwd(), "src", "components", header), "utf8")).toContain("backdrop-blur"); // why the portal is needed
   });
 
   it("Tab stays inside: past the last control to the first, before the first to the last", () => {

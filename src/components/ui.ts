@@ -93,7 +93,7 @@ export const menuItem = `flex w-full items-center px-3 py-2 leading-5 rounded-lg
 /** A group heading inside a menu panel (Learn, Firm OS on the phone menu). */
 export const menuHeading = "px-3 pt-2 pb-1 text-[11px] leading-4 font-extrabold tracking-[0.12em] uppercase text-ink-mute";
 /** The keyboard hint beside an icon button ("Ctrl K"). */
-export const kbdHint = "rounded border border-border bg-page px-1.5 text-[11px] leading-4 font-semibold text-ink-mute";
+export const kbdHint = "rounded border border-border bg-page px-1 text-[11px] leading-4 font-semibold text-ink-mute";
 
 // ------------------------------------------------------------------ buttons
 // One shape: rounded-lg, 13 px bold, 32 px tall (20 line + 2 × 5 padding + 2 × 1 border; every variant has a

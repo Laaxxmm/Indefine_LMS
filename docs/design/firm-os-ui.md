@@ -170,7 +170,10 @@ words beat a placeholder: `/agents/mistakes` over `/agents/[agent]`), then its a
   area header (Tools, Clients) and the admin layout; it renders nothing where there is no entry. It
   opens a modal side panel (480 px, full width on a phone): `role="dialog"`, `aria-modal`, named by its
   heading; Close, Escape or a click outside shuts it; Tab stays inside (`trapTab`); focus returns to the
-  Help button; a route change closes it.
+  Help button; a route change closes it. It is rendered into `<body>` through a portal: the headers'
+  `backdrop-blur` makes the header the box a `position: fixed` child is placed in, so a panel rendered
+  in place would be clipped to the header's 64 px (found by the checker, 06 Nov 2026). Any new overlay
+  opened from a header follows the same rule.
 * The words are written for CA staff from what the code does (each entry names its source files) and
   pass the plain-language rules: no codes, no jargon beyond the firm-term allowlist. Job states are
   never written as codes in a sentence; the chip shows the code.
