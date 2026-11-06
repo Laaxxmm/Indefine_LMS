@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { refreshVideoAssignments, canAccessVideo } from "@/lib/assignments";
 import { z } from "zod";
 import { isActive, isAdmin } from "@/lib/access";
+import { readJsonCapped } from "@/lib/hardening/json-body";
 
 const Body = z.object({
   lastPosition: z.number().int().nonnegative(),
@@ -30,7 +31,9 @@ export async function POST(
     return NextResponse.json({ error: "That video wasn't found. Go back to the dashboard and open it again." }, { status: 404 });
   }
 
-  const json = await req.json().catch(() => null);
+  const jsonBody = await readJsonCapped(req); // re-audit NEW-6: capped as it streams in
+  if (!jsonBody.ok) return jsonBody.res;
+  const json = jsonBody.value;
   const parsed = Body.safeParse(json);
   if (!parsed.success) return NextResponse.json({ error: "Your progress could not be read. Reload the page; it will be saved from there." }, { status: 400 });
   const { lastPosition, percent } = parsed.data;

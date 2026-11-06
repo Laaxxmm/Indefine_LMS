@@ -4,6 +4,7 @@ import { pairingDb } from "@/lib/companion/defaults";
 import { createPairingBodyZ, pairingErrorResponse, parseOr400, sessionGuard } from "@/lib/companion/pairing-http";
 import { createPairing } from "@/lib/companion/tokens";
 import { firmOsEnabled, firmOsOffResponse } from "@/lib/workspace/flag";
+import { readJsonCapped } from "@/lib/hardening/json-body";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,9 @@ export async function POST(req: Request) {
   if (!firmOsEnabled()) return firmOsOffResponse();
   const g = sessionGuard(await auth());
   if (!g.ok) return g.res;
-  const body = parseOr400(createPairingBodyZ, await req.json().catch(() => null));
+  const jsonBody = await readJsonCapped(req); // re-audit NEW-6: capped as it streams in
+  if (!jsonBody.ok) return jsonBody.res;
+  const body = parseOr400(createPairingBodyZ, jsonBody.value);
   if (!body.ok) return body.res;
   try {
     const { token, pairing } = await createPairing(pairingDb(), g.user, body.data.label, new Date());

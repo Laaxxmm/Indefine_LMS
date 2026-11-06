@@ -26,7 +26,8 @@ export default function ScheduleLiveForm({
   currentUserId: string;
   /** Course folders already present under the L&D root. */
   existingFolders: string[];
-  action: (formData: FormData) => Promise<void>;
+  /** Where the form posts (a route handler that takes the material files; re-audit NEW-6). */
+  action: string;
   defaultStart: string;
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -49,7 +50,7 @@ export default function ScheduleLiveForm({
     setSelected(allOn ? new Set() : new Set(users.map((u) => u.id)));
 
   return (
-    <form action={action} className="space-y-5">
+    <form action={action} method="post" encType="multipart/form-data" className="space-y-5">
       {/* Selected attendees travel with the form as repeated hidden fields. */}
       {[...selected].map((id) => (
         <input key={id} type="hidden" name="attendeeIds" value={id} />

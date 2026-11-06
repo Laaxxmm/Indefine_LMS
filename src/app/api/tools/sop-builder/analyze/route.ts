@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { canCreateSop } from "@/lib/sop/access";
 import { analyzeSopRequest } from "@/lib/sop/gemini";
 import { failureSentence } from "@/lib/errors";
+import { readJsonCapped } from "@/lib/hardening/json-body";
 
 export const maxDuration = 60;
 
@@ -20,7 +21,9 @@ export async function POST(req: Request) {
   if (!session?.user) return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
   if (!(await canCreateSop(session.user))) return NextResponse.json({ error: "You don't have permission to create SOPs. Ask an admin to give you access." }, { status: 403 });
 
-  const parsed = Body.safeParse(await req.json().catch(() => null));
+  const jsonBody = await readJsonCapped(req); // re-audit NEW-6: capped as it streams in
+  if (!jsonBody.ok) return jsonBody.res;
+  const parsed = Body.safeParse(jsonBody.value);
   if (!parsed.success) return NextResponse.json({ error: "Describe the procedure in at least a sentence or two." }, { status: 400 });
 
   try {

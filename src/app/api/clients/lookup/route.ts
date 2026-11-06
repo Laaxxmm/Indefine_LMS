@@ -5,6 +5,7 @@ import { canViewClients } from "@/lib/clients/core";
 import { findByIdentifier } from "@/lib/search/identifiers";
 import { isSensitiveQuery } from "@/lib/search/query";
 import { IDENTIFIER_LABELS } from "@/lib/search/types";
+import { readJsonCapped } from "@/lib/hardening/json-body";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +21,9 @@ export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return fail(401, "Sign in to search clients.");
   if (!canViewClients(session.user)) return fail(403, "Your account is not active, so client search is not available. Ask an admin to reactivate it.");
-  const parsed = bodyZ.safeParse(await req.json().catch(() => null));
+  const jsonBody = await readJsonCapped(req); // re-audit NEW-6: capped as it streams in
+  if (!jsonBody.ok) return jsonBody.res;
+  const parsed = bodyZ.safeParse(jsonBody.value);
   if (!parsed.success) return fail(400, parsed.error.issues[0]?.message ?? "The search could not be read. Reload the page and try again.");
   const q = parsed.data.q;
   if (!isSensitiveQuery(q)) return fail(400, "Search by name or client code with the Filter button.");

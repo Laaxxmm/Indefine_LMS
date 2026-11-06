@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { DEPARTMENTS } from "@/lib/ca-firm";
 import { isClientsAdmin } from "@/lib/clients/core";
 import { validationMessage } from "@/lib/errors";
+import { readJsonCapped } from "@/lib/hardening/json-body";
 
 const bodyZ = z.object({
   department: z.enum(DEPARTMENTS.filter((d) => d !== "GENERAL") as [typeof DEPARTMENTS[number], ...typeof DEPARTMENTS]),
@@ -17,7 +18,9 @@ export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
   if (!isClientsAdmin(session.user)) return NextResponse.json({ error: "Only admins can change the service list. Ask an admin." }, { status: 403 });
-  const parsed = bodyZ.safeParse(await req.json().catch(() => null));
+  const jsonBody = await readJsonCapped(req); // re-audit NEW-6: capped as it streams in
+  if (!jsonBody.ok) return jsonBody.res;
+  const parsed = bodyZ.safeParse(jsonBody.value);
   if (!parsed.success) return NextResponse.json({ error: validationMessage(parsed.error) }, { status: 400 });
   const max = await prisma.serviceType.aggregate({ where: { department: parsed.data.department }, _max: { order: true } });
   try {

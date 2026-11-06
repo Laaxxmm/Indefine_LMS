@@ -9,15 +9,7 @@ import { NAMES_UNAVAILABLE, legacyDictionary } from "@/lib/auto-quiz";
 import { getQuizDefaults } from "@/lib/settings";
 import { SubmitButton } from "@/components/SubmitButton";
 import { ConfirmButton } from "@/components/ConfirmButton";
-import {
-  getAppOnlyToken,
-  getUserGraphToken,
-  getItemParentId,
-  uploadFileToFolderId,
-  resolveFolderId,
-} from "@/lib/graph";
 import { isAdmin } from "@/lib/access";
-import { failureSentence } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 
@@ -215,81 +207,7 @@ async function deleteQuestion(formData: FormData) {
   revalidatePath(`/admin/video/${videoId}`);
 }
 
-// Attach a downloadable handout to this video. The file is uploaded into the
-// SAME SharePoint folder the video lives in, so materials sit beside the
-// recording and nothing is stored in our DB but the Graph pointer.
-async function addMaterial(formData: FormData) {
-  "use server";
-  await requireAdmin();
-  const videoId = String(formData.get("videoId"));
-  const back = (msg: string) =>
-    `/admin/video/${videoId}?matinfo=${encodeURIComponent(msg)}`;
-
-  // Everything that can fail is inside the try, so a bad upload shows a message
-  // instead of throwing and blanking the page. redirect() throws by design, so
-  // it stays OUTSIDE (a caught NEXT_REDIRECT would swallow the navigation).
-  let done: string;
-  try {
-    const file = formData.get("file");
-    if (!(file instanceof File) || file.size === 0) {
-      throw new Error("Choose a file first.");
-    }
-
-    const video = await prisma.video.findUnique({ where: { id: videoId } });
-    if (!video) notFound();
-
-    const session = await auth();
-    const token =
-      (await getAppOnlyToken()) ??
-      (session?.user ? await getUserGraphToken(session.user.id) : null);
-    if (!token) throw new Error("No Microsoft Graph token available.");
-
-    // Store it beside the video (that folder already lives under the L&D root);
-    // if the video's own folder can't be resolved, fall back to the L&D root so
-    // the handout still lands somewhere sensible.
-    let folderId = await getItemParentId(
-      video.graphDriveId,
-      video.graphItemId,
-      token
-    );
-    const rootPath = process.env.GRAPH_VIDEOS_FOLDER_PATH;
-    if (!folderId && rootPath) {
-      folderId = await resolveFolderId(video.graphDriveId, rootPath, token);
-    }
-    if (!folderId) throw new Error("Couldn't find a folder to store the file in.");
-
-    const uploaded = await uploadFileToFolderId(
-      video.graphDriveId,
-      folderId,
-      file.name,
-      await file.arrayBuffer(),
-      token
-    );
-    if (!uploaded) {
-      throw new Error(
-        "Upload was rejected by SharePoint — check the app has Files.ReadWrite.All."
-      );
-    }
-
-    const count = await prisma.material.count({ where: { videoId } });
-    await prisma.material.create({
-      data: {
-        videoId,
-        name: file.name,
-        graphDriveId: video.graphDriveId,
-        graphItemId: uploaded.id,
-        sizeBytes: uploaded.size || file.size,
-        order: count,
-      },
-    });
-    revalidatePath(`/admin/video/${videoId}`);
-    revalidatePath(`/video/${videoId}`);
-    done = back("Material attached.");
-  } catch (e) {
-    done = back(failureSentence(e, "The material could not be uploaded.", "Try again in a minute."));
-  }
-  redirect(done);
-}
+// Attaching a handout is a route handler (re-audit NEW-6): POST /api/admin/video/[id]/materials.
 
 // Detach a handout. Removes our pointer only — the file stays in SharePoint, so
 // an accidental click here never destroys the firm's copy.
@@ -394,12 +312,12 @@ export default async function AdminVideoPage({
           </div>
         )}
 
-        <form action={addMaterial} className="flex items-center gap-3 flex-wrap">
-          <input type="hidden" name="videoId" value={video.id} />
+        <form action={`/api/admin/video/${encodeURIComponent(video.id)}/materials`} method="post" encType="multipart/form-data" className="flex items-center gap-3 flex-wrap">
           <input
             type="file"
             name="file"
             required
+            accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.txt,.png,.jpg,.jpeg"
             className="text-sm file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border file:border-border file:bg-white file:text-ink-soft file:font-semibold file:text-xs hover:file:bg-muted"
           />
           <SubmitButton className="text-sm px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-bold transition">

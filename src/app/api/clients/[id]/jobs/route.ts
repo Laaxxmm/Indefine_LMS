@@ -6,6 +6,7 @@ import { canViewClients, jobBodyZ } from "@/lib/clients/core";
 import { ensureJobFolder } from "@/lib/clients/storage";
 import { scheduleWorkbookRebuild } from "@/lib/clients/workbook";
 import { validationMessage } from "@/lib/errors";
+import { readJsonCapped } from "@/lib/hardening/json-body";
 
 export const maxDuration = 60;
 
@@ -19,7 +20,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!(await prisma.client.findUnique({ where: { id: clientId }, select: { id: true } })))
     return NextResponse.json({ error: "That client wasn't found. Go back to the client list and open it again." }, { status: 404 });
 
-  const parsed = jobBodyZ.safeParse(await req.json().catch(() => null));
+  const jsonBody = await readJsonCapped(req); // re-audit NEW-6: capped as it streams in
+  if (!jsonBody.ok) return jsonBody.res;
+  const parsed = jobBodyZ.safeParse(jsonBody.value);
   if (!parsed.success) return NextResponse.json({ error: validationMessage(parsed.error) }, { status: 400 });
   const job = parsed.data;
 

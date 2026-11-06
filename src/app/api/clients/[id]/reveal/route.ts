@@ -6,6 +6,7 @@ import { logAudit } from "@/lib/audit/log";
 import { canRevealClientPii } from "@/lib/rbac/policy";
 import { EDIT_PRIVATE_FIELDS, PII_FIELDS, PII_LABELS, type PiiField } from "@/lib/clients/pii";
 import { validationMessage } from "@/lib/errors";
+import { readJsonCapped } from "@/lib/hardening/json-body";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +27,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!canRevealClientPii(session.user)) {
     return NextResponse.json({ error: "Only admins and partners can see a client's full PAN, GSTIN, phone or email. Use the masked value, or ask one of them." }, { status: 403, headers: NO_STORE });
   }
-  const body = (await req.json().catch(() => null)) as unknown;
+  const jsonBody = await readJsonCapped(req); // re-audit NEW-6: capped as it streams in
+  if (!jsonBody.ok) return jsonBody.res;
+  const body = (jsonBody.value) as unknown;
   const { id } = await params;
   if ((body as { purpose?: unknown } | null)?.purpose === "edit") return editValues(session.user.id, id);
   const parsed = bodyZ.safeParse(body);

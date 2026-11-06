@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { canEditSop } from "@/lib/sop/access";
 import { buildVersion, normDept, createBodyZ, resolveCreator } from "@/lib/sop/service";
 import { validationMessage, failureSentence } from "@/lib/errors";
+import { readJsonCapped } from "@/lib/hardening/json-body";
 
 export const maxDuration = 60;
 
@@ -20,7 +21,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!(await canEditSop(session.user, sop.department)))
     return NextResponse.json({ error: "You don't have permission to edit this department's SOPs. Ask an admin." }, { status: 403 });
 
-  const parsed = createBodyZ.safeParse(await req.json().catch(() => null));
+  const jsonBody = await readJsonCapped(req); // re-audit NEW-6: capped as it streams in
+  if (!jsonBody.ok) return jsonBody.res;
+  const parsed = createBodyZ.safeParse(jsonBody.value);
   if (!parsed.success) return NextResponse.json({ error: validationMessage(parsed.error) }, { status: 400 });
   const { brief, rawProcedure, purpose } = parsed.data;
   // The edit may move the SOP to another department; the editor must be allowed there too.

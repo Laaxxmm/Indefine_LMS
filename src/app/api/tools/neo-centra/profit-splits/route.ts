@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canUseNeoCentra, isNeoCentraAdmin } from "@/lib/neo-centra/access";
 import { validationMessage } from "@/lib/errors";
+import { readJsonCapped } from "@/lib/hardening/json-body";
 
 // Bucket 3 manual profit splits. Any director may view; admins edit. A split applies
 // on the next Sync (it feeds the incentive compute, like Bucket 4 approved hours).
@@ -29,7 +30,9 @@ const Body = z.object({
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user || !isNeoCentraAdmin(session.user)) return NextResponse.json({ error: "Only Neo Centra admins can change this. Ask an admin." }, { status: 403 });
-  const parsed = Body.safeParse(await req.json().catch(() => null));
+  const jsonBody = await readJsonCapped(req); // re-audit NEW-6: capped as it streams in
+  if (!jsonBody.ok) return jsonBody.res;
+  const parsed = Body.safeParse(jsonBody.value);
   if (!parsed.success) return NextResponse.json({ error: validationMessage(parsed.error) }, { status: 400 });
   const { taskIdentity, turiaTaskId, splits } = parsed.data;
   const taskName = parsed.data.taskName?.trim() || taskIdentity || turiaTaskId || "Untitled task";

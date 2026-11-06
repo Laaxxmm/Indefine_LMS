@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import type { Session } from "next-auth";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
+import { BODY_TOO_LARGE, bodyTooLargeResponse, readJsonOrMarker } from "@/lib/hardening/json-body";
 import type { ServiceResult } from "./result";
 
 export type Signed = { ok: true; user: Session["user"] } | { ok: false; res: NextResponse };
@@ -16,6 +17,7 @@ export async function signedIn(): Promise<Signed> {
 }
 
 export function parse<S extends z.ZodTypeAny>(schema: S, value: unknown): { ok: true; data: z.output<S> } | { ok: false; res: NextResponse } {
+  if (value === BODY_TOO_LARGE) return { ok: false, res: bodyTooLargeResponse() };
   const parsed = schema.safeParse(value);
   if (parsed.success) return { ok: true, data: parsed.data };
   const msg = parsed.error.issues[0]?.message;
@@ -23,8 +25,9 @@ export function parse<S extends z.ZodTypeAny>(schema: S, value: unknown): { ok: 
   return { ok: false, res: NextResponse.json({ error: sentence }, { status: 400 }) };
 }
 
+/** The JSON body, capped at 1 MB as it streams in (re-audit NEW-6); over the cap, parse() answers 413. */
 export async function readJson(req: Request): Promise<unknown> {
-  return req.json().catch(() => null);
+  return readJsonOrMarker(req);
 }
 
 export function toJson<T>(r: ServiceResult<T>, okStatus = 200): NextResponse {

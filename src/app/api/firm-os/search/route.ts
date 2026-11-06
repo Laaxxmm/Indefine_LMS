@@ -6,6 +6,7 @@ import { isSensitiveQuery } from "@/lib/search/query";
 import { SEARCH_MESSAGES, searchRequestZ } from "@/lib/search/schema";
 import { search, type SearchOutcome } from "@/lib/search/service";
 import { firmOsEnabled, firmOsOffResponse } from "@/lib/workspace/flag";
+import { readJsonCapped } from "@/lib/hardening/json-body";
 
 // Firm OS search: auth → zod → search() → JSON. GET ?q=&type= for text; POST { q, type } for a PAN,
 // GSTIN, phone or email, which GET refuses so identifiers stay out of URLs and access logs.
@@ -50,5 +51,7 @@ export async function POST(req: Request) {
   if (!firmOsEnabled()) return firmOsOffResponse();
   const g = await guard();
   if (g.res) return g.res;
-  return run(g.user, await req.json().catch(() => null), false);
+  const jsonBody = await readJsonCapped(req); // re-audit NEW-6: capped as it streams in
+  if (!jsonBody.ok) return jsonBody.res;
+  return run(g.user, jsonBody.value, false);
 }

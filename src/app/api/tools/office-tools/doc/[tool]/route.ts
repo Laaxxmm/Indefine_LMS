@@ -5,6 +5,7 @@ import { DOC_GENERATORS, slug } from "@/lib/office-tools/generate";
 import { recordToolRun } from "@/lib/office-tools/audit";
 import { DOCX_MIME } from "@/lib/certificates/download";
 import { validationMessage, failureSentence } from "@/lib/errors";
+import { readJsonCapped } from "@/lib/hardening/json-body";
 
 export const maxDuration = 60;
 
@@ -19,7 +20,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ tool: s
   const gen = DOC_GENERATORS[tool];
   if (!gen) return NextResponse.json({ error: "That tool doesn't exist. Go back to Office tools and pick one from the list." }, { status: 404 });
 
-  const parsed = gen.schema.safeParse(await req.json().catch(() => null));
+  const jsonBody = await readJsonCapped(req); // re-audit NEW-6: capped as it streams in
+  if (!jsonBody.ok) return jsonBody.res;
+  const parsed = gen.schema.safeParse(jsonBody.value);
   if (!parsed.success) {
     return NextResponse.json({ error: validationMessage(parsed.error), issues: parsed.error.issues }, { status: 400 });
   }

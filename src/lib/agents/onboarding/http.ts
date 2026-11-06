@@ -9,6 +9,7 @@ import { canOnboard, firmRole } from "@/lib/rbac/policy";
 import { USER_MESSAGES, userMessage, validationMessage } from "@/lib/errors";
 import { SagaError } from "./saga";
 import { OnboardingError } from "./service";
+import { readJsonCapped } from "@/lib/hardening/json-body";
 
 export const runIdZ = z.string().trim().min(1).max(64);
 
@@ -44,7 +45,9 @@ export function guard(session: Session | null): Guarded {
 
 /** Parse a JSON body with a schema; 400 with the first message on failure. */
 export async function parseBody<T>(req: Request, schema: z.ZodType<T>): Promise<{ ok: true; data: T } | { ok: false; res: NextResponse }> {
-  const parsed = schema.safeParse(await req.json().catch(() => null));
+  const jsonBody = await readJsonCapped(req); // re-audit NEW-6: capped as it streams in
+  if (!jsonBody.ok) return { ok: false, res: jsonBody.res };
+  const parsed = schema.safeParse(jsonBody.value);
   if (parsed.success) return { ok: true, data: parsed.data };
   return { ok: false, res: NextResponse.json({ error: validationMessage(parsed.error) }, { status: 400 }) };
 }

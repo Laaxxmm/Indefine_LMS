@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { canUseOfficeTools } from "@/lib/office-tools/access";
 import { fyLabel, fyOf } from "@/lib/office-tools/engagement-letters";
 import { folderName } from "@/lib/clients/core";
+import { readJsonCapped } from "@/lib/hardening/json-body";
 
 // Save the generator form to the register. One letter per client per FY: saving again
 // (with its id) updates it and appends a "saved" event carrying the form snapshot, so
@@ -23,7 +24,9 @@ export async function POST(req: Request) {
   if (!session?.user) return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
   if (!canUseOfficeTools(session.user)) return NextResponse.json({ error: "You don't have access to this tool. Ask an admin to give you access." }, { status: 403 });
 
-  const body = (await req.json().catch(() => null)) as { id?: string; data?: Record<string, unknown>; overwrite?: boolean } | null;
+  const jsonBody = await readJsonCapped(req); // re-audit NEW-6: capped as it streams in
+  if (!jsonBody.ok) return jsonBody.res;
+  const body = (jsonBody.value) as { id?: string; data?: Record<string, unknown>; overwrite?: boolean } | null;
   const data = body?.data;
   const clientName = typeof data?.client === "string" ? data.client.trim().replace(/\s+/g, " ") : "";
   const fy = fyOf(String(data?.start ?? ""));
