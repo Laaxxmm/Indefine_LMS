@@ -76,7 +76,7 @@ Columns not listed hold ids, enums, booleans, counts or timestamps only (class �
 | | `spotCheckNote` | B | Partner's spot-check note |
 | `OnboardingRun` | `prompt` | **A** | The partner's plain-English sentence (may name people, carry PAN/GSTIN). **Retention: replaced by `[cleared by retention]` 30 days after the run last changed** (done, failed or abandoned) |
 | | `spec`, `plan` | **A** | Extracted client details (PAN, GSTIN, contact name, phone, email) and the plan. **Retention: cleared with the prompt** (`spec` → `{ cleared: true }`, `plan` → null). A run that never reached a client record (`firmClientId` null) is found for erasure by identifiers that pin the person alone (PAN / GSTIN / CIN, an email or phone no other client shares), never by a name; for a person no record matches, by the request's identifier hash (they are then "known only by identifiers", rights.md) |
-| | `steps`, `error` | C | Saga progress |
+| | `steps`, `error` | C | Saga progress. A failure is stored as a classification for IT, never the thrown text: known errors as fixed text (no client, file or sheet name, path or received value), anything else masked with the run's names or withheld (`src/lib/agents/onboarding/run-errors.ts`); the page shows a plain sentence (`onboardingFailureMessage`) |
 | | `createdById` | B | |
 
 ### Coach, comms, hardening

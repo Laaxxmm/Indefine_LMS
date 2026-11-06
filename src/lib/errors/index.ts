@@ -3,6 +3,7 @@
 //   userMessage(err | code, context)  → a sentence: what happened and what to do next.
 //   PlainError                        → throw this when the message is already written for a person.
 //   runFailureMessage(stored)         → the sentence for an agent run's stored failure classification.
+//   onboardingFailureMessage(stored)  → the same for an onboarding step's.
 //
 // Rules (README "Conventions"; the owner: "no codes on the error messages"):
 //   - A JSON error body is { error: <sentence> }. A machine-readable `code` may sit beside it for
@@ -264,6 +265,25 @@ export function storedFailureMessage(stored: string | null | undefined, context:
   // Sentences written for a person (the guardrails' budget and masking sentences, input refusals).
   if (/\s/.test(s) && isPlainMessage(s)) return s;
   return USER_MESSAGES.unexpected(context);
+}
+
+/**
+ * An onboarding step's stored failure classification (src/lib/agents/onboarding/run-errors.ts:
+ * "Microsoft 365: GET request failed: 404", "database: P2002", "LMS client: a client with the same
+ * name …") as the sentence the onboarding page shows. A classification with no sentence of its own
+ * gets `context.fallback`; anything else is read as storedFailureMessage reads it.
+ */
+export function onboardingFailureMessage(stored: string | null | undefined, context: MessageContext = {}): string {
+  const s = (stored ?? "").trim();
+  const prisma = /^database: (P\d{4})\b/.exec(s);
+  if (prisma) return fromCode(prisma[1], context) ?? USER_MESSAGES.recordsUnavailable();
+  if (/^database: /.test(s)) return USER_MESSAGES.recordsUnavailable();
+  if (/^LMS client: a client with the same\b/.test(s)) return USER_MESSAGES.alreadyExists({ subject: "a client with this name, folder name or PAN" });
+  if (/^SharePoint: a file already exists\b/.test(s)) return USER_MESSAGES.fileAlreadyThere();
+  if (/^Turia: (?:could not be reached|timed out)/.test(s)) return USER_MESSAGES.turiaUnavailable();
+  if (/^Microsoft 365: could not be reached/.test(s)) return USER_MESSAGES.microsoftUnavailable(context);
+  if (/^(?:SharePoint|Microsoft 365|LMS client|network|A request): /.test(s) && !/\b(?:GET|POST|PUT|PATCH|DELETE) \S+ failed: \d{3}\b|\btimed out\b/.test(s)) return USER_MESSAGES.unexpected(context);
+  return storedFailureMessage(s, context);
 }
 
 /** A step's "what a person must do" text (BlockedError.action), or a plain stand-in when it names server settings. */

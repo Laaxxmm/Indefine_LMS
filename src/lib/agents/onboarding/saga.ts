@@ -20,6 +20,7 @@ import { BlockedError } from "@/lib/integrations/sharepoint/errors";
 import type { FyTreeOptions } from "@/lib/integrations/sharepoint/clfolders";
 import { auditDbFromSink, logAudit } from "@/lib/audit/log";
 import type { OnboardingPlan, PlanJob } from "./plan";
+import { onboardingErrorDictionary, storedOnboardingError } from "./run-errors";
 import type { OnboardingSpec, ServiceLine } from "./spec";
 
 export const STEP_KEYS = ["lmsClient", "turia", "sharepoint", "jobs", "assignment", "summary"] as const;
@@ -139,8 +140,6 @@ export function normalizeSteps(stored: SagaStep[] | null | undefined): SagaStep[
   return STEP_KEYS.map((key) => ({ key, label: STEP_LABELS[key], status: "pending" as StepStatus, ...byKey.get(key) }));
 }
 
-const message = (e: unknown) => (e instanceof Error ? e.message : String(e)).slice(0, 500);
-
 type StepOutcome = { status: "done" | "waiting"; result: Record<string, unknown>; action?: string };
 
 function turiaOutcome(results: TuriaOpResult[], what: string): StepOutcome {
@@ -210,7 +209,7 @@ export function createSaga(deps: SagaDeps) {
       }
       case "assignment": {
         for (const who of ["assignee", "reviewer"] as const) {
-          if (!(await store.activeUser(plan.people[who].id))) throw new Error(`The ${who} ${plan.people[who].name} is no longer an active LMS user; re-plan with someone else`);
+          if (!(await store.activeUser(plan.people[who].id))) throw new Error(`The ${who} is no longer an active user. Pick someone else and build the plan again.`);
         }
         const fc = firmClientId();
         const tasks = await store.listJobTasks(fc);
@@ -263,6 +262,9 @@ export function createSaga(deps: SagaDeps) {
     }
     const steps = normalizeSteps(run.steps);
     const save = (patch: RunPatch = {}) => store.saveRun(runId, { steps: steps.map((s) => ({ ...s })), ...patch });
+    // A failure is stored as a classification, never the thrown text (run-errors.ts): it can name the client.
+    const dictionary = onboardingErrorDictionary(run.spec as unknown as Record<string, unknown>, run.plan);
+    const stored = (e: unknown, key: StepKey) => storedOnboardingError(e, dictionary, key);
     await save({ status: "RUNNING", error: null });
 
     for (const step of steps) {
@@ -285,12 +287,13 @@ export function createSaga(deps: SagaDeps) {
         await save();
       } catch (e) {
         if (e instanceof BlockedError) {
-          Object.assign(step, { status: "blocked", action: e.action, error: message(e), finishedAt: now().toISOString() });
+          Object.assign(step, { status: "blocked", action: e.action, error: stored(e, step.key), finishedAt: now().toISOString() });
           await save();
           continue;
         }
-        Object.assign(step, { status: "failed", error: message(e), finishedAt: now().toISOString() });
-        await save({ status: "FAILED", error: `${step.label} failed: ${message(e)}` });
+        const error = stored(e, step.key);
+        Object.assign(step, { status: "failed", error, finishedAt: now().toISOString() });
+        await save({ status: "FAILED", error: `${step.label} failed: ${error}` });
         return (await store.getRun(runId)) as RunRecord;
       }
     }

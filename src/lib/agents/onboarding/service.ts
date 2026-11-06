@@ -24,7 +24,7 @@ import type { OnboardingSubject } from "./restriction";
 import { AI_RESTRICTED_MESSAGE } from "@/lib/privacy/consent";
 import type { SessionUser } from "@/lib/access";
 import { canOpenOnboardingRun } from "@/lib/rbac/policy";
-import { plainAction, storedFailureMessage } from "@/lib/errors";
+import { onboardingFailureMessage, plainAction } from "@/lib/errors";
 
 /** Shown when the sentence is about a client whose AI processing is restricted (DPDP, src/lib/privacy/consent.ts). */
 export const ONBOARDING_AI_RESTRICTED = AI_RESTRICTED_MESSAGE;
@@ -77,7 +77,7 @@ function plainStep(s: SagaStep): SagaStep {
   return {
     ...s,
     ...(s.action ? { action: plainAction(s.action) } : {}),
-    ...(s.error ? { error: storedFailureMessage(s.error, { subject: "the onboarding", fallback: "This step failed. Use Resume to try it again; if it fails again, tell IT." }) } : {}),
+    ...(s.error ? { error: onboardingFailureMessage(s.error, { subject: "the onboarding", fallback: "This step failed. Use Resume to try it again; if it fails again, tell IT." }) } : {}),
   };
 }
 
