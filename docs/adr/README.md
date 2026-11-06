@@ -8,7 +8,7 @@ The repository inventory these decisions rest on is in [`docs/inventory.md`](../
 |---|---|---|---|---|
 | [ADR-001](ADR-001-extend-lms.md) | Extend the LMS, do not build greenfield | Accepted | 2026-11-05 | Firm OS lives in this repo and follows its conventions: npm, flat `src/app/<module>/`, route handlers, `access.ts` roles, additive schema, `FIRM_OS_*` flags off. |
 | [ADR-002](ADR-002-model-router.md) | ModelRouter and providers | Accepted | 2026-11-05 | All Firm OS AI goes through `src/lib/ai/router.ts`: Claude now, Grok optional, local stub fails closed; `local-only` never reaches the cloud; budget guard; `ModelCall` logs hashes only. Legacy Gemini stays, two callers flagged. |
-| [ADR-003](ADR-003-turia-adapter.md) | Turia adapter | Accepted | 2026-11-05 | No documented Turia API exists; ManualBridge is active, UiAutomationBridge optional (partner, read-first, dry-run), ApiBridge only with vendor docs. |
+| [ADR-003](ADR-003-turia-adapter.md) | Turia adapter | Accepted; amended | 2026-11-05; 2026-11-06 | No documented Turia API exists; ManualBridge is active, UiAutomationBridge optional (partner, read-first, dry-run), ApiBridge only with vendor docs. Amendment 1: read-only Turia task pull through the Neo Centra session (FIRM_OS_TURIA_PULL, off by default). |
 | [ADR-004](ADR-004-sharepoint-path-a.md) | SharePoint Path A is the only document spine | Accepted | 2026-11-05 | Deliverables go to `CL-{Code}` sites under the Indefine-Compliance hub; legacy `GRAPH_CLIENTS_ROOT` stays readable; no moves or deletes. |
 | [ADR-005](ADR-005-close-loop-done.md) | DONE requires Turia close and SharePoint presence | Accepted | 2026-11-05 | `JobTask` state machine; `DONE` only via `closeLoop.gate()`, enforced below the UI. |
 | [ADR-006](ADR-006-dpdp-data-classes.md) | DPDP data classes and anonymization | Accepted (amended 2026-11-06) | 2026-11-05 | Client PII reaches a cloud model only masked; token map never sent; inputs ≤ 30 days; break-nudge heartbeats 7 days, no manager report. Amendment: onboarding copies cleared after 30 days, nightly masking of ModelCall.error / typed AuditEvent notes, expired rate-limit buckets deleted. |
@@ -20,7 +20,7 @@ The repository inventory these decisions rest on is in [`docs/inventory.md`](../
 
 | Item | ADR | Type |
 |---|---|---|
-| Turia API documentation and credentials; permission for UI automation | 003 | Blocked / needs human |
+| Turia API documentation and credentials; permission for UI automation and for the automated read-only task pull | 003 | Blocked / needs human |
 | PnP app certificate or secret; SharePoint/Entra admin consent for site creation | 004 | Blocked / needs human |
 | Entra groups claim or Graph consent to read Partners/Staff membership | 001 | Needs human if consent required |
 | Gemini transcription of recorded live sessions; SOP Builder free text unmasked | 002, 006 | Known gap, partner decision |

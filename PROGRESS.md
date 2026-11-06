@@ -23,6 +23,7 @@ Model mode: CLAUDE_ONLY + LOCAL_STUB(fail-closed) | Turia bridge: MANUAL (ADR-00
 - [ ] 15 Search & retrieval (merged: RBAC-scoped providers, identifier lookup exact-only/masked/audited, POST-only for identifiers, /search + command palette) · corrections with history (allow-listed fields, one transaction + masked before/after audit) · DPDP rights: request register, access export, erasure = anonymise or legal hold (UPDATE-only), grievance, consent withdrawal, breach register with 72-h clock — merged; local gate green ×3; staging UI pass Blocked; DPDP legal confirmation pending
 - [ ] 16 Admin workspace settings · focus mode · guided workspace — merged; navigation integration merged (requireModule in every layout, dashboard by module + focus landing, one Firm OS header, command palette, coach rank → next task, companion = /focus's task, comms links, History links, fonts via next/font); (module registry + role defaults, /admin/firm-os/workspace with change summary + audit, getNextTask + NextTaskView contract, /focus one-task page, /workspace/[jobId] split view); gating wired; local gate green ×3; staging UI pass Blocked
 - [ ] 17 Companion side-panel extension — merged (pairing tokens hashed, 90-day expiry, revoke by update; read-only GET next-task with CORS for the extension origin only; MV3 side panel with permissions sidePanel+storage, host LMS only, no content scripts; safety scan test); not yet tried in real Chrome
+- [ ] 19 Turia → Firm OS task pull, read only (owner decision 06 Nov 2026, ADR-003 Amendment 1) — built on a branch, not merged: `src/lib/integrations/turia/pull/` (read-only allowlist over Neo Centra's turiaPost + guard test; TuriaTaskMirror / TuriaPersonLink / TuriaClientLink / TuriaTaskRule / TuriaPullRun / TuriaPullLock; additive JobTask columns source, turiaTaskId, agentless, turiaMissingAt, turiaNote; migration 20261106120000_turia_pull re-runnable), FIRM_OS_TURIA_PULL off | dry-run | on (default off), cron /api/cron/firm-os/turia-pull + .github/workflows/firm-os-turia-pull.yml (every 15 min, Mon–Sat 09:00–20:00 IST), /admin/firm-os/turia-sync (Sync now, preview, people / clients / rules). Next: owner runs dry-run in prod and checks the preview (docs/go-live.md §4.1)
 - [ ] 2b Local open-weight wiring (WEEK 2)
 
 ## Current phase tasks
@@ -216,6 +217,7 @@ Model-dependent and LLM rules are gated as code path only in recorded mode (they
 
 ## Blocked / needs human   (what · why · exact action · since)
 - Turia API docs/credentials · ADR-003 · ask Turia for a documented API + credentials, and confirm UI automation is permitted · 2026-11-05
+- Turia terms for the automated read-only task pull · ADR-003 Amendment 1 (one director's session, undocumented endpoints) · owner asks Turia to confirm automated reads are permitted, or for a documented read API · 2026-11-06
 - PnP app 381abf0e-… certificate + SharePoint/Entra admin consent for site creation · Phase 1 ensureClientSite · upload cert, grant consent · 2026-11-05
 - Entra group → role mapping · nothing reads groups today · add groups claim (or GroupMember.Read.All consent) to the Entra app · 2026-11-05
 - Graph app-only creds + consent · verify-patha / ensure* · set MS_TENANT_ID/MS_CLIENT_ID/MS_CLIENT_SECRET in .env.local; grant Graph application Sites.ReadWrite.All + Group.Read.All with admin consent · 2026-11-05
@@ -361,3 +363,4 @@ Model-dependent and LLM rules are gated as code path only in recorded mode (they
 - 10:06 · incident · Hotfix: all Firm OS migrations re-runnable; unit test + CI psql re-run step (59b3205) · 4412/4412 · verify:firm-os green
 - 10:15 · incident · Owner merged PR #71; boot recorded the migrations and started · site 200, Firm OS off, CI green incl. the re-run step
 - 10:25 · docs · Incident and deploy lessons recorded (PROGRESS, docs/go-live.md §1 + §9.1) · –
+- 13:50 · 19 · Turia → Firm OS read-only task pull built on a branch (ADR-003 Amendment 1): mirror, people / client / rule mapping, dry run, cron + Action, /admin/firm-os/turia-sync, guard test for the read allowlist · see the branch report
