@@ -17,20 +17,33 @@
 // - 4(A)(5) = ITC on purchase documents matched to GSTR-2B with ITC available, at the LOWER of
 //   books and 2B per tax head (credit notes: the larger reduction). Books documents missing in 2B
 //   are deferred (not claimed); a supplier credit note missing in 2B still reduces ITC.
-// - 4(B)(1) = ITC of matched documents in a s.17(5) category; 4(B)(2) = rule 37 reversal (+ any
-//   net-negative head of 4(A)(5)). 4(C) = 4(A) − 4(B). 4(D)(2) memo = 2B documents with ITC not available.
-//   Credit notes on blocked purchases net against this period's blocked ITC; any excess (ITC that
-//   was never availed) is kept out of 4(A) too, so it never reduces net ITC (memo row in Table 4).
+// - 4(B)(1) = ITC of documents in a s.17(5) category (forward charge and reverse charge);
+//   4(B)(2) = rule 37 reversal (+ any net-negative head of the not-blocked 4(A)(5) ITC, + the
+//   not-blocked reverse-charge credit-note reduction applied this period, see below).
+//   4(C) = 4(A) − 4(B). 4(D)(2) memo = 2B documents with ITC not available.
+// - Table 4 keeps four signed buckets per head apart and never nets one against another (formula
+//   re-audit NEW-1 / NEW-4): forward-charge ITC and reverse-charge ITC, each split into blocked and
+//   not blocked. Credit notes on blocked purchases net only against blocked ITC of the same kind
+//   (forward against forward, reverse charge against reverse charge); any excess (ITC that was
+//   never availed) is kept out of 4(A), so it never reduces net ITC (memo row in Table 4), and a
+//   blocked invoice of the other kind is still reversed in full in 4(B)(1).
 // - A head whose outward tax is negative (credit notes above invoices) is nil in the liability
 //   set off; the excess is carried forward to a later period's output tax (rule
 //   gst.negative-outward-tax, warn; memo row under Table 3.1). It is never ITC.
-// - Reverse charge the same way: a head whose reverse-charge credit notes exceed this period's
-//   reverse-charge bills is entered as nil in 3.1(d) (and paid as nil in cash), and the 4(A)(3)
-//   head it would make negative is nil too. Neither excess is dropped silently: rcm.carryForward
-//   (3.1(d)) and itc.a3CarryForward (4(A)(3)) carry them, rule gst.negative-rcm (warn) lists the
-//   amounts and the credit notes, and Tables 3.1 / 4 and the Notes sheet show memo rows. The
-//   liability excess is carried forward to reduce a later period's reverse-charge liability of
-//   the same head, together with the matching 4(A)(3) credit — partner to verify.
+// - Reverse charge the same way: 3.1(d) nets every reverse-charge document of a head (blocked, not
+//   blocked, held back); a head whose total is negative is entered as nil (and paid as nil in cash)
+//   and the excess is carried forward (rcm.carryForward). In 4(A)(3), a head whose not-blocked
+//   reverse-charge credit notes exceed this period's not-blocked reverse-charge bills is entered as
+//   nil for that bucket (blocked reverse-charge credit never offsets it). A credit note reduces the
+//   liability and the matching ITC in the same period (owner decision: conservative drafts), so the
+//   ITC side carries forward only what the liability side carries — itc.a3CarryForward =
+//   min(not-blocked shortfall, rcm.carryForward) — and the rest is reversed now in 4(B)(2)
+//   (itc.rcmNoteReversal). Nothing is dropped silently: rule gst.negative-rcm (warn) lists the
+//   carried amounts and the credit notes, and Tables 3.1 / 4 and the Notes sheet show memo rows.
+//   The carried amounts reduce a later period's reverse-charge liability and 4(A)(3) credit of the
+//   same head — partner to verify. The next period's previous-return input can state them
+//   (PrevReturn.carryForward); rule gst.prior-carry-forward then lists them for a partner, and
+//   nothing is consumed automatically.
 // - B2CL: unregistered recipient, inter-state, invoice value > GST_CONFIG.b2clThresholdPaise.
 //   Notes to unregistered persons are netted into B2CS (CDNUR is not produced in v1.0.0).
 // - Time-barred credit notes (owner-approved 2026-11-05): a credit note dated after the s.34(2)
@@ -169,10 +182,15 @@ export type Analysis = {
     deferred: TaxSplit;
     unavailable2b: TaxSplit;
     notBooked: TaxSplit;
-    /** Credit notes on s.17(5) blocked purchases above this period's blocked ITC: kept out of 4(A) (never availed). */
+    /** Credit notes on s.17(5) blocked purchases above this period's blocked ITC of the same kind (forward / reverse charge): kept out of 4(A) (never availed). */
     blockedNoteExcess: TaxSplit;
-    /** The negative part of each 4(A)(3) head (reverse-charge credit notes above this period's reverse-charge ITC): entered as nil, carried forward. */
+    /**
+     * The part of each head's negative not-blocked 4(A)(3) ITC that is carried forward: only what the
+     * 3.1(d) excess carries on the liability side — min(that shortfall, rcm.carryForward).
+     */
     a3CarryForward: TaxSplit;
+    /** The rest of that shortfall: reversed now in 4(B)(2), because 3.1(d) already took the matching liability reduction this period. */
+    rcmNoteReversal: TaxSplit;
     rule37Rows: Rule37Row[];
   };
   liability: TaxSplit;
@@ -361,6 +379,8 @@ function analysePurchases(x: GstExtract, clientState: string): PurchaseA[] {
       }
     }
     // A reverse-charge bill's 4(A)(3) ITC is held back here; a forward-charge bill's in reconcile().
+    // Held-back ITC is neither claimed in 4(A) nor reversed in 4(B)(1) (re-audit NEW-2), whatever
+    // blocked category the model gave the ledger.
     const heldBack = rcm && abstained && d.docType !== "CRN" ? pos0(rcmTax) : zeroTax();
     return { ...d, key, cls: c, blocked, rcmService, rcm, rcmUnmarked: rcm && !d.reverseCharge, abstained, heldBack, rcmTax, rcmTaxable, booksTax, booksTaxable };
   });
@@ -483,32 +503,39 @@ export function analyse(x: GstExtract): Analysis {
   const rcmTaxable = rcmDocs.reduce((n, p) => n + p.rcmTaxable, 0);
 
   const heldBack = sumTax(purchases.map((p) => p.heldBack));
+  // Table 4 keeps four signed buckets per head apart — forward-charge ITC (the 2B reconciliation)
+  // and reverse-charge ITC, each split into s.17(5) blocked and not blocked — and never nets one
+  // bucket against another (formula re-audit NEW-1 / NEW-4):
+  //   4(A)(5) = pos0(forward, not blocked) + pos0(forward, blocked)
+  //   4(A)(3) = pos0(RCM, not blocked)     + pos0(RCM, blocked)
+  //   4(B)(1) = pos0(forward, blocked)     + pos0(RCM, blocked)
+  //   4(B)(2) = rule 37 + neg0(forward, not blocked) + the reverse-charge note reduction applied now
+  // A blocked bucket that is negative (credit notes on blocked purchases above this period's
+  // blocked ITC of the same kind) reduces ITC that was never availed — it was reversed in 4(B)(1)
+  // when the bill was booked — so it is kept out of Table 4(A) and does not reduce net ITC
+  // (itc.blockedNoteExcess, a memo row in Table 4). A negative not-blocked forward bucket is
+  // reversed in 4(B)(2). A negative not-blocked reverse-charge bucket N (its magnitude) is entered as
+  // nil in 4(A)(3); a reverse-charge credit note reduces the liability and the matching ITC in the
+  // same period (owner decision: conservative drafts), so only the part the 3.1(d) excess carries is
+  // carried on the ITC side — itc.a3CarryForward = min(N, neg0(3.1(d) signed total)) — and the rest
+  // is reversed now in 4(B)(2) (itc.rcmNoteReversal). Held-back ITC (abstained or withheld ledgers)
+  // is in no bucket: it is neither claimed nor reversed (its liability still counts in 3.1(d)).
+  const rcmItc = (p: PurchaseA) => subTax(p.rcmTax, p.heldBack);
   const claimedAll = sumTax(recon.map((r) => r.claimed));
-  // 4(B)(1): s.17(5) ITC of this period's blocked documents, SIGNED (a credit note on a blocked
-  // purchase is negative). Such a note reduces ITC that was never availed — it was reversed in
-  // 4(B)(1) when the bill was booked — so it must not reduce net ITC. When the notes exceed this
-  // period's blocked ITC for a head, 4(B)(1) stays at nil (it cannot be negative) and the excess is
-  // kept out of Table 4(A) at its source — 4(A)(5) for notes in the 2B reconciliation, 4(A)(3) for
-  // reverse-charge notes — so 4(C) = 4(A) − 4(B) equals available ITC − signed blocked ITC −
-  // 4(B)(2). The excess is a memo row in Table 4 (itc.blockedNoteExcess).
   const blockedClaimed = sumTax(recon.filter((r) => r.books?.blocked).map((r) => r.claimed));
-  const blockedRcm = sumTax(rcmDocs.filter((p) => p.blocked).map((p) => p.rcmTax));
-  const blockedSigned = addTax(blockedClaimed, blockedRcm);
-  const b1 = pos0(blockedSigned);
-  const blockedNoteExcess = neg0(blockedSigned);
-  const excessFromA5 = minTax(blockedNoteExcess, neg0(blockedClaimed));
-  const excessFromA3 = subTax(blockedNoteExcess, excessFromA5);
-  // 4(A)(3): RCM tax paid is credit, except on a bill whose ledger the model abstained on (held back).
-  // A head the reverse-charge credit notes make negative is entered as nil; the excess is kept
-  // (a3CarryForward, rule gst.negative-rcm), not dropped.
-  const a3Raw = addTax(subTax(rcmTax, sumTax(rcmDocs.map((p) => p.heldBack))), excessFromA3);
-  const a3 = pos0(a3Raw);
-  const a3CarryForward = neg0(a3Raw);
-  const claimedA5 = addTax(claimedAll, excessFromA5);
-  const a5 = pos0(claimedA5);
+  const openClaimed = subTax(claimedAll, blockedClaimed);
+  const blockedRcm = sumTax(rcmDocs.filter((p) => p.blocked).map(rcmItc));
+  const openRcm = sumTax(rcmDocs.filter((p) => !p.blocked).map(rcmItc));
+  const b1 = addTax(pos0(blockedClaimed), pos0(blockedRcm));
+  const blockedNoteExcess = addTax(neg0(blockedClaimed), neg0(blockedRcm));
+  const a3 = addTax(pos0(openRcm), pos0(blockedRcm));
+  const openRcmShort = neg0(openRcm);
+  const a3CarryForward = minTax(openRcmShort, neg0(rcmTax));
+  const rcmNoteReversal = subTax(openRcmShort, a3CarryForward);
+  const a5 = addTax(pos0(openClaimed), pos0(blockedClaimed));
   const r37 = rule37Rows(x.payables, pi.end);
   const rule37 = sumTax(r37.map((r) => r.reversal));
-  const b2 = addTax(rule37, neg0(claimedA5));
+  const b2 = addTax(addTax(rule37, neg0(openClaimed)), rcmNoteReversal);
   const available = addTax(a3, a5);
   const netRaw = subTax(subTax(available, b1), b2);
   const net = pos0(netRaw);
@@ -550,7 +577,7 @@ export function analyse(x: GstExtract): Analysis {
     // 3.1(d) is entered (and the reverse-charge cash paid, setOff above) at pos0(rcmTax); the negative part is carried forward.
     rcm: { taxable: rcmTaxable, tax: rcmTax, carryForward: neg0(rcmTax) },
     recon,
-    itc: { a3, a5, available, b1, b2, rule37, net, heldBack, deferred, unavailable2b, notBooked, blockedNoteExcess, a3CarryForward, rule37Rows: r37 },
+    itc: { a3, a5, available, b1, b2, rule37, net, heldBack, deferred, unavailable2b, notBooked, blockedNoteExcess, a3CarryForward, rcmNoteReversal, rule37Rows: r37 },
     liability,
     openingCredit,
     setoff: so,

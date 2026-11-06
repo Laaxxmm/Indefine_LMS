@@ -104,8 +104,24 @@ export type TaxAnalysis = {
   /** Income test for s.44AB(d)/(e) and s.44AD(4): new-regime total income against the basic exemption (0 for firms / companies). */
   auditIncomeTest: { totalIncomePaise: number; basicExemptionPaise: number };
   itrForm: "ITR-1" | "ITR-2" | "ITR-3" | "ITR-4" | "ITR-5" | "ITR-6";
-  /** `stages234B`: the s.234B(2) stages (one when no tax is paid after 31 March; empty when 234B does not apply). */
-  advance: { liable: boolean; exempt: boolean; presumptiveOnly: boolean; assessedTaxPaise: number; paidPaise: number; rows: InstalmentRow[]; i234B: number; i234C: number; stages234B: Stage234B[] };
+  /**
+   * `stages234B`: the s.234B(2) stages (one when no tax is paid after 31 March; empty when 234B does not apply).
+   * `paidPaise`: every advance / self-assessment tax row in the organiser. `paidAfterFiling`: the rows
+   * dated after the planned filing date — 234B ignores them, and so does the net payable (re-audit NEW-6).
+   */
+  advance: {
+    liable: boolean;
+    exempt: boolean;
+    presumptiveOnly: boolean;
+    assessedTaxPaise: number;
+    paidPaise: number;
+    paidAfterFiling: { date: string; amountPaise: number }[];
+    paidAfterFilingPaise: number;
+    rows: InstalmentRow[];
+    i234B: number;
+    i234C: number;
+    stages234B: Stage234B[];
+  };
   i234A: number;
   fee234F: number;
   netPayablePaise: number;
@@ -523,7 +539,12 @@ function analyse(x: TaxExtract): TaxAnalysis {
   const paidByDue = o.advanceTax.filter((a2) => a2.date <= due139).reduce((s, a2) => s + a2.amountPaise, 0);
   const i234A = interest234A(assessed - paidByDue, due139, p.plannedFilingDate, rules, addDays(due139, 1));
   const fee234F = lateFee234F(chosenFull.totalIncome, due139, p.plannedFilingDate, rules);
-  const netPayablePaise = roundPayableTo10(taxLiability + i234A + adv.i234B + adv.i234C + fee234F - tds.credit - paid);
+  // Net payable on filing: only tax paid on or before the planned filing date reduces it — the same
+  // filter 234B applies (formula re-audit NEW-6: a payment dated after filing used to reduce the
+  // payable while 234B ignored it). Later rows are listed in the pack, not deducted.
+  const paidAfterFiling = o.advanceTax.filter((a2) => a2.date > p.plannedFilingDate).map((a2) => ({ date: a2.date, amountPaise: a2.amountPaise }));
+  const paidAfterFilingPaise = paidAfterFiling.reduce((s, a2) => s + a2.amountPaise, 0);
+  const netPayablePaise = roundPayableTo10(taxLiability + i234A + adv.i234B + adv.i234C + fee234F - tds.credit - (paid - paidAfterFilingPaise));
 
   // Missing documents.
   const missingDocs: string[] = [];
@@ -565,7 +586,7 @@ function analyse(x: TaxExtract): TaxAnalysis {
     audit,
     auditIncomeTest: { totalIncomePaise: resNew.totalIncome, basicExemptionPaise: exemptLimit },
     itrForm,
-    advance: { liable: adv.liable, exempt, presumptiveOnly: presOk, assessedTaxPaise: assessed, paidPaise: paid, rows: adv.rows, i234B: adv.i234B, i234C: adv.i234C, stages234B: adv.stages234B },
+    advance: { liable: adv.liable, exempt, presumptiveOnly: presOk, assessedTaxPaise: assessed, paidPaise: paid, paidAfterFiling, paidAfterFilingPaise, rows: adv.rows, i234B: adv.i234B, i234C: adv.i234C, stages234B: adv.stages234B },
     i234A,
     fee234F,
     netPayablePaise,

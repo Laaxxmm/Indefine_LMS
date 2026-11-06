@@ -22,6 +22,9 @@
 //     or reverse charge) is HELD BACK — not claimed in Table 4(A) — until answered: figure
 //     itcHeldBackPaise, raised by gst.model-questions and the client document requests with the
 //     amount, and shown under Open questions on the review screen.
+//   - Amounts the previous return carried forward (its file's optional `carriedForward`) are listed
+//     by gst.prior-carry-forward (warn) for a partner and never consumed: this period's liability
+//     and ITC are computed without them (formula re-audit NEW-5; conservative drafts).
 //   - Owner-approved 2026-11-06 (ADR-009): a ledger the injection screen withheld from the model
 //     (its text read like an instruction to the AI) is treated the same way — ITC held back
 //     (itcHeldBackPaise), a gst.model-questions question and a client document request — next to
@@ -34,7 +37,7 @@ import { analyse, creditNoteDeadline, differs, heldBackFor, rule37Rows, sign, ty
 import { HEADS, dayAfterFyEnd, fyOfDay, plainRupees, sumTax, taxTotal, type TaxSplit } from "./money";
 import { dupKey } from "./registers";
 import { INSUFFICIENT } from "./tasks";
-import type { GstExtract, GstInput } from "./types";
+import type { CarryForwardIn, GstExtract, GstInput } from "./types";
 
 export type GstCheckInput = CheckInput<GstInput, GstExtract>;
 
@@ -118,7 +121,9 @@ function blockedCredit(ci: GstCheckInput): CheckOutcome {
   for (const p of a.purchases) {
     const tax = p.rcm ? p.rcmTax : p.booksTax;
     if (!p.blocked || taxTotal(tax) * sign(p.docType) <= 0) continue;
-    hits.push({ quote: p.key, loc: p.loc, text: `${p.number} "${p.key}" → ${BLOCKED_CATEGORIES[p.blocked].split(":")[0]} (${taxText(tax)})` });
+    // Held-back ITC (the model abstained on reverse charge) is neither claimed nor reversed (re-audit NEW-2).
+    const held = taxTotal(p.heldBack) > 0 ? "; ITC held back until the question on this ledger is answered, not reversed" : "";
+    hits.push({ quote: p.key, loc: p.loc, text: `${p.number} "${p.key}" → ${BLOCKED_CATEGORIES[p.blocked].split(":")[0]} (${taxText(tax)}${held})` });
   }
   return listFail(hits, `ITC on blocked credits u/s 17(5): ${inr(taxTotal(a.itc.b1))} moved to Table 4(B)(1); confirm the classification`);
 }
@@ -293,9 +298,12 @@ function negativeOutward(ci: GstCheckInput): CheckOutcome {
 
 /**
  * Reverse-charge credit notes above this period's reverse-charge bills for a tax head: Table 3.1(d)
- * and 4(A)(3) cannot be negative, so the head is entered as nil in both and the excess is carried
- * forward (compute.ts rcm.carryForward / itc.a3CarryForward; memo rows in Tables 3.1 and 4 and a
- * Notes row) — never dropped silently. Partner to verify the carry-forward treatment.
+ * and 4(A)(3) cannot be negative, so the head is entered as nil and the excess is carried forward
+ * (compute.ts rcm.carryForward / itc.a3CarryForward; memo rows in Tables 3.1 and 4 and a Notes row)
+ * — never dropped silently. The ITC side carries only what the liability side carries (a credit
+ * note reduces both in the same period); any rest of the not-blocked shortfall is reversed now in
+ * 4(B)(2) (itc.rcmNoteReversal), so a 4(A)(3) excess never appears without a 3.1(d) excess.
+ * Partner to verify the carry-forward treatment.
  */
 function negativeRcm(ci: GstCheckInput): CheckOutcome {
   const a = A(ci);
@@ -308,9 +316,48 @@ function negativeRcm(ci: GstCheckInput): CheckOutcome {
   const hits = notes.map((p) => ({ quote: `${p.number}: ${taxText(noteTax(p))}`, loc: p.loc, text: `reverse-charge credit note ${p.number} from ${p.supplier || "supplier"} on "${p.key}" (${taxText(noteTax(p))})` }));
   const amounts = (t: TaxSplit) => heads.filter((h) => t[h] > 0).map((h) => `${h.toUpperCase()} ${inr(t[h])}`).join(", ") || "nil";
   const head =
-    `Reverse-charge credit notes exceed this period's reverse-charge bills: Table 3.1(d) excess ${amounts(cf)} and Table 4(A)(3) excess ${amounts(itcCf)} are entered as nil (not paid, not claimed) and carried forward` +
-    ` to reduce the same head's reverse-charge liability and its 4(A)(3) credit in a later return (partner to verify)`;
+    `Reverse-charge credit notes exceed this period's reverse-charge bills: Table 3.1(d) excess ${amounts(cf)} and Table 4(A)(3) excess ${amounts(itcCf)} (notes on purchases not blocked u/s 17(5), as far as the 3.1(d) excess carries them) are entered as nil (not paid, not claimed) and carried forward` +
+    ` to reduce the same head's reverse-charge liability and its 4(A)(3) credit in a later return (partner to verify)` +
+    (taxTotal(a.itc.rcmNoteReversal) > 0 ? `; the rest of those notes, ${amounts(a.itc.rcmNoteReversal)}, is reversed now in Table 4(B)(2)` : "");
   return hits.length ? listFail(hits, head) : fail(head, heads.map((h) => `${h.toUpperCase()} ${plainRupees(cf[h] || itcCf[h])}`).join(", "), ci.extracted.sources.purchases.file);
+}
+
+/**
+ * Amounts the previous return carried forward (formula re-audit NEW-5): the previous pack's
+ * outward / reverse-charge / 4(A)(3) carry-forwards, as stated in the previous-return file
+ * (`carriedForward`). Listed with the amount and head for a partner; the draft never consumes them
+ * (owner decision: conservative GST drafts — using one is a partner / legal call). No previous
+ * return, or one that does not state the field → na; stated but nil → pass.
+ */
+const CARRIED: readonly { key: keyof CarryForwardIn; what: string; field: string }[] = [
+  { key: "outward", what: "output tax", field: "outputTax" },
+  { key: "rcm", what: "reverse-charge tax", field: "reverseChargeTax" },
+  { key: "rcmItc", what: "reverse-charge input tax credit", field: "reverseChargeCredit" },
+];
+const headsText = (t: TaxSplit) =>
+  HEADS.filter((h) => t[h] !== 0)
+    .map((h) => `${h.toUpperCase()} ${inr(t[h])}`)
+    .join(", ");
+
+/** "₹36,000.00 of output tax (IGST ₹36,000.00)" per carried kind with an amount; [] when nothing is carried. */
+export function carriedForwardParts(cf: CarryForwardIn | undefined): string[] {
+  return cf ? CARRIED.filter((c) => taxTotal(cf[c.key]) !== 0).map((c) => `${inr(taxTotal(cf[c.key]))} of ${c.what} (${headsText(cf[c.key])})`) : [];
+}
+
+function priorCarryForward(ci: GstCheckInput): CheckOutcome {
+  const p = ci.extracted.prev;
+  if (!p) return na("No previous return figures given");
+  const cf = p.carryForward;
+  if (!cf) return na("The previous return figures do not say whether anything was carried forward");
+  const parts = carriedForwardParts(cf);
+  if (!parts.length) return ok();
+  const first = CARRIED.find((c) => taxTotal(cf[c.key]) !== 0)!;
+  const one = parts.length === 1;
+  return fail(
+    `Last period (${p.period}) carried forward ${parts.join("; ")}. The draft does not use ${one ? "it" : "these amounts"}: adjust ${one ? "it" : "them"} in this return after a partner confirms`,
+    `carriedForward.${first.field}: ${taxText(cf[first.key])}`,
+    p.loc,
+  );
 }
 
 function rule37(ci: GstCheckInput, rule: RuleDefinition): CheckOutcome {
@@ -447,6 +494,7 @@ export const gstRegistry = createRuleRegistry<GstCheckInput>({
   "gst.rule37-180-days": rule37,
   "gst.negative-outward-tax": negativeOutward,
   "gst.negative-rcm": negativeRcm,
+  "gst.prior-carry-forward": priorCarryForward,
   "gst.late-fee-interest": lateness,
   "gst.period-lock": periodLock,
   "gst.einvoice-irn": einvoice,
@@ -500,7 +548,19 @@ export const GST_CHECKLIST: ChecklistPack = {
       kind: "deterministic",
       check: "gst.negative-rcm",
       evidence: "tax head, amounts carried forward (3.1(d) and 4(A)(3)) and the credit notes",
-      params: { verify: "Table 3.1(d) / 4(A)(3) cannot take a negative figure: the head is entered as nil and the excess carried forward to a later period's reverse-charge liability and 4(A)(3) credit of the same head. Partner to verify the treatment (carry forward vs. adjusting the earlier return's figures)." },
+      params: {
+        verify:
+          "Table 3.1(d) / 4(A)(3) cannot take a negative figure: the head is entered as nil and the excess carried forward to a later period's reverse-charge liability and 4(A)(3) credit of the same head. A credit note reduces the liability and the matching credit in the same period, so the 4(A)(3) side carries only what the 3.1(d) side carries; the rest is reversed now in 4(B)(2). Partner to verify the treatment (carry forward vs. adjusting the earlier return's figures).",
+      },
+    },
+    {
+      id: "gst.prior-carry-forward",
+      title: "Amounts carried forward from the previous return",
+      severity: "warn",
+      kind: "deterministic",
+      check: "gst.prior-carry-forward",
+      evidence: "previous return file, the amount carried forward and its tax head",
+      params: { verify: "The draft never uses an amount carried forward on its own. A partner confirms the amount and how it is adjusted in this return (the same head's output tax, reverse-charge liability or 4(A)(3) credit) before staff enter it." },
     },
     { id: "gst.late-fee-interest", title: "Late fee and interest exposure", severity: "warn", kind: "deterministic", check: "gst.late-fee-interest", evidence: "expected filing date or previous filing date", params: { verify: [verify("interestRateBps"), verify("lateFee.caps")] } },
     { id: "gst.b2cl-threshold", title: "B2C large (inter-state above threshold) invoices", severity: "info", kind: "deterministic", check: "gst.b2cl-threshold", evidence: "invoice number and row", params: { verify: verify("b2clThresholdPaise") } },

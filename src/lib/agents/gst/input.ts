@@ -4,7 +4,7 @@
 //
 // File-name contract for the job's ClientDocs folder (case-insensitive, first match wins):
 //   profile.json / gst-profile.json   client GSTIN, AATO, filing frequency, expected filing date  (required)
-//   *prev*.json / *previous*.json      previous period return figures                             (optional)
+//   *prev*.json / *previous*.json      previous period return figures, incl. carriedForward        (optional)
 //   *payable*.csv|xlsx                 open payables ageing as at period end (rule 37)             (optional)
 //   *einvoice* / *e-invoice* / *irn*   e-invoice register (doc no → IRN), csv|xlsx|json            (optional)
 //   *eway* / *e-way*                   e-way bill data: received, not used by v1.0.0               (optional)
@@ -131,6 +131,8 @@ export const ProfileZ = z
     }),
   );
 
+const CarriedZ = SplitZ.refine((t) => t.igst >= 0 && t.cgst >= 0 && t.sgst >= 0 && t.cess >= 0, "an amount carried forward cannot be negative");
+
 export const PrevReturnZ = z.object({
   period: z.string().trim().min(1),
   gstr1Liability: SplitZ,
@@ -138,6 +140,13 @@ export const PrevReturnZ = z.object({
   closingCreditBalance: SplitZ.optional(),
   filedOn: DayZ.nullable().optional(),
   dueOn: DayZ.nullable().optional(),
+  /**
+   * Optional (formula re-audit NEW-5): what the previous return carried forward, per tax head, in
+   * rupees — the previous pack's memo rows. outputTax = credit notes above invoices (3.1(a));
+   * reverseChargeTax = reverse-charge credit notes above the bills (3.1(d)); reverseChargeCredit =
+   * the matching 4(A)(3) excess. Listed for a partner; never used in this period's figures.
+   */
+  carriedForward: z.object({ outputTax: CarriedZ.optional(), reverseChargeTax: CarriedZ.optional(), reverseChargeCredit: CarriedZ.optional() }).optional(),
 });
 
 function parseJson(f: RoleFile): unknown {
@@ -231,6 +240,8 @@ export async function loadGstData(input: GstInput, job: Pick<JobContext, "period
   if (prevFile) {
     const p = zodOrThrow(PrevReturnZ, parseJson(prevFile), prevFile.name);
     prev = { loc: prevFile.name, period: p.period, gstr1: p.gstr1Liability, gstr3b: p.gstr3bLiability, closingCredit: p.closingCreditBalance ?? zeroTax(), filedOn: p.filedOn ?? null, dueOn: p.dueOn ?? null };
+    const cf = p.carriedForward;
+    if (cf) prev.carryForward = { outward: cf.outputTax ?? zeroTax(), rcm: cf.reverseChargeTax ?? zeroTax(), rcmItc: cf.reverseChargeCredit ?? zeroTax() };
   }
 
   const payablesFile = byRole("payables");

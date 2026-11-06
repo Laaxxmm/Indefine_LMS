@@ -3,7 +3,10 @@
 // Sign convention: every line carries a signed amount from the bank account's point of view —
 // money in is positive (statement deposit / ledger debit), money out is negative (statement
 // withdrawal / ledger credit). A row whose narration reads "opening balance" / "b/f" is the
-// opening balance, not a transaction.
+// opening balance, not a transaction. A statement without such a row takes its opening from the
+// first line that prints a balance: that balance less the sum of every line read up to and
+// including it (earlier lines without a balance count too). With no balance printed anywhere the
+// opening is unknown (null), and so is the BRS difference. The ledger never derives an opening.
 //
 // Cr / Dr markers follow each side's own wording (IN_MARKER):
 //   statement (the bank's books, written from the customer's side): Cr = money in / in credit = +,
@@ -140,7 +143,12 @@ export function parseBank(
   const lines: BankLine[] = [];
   const issues: ParseIssue[] = [];
   let openingPaise: number | null = null;
-  let firstBalance: { balance: number; amount: number } | null = null;
+  // Statement without an opening row: opening = the balance printed on the first line that has
+  // one, less every line read up to and including that line (formula re-audit NEW-3: subtracting
+  // only that line's own amount gave a false opening — and a false BRS difference — whenever the
+  // earlier lines carried no balance). No balance anywhere → the opening stays unknown.
+  let readSoFar = 0;
+  let derivedOpening: number | null = null;
   for (let r = loc.headerRow + 1; r < rows.length; r++) {
     const row = rows[r];
     if (row.every((x) => (x ?? "").trim() === "")) continue;
@@ -184,10 +192,11 @@ export function parseBank(
       issues.push({ file, row: r + 1, message: "no amount on the line" });
       continue;
     }
-    if (!firstBalance && c.balance !== undefined && cell(row, c.balance) && bal.ok) firstBalance = { balance: bal.paise, amount: amountPaise };
+    readSoFar += amountPaise;
+    if (derivedOpening === null && c.balance !== undefined && cell(row, c.balance) && bal.ok) derivedOpening = bal.paise - readSoFar;
     lines.push({ id: `${side}${lines.length + 1}`, row: r + 1, date, narration, ref: cell(row, c.ref), amountPaise });
   }
-  if (openingPaise === null && firstBalance && side === "S") openingPaise = firstBalance.balance - firstBalance.amount;
+  if (openingPaise === null && derivedOpening !== null && side === "S") openingPaise = derivedOpening;
   return { data: { file, lines, openingPaise }, issues };
 }
 

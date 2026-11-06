@@ -89,7 +89,22 @@ const zoho = (pattern: string, note: string, sign?: "dr" | "cr"): GroupRule => (
 export const LEAD_AREAS: LeadArea[] = [
   { wp: "L-A", name: "Share capital and reserves", side: "cr", groups: ["capital account", "share capital", "reserves", "surplus", "equity", "partners"] },
   // "^long[- ]term liabilit": Zoho account type "Long Term Liability" (term loans) — before L-D's catch-all "liabilit".
-  { wp: "L-B", name: "Borrowings", side: "cr", groups: ["loans \\(liability\\)", "secured loans", "unsecured loans", "borrowings", "bank od", "cash credit", "^long[- ]term liabilit"] },
+  // It carries a partner note like the other Zoho mappings (formula re-audit NEW-7): the type also holds
+  // long-term liabilities that are not borrowings.
+  {
+    wp: "L-B",
+    name: "Borrowings",
+    side: "cr",
+    groups: [
+      "loans \\(liability\\)",
+      "secured loans",
+      "unsecured loans",
+      "borrowings",
+      "bank od",
+      "cash credit",
+      zoho("^long[- ]term liabilit", "Zoho \"Long Term Liability\" → long-term borrowings, non-current (term loans; a long-term liability that is not a borrowing, such as a security deposit received, belongs in L-Q)"),
+    ],
+  },
   { wp: "L-C", name: "Trade payables", side: "cr", groups: ["sundry creditors", "trade payables", "accounts payable"] },
   // Deferred tax (Schedule III: non-current, shown net). Before L-D, whose catch-all "liabilit" took "Deferred Tax Liability".
   { wp: "L-O", name: "Deferred tax assets (net)", side: "dr", groups: [zoho("^deferred tax assets?$", "Zoho \"Deferred Tax Asset\" → Deferred tax assets (net), non-current")] },

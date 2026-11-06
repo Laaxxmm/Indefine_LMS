@@ -101,6 +101,14 @@ export type Profile = {
   dueDate: string | null;
 };
 
+/**
+ * Amounts the previous return carried forward, per tax head (positive paise): `outward` = output
+ * tax (credit notes above invoices, 3.1(a)), `rcm` = reverse-charge tax (3.1(d)), `rcmItc` =
+ * reverse-charge credit (4(A)(3)) — the figures the previous pack showed as outward / rcm /
+ * itc.a3 carry-forward (formula re-audit NEW-5).
+ */
+export type CarryForwardIn = { outward: TaxSplit; rcm: TaxSplit; rcmItc: TaxSplit };
+
 export type PrevReturn = {
   loc: string;
   period: string;
@@ -109,6 +117,12 @@ export type PrevReturn = {
   closingCredit: TaxSplit;
   filedOn: string | null;
   dueOn: string | null;
+  /**
+   * Present only when the previous-return file states what it carried forward (`carriedForward`).
+   * Listed for a partner by rule gst.prior-carry-forward; never consumed automatically — this
+   * period's liability and ITC are not reduced by it (owner decision: conservative GST drafts).
+   */
+  carryForward?: CarryForwardIn;
 };
 
 export type ModelEvidence = { quote: string; location: string };

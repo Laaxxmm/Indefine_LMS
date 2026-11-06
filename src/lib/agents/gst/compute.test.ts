@@ -407,15 +407,19 @@ describe("independent formula audit: blocked credit notes, negative outward tax,
       expect(a.itc.a3).toEqual(T(R(3600), 0, 0));
       expect(a.setoff.rcm).toEqual(T(R(3600), 0, 0));
     });
-    it("a held-back RCM bill: the credit note's 4(A)(3) excess is carried even though 3.1(d) stays positive", () => {
+    it("a held-back RCM bill: 3.1(d) stays positive, so the credit note's ITC reduction is applied now in 4(B)(2), not carried", () => {
       // Abstained ledger "Labour" bill 10,000 (CGST 900 / SGST 900) held back; Legal note 5,000 (CGST −450 / SGST −450).
+      // Round 2 carried the −450 per head in a3CarryForward; the coordinator's rule (re-audit NEW-4, conservative drafts):
+      // a credit note reduces the liability and the matching ITC in the same period, and 3.1(d) already netted it here.
       const labour = { ledger: "Labour", blockedCategory: "none" as const, rcmService: "insufficient_evidence" as const, evidence: null, note: "" };
       const held = purchase({ number: "LB/1", gstin: null, reverseCharge: true, ledger: "Labour", lines: [line(R(10000))] });
       const a = analyse(extract({ purchases: [held, note(R(5000))], ledgers: [legal, labour] }));
       expect(a.rcm.tax).toEqual(T(0, R(450), R(450)));
       expect(a.rcm.carryForward).toEqual(zeroTax());
       expect(a.itc.heldBack).toEqual(T(0, R(900), R(900)));
-      expect(a.itc.a3CarryForward).toEqual(T(0, R(450), R(450))); // 450 − 900 = −450 per head (was dropped)
+      expect(a.itc.a3CarryForward).toEqual(zeroTax());
+      expect(a.itc.rcmNoteReversal).toEqual(T(0, R(450), R(450)));
+      expect(a.itc.b2).toEqual(T(0, R(450), R(450)));
     });
   });
 
