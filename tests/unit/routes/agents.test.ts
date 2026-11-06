@@ -87,28 +87,33 @@ describe("correction history on the review page", () => {
 });
 
 describe("/agents", () => {
-  it("layout: nav with the visible agents; staff see 'My agent runs' and no mistake log", async () => {
+  it("layout: nav with the visible agents; the header says Agents for everyone; staff see no mistake log", async () => {
     as(user("priya"));
     const html = await renderHtml(await Layout({ children: null }));
     expect(html).toContain('aria-label="Agents"');
-    expect(html).toContain(">My agent runs<");
+    expect(html).toContain(">Agents<");
     expect(html).toContain('href="/agents/echo"');
     expect(html).not.toContain("Mistake log");
     as(user("partner"));
     const partner = await renderHtml(await Layout({ children: null }));
     expect(partner).toContain("Mistake log");
-    expect(partner).toContain(">Agent runs<");
+    expect(partner).toContain(">Agents<");
+    expect(partner).not.toContain("Agent runs<");
   });
 
-  it("nav label, page title and back links to /agents use the same words", async () => {
+  it("nav label, page title and back links to /agents use the same word, Agents; the lead says whose runs staff see", async () => {
     as(user("priya"));
-    expect(await renderHtml(await RunsPage())).toContain(">My agent runs</h1>");
+    const staff = await renderHtml(await RunsPage());
+    expect(staff).toContain(">Agents</h1>");
+    expect(staff).toContain("You see the runs of jobs you prepare or review.");
     const agentPage = await renderHtml(await AgentPage({ params: Promise.resolve({ agent: "echo" }) }));
-    expect(agentPage).toMatch(/href="\/agents"[^>]*>.*My agent runs<\/a>/);
+    expect(agentPage).toMatch(/href="\/agents"[^>]*>.*Agents<\/a>/);
     expect(agentPage).toContain(">Echo (framework test)</h1>");
     as(user("meera"));
-    expect(await renderHtml(await RunsPage())).toContain(">Agent runs</h1>");
-    expect(await renderHtml(await MistakesPage())).toMatch(/href="\/agents"[^>]*>.*Agent runs<\/a>/);
+    const all = await renderHtml(await RunsPage());
+    expect(all).toContain(">Agents</h1>");
+    expect(all).not.toContain("You see the runs of jobs you prepare or review.");
+    expect(await renderHtml(await MistakesPage())).toMatch(/href="\/agents"[^>]*>.*Agents<\/a>/);
   });
 
   it("empty run list", async () => {

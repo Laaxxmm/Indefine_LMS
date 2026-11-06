@@ -53,13 +53,15 @@ afterEach(() => {
 });
 
 describe("layout", () => {
-  it("the one Firm OS header with a narrow column; same access as /agents; the Agents module must be on", async () => {
+  it("the one Firm OS header at the page width, a narrow reading column inside the same page box; same access as /agents; the Agents module must be on", async () => {
     as(user("priya"));
     const html = await renderHtml(await Layout({ children: null }));
     expect(html).toContain('aria-label="Firm OS"');
     expect(html).toMatch(/href="\/focus"[^>]*>Next task<\/a>/);
     expect(html).toContain('href="/dashboard"');
-    expect(html).toContain('<main class="max-w-3xl');
+    // The header and the page box are 1280 like every Firm OS page; only the content column is narrow, left-aligned.
+    expect(html).toMatch(/<header[^>]*><div class="max-w-\[1280px\] mx-auto/);
+    expect(html).toContain('<main class="max-w-[1280px] mx-auto px-4 sm:px-8 py-8"><div class="max-w-3xl">');
     as(null);
     expect(await redirectTarget(() => Layout({ children: null }))).toBe("/");
     as(user("priya", { active: false }));

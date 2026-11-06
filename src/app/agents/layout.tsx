@@ -1,8 +1,8 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { ActivityPing } from "@/components/ActivityPing";
-import { FirmOsHeader, firmOsLink } from "@/components/FirmOsHeader";
-import { contentWidth, pageGutter, pageMain } from "@/components/ui";
+import { FirmOsHeader, FirmOsSubnav, firmOsLink } from "@/components/FirmOsHeader";
+import { pageMain } from "@/components/ui";
 import { NavLink } from "@/components/NavLink";
 import { canSeeMistakeLog, canUseAgents } from "@/lib/agents/access";
 import { isBreakNudgeEnabled } from "@/lib/agents/coach/flags";
@@ -25,22 +25,18 @@ export default async function AgentsLayout({ children }: { children: React.React
   return (
     <div className="min-h-screen">
       <FirmOsHeader user={session.user} home="/agents" />
-      <div className="border-b border-border bg-card/60">
-        <div className={`${contentWidth} mx-auto ${pageGutter} py-2`}>
-          <nav aria-label="Agents" className="flex items-center gap-1 max-w-full overflow-x-auto">
-            {agents.map((a) => (
-              <NavLink key={a.key} href={`/agents/${a.key}`} className={firmOsLink}>
-                {a.title}
-              </NavLink>
-            ))}
-            {canSeeMistakeLog(session.user) && (
-              <NavLink href="/agents/mistakes" className={firmOsLink}>
-                Mistake log
-              </NavLink>
-            )}
-          </nav>
-        </div>
-      </div>
+      <FirmOsSubnav label="Agents">
+        {agents.map((a) => (
+          <NavLink key={a.key} href={`/agents/${a.key}`} className={firmOsLink}>
+            {a.title}
+          </NavLink>
+        ))}
+        {canSeeMistakeLog(session.user) && (
+          <NavLink href="/agents/mistakes" className={firmOsLink}>
+            Mistake log
+          </NavLink>
+        )}
+      </FirmOsSubnav>
       <main className={pageMain}>{children}</main>
       <ActivityPing enabled={isBreakNudgeEnabled()} />
     </div>

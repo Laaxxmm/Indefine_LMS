@@ -21,6 +21,7 @@ import { afterAll, describe, expect, it, vi } from "vitest";
 import type { Session } from "next-auth";
 import { renderHtml } from "../unit/routes/harness";
 import { echoWorld, user, type World } from "../fakes/agent-world";
+import { MODULE_KEYS } from "@/lib/workspace/registry";
 
 const state = vi.hoisted(() => ({ world: null as unknown as World, session: null as unknown }));
 
@@ -63,6 +64,9 @@ vi.mock("@/lib/prisma", async () => {
       return new Proxy({}, {
         get: (_t, key: string | symbol) => {
           if (key === "client") return { ...(mem.client as object), findUnique: async () => CLIENT };
+          // Every module switched on and the companion allowed, as the owner runs it: the headers then
+          // show every place (the role rules still apply on top), so the menus are seen at full length.
+          if (key === "workspaceSetting") return { findUnique: async () => ({ modules: [...MODULE_KEYS], focusMode: false, companionEnabled: true }) };
           if (key === "turiaSync") return { findMany: async () => [] };
           if (typeof key === "string" && (key in mem.tables || key.startsWith("$"))) return mem[key];
           return (prismaMock as Record<string | symbol, unknown>)[key];

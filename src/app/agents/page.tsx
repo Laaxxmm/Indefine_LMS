@@ -9,7 +9,7 @@ import type { FirmDb } from "@/lib/agents/core/runner";
 import { visibleAgents } from "@/lib/agents/registry";
 import { listMyJobs, listRuns, type MyJobRow } from "@/lib/agents/views";
 import { RunAgentButton } from "./[agent]/RunAgentButton";
-import { RunsTable, runsListLabel } from "./parts";
+import { AGENTS_LABEL, RunsTable } from "./parts";
 
 export const dynamic = "force-dynamic";
 
@@ -72,8 +72,8 @@ export default async function AgentsPage() {
     <div>
       <PageHeader
         eyebrow="Firm OS"
-        title={runsListLabel(all)}
-        lead="Draft packs prepared by task agents for review. A person checks every finding, approves the pack and files it; the app never files or sends anything."
+        title={AGENTS_LABEL}
+        lead={`Draft packs prepared by task agents for review. A person checks every finding, approves the pack and files it; the app never files or sends anything.${all ? "" : " You see the runs of jobs you prepare or review."}`}
       />
 
       <Section id="waiting" title="Waiting for you">

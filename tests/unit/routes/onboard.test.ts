@@ -38,7 +38,7 @@ describe("/onboard", () => {
     expect(html).toContain('href="/dashboard"');
     expect(html).toContain('href="/agents"'); // where the new jobs are worked on
     expect(html).toContain('aria-label="Firm OS"'); // the one Firm OS header
-    expect(html).toContain(">Firm OS onboarding</a>");
+    expect(html).toContain(">Onboard client</a>"); // in the header's More menu
     expect(html).not.toContain("text-ink-faint"); // ~2:1 on white, below AA: Firm OS text uses ink-mute
     expect(html).not.toMatch(/submit to portal/i);
   });

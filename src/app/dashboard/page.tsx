@@ -22,11 +22,13 @@ import { isBreakNudgeEnabled } from "@/lib/agents/coach/flags";
 import { CoachCard } from "@/app/coach/CoachCard";
 import { ActivityPing } from "@/components/ActivityPing";
 import { SearchButton } from "@/components/SearchButton";
+import { HelpButton } from "@/components/HelpButton";
+import { NavMenu } from "@/components/NavMenu";
 import { ModuleOffNotice } from "@/app/workspace/ModuleOffNotice";
 import type { FirmDb } from "@/lib/agents/core/runner";
 import type { NextTaskView } from "@/lib/workspace/contract";
 import { MODULE_OFF_PARAM } from "@/lib/workspace/guard";
-import { dashboardLinks } from "@/lib/workspace/nav";
+import { dashboardNav } from "@/lib/workspace/nav";
 import { getNextTaskView } from "@/lib/workspace/next-task";
 import { effectiveModules, focusModeFor } from "@/lib/workspace/settings";
 import {
@@ -42,6 +44,7 @@ import {
   ArrowRight,
   ChevronDown,
   ExternalLink,
+  Menu,
   Radio,
 } from "lucide-react";
 import { isAdmin } from "@/lib/access";
@@ -72,7 +75,7 @@ const TOUR_STEPS: TourStep[] = [
   {
     selector: "[data-tour='leaderboard']",
     title: "Leaderboard",
-    body: "See how you rank. Points come from videos watched, quizzes passed, deadlines and attendance.",
+    body: "The Leaderboard, Check-in and Recap are in the Learn menu. See how you rank: points come from videos watched, quizzes passed, deadlines and attendance.",
   },
   {
     title: "You're all set 🎉",
@@ -104,6 +107,8 @@ const TRACK_COLOR: Record<string, string> = {
 const COURSE_ACCENTS = ["#5B4BE6", "#17B978", "#FF6B4A", "#0EA5E9", "#8B5CF6"];
 
 const navLink = `shrink-0 whitespace-nowrap px-4 py-2 rounded-full text-ink-mute font-semibold text-[13.5px] hover:text-ink transition ${focusRing}`;
+/** Search and Help beside the bar: outlined pills, 36 px tall like the bar's links. */
+const barButton = `h-9 px-3.5 rounded-full border border-border bg-card text-[13.5px] font-semibold text-ink-mute hover:text-ink transition ${focusRing}`;
 
 // Everyone's landing page, never gated itself. What it shows follows the person's workspace
 // modules (effectiveModules: role rules, the Firm OS master switch and the workspace settings):
@@ -118,6 +123,7 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
   const moduleOff = (await searchParams)?.[MODULE_OFF_PARAM];
   const [workspace, focusMode] = await Promise.all([effectiveModules(session.user), focusModeFor(session.user)]);
   const on = (k: (typeof workspace)[number]) => workspace.includes(k);
+  const bar = dashboardNav(workspace);
   const learning = on("learning");
   const growth = on("leaderboard");
   // Focus landing needs the next-task page, which belongs to the Agents module.
@@ -326,21 +332,36 @@ export default async function Dashboard({ searchParams }: { searchParams?: Promi
       <header className="flex items-center justify-between gap-4 flex-wrap max-w-[1240px] mx-auto px-5 sm:px-10 py-[18px]">
         <Logo tagline="LEARN · GROW" size={40} />
 
-        {/* One link per module that is on for the person (the same rule as each area's guard). */}
-        <nav aria-label="Main" className="flex items-center gap-1 bg-card p-1.5 rounded-full border border-border max-w-full overflow-x-auto">
+        {/* One link per module that is on for the person (the same rule as each area's guard), the
+            learning pages under Learn and the Firm OS places under Firm OS (src/lib/workspace/nav.ts).
+            From 640 px the bar shows them all; on a phone Home and one Menu with the same entries. */}
+        <nav aria-label="Main" className="flex items-center gap-1 bg-card p-1.5 rounded-full border border-border max-w-full">
           <span aria-current="page" className="shrink-0 px-4 py-2 rounded-full bg-brand-50 text-brand-600 font-bold text-[13.5px]">Home</span>
-          {dashboardLinks(workspace).map((l) => (
-            <Link key={l.href} href={l.href} data-tour={l.tour} className={navLink}>
-              {l.label}
-            </Link>
-          ))}
+          {bar.map((e) =>
+            e.kind === "link" ? (
+              <Link key={e.item.href} href={e.item.href} data-tour={e.item.tour} className={`${navLink} hidden sm:inline-flex`}>
+                {e.item.label}
+              </Link>
+            ) : (
+              <NavMenu key={e.group} label={e.label} sections={[{ items: e.items }]} buttonClassName={navLink} className="hidden sm:block" align="left" tour={e.items.find((i) => i.tour)?.tour} />
+            ),
+          )}
+          {bar.length > 0 && (
+            <NavMenu
+              label="Menu"
+              sections={bar.map((e) => (e.kind === "link" ? { items: [e.item] } : { heading: e.label, items: e.items }))}
+              buttonClassName={navLink}
+              className="sm:hidden"
+              align="left"
+              icon={<Menu className="w-4 h-4" aria-hidden="true" />}
+            />
+          )}
         </nav>
 
         <div className="flex items-center gap-3">
           {/* Opens the command palette (mounted once in the root layout for the same people). */}
-          {on("search") && (
-            <SearchButton className={`px-3.5 py-2 rounded-full border border-border bg-card text-[13.5px] font-semibold text-ink-mute hover:text-ink transition ${focusRing}`} />
-          )}
+          {on("search") && <SearchButton className={barButton} />}
+          <HelpButton className={barButton} labelClassName="sr-only sm:not-sr-only" />
           {(learning || growth) && (
           <div
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-full border"

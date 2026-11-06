@@ -1,12 +1,11 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { canSeeAllRuns } from "@/lib/agents/access";
 import { canSpotCheck } from "@/lib/rbac/policy";
 import { listSpotChecks, type SpotCheckRow } from "@/lib/audit/spot-checks";
 import { DataTable, EmptyState, PageHeader, Section } from "@/components/firm-os";
 import { td, tr } from "@/components/ui";
-import { runsListLabel } from "../parts";
+import { AGENTS_LABEL } from "../parts";
 import { SpotCheckAction } from "./SpotCheckAction";
 
 export const dynamic = "force-dynamic";
@@ -98,7 +97,7 @@ export default async function SpotChecksPage() {
   return (
     <div>
       <PageHeader
-        back={{ href: "/agents", label: runsListLabel(canSeeAllRuns(session.user)) }}
+        back={{ href: "/agents", label: AGENTS_LABEL }}
         eyebrow="Firm OS · close loop"
         title="Turia spot checks"
         lead="Staff record Turia closes by hand, so about one in ten is picked for a partner to check. Open the task in Turia, check the task ref and the minutes logged, then record it here."

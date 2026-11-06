@@ -11,10 +11,10 @@ export { focusRing, eyebrow, pageTitle, sectionTitle, tableWrap, thead, th, td, 
 export { BackLink, EmptyState, PartnerChip, RunStatusChip, StateChip } from "@/components/firm-os";
 
 /**
- * Title of /agents, used verbatim by its nav link and by every back link to it, so the three
- * always agree (managers, partners and admins see every run; staff see their own).
+ * Title of /agents, used verbatim by its nav link (src/lib/workspace/nav.ts AGENTS_LABEL) and by
+ * every back link to it, so they always agree. Who sees which runs is said by the page's lead.
  */
-export const runsListLabel = (seesAll: boolean) => (seesAll ? "Agent runs" : "My agent runs");
+export { AGENTS_LABEL } from "@/lib/workspace/nav";
 
 export function RunsTable({ runs, showAgent = true }: { runs: RunRow[]; showAgent?: boolean }) {
   return (

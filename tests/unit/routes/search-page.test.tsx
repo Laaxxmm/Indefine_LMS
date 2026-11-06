@@ -54,7 +54,7 @@ describe("layout", () => {
     as(PEOPLE.priya);
     const html = await renderHtml(await Layout({ children: "x" }));
     expect(html).toContain('aria-label="Firm OS"'); // not "Search": the search form is its own landmark
-    expect(html).toMatch(/<button[^>]*aria-keyshortcuts="Control\+K Meta\+K"[^>]*>.*Search<\/button>/);
+    expect(html).toMatch(/<button[^>]*aria-label="Search" aria-keyshortcuts="Control\+K Meta\+K"[^>]*>.*Ctrl K<\/kbd><\/button>/); // an icon, named Search, with its shortcut
     expect(html).toMatch(/href="\/agents"/);
     expect(html).toMatch(/href="\/dashboard"[^>]*>.*Dashboard/);
     expect(html).toContain("focus-visible:ring-2");

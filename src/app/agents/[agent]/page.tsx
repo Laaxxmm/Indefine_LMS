@@ -7,7 +7,7 @@ import { getAgent, visibleAgents } from "@/lib/agents/registry";
 import { listRunnableJobs, listRuns } from "@/lib/agents/views";
 import { DataTable, EmptyState, PageHeader, Section, StateChip } from "@/components/firm-os";
 import { td, tr } from "@/components/ui";
-import { RunsTable, runsListLabel } from "../parts";
+import { AGENTS_LABEL, RunsTable } from "../parts";
 import { RunAgentButton } from "./RunAgentButton";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +24,7 @@ export default async function AgentPage({ params }: { params: Promise<{ agent: s
 
   return (
     <div>
-      <PageHeader back={{ href: "/agents", label: runsListLabel(canSeeAllRuns(session.user)) }} eyebrow={`Agent · ${def.service}`} title={def.title} />
+      <PageHeader back={{ href: "/agents", label: AGENTS_LABEL }} eyebrow={`Agent · ${def.service}`} title={def.title} />
 
       <Section id="ready" title="Jobs ready for the agent">
         {jobs.length === 0 ? (

@@ -21,8 +21,11 @@ export function PageHeader({
   lead,
   meta,
   action,
+  titleId,
   className = "",
 }: {
+  /** An id on the title, for a region of the page that the title names (aria-labelledby). */
+  titleId?: string;
   back?: { href: string; label: React.ReactNode };
   eyebrow?: React.ReactNode;
   title: React.ReactNode;
@@ -40,7 +43,9 @@ export function PageHeader({
       <div className={cx(headerGap, "flex items-start justify-between gap-4 flex-wrap", className)}>
         <div className="min-w-0 max-w-full">
           {eyebrow && <p className={`${eyebrowText} mb-2`}>{eyebrow}</p>}
-          <h1 className={`${pageTitle} break-words`}>{title}</h1>
+          <h1 id={titleId} className={`${pageTitle} break-words`}>
+            {title}
+          </h1>
           {lead && <p className={`${leadText} mt-2`}>{lead}</p>}
           {meta && <p className="text-[13px] leading-5 text-ink-mute mt-2 tabular-nums">{meta}</p>}
         </div>

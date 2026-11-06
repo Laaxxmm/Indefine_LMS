@@ -21,11 +21,12 @@ const html = async (path: string) => {
 const link = (out: string, label: string) => out.match(new RegExp(`<a[^>]*>(?:<svg[^]*?</svg>)? ?${label}</a>`))?.[0] ?? "";
 
 describe("AreaHeader", () => {
-  it("wraps on a phone: flex-wrap row with a min height, nav scrolls inside its own box", async () => {
+  it("wraps on a phone: flex-wrap row with a min height, and the nav wraps too (nothing hidden behind a sideways scroll)", async () => {
     const out = await html("/clients");
     expect(out).toMatch(/class="[^"]*flex flex-wrap[^"]*min-h-16|class="[^"]*min-h-16[^"]*flex flex-wrap/);
     expect(out).not.toContain(" h-16 ");
-    expect(out).toMatch(/<nav aria-label="Clients" class="[^"]*overflow-x-auto/);
+    expect(out).toMatch(/<nav aria-label="Clients" class="[^"]*flex-wrap/);
+    expect(out).not.toMatch(/<nav aria-label="Clients" class="[^"]*overflow-x-auto/);
   });
 
   it("marks the current section: the page itself, and the area root on a page below it", async () => {

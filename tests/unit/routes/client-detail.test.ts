@@ -203,7 +203,7 @@ describe("/clients/[id] Firm OS jobs (flag on)", () => {
     expect(q.where).toEqual({ AND: [{ OR: [{ assigneeId: "u-priya" }, { reviewerId: "u-priya" }] }, { firmClient: { lmsClientId: "c1" } }] });
   });
 
-  it("managers and partners see every job of the client; a job with no run links to Agent runs; unassigned and undated jobs say so", async () => {
+  it("managers and partners see every job of the client; a job with no run links to Agents; unassigned and undated jobs say so", async () => {
     for (const level of ["MANAGER", "PARTNER"]) {
       prismaCalls.length = 0;
       as({ id: `u-${level.toLowerCase()}`, level });
@@ -220,9 +220,9 @@ describe("/clients/[id] Firm OS jobs (flag on)", () => {
       expect(rows[0]).toContain(">anil@indefine.test<"); // no name: the email
       expect(rows[0]).toContain(">ASSIGNED<");
       expect(rows[0]).toContain("No run yet · </span>");
-      const agentsLink = /<a [^>]*>Agent runs<\/a>/.exec(rows[0])?.[0] ?? "";
+      const agentsLink = /<a [^>]*>Agents<\/a>/.exec(rows[0])?.[0] ?? "";
       expect(agentsLink).toContain('href="/agents"');
-      expect(agentsLink).toContain('aria-label="Agent runs: no run yet for GSTR-1 2026-10"');
+      expect(agentsLink).toContain('aria-label="Agents: no run yet for GSTR-1 2026-10"');
       expect(rows[2]).toContain(">DRAFT<");
       expect(rows[2]).toContain(">Not assigned<");
       expect(rows[2]).toContain(">—<");

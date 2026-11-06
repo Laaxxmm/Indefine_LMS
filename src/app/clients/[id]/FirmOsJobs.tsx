@@ -6,14 +6,14 @@ import Link from "next/link";
 import { card, focusRing, linkText, sectionTitle } from "@/components/ui";
 import type { ClientJobRow } from "@/lib/agents/client-jobs";
 import { StateChip } from "@/components/firm-os";
-import { runsListLabel } from "@/app/agents/parts";
+import { AGENTS_LABEL } from "@/app/agents/parts";
 
 // Compact cells to match the page's own Jobs card; rows are the shared 44 px.
 const th = "py-2 pr-3 h-11 font-bold";
 const td = "py-2 pr-3";
 
 export function FirmOsJobs({ jobs, seesAll, commsHref }: { jobs: ClientJobRow[]; seesAll: boolean; commsHref?: string }) {
-  const agentsLabel = runsListLabel(seesAll);
+  const agentsLabel = AGENTS_LABEL;
   return (
     <section aria-labelledby="firm-os-jobs" className={`${card} mb-6`}>
       <div className="flex items-start justify-between gap-3 flex-wrap">
