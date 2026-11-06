@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { recordHeartbeat } from "@/lib/agents/coach/activity";
 import { coachDb } from "@/lib/agents/coach/defaults";
-import { emptyBody, requireCoachUser } from "@/lib/agents/coach/http";
+import { refuseNonEmptyBody, requireCoachUser } from "@/lib/agents/coach/http";
 import { firmOsEnabled, firmOsOffResponse } from "@/lib/workspace/flag";
 
 // LMS activity heartbeat for break nudges (ADR-006). The browser sends one at most once a minute
@@ -11,6 +11,7 @@ export async function POST(req: Request) {
   if (!firmOsEnabled()) return firmOsOffResponse();
   const g = await requireCoachUser();
   if (g.res) return g.res;
-  if (!(await emptyBody(req))) return NextResponse.json({ error: "This check-in from the page should carry nothing, so it was refused. Reload the page." }, { status: 400 });
+  const refused = await refuseNonEmptyBody(req); // capped as it streams in: 413 past 1 KB, 400 for anything but {} or nothing
+  if (refused) return refused;
   return NextResponse.json(await recordHeartbeat(g.user.id, { db: coachDb() }));
 }
