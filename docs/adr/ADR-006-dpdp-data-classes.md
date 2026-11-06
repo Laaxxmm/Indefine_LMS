@@ -33,6 +33,13 @@ values with stable tokens (`⟨PAN_1⟩`, `⟨GSTIN_2⟩`, `⟨PHONE_1⟩` …):
 PAN, GSTIN (state code + checksum), Aadhaar (12 digits, Verhoeff), CIN/LLPIN, DIN, TAN, IFSC and
 account numbers, +91 phone numbers, email, PIN-code addresses, and a dictionary of person and company
 names from the client master. `unmask()` restores values in the response.
+*Amendment (06 Nov 2026, security rounds 2–3):* the maskers also cover Aadhaar last-4 forms (masked
+groups such as `XXXX XXXX 1234`, or "Aadhaar ending / no. / last 4 digits"), Indian vehicle
+registration numbers (new `VEHICLE` kind, Bharat series included), passports ("PP No"), dates of birth
+labelled in Hindi or Kannada, and a whole address line ending in a PIN as one `ADDRESS` token. Person
+names found in free text (`src/lib/ai/names.ts`) join the run's name dictionary, Devanagari and Kannada
+spellings are matched by a phonetic key, and an independent leak gate (`detectPii`) refuses any
+outbound payload it still flags.
 
 - The **token map is never sent** to any provider. It lives in memory for the call, or, when a run spans several calls, in a database row encrypted with `src/lib/secret-box.ts`, deleted with the run's other inputs (see retention).
 - `ModelCall` stores only the SHA-256 of the masked prompt (ADR-002).

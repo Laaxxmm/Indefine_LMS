@@ -50,7 +50,7 @@
     "efficiency": "tsx scripts/efficiency-report.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^1.5.0",
+    "@anthropic-ai/sdk": "1.5.0",
     "@auth/prisma-adapter": "^2.7.4",
     "@prisma/client": "^6.1.0",
     "canvas-confetti": "^1.9.3",
