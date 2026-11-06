@@ -498,6 +498,7 @@ export async function runAgent<I, E>(def: AgentDefinition<I, E>, jobTaskId: stri
             privacy: "anonymize-then-cloud",
             difficulty: "judgement",
             schema: LlmVerdictOutputSchema,
+            unmask: "findings", // stored as a ChecklistResult: identifiers stay placeholders (re-audit NEW-7)
             messages: [
               { role: "system", content: LLM_CHECK_SYSTEM },
               {
