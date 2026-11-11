@@ -60,6 +60,32 @@ export function stripBriefSecrets(b: SopBrief): SopBrief {
   };
 }
 
+// Measured live (11 Nov 2026, gemini-2.5-flash): a call answers in 2–8 s, but now and then the
+// model repeats one sentence inside a field until the 16k output cap (~60 s, finish=MAX_TOKENS),
+// for one prompt in up to a third of tries. Schema maxItems is refused ("too many states") and
+// maxLength is not enforced, and a prompt rule did not lower the rate. A runaway is random, so
+// give each try 15 s and ask again, up to 3 tries: worst case 45 s, under the routes' 60 s.
+// The abandoned request is still aborted by callGemini's own 45 s timeout.
+const CALL_LIMIT_MS = 15_000;
+const ATTEMPTS = 3;
+export async function callWithRetry(prompt: string, schema: object, dictionary: DictionaryEntry[]): Promise<string> {
+  const once = () => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const limit = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(Object.assign(new Error("The AI took too long to answer. Try again in a minute."), { name: "TimeoutError" })), CALL_LIMIT_MS);
+    });
+    // Promise.race keeps listening to an abandoned call, so its later 45 s abort is handled.
+    return Promise.race([callGemini(prompt, schema, { dictionary, what: "This procedure" }), limit]).finally(() => clearTimeout(timer));
+  };
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await once();
+    } catch (e) {
+      if ((e as Error).name !== "TimeoutError" || attempt === ATTEMPTS) throw e;
+    }
+  }
+}
+
 /* ------------------------- 1. Analyze (guardrail) ------------------------- */
 
 const briefZ = z.object({
@@ -120,7 +146,7 @@ ${request}
 
 Return JSON matching the schema.`;
 
-  const raw = await callGemini(prompt, ANALYSIS_SCHEMA, { dictionary, what: "This procedure" });
+  const raw = await callWithRetry(prompt, ANALYSIS_SCHEMA, dictionary);
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -308,7 +334,7 @@ Also give objective (one sentence: what this sub-process achieves) and owner (th
 Write as many steps as the work really has (usually 8 to 30). Return JSON matching the schema.`;
 
   const ask = async (prompt: string, schema: object): Promise<unknown> => {
-    const raw = await callGemini(prompt, schema, { dictionary, what: "This procedure" });
+    const raw = await callWithRetry(prompt, schema, dictionary);
     try {
       return JSON.parse(raw);
     } catch {
