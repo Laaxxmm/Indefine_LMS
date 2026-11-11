@@ -3,10 +3,10 @@ import type { Session } from "next-auth";
 import type { Department, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { levelLabel } from "@/lib/ca-firm";
-import { generateSop } from "./gemini";
+import { generateSop, stripBriefSecrets, stripSecrets } from "./gemini";
 import { renderSopDocx } from "./render";
 import { saveSopDocxToOneDrive } from "./storage";
-import type { SopBrief } from "./types";
+import { MAX_SUB_PROCESSES, type SopBrief } from "./types";
 
 const DEPTS = ["AUDIT", "TAX", "ACCOUNTS", "ROC", "TECH", "ADMIN", "GENERAL"];
 const slug = (s: string) => s.replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40) || "SOP";
@@ -27,6 +27,7 @@ export const incomingBriefZ = z.object({
   keySteps: z.array(line).max(200).default([]),
   rolesInvolved: z.array(line).max(100).default([]),
   references: z.array(line).max(100).default([]),
+  subProcesses: z.array(line).max(MAX_SUB_PROCESSES).default([]),
 });
 export const createBodyZ = z.object({ brief: incomingBriefZ, rawProcedure: z.string().min(10).max(50_000), purpose: z.string().max(10_000).default("") });
 
@@ -48,16 +49,21 @@ export async function buildVersion(opts: {
 }): Promise<Omit<Prisma.SopVersionCreateManyInput, "sopId">> {
   const now = new Date();
   const effectiveDate = now.toLocaleDateString("en-GB"); // DD/MM/YYYY
-  const content = await generateSop(opts.brief, opts.rawProcedure, { effectiveDate, revision: opts.revision });
+  // A credential typed into any field is never sent to the AI and never stored.
+  const rawProcedure = stripSecrets(opts.rawProcedure);
+  const purpose = stripSecrets(opts.purpose);
+  const brief = stripBriefSecrets(opts.brief);
+  const preparedBy = [opts.creator.name, opts.creator.designation].filter(Boolean).join(", ");
+  const content = { ...(await generateSop(brief, rawProcedure, { effectiveDate, revision: opts.revision })), preparedBy };
   const docx = await renderSopDocx(content);
-  const stored = await saveSopDocxToOneDrive({ department: opts.brief.department, title: opts.brief.title, versionNumber: opts.versionNumber, docx, userId: opts.creator.id });
-  const versionString = `${slug(opts.brief.title)}_Ver_${now.toISOString().slice(0, 10)}-${String(opts.versionNumber).padStart(2, "0")}`;
+  const stored = await saveSopDocxToOneDrive({ department: brief.department, title: brief.title, versionNumber: opts.versionNumber, docx, userId: opts.creator.id });
+  const versionString = `${slug(brief.title)}_Ver_${now.toISOString().slice(0, 10)}-${String(opts.versionNumber).padStart(2, "0")}`;
   return {
     versionNumber: opts.versionNumber,
     versionString,
-    purpose: opts.purpose,
-    rawProcedure: opts.rawProcedure,
-    brief: opts.brief as unknown as Prisma.InputJsonValue,
+    purpose,
+    rawProcedure,
+    brief: brief as unknown as Prisma.InputJsonValue,
     content: content as unknown as Prisma.InputJsonValue,
     graphItemId: stored?.itemId ?? null,
     graphWebUrl: stored?.webUrl ?? null,

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Sparkles, Loader2, AlertTriangle, CheckCircle2, Wand2 } from "lucide-react";
-import type { SopBrief, SopAnalysis } from "@/lib/sop/types";
+import { MAX_SUB_PROCESSES, type SopBrief, type SopAnalysis } from "@/lib/sop/types";
 import { departmentLabel } from "@/lib/sop/labels";
 import { userMessage } from "@/lib/errors";
 
@@ -24,11 +24,16 @@ export function SopCreator({ defaultDepartment, lockDepartment, editSopId, initi
   const [error, setError] = useState<string | null>(null);
   const [rejected, setRejected] = useState<string | null>(null);
   const [brief, setBrief] = useState<SopBrief | null>(null);
+  // What the description left unsaid, and the author's answers (by question index).
+  const [questions, setQuestions] = useState<string[]>([]);
+  const [answers, setAnswers] = useState<Record<number, string>>({});
 
   async function analyze() {
     setError(null);
     setRejected(null);
     setBrief(null);
+    setQuestions([]);
+    setAnswers({});
     if (rawProcedure.trim().length < 10) {
       setError("Describe the procedure in at least a sentence or two.");
       return;
@@ -41,6 +46,7 @@ export function SopCreator({ defaultDepartment, lockDepartment, editSopId, initi
       if (!data.valid || !data.brief) { setRejected(data.reason || "This doesn't look like a valid SOP request for the firm."); return; }
       // Granted editors are locked to their own department — never let the AI reassign it.
       setBrief(lockDepartment ? { ...data.brief, department: defaultDepartment } : data.brief);
+      setQuestions(data.questions ?? []);
     } catch (e) {
       setError(userMessage(e));
     } finally {
@@ -50,11 +56,25 @@ export function SopCreator({ defaultDepartment, lockDepartment, editSopId, initi
 
   async function generate() {
     if (!brief) return;
-    setGenerating(true);
     setError(null);
+    // The list fields keep blank lines while being typed; tidy them only now.
+    const tidy = (a?: string[]) => linesToArr((a ?? []).join("\n"));
+    const confirmed = { ...brief, keySteps: tidy(brief.keySteps), rolesInvolved: tidy(brief.rolesInvolved), references: tidy(brief.references), subProcesses: tidy(brief.subProcesses) };
+    if (confirmed.subProcesses.length > MAX_SUB_PROCESSES) {
+      setError(`Keep it to ${MAX_SUB_PROCESSES} sub-processes. Merge some, or split this into two SOPs.`);
+      return;
+    }
+    // Answers travel with the description, so they are kept for the next version too.
+    const answered = questions.map((q, i) => ({ q, a: (answers[i] ?? "").trim() })).filter((x) => x.a);
+    const described = answered.length ? `${rawProcedure}\n\nClarifications from the author:\n${answered.map((x) => `Q: ${x.q}\nA: ${x.a}`).join("\n")}` : rawProcedure;
+    if (described.length > 50_000) {
+      setError("The description and your answers are too long together. Shorten them to under 50,000 characters.");
+      return;
+    }
+    setGenerating(true);
     try {
       const url = editSopId ? `/api/tools/sop-builder/sops/${editSopId}/versions` : "/api/tools/sop-builder/sops";
-      const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ brief, rawProcedure, purpose }) });
+      const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ brief: confirmed, rawProcedure: described, purpose }) });
       const data = (await res.json()) as { id?: string; error?: string };
       if (!res.ok || !data.id) { setError(data.error || "The SOP could not be generated. Try again in a minute."); return; }
       router.push(`/tools/sop-builder/${data.id}`);
@@ -71,7 +91,7 @@ export function SopCreator({ defaultDepartment, lockDepartment, editSopId, initi
         <ArrowLeft className="w-4 h-4" /> {editSopId ? "Back to SOP" : "All SOPs"}
       </button>
       <h1 className="font-display font-extrabold text-2xl sm:text-[28px] tracking-[-0.02em] mb-1">{editSopId ? "New version" : "New SOP"}</h1>
-      <p className="text-ink-mute text-[14px] mb-6">Describe the procedure plainly. The AI checks it&apos;s in scope, refines it into a brief for you to confirm, then generates the SOP.</p>
+      <p className="text-ink-mute text-[14px] mb-6">Explain the work the way you would to a new joiner on their first day. The AI checks it&apos;s in scope, drafts a brief, asks about anything you left out, then writes the SOP one small step at a time.</p>
 
       {/* Step 1 — input */}
       <section className="rounded-2xl bg-card border border-border shadow-lift p-5 mb-4">
@@ -88,7 +108,8 @@ export function SopCreator({ defaultDepartment, lockDepartment, editSopId, initi
           <Field label="Purpose (optional)"><input className={input} value={purpose} onChange={(e) => setPurpose(e.target.value)} placeholder="Why this SOP exists" /></Field>
           <div className="sm:col-span-2">
             <Field label="Describe the procedure" required>
-              <textarea className={input} rows={5} value={rawProcedure} onChange={(e) => setRawProcedure(e.target.value)} placeholder="In your own words, list the steps, who does what, any checks or approvals…" />
+              <textarea className={input} rows={12} value={rawProcedure} onChange={(e) => setRawProcedure(e.target.value)} placeholder="Start from the very first click. Which software and screen, what you type and where that comes from, where files are saved and how they are named, who checks it, and what you do when something does not match. Long is good." />
+              <span className="block text-[11px] text-ink-faint mt-1">Do not type passwords or OTPs. Anything that looks like one is removed.</span>
             </Field>
           </div>
         </div>
@@ -125,10 +146,27 @@ export function SopCreator({ defaultDepartment, lockDepartment, editSopId, initi
             <Field label="Work category"><input className={input} value={brief.workCategory} onChange={(e) => setBrief({ ...brief, workCategory: e.target.value })} /></Field>
             <Field label="Objective"><input className={input} value={brief.objective} onChange={(e) => setBrief({ ...brief, objective: e.target.value })} /></Field>
             <div className="sm:col-span-2"><Field label="Scope"><textarea className={input} rows={2} value={brief.scope} onChange={(e) => setBrief({ ...brief, scope: e.target.value })} /></Field></div>
-            <div className="sm:col-span-2"><Field label="Key steps (one per line)"><textarea className={input} rows={5} value={brief.keySteps.join("\n")} onChange={(e) => setBrief({ ...brief, keySteps: linesToArr(e.target.value) })} /></Field></div>
-            <Field label="Roles (one per line)"><textarea className={input} rows={3} value={brief.rolesInvolved.join("\n")} onChange={(e) => setBrief({ ...brief, rolesInvolved: linesToArr(e.target.value) })} /></Field>
-            <Field label="References (one per line)"><textarea className={input} rows={3} value={brief.references.join("\n")} onChange={(e) => setBrief({ ...brief, references: linesToArr(e.target.value) })} /></Field>
+            <div className="sm:col-span-2"><Field label="Key steps (one per line)"><textarea className={input} rows={5} value={brief.keySteps.join("\n")} onChange={(e) => setBrief({ ...brief, keySteps: e.target.value.split("\n") })} /></Field></div>
+            <div className="sm:col-span-2">
+              <Field label="Sub-processes, in order (one per line)">
+                <textarea className={input} rows={4} value={(brief.subProcesses ?? []).join("\n")} onChange={(e) => setBrief({ ...brief, subProcesses: e.target.value.split("\n") })} />
+                <span className="block text-[11px] text-ink-faint mt-1">Each one is written out step by step. Up to {MAX_SUB_PROCESSES}.</span>
+              </Field>
+            </div>
+            <Field label="Roles (one per line)"><textarea className={input} rows={3} value={brief.rolesInvolved.join("\n")} onChange={(e) => setBrief({ ...brief, rolesInvolved: e.target.value.split("\n") })} /></Field>
+            <Field label="References (one per line)"><textarea className={input} rows={3} value={brief.references.join("\n")} onChange={(e) => setBrief({ ...brief, references: e.target.value.split("\n") })} /></Field>
           </div>
+          {questions.length > 0 && (
+            <div className="mt-5 pt-4 border-t border-border">
+              <h3 className="text-[13.5px] font-bold text-ink mb-0.5">Answer these to make every step clear</h3>
+              <p className="text-[12px] text-ink-mute mb-3.5">The description does not say these. Anything you leave blank is marked &quot;to confirm&quot; in the SOP.</p>
+              <div className="space-y-3.5">
+                {questions.map((q, i) => (
+                  <Field key={i} label={q}><textarea className={input} rows={2} value={answers[i] ?? ""} onChange={(e) => setAnswers({ ...answers, [i]: e.target.value })} /></Field>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="mt-4 flex items-center gap-3">
             <button onClick={generate} disabled={generating || !brief.title.trim()} className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-ink-faint text-white text-sm font-bold shadow-pop transition">
               {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
