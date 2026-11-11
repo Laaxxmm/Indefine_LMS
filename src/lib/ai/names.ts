@@ -306,7 +306,34 @@ ROUNDING EXCHANGE FOREX GAIN
 ONBOARD ONBOARDING CREATE ADD SETUP SET OPEN UPDATE CHANGE REMOVE DELETE CLOSE SEND CALL MEET FOLLOW VERIFY CONFIRM PAY RECEIVE
 COLLECT RAISE GENERATE DOWNLOAD UPLOAD SUBMIT PREPARE REMIND REMINDER ASK TELL INFORM NOTIFY GET GIVE MAKE TAKE USE NEED WANT
 ENSURE KEEP HOLD REGARDING RE SUBJECT FWD FW CC BCC NEW EXAMPLE SAMPLE TEST DEMO DUMMY TEMPLATE
+SENIOR ACCOUNTANT ACCOUNTANCY CHARTERED EXECUTIVE ASSOCIATE ANALYST OFFICER TRAINEE INTERN ARTICLE ARTICLED
+CONSULTANT SUPERVISOR COORDINATOR CASHIER INCHARGE DEPUTY CHIEF PROCEDURE PROCESS SUBPROCESS STEP BRIEF CONFIRMED
+CLARIFICATION AUTHOR PURPOSE RESPONSIBILITY DEFINITION CONTROL KPI FLOWCHART WORKFLOW FOLDER BANKING NETBANKING
+GATEWAY SAVE PERFORM RECORD RECONCILE RESOLVE STORE PRINT SELECT ENTER CLICK NAVIGATE TICK SIGN LOGIN LOGOUT RENAME
+ATTACH SCAN IDENTIFY INVESTIGATE CORRECT COMPARE COMPLETE OBTAIN ESCALATE ASSIGN TRACK VALIDATE FILL SEARCH
+APPROVAL REMARK COMMENT SIGNATURE APPOINTMENT IDENTIFICATION COMMISSIONER COMMITTEE TENURE DESIGNATION RATING STIPEND COUNTER
+AGREEMENT CONSENT
+NAME SURNAME FULL MIDDLE CONTACT PERSON ATTN ATTENTION DEDUCTOR DEDUCTEE PAYEE PROPRIETOR PROPRIETRESS LANDLORD LANDLADY
+TENANT LESSOR LESSEE SIGNATORY BENEFICIARY NOMINEE FATHER MOTHER SPOUSE HUSBAND WIFE GUARDIAN ASSESSEE TAXPAYER APPLICANT
+SHAREHOLDER BORROWER GUARANTOR KARTA TRUSTEE SETTLOR REMITTER DRAWER DRAWEE PATIENT STUDENT
 `;
+// The last three lines: the label words of LABEL_SOURCE / ROLE. Were one masked as a "name", the label rule could
+// not see the name after it ("⟨NAME_1⟩ of Employee: Asha" would go out with Asha in it). Label words that are also
+// surnames stay out (Holder, Seller(s), Owner, Member, Given(s), Witness, Buyer, Payer, Lender, Sender).
+
+// Job titles are business words (so "Senior Accountant" is never a name), but they also announce one, like an
+// honorific: a labelled value skips them ("Employee: Senior Accountant Asha") and a role noun followed by name
+// words marks those words ("Cashier Lakshmi", "Senior Accountant Kiran Kumar"). A modifier alone does not
+// ("Chief Financial Officer"). Words that are also given names or surnames (Junior, Clerk, Banks) stay out.
+const ROLE_NOUNS: ReadonlySet<string> = new Set([
+  "ACCOUNTANT", "CASHIER", "INTERN", "TRAINEE", "EXECUTIVE", "ASSOCIATE", "ANALYST", "OFFICER", "CONSULTANT", "SUPERVISOR",
+  "COORDINATOR", "INCHARGE", "ASSISTANT", "MANAGER", "REVIEWER", "PREPARER", "PARTNER", "DIRECTOR", "AUDITOR", "COMMISSIONER",
+  // Person roles of a label ("Landlord Ravi"): business words too, so they are never a name themselves.
+  "LANDLORD", "LANDLADY", "TENANT", "PROPRIETOR", "PROPRIETRESS", "KARTA", "PAYEE", "NOMINEE", "GUARDIAN", "TRUSTEE",
+]);
+/** Role words that may start a labelled value before the name ("Payee: Owner Ravi"); not business words (surnames). */
+const LABEL_ROLES: ReadonlySet<string> = new Set(["OWNER", "HOLDER", "MEMBER", "WITNESS", "BUYER", "SELLER", "PAYER", "LENDER", "SENDER"]);
+const JOB_TITLES: ReadonlySet<string> = new Set([...ROLE_NOUNS, "SENIOR", "CHIEF", "DEPUTY", "CHARTERED", "ARTICLE", "ARTICLED", "HEAD"]);
 
 /** Every word of BUSINESS_TEXT plus the narration stopwords. Upper case. */
 export const BUSINESS_WORDS: ReadonlySet<string> = new Set([...NAME_STOPWORDS, ...BUSINESS_TEXT.split(/\s+/).filter(Boolean)]);
@@ -430,6 +457,9 @@ function joinable(text: string, toks: Tok[], k: number): boolean {
   return g0 === 0x2e && (len === 1 || g1 === 0x20) && (a.cls === "initial" || isHonorificAt(text, toks, k - 1)); // "." / ". " after R. or Mr.
 }
 
+/** A capitalised job title ("Senior", "Accountant"); see JOB_TITLES. */
+const jobTitle = (t: Tok, set: ReadonlySet<string> = JOB_TITLES) => !t.glued && (t.cls === "title" || t.cls === "caps") && set.has(t.w.toUpperCase());
+
 /** A capitalised word that can be part of a name (an organisation suffix counts; business words do not). */
 const nameWord = (t: Tok) => (t.cls === "title" || t.cls === "caps" || t.cls === "initial") && (tokOrg(t) || !tokBiz(t));
 /** A core name word: not an initial, not a two-letter all-capitals code ("KA", "MS"), not an organisation suffix. */
@@ -522,6 +552,18 @@ function valueSpans(text: string, toks: Tok[], start: number, end: number, reaso
   if (to < from) return;
   let first = from;
   while (first <= to && isHonorificAt(text, toks, first)) first++;
+  // "Name: Executive Enterprises": a firm whose name starts with a job title keeps it.
+  if (first <= to && jobTitle(toks[first])) {
+    let last = -1;
+    for (let k = first + 1; k <= to && toks[k].s - toks[k - 1].e <= 3; k++) if (toks[k].cls !== "lower" && toks[k].cls !== "initial" && tokOrg(toks[k])) last = k;
+    if (last > first) {
+      out.push({ start: toks[first].s, end: toks[last].e, kind: "ORG", reason });
+      first = last + 1;
+      if (first > to) return;
+    }
+  }
+  // Skip a leading job title or role word, but never the value's last word ("Payee: Owner" may be a surname).
+  while (first < to && (jobTitle(toks[first]) || jobTitle(toks[first], LABEL_ROLES))) first++;
   // A value is a name only when its first word is not a business word (Name of Ledger: "Rent", payee: "Cash").
   if (first > to || tokBiz(toks[first])) return;
   // A firm's name keeps its business words: "Name: Synthetic Client Pvt Ltd" is one organisation.
@@ -570,7 +612,9 @@ function honorificSpans(text: string, toks: Tok[], out: PersonNameSpan[]) {
   for (let k = 0; k + 1 < toks.length; k++) {
     // "M/s Sunrise Steel": a firm.
     const firm = (toks[k].w === "M" || toks[k].w === "m") && /^\/[sS]\.?\s/.test(text.slice(toks[k].e, toks[k].e + 4));
-    if (!firm && !isHonorificAt(text, toks, k)) continue;
+    // A role noun works like an honorific when a name word follows it: "Cashier Lakshmi".
+    const role = !firm && jobTitle(toks[k], ROLE_NOUNS) && !jobTitle(toks[k + 1]);
+    if (!firm && !role && !isHonorificAt(text, toks, k)) continue;
     let first = k + 1;
     if (firm) {
       first = k + 2; // skip the "s" of M/s
@@ -583,7 +627,28 @@ function honorificSpans(text: string, toks: Tok[], out: PersonNameSpan[]) {
     if (j < first) continue;
     const span = runSpan(toks, first, j, "honorific", 1);
     if (span) out.push(firm ? { ...span, kind: "ORG" } : span);
-    k = j;
+    // A role noun that found no name must not swallow what follows ("Landlord M/s Sunrise Steel").
+    if (span || !role) k = j;
+  }
+}
+
+/**
+ * A job title can start a firm's name: "Executive Enterprises", "Deputy Traders Pvt Ltd". Only titles and
+ * organisation suffixes may follow it (a firm with a person's name in it, "Manager Kiran Rao Traders", is left to
+ * the sequence rule), and the suffix must not lead into another title ("Chief Financial Officer" is a job, though
+ * FINANCIAL is a suffix).
+ */
+function titleFirmSpans(text: string, toks: Tok[], out: PersonNameSpan[]) {
+  for (let k = 0; k + 1 < toks.length; k++) {
+    if (!jobTitle(toks[k])) continue;
+    let last = -1;
+    for (let j = k + 1; j < toks.length && j - k <= 4 && (toks[j].cls === "title" || toks[j].cls === "caps") && joinable(text, toks, j); j++) {
+      if (tokOrg(toks[j])) last = j;
+      else if (!jobTitle(toks[j])) break;
+    }
+    if (last < 0 || (last + 1 < toks.length && jobTitle(toks[last + 1]) && joinable(text, toks, last + 1))) continue;
+    out.push({ start: toks[k].s, end: toks[last].e, kind: "ORG", reason: "sequence" });
+    k = last;
   }
 }
 
@@ -639,6 +704,7 @@ export function personNameSpans(text: string): PersonNameSpan[] {
   if (text.includes('"')) jsonSpans(text, toks, found);
   if (text.includes(":") || text.includes("=")) labelSpans(text, toks, found);
   honorificSpans(text, toks, found);
+  titleFirmSpans(text, toks, found);
   if (RAIL_PRESENT.test(text)) railSpans(text, toks, found);
   runsIn(text, toks, 0, toks.length - 1, "sequence", 2, found);
   found.sort((a, b) => a.start - b.start || b.end - a.end);
