@@ -8,6 +8,7 @@
 import { describe, expect, it } from "vitest";
 import { loadRouterConfig } from "@/lib/ai/config";
 import { detectPii, mask } from "@/lib/ai/anonymizer";
+import { gateForGemini } from "@/lib/ai/legacy-gate";
 import { fileNameText, freeTextNames, personNameSpans, personNames } from "@/lib/ai/names";
 import { createRouter, leakGateKinds, withMessageNames, type ModelCallRepo, type ModelRequest } from "@/lib/ai/router";
 import { indicKey, phoneticKey } from "@/lib/ai/transliterate";
@@ -110,6 +111,130 @@ describe("NEW-1: false positives — business text comes through unchanged", () 
       expect(mask(t, { now: NOW }).masked, t).toBe(t);
       expect(detectPii(t, { names: true }), t).toEqual([]);
     }
+  });
+});
+
+/**
+ * SOP Builder text (live test, 11 Nov 2026): job titles, SOP verbs and SOP terms were read as names
+ * ("Save BRS", "Senior Accountant", "Chartered Accountancy", "CONFIRMED BRIEF"), and every part of a
+ * name is then hidden everywhere, so "Save" vanished from "Save and submit for review" and Gemini
+ * looped on that sub-process. The words join BUSINESS_TEXT; real names beside them are still caught.
+ */
+const SOP_TEXT = [
+  "Save BRS PDF",
+  "Save and Submit BRS",
+  "Roles: Accounts Assistant, Senior Accountant",
+  "Senior Accountant reviews; Article Assistant prepares",
+  "You are documenting work at a Chartered Accountancy / professional-services firm",
+  "Standard Operating Procedure",
+  "CONFIRMED BRIEF",
+  "Perform Reconciliation in Tally",
+  "Select Bank Ledger, then Navigate to Gateway of Tally",
+  "Senior Associate and Junior Executive sign off",
+];
+
+describe("SOP Builder: job titles and SOP words are not names", () => {
+  it(`${SOP_TEXT.length} SOP strings come through unchanged`, () => {
+    for (const t of SOP_TEXT) {
+      expect(personNameSpans(t), t).toEqual([]);
+      expect(mask(t, { now: NOW }).masked, t).toBe(t);
+      expect(detectPii(t, { names: true }), t).toEqual([]);
+    }
+  });
+
+  it("a real name beside those words is still found and masked, in every rule", () => {
+    const cases: [string, string][] = [
+      // sequence
+      ["Senior Accountant Kiran Kumar signs off", "Kiran Kumar"],
+      ["Save Ravindra Hegde's BRS in the folder", "Ravindra Hegde"],
+      ["Send the BRS to Meera Iyer for review", "Meera Iyer"],
+      ["Article Assistant Yashwanth Gowda prepares the BRS", "Yashwanth Gowda"],
+      ["Tyra Banks signed the BRS", "Tyra Banks"],
+      ["BRS Murthy will review", "Murthy"],
+      ["Kiran Junior signed", "Kiran Junior"],
+      // a role noun announces a name, even a single one
+      ["Cashier Lakshmi counts the cash", "Lakshmi"],
+      ["Senior Accountant Kiran prepares the BRS", "Kiran"],
+      ["Chief Accountant Ramesh approves", "Ramesh"],
+      ["Intern Priya uploads the statement", "Priya"],
+      // label and JSON: a job title in front of the name is skipped like an honorific
+      ["Employee: Senior Accountant Asha Rao", "Asha Rao"],
+      ["Employee: Senior Accountant Asha", "Asha"],
+      ["Name of Employee: Deputy Kiran", "Kiran"],
+      ["Contact person: Trainee Ravi", "Ravi"],
+      ['{"employee": "Senior Executive Asha Rao"}', "Asha Rao"],
+      ["Payee: Joseph Banks", "Banks"],
+      ["Reviewer: Asha Rao", "Asha Rao"],
+      // honorific
+      ["Mr. Banks signed the BRS", "Banks"],
+      ["Ms. Junior signed", "Junior"],
+      // rail
+      ["NEFT-SAVE ASHA-SAL", "ASHA"],
+      ["NEFT-CHIEF ASHA RAO-SAL", "ASHA RAO"],
+      // label words that are also surnames stay name words
+      ["Eric Holder signed", "Holder"],
+      ["Mr. Holder signed", "Holder"],
+      ["Peter Sellers signed", "Sellers"],
+      ["Payee: Owner", "Owner"],
+      // a role word before a one-word name, in a label, JSON or plain text
+      ["Payee: Owner Ravi", "Ravi"],
+      ['{"payee": "Member Asha"}', "Asha"],
+      ["Name of Proprietor: Proprietor Asha", "Asha"],
+      ["Payee: Karta Ravi", "Ravi"],
+      ["Landlord Ravi collects the rent", "Ravi"],
+      // a firm with a person's name in it keeps the name's own variants
+      ["Manager Kiran Rao Traders", "Kiran Rao"],
+    ];
+    for (const [t, name] of cases) {
+      // The span may keep a possessive ("Ravindra Hegde's"); what matters is the name inside it.
+      expect(personNames(t).some((e) => e.value.includes(name)), `found in: ${t}`).toBe(true);
+      expect(mask(t, { now: NOW }).masked, `masked in: ${t}`).not.toContain(name);
+      expect(detectPii(t, { names: true }).length, `gate on: ${t}`).toBeGreaterThan(0);
+    }
+  });
+
+  it("a dictionary name keeps every word as a variant", () => {
+    const masked = mask("Banks called about the BRS", { dictionary: [{ value: "Tyra Banks", kind: "NAME" }], now: NOW }).masked;
+    expect(masked).not.toContain("Banks");
+  });
+
+  it("a modifier alone is not a name signal", () => {
+    expect(personNameSpans("Chief Financial Officer signs the statement")).toEqual([]);
+  });
+
+  it("a firm whose name starts with a job title is still an organisation", () => {
+    const cases: [string, string][] = [
+      ["Name: Executive Enterprises", "Executive Enterprises"],
+      ["Supplier: Chartered Associates", "Chartered Associates"],
+      ["Executive Enterprises invoice for October", "Executive Enterprises"],
+      ["Senior Traders invoice", "Senior Traders"],
+      ["Payee: Chief Motors", "Chief Motors"],
+      ["Deputy Traders Pvt Ltd paid", "Deputy Traders"],
+      // a role noun before M/s leaves the firm to the M/s rule
+      ["Rent paid to Landlord M/s Sunrise Steel", "Sunrise Steel"],
+      ["Manager M/s Sunrise Steel", "Sunrise Steel"],
+      ["Partner M/s Sunrise Steel", "Sunrise Steel"],
+    ];
+    for (const [t, firm] of cases) {
+      expect(personNameSpans(t).some((s) => s.kind === "ORG" && t.slice(s.start, s.end).includes(firm)), `found in: ${t}`).toBe(true);
+      expect(mask(t, { now: NOW }).masked, `masked in: ${t}`).not.toContain(firm);
+      expect(detectPii(t, { names: true }).length, `gate on: ${t}`).toBeGreaterThan(0);
+    }
+  });
+
+  it("CA register phrases after a role noun stay readable", () => {
+    for (const t of ["Director Identification Number", "Assistant Commissioner of Income Tax", "Manager Approval", "Reviewer Comments", "Auditor Remarks", "Auditor Appointment", "Manager Signature", "Officer Name", "Executive Committee", "Partner Capital Account", "Director Sitting Fees", "Consultant Fees", "Tenant Agreement", "Guardian Consent"]) {
+      expect(personNameSpans(t), t).toEqual([]);
+      expect(mask(t, { now: NOW }).masked, t).toBe(t);
+    }
+  });
+
+  it("a label word never becomes a name, so the name after the label is still masked", () => {
+    const gated = gateForGemini("Executive Assistant Name\nCoordinator Contact\nName of Employee: Asha\nContact person: Ravi");
+    expect(gated.prompt).not.toContain("Asha");
+    expect(gated.prompt).not.toContain("Ravi");
+    expect(gated.prompt).toContain("Name of Employee:");
+    expect(gated.prompt).toContain("Contact person:");
   });
 });
 
