@@ -134,7 +134,7 @@ export async function analyzeSopRequest(input: { title: string; department: stri
 - Work category: ${input.workCategory || "(none)"}
 - Purpose: ${input.purpose || "(none)"}
 - Procedure (layman description): ${input.rawProcedure}`);
-  const prompt = `You are the gatekeeper and technical lead for the Standard Operating Procedure (SOP) system of a Chartered Accountancy / professional-services firm. Its departments are: Audit, Tax, Accounts, ROC (Registrar of Companies compliance), Tech (internal engineering), and Admin (operations/HR/finance/front-office).
+  const prompt = `You are the gatekeeper and technical lead for the standard operating procedure (SOP) system of a chartered accountancy (CA) / professional-services firm. Its departments are: Audit, Tax, Accounts, ROC (Registrar of Companies compliance), Tech (internal engineering), and Admin (operations/HR/finance/front-office).
 
 Decide whether the request below is a legitimate professional or operational SOP for such a firm. REJECT (valid=false, with a short reason) if it is off-topic (e.g. recipes, personal life, entertainment), harmful, disallowed, spam/gibberish, or clearly not an operational procedure. Do NOT invent an SOP for an out-of-scope topic.
 
@@ -286,7 +286,7 @@ export async function generateSop(confirmed: SopBrief, rawProcedure: string, met
   if (!names.length) names.push(brief.title);
   const dictionary = await sopDictionary(deps);
 
-  const context = stripSecrets(`CONFIRMED BRIEF
+  const context = stripSecrets(`Confirmed brief:
 - Title: ${brief.title}
 - Department: ${brief.department}
 - Work category: ${brief.workCategory}
@@ -297,10 +297,10 @@ export async function generateSop(confirmed: SopBrief, rawProcedure: string, met
 - Roles: ${brief.rolesInvolved.join(", ")}
 - References: ${brief.references.join(", ")}
 
-AUTHOR'S DESCRIPTION (with any clarifications)
+Author's description (with any clarifications):
 ${rawProcedure}`);
 
-  const framePrompt = `You are an expert technical writer and quality specialist at a Chartered Accountancy / professional-services firm. Write the framing sections of a Standard Operating Procedure, using ONLY the confirmed brief and the author's description below. The step-by-step procedure is written separately: do not write steps here. Do not add unrelated content, and do not invent facts the description does not support.
+  const framePrompt = `You are an expert technical writer and quality specialist at a chartered accountancy (CA) / professional-services firm. Write the framing sections of a standard operating procedure, using ONLY the confirmed brief and the author's description below. The step-by-step procedure is written separately: do not write steps here. Do not add unrelated content, and do not invent facts the description does not support.
 
 ${context}
 
@@ -314,14 +314,14 @@ Write:
 - references: standards, laws, forms or policies referenced (may be empty).
 Return JSON matching the schema.`;
 
-  const subProcessPrompt = (name: string) => `You are documenting how work is really done at a Chartered Accountancy / professional-services firm, for a new joiner who has never seen this process and has nobody to ask. Write ONLY the sub-process "${name}" of the SOP "${brief.title}". The other sub-processes are written separately: do not repeat their steps.
+  const subProcessPrompt = (name: string) => `You are documenting how work is really done at a chartered accountancy (CA) / professional-services firm, for a new joiner who has never seen this process and has nobody to ask. Write ONLY the sub-process "${name}" of the SOP "${brief.title}". The other sub-processes are written separately: do not repeat their steps.
 
 Use ONLY the confirmed brief and the author's description below.
 
 ${context}
 
 RULES
-1. One physical action per step: open, sign in, click, select, type, attach, save, send, wait, check. Never join two actions with "and".
+1. One physical action per step, never two joined with "and". action is a complete imperative sentence that names what is acted on, so it makes sense read on its own: "Select the client's bank ledger from the List of Ledgers", never just "Select". A one- or two-word action is wrong.
 2. Record every minute step, including the ones people skip because they seem obvious: signing in, which menu to open, which button to press, what to type in each field and where that value comes from, where the file is saved and how it is named, who is told, how you know it worked.
 3. system: the application, screen and menu path for that step (for example "Tally Prime > Gateway of Tally > Vouchers > F5 Payment"), or "" for work done off-screen.
 4. input: what the person must have in hand before the step. output: what exists after it.
