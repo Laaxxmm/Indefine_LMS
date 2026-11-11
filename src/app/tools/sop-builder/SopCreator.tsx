@@ -22,6 +22,8 @@ export function SopCreator({ defaultDepartment, lockDepartment, editSopId, initi
   const [analyzing, setAnalyzing] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Shown beside the Generate button, which sits far below the Analyze row.
+  const [genError, setGenError] = useState<string | null>(null);
   const [rejected, setRejected] = useState<string | null>(null);
   const [brief, setBrief] = useState<SopBrief | null>(null);
   // What the description left unsaid, and the author's answers (by question index).
@@ -30,6 +32,7 @@ export function SopCreator({ defaultDepartment, lockDepartment, editSopId, initi
 
   async function analyze() {
     setError(null);
+    setGenError(null);
     setRejected(null);
     setBrief(null);
     setQuestions([]);
@@ -56,19 +59,19 @@ export function SopCreator({ defaultDepartment, lockDepartment, editSopId, initi
 
   async function generate() {
     if (!brief) return;
-    setError(null);
+    setGenError(null);
     // The list fields keep blank lines while being typed; tidy them only now.
     const tidy = (a?: string[]) => linesToArr((a ?? []).join("\n"));
     const confirmed = { ...brief, keySteps: tidy(brief.keySteps), rolesInvolved: tidy(brief.rolesInvolved), references: tidy(brief.references), subProcesses: tidy(brief.subProcesses) };
     if (confirmed.subProcesses.length > MAX_SUB_PROCESSES) {
-      setError(`Keep it to ${MAX_SUB_PROCESSES} sub-processes. Merge some, or split this into two SOPs.`);
+      setGenError(`Keep it to ${MAX_SUB_PROCESSES} sub-processes. Merge some, or split this into two SOPs.`);
       return;
     }
     // Answers travel with the description, so they are kept for the next version too.
     const answered = questions.map((q, i) => ({ q, a: (answers[i] ?? "").trim() })).filter((x) => x.a);
     const described = answered.length ? `${rawProcedure}\n\nClarifications from the author:\n${answered.map((x) => `Q: ${x.q}\nA: ${x.a}`).join("\n")}` : rawProcedure;
     if (described.length > 50_000) {
-      setError("The description and your answers are too long together. Shorten them to under 50,000 characters.");
+      setGenError("The description and your answers are too long together. Shorten them to under 50,000 characters.");
       return;
     }
     setGenerating(true);
@@ -76,10 +79,10 @@ export function SopCreator({ defaultDepartment, lockDepartment, editSopId, initi
       const url = editSopId ? `/api/tools/sop-builder/sops/${editSopId}/versions` : "/api/tools/sop-builder/sops";
       const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ brief: confirmed, rawProcedure: described, purpose }) });
       const data = (await res.json()) as { id?: string; error?: string };
-      if (!res.ok || !data.id) { setError(data.error || "The SOP could not be generated. Try again in a minute."); return; }
+      if (!res.ok || !data.id) { setGenError(data.error || "The SOP could not be generated. Try again in a minute."); return; }
       router.push(`/tools/sop-builder/${data.id}`);
     } catch (e) {
-      setError(userMessage(e));
+      setGenError(userMessage(e));
     } finally {
       setGenerating(false);
     }
@@ -174,6 +177,7 @@ export function SopCreator({ defaultDepartment, lockDepartment, editSopId, initi
             </button>
             <span className="text-[11px] text-ink-faint">Saves a Word copy to the L&D drive and records you as the author.</span>
           </div>
+          {genError && <p role="alert" className="mt-2.5 text-[13px] text-rose-600 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4 shrink-0" /> {genError}</p>}
         </section>
       )}
     </div>
