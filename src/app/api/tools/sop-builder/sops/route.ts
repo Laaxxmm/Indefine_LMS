@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canEditSop } from "@/lib/sop/access";
-import { buildVersion, normDept, createBodyZ, resolveCreator } from "@/lib/sop/service";
+import { buildVersion, fileToOneDrive, normDept, createBodyZ, resolveCreator } from "@/lib/sop/service";
 import { validationMessage, failureSentence } from "@/lib/errors";
 import { readJsonCapped } from "@/lib/hardening/json-body";
 
@@ -43,6 +43,7 @@ export async function POST(req: Request) {
     include: { versions: { select: { id: true } } },
   });
   await prisma.sop.update({ where: { id: sop.id }, data: { currentVersionId: sop.versions[0]?.id } });
+  if (sop.versions[0]) await fileToOneDrive(sop.id, sop.versions[0].id, creator.id);
 
   return NextResponse.json({ id: sop.id }, { status: 201 });
 }

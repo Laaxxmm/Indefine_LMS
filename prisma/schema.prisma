@@ -781,9 +781,14 @@ model Sop {
   createdByName    String
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
+  // OneDrive folder holding every version's Word file. Named after the title once, when the SOP
+  // is first saved, and found by id after that, so a rename or a same-title SOP never splits or
+  // overwrites it.
+  graphFolderId    String?
 
   versions SopVersion[]
   views    SopView[]
+  images   SopImage[]
 
   @@index([department])
   @@index([createdAt])
@@ -805,6 +810,23 @@ model SopVersion {
   creatorName        String
   creatorDesignation String
   createdAt          DateTime @default(now())
+
+  @@index([sopId])
+}
+
+// A screenshot shown under a step (SopDetailStep.screens). Marked up in the browser before it is
+// sent, so a hidden area is already black here; the unmarked original never leaves the browser.
+// Never sent to the AI. Versions point at images by id, so a new version does not copy them.
+model SopImage {
+  id          String   @id @default(cuid())
+  sopId       String
+  sop         Sop      @relation(fields: [sopId], references: [id], onDelete: Cascade)
+  mime        String // image/png | image/jpeg
+  bytes       Bytes
+  width       Int
+  height      Int
+  createdById String
+  createdAt   DateTime @default(now())
 
   @@index([sopId])
 }

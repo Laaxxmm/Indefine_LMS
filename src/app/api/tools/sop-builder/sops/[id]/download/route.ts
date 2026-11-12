@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canViewSop } from "@/lib/sop/access";
-import { renderSopDocx } from "@/lib/sop/render";
+import { renderVersionDocx } from "@/lib/sop/service";
 import type { SopContent } from "@/lib/sop/types";
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -25,7 +25,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   });
   if (!version) return NextResponse.json({ error: "That version of the SOP wasn't found. Go back to the SOP and pick a version." }, { status: 404 });
 
-  const buffer = await renderSopDocx(version.content as unknown as SopContent);
+  const buffer = await renderVersionDocx(version.content as unknown as SopContent, id);
   const filename = `${slug(sop.title)}_v${version.versionNumber}.docx`;
   return new NextResponse(new Uint8Array(buffer), {
     status: 200,
