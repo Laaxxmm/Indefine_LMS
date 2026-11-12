@@ -694,12 +694,13 @@ export async function uploadFileToFolderId(
   folderId: string,
   fileName: string,
   bytes: ArrayBuffer,
-  token: string
+  token: string,
+  conflict: "rename" | "replace" = "rename"
 ): Promise<{ id: string; size: number; webUrl: string } | null> {
   const res = await fetch(
     `${GRAPH}/drives/${driveId}/items/${folderId}:/${encodeURIComponent(
       fileName
-    )}:/content?@microsoft.graph.conflictBehavior=rename`,
+    )}:/content?@microsoft.graph.conflictBehavior=${conflict}`,
     {
       method: "PUT",
       headers: {
@@ -717,6 +718,35 @@ export async function uploadFileToFolderId(
   }
   const item = (await res.json()) as { id?: string; size?: number; webUrl?: string };
   return item.id ? { id: item.id, size: item.size ?? 0, webUrl: item.webUrl ?? "" } : null;
+}
+
+/** A drive item's name and parent, or null when it is gone (deleted). Other failures throw, so a
+ *  passing outage is never mistaken for a deleted item. */
+export async function getDriveItem(
+  driveId: string,
+  itemId: string,
+  token: string
+): Promise<{ id: string; name: string; parentId: string | null } | null> {
+  const res = await fetch(`${GRAPH}/drives/${driveId}/items/${itemId}?$select=id,name,parentReference`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Graph get item failed: ${res.status} ${await res.text().catch(() => "")}`);
+  const item = (await res.json()) as { id: string; name: string; parentReference?: { id?: string } };
+  return { id: item.id, name: item.name, parentId: item.parentReference?.id ?? null };
+}
+
+/** Make a new folder inside `parentId`. A taken name gets a number from OneDrive ("Name 1"), so
+ *  this never reuses someone else's folder. Returns the new folder's id. */
+export async function createFolderIn(driveId: string, parentId: string, name: string, token: string): Promise<string> {
+  const res = await fetch(`${GRAPH}/drives/${driveId}/items/${parentId}/children`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ name, folder: {}, "@microsoft.graph.conflictBehavior": "rename" }),
+  });
+  if (!res.ok) throw new Error(`Graph create folder failed: ${res.status} ${await res.text().catch(() => "")}`);
+  return ((await res.json()) as { id: string }).id;
 }
 
 /** The parent folder id of a drive item (used to find the folder holding a

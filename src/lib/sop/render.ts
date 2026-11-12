@@ -1,5 +1,6 @@
-import { AlignmentType, BorderStyle, Document, Footer, HeadingLevel, PageNumber, PageOrientation, Packer, Paragraph, Table, TableCell, TableRow, TextRun, WidthType } from "docx";
-import type { SopContent } from "./types";
+import { AlignmentType, BorderStyle, Document, Footer, HeadingLevel, ImageRun, PageNumber, PageOrientation, Packer, Paragraph, Table, TableCell, TableRow, TextRun, WidthType } from "docx";
+import type { SopContent, SopDetailStep, SopSubProcess } from "./types";
+import { fitBox } from "./screens";
 import { departmentLabel } from "./labels";
 
 /* ------------------------------ DOCX (OneDrive / download) ------------------------------ */
@@ -19,13 +20,41 @@ function metaCell(text: string, header = false) {
   });
 }
 
+const headerRow = (headers: string[]) => new TableRow({ tableHeader: true, children: headers.map((h) => new TableCell({ shading: { fill: "F1F0F7" }, children: [new Paragraph({ children: [run(h, { bold: true })] })] })) });
+const textRow = (r: string[]) => new TableRow({ children: r.map((v) => new TableCell({ children: [new Paragraph({ children: [run(v)] })] })) });
+const table = (rows: TableRow[], widths?: number[]) => new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, columnWidths: widths, rows });
+
 function dataTable(headers: string[], rows: string[][], widths?: number[]): Table {
-  const headerRow = new TableRow({ tableHeader: true, children: headers.map((h) => new TableCell({ shading: { fill: "F1F0F7" }, children: [new Paragraph({ children: [run(h, { bold: true })] })] })) });
-  const bodyRows = rows.map((r) => new TableRow({ children: r.map((v) => new TableCell({ children: [new Paragraph({ children: [run(v)] })] })) }));
-  return new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
-    columnWidths: widths,
-    rows: [headerRow, ...bodyRows],
+  return table([headerRow(headers), ...rows.map(textRow)], widths);
+}
+
+// A screenshot's bytes and pixel size (SopImage), keyed by id in the map renderSopDocx takes.
+export type SopImageData = { mime: string; bytes: Uint8Array; width: number; height: number };
+
+// One sub-process's steps; a step with screens is followed by a full-width row holding them.
+const STEP_HEADERS = ["Step", "Who", "Action", "System / screen", "Input → Output", "Control"];
+function stepTable(p: SopSubProcess, images: ReadonlyMap<string, SopImageData>): Table {
+  const rows = [headerRow(STEP_HEADERS)];
+  for (const s of p.steps) {
+    rows.push(textRow([s.no, s.role, s.action, s.system, [s.input, s.output].filter(Boolean).join(" → "), s.control]));
+    const shots = screenParagraphs(s, images);
+    if (shots.length) rows.push(new TableRow({ children: [new TableCell({ columnSpan: STEP_HEADERS.length, children: shots })] }));
+  }
+  return table(rows, [900, 1700, 5200, 2600, 2700, 900]);
+}
+function screenParagraphs(s: SopDetailStep, images: ReadonlyMap<string, SopImageData>): Paragraph[] {
+  return (s.screens ?? []).flatMap((sc) => {
+    const img = images.get(sc.imageId);
+    if (!img) return [];
+    const caption = `Screen ${s.no}${sc.caption ? ` — ${sc.caption}` : ""}`;
+    return [
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 120 },
+        children: [new ImageRun({ type: img.mime === "image/png" ? "png" : "jpg", data: img.bytes, transformation: fitBox(img.width, img.height), altText: { name: `Screen ${s.no}`, title: caption, description: caption } })],
+      }),
+      new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 120 }, children: [new TextRun({ text: caption, font: FONT, size: 18, italics: true, color: "555555" })] }),
+    ];
   });
 }
 
@@ -37,7 +66,7 @@ const bullet = (text: string) => new Paragraph({ bullet: { level: 0 }, children:
 const flowBox = (text: string) => new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 40, after: 40 }, border: { top: BOX, bottom: BOX, left: BOX, right: BOX }, children: [run(text, { bold: true })] });
 const flowArrow = () => new Paragraph({ alignment: AlignmentType.CENTER, children: [run("↓", { size: 24 })] });
 
-export async function renderSopDocx(c: SopContent): Promise<Buffer> {
+export async function renderSopDocx(c: SopContent, images: ReadonlyMap<string, SopImageData> = new Map()): Promise<Buffer> {
   // Detailed SOPs (schemaVersion 2) carry sub-processes; older versions carry a flat procedure.
   const subProcesses = c.subProcesses ?? [];
   const detailed = subProcesses.length > 0;
@@ -86,13 +115,7 @@ export async function renderSopDocx(c: SopContent): Promise<Buffer> {
       children.push(subHeading(`${p.code} — ${p.name}`));
       if (p.objective) children.push(para(`Objective: ${p.objective}`));
       if (p.owner) children.push(para(`Process owner: ${p.owner}`));
-      children.push(
-        dataTable(
-          ["Step", "Who", "Action", "System / screen", "Input → Output", "Control"],
-          p.steps.map((s) => [s.no, s.role, s.action, s.system, [s.input, s.output].filter(Boolean).join(" → "), s.control]),
-          [900, 1700, 5200, 2600, 2700, 900],
-        ),
-      );
+      children.push(stepTable(p, images));
       const differences = p.steps.flatMap((s) => s.ifThen.map((t) => `${s.no}: ${t}`));
       if (differences.length) {
         children.push(label("If something is different"));

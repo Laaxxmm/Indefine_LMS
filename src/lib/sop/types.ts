@@ -52,6 +52,12 @@ export interface SopDetailStep {
   output: string;
   ifThen: string[]; // "If <what is different>, then <what to do>"
   control: string; // id in SopContent.controls ("C1" manual, "AC1" application) or ""
+  screens?: SopScreen[]; // screenshots the author added under this step, in order
+}
+// A screenshot under a step: the SopImage row and the line printed under it.
+export interface SopScreen {
+  imageId: string;
+  caption: string;
 }
 export interface SopSubProcess {
   code: string; // "P01"

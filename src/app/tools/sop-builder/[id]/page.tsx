@@ -5,8 +5,9 @@ import { prisma } from "@/lib/prisma";
 import { canViewSop, canEditSop, isSopAdmin } from "@/lib/sop/access";
 import { departmentLabel } from "@/lib/sop/labels";
 import { SopDocView } from "../SopDocView";
+import { OneDriveRetry } from "../OneDriveRetry";
 import type { SopContent } from "@/lib/sop/types";
-import { ArrowLeft, Download, Pencil, History, Eye, User } from "lucide-react";
+import { ArrowLeft, Download, Pencil, History, Eye, User, Camera, ExternalLink } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,8 @@ export default async function SopPage({ params, searchParams }: { params: Promis
   const selected = sop.versions.find((x) => x.id === v) ?? sop.versions.find((x) => x.id === sop.currentVersionId) ?? sop.versions[0];
   const content = selected.content as unknown as SopContent;
   const [canEdit, admin] = [await canEditSop(session.user, sop.department), isSopAdmin(session.user)];
+  // Screens go on the latest version; the older format has no step rows to put them under.
+  const screensReady = !!(sop.versions[0].content as unknown as SopContent).subProcesses?.length;
 
   // Audit — log this view (best-effort).
   await prisma.sopView.create({ data: { sopId: id, userId: session.user.id, userName: session.user.name ?? "Unknown" } }).catch(() => {});
@@ -41,11 +44,28 @@ export default async function SopPage({ params, searchParams }: { params: Promis
           <span className="text-[10.5px] font-extrabold tracking-wide uppercase px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">{departmentLabel(sop.department)}</span>
           <h1 className="font-display font-extrabold text-2xl sm:text-[28px] tracking-[-0.02em] mt-1.5 leading-tight">{sop.title}</h1>
           <p className="text-xs text-ink-faint font-bold mt-1">v{selected.versionNumber} · by {selected.creatorName}{selected.creatorDesignation ? ` (${selected.creatorDesignation})` : ""} · {fmt(selected.createdAt)}</p>
+          <p className="text-xs mt-1 flex items-center gap-2 flex-wrap">
+            {selected.graphWebUrl ? (
+              <a href={selected.graphWebUrl} target="_blank" rel="noopener" className="inline-flex items-center gap-1 font-bold text-brand-700 hover:underline">
+                <ExternalLink className="w-3.5 h-3.5" /> Open in OneDrive
+              </a>
+            ) : (
+              <>
+                <span className="font-bold text-amber-700">Not in OneDrive yet.</span>
+                {canEdit && <OneDriveRetry sopId={id} versionId={selected.id} />}
+              </>
+            )}
+          </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <a href={`/api/tools/sop-builder/sops/${id}/download?v=${selected.id}`} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full border border-border bg-card text-sm font-semibold text-ink-soft hover:bg-muted transition">
             <Download className="w-4 h-4" /> Word
           </a>
+          {canEdit && screensReady && (
+            <Link href={`/tools/sop-builder/${id}/screens`} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full border border-border bg-card text-sm font-semibold text-ink-soft hover:bg-muted transition">
+              <Camera className="w-4 h-4" /> Screens
+            </Link>
+          )}
           {canEdit && (
             <Link href={`/tools/sop-builder/${id}/edit`} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-brand-500 hover:bg-brand-600 text-white text-sm font-bold shadow-pop transition">
               <Pencil className="w-4 h-4" /> New version
@@ -56,7 +76,7 @@ export default async function SopPage({ params, searchParams }: { params: Promis
 
       <div className="grid lg:grid-cols-[minmax(0,1fr)_260px] gap-6 items-start">
         <div className="rounded-[20px] bg-card border border-border shadow-lift p-6 sm:p-8">
-          <SopDocView c={content} />
+          <SopDocView c={content} sopId={id} />
         </div>
 
         <div className="flex flex-col gap-4">
