@@ -1,4 +1,5 @@
-import type { SopContent } from "@/lib/sop/types";
+import { Fragment } from "react";
+import type { SopContent, SopSubProcess } from "@/lib/sop/types";
 import { departmentLabel } from "@/lib/sop/labels";
 
 function DataTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
@@ -18,7 +19,46 @@ function DataTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
 
 const List = ({ items }: { items: string[] }) => <ul className="sop-list">{items.map((r, i) => <li key={i}>{r}</li>)}</ul>;
 
-export function SopDocView({ c }: { c: SopContent }) {
+// One sub-process's steps; a step with screens is followed by a full-width row showing them.
+// A screen opens full size in a new tab.
+function StepTable({ p, sopId }: { p: SopSubProcess; sopId?: string }) {
+  const headers = ["Step", "Who", "Action", "System / screen", "Input → Output", "Control"];
+  return (
+    <table className="sop-table">
+      <thead>
+        <tr>{headers.map((h) => <th key={h}>{h}</th>)}</tr>
+      </thead>
+      <tbody>
+        {p.steps.map((s, i) => (
+          <Fragment key={i}>
+            <tr>{[s.no, s.role, s.action, s.system, [s.input, s.output].filter(Boolean).join(" → "), s.control].map((c, j) => <td key={j}>{c}</td>)}</tr>
+            {sopId && s.screens?.length ? (
+              <tr className="sop-screens">
+                <td colSpan={headers.length}>
+                  {s.screens.map((sc, k) => {
+                    const src = `/api/tools/sop-builder/sops/${sopId}/images/${sc.imageId}`;
+                    const caption = `Screen ${s.no}${sc.caption ? ` — ${sc.caption}` : ""}`;
+                    return (
+                      <figure key={k}>
+                        <a href={src} target="_blank" rel="noopener" title="Open full size">
+                          {/* eslint-disable-next-line @next/next/no-img-element -- served by the SOP image route, which checks access */}
+                          <img src={src} alt={caption} loading="lazy" />
+                        </a>
+                        <figcaption>{caption}</figcaption>
+                      </figure>
+                    );
+                  })}
+                </td>
+              </tr>
+            ) : null}
+          </Fragment>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+export function SopDocView({ c, sopId }: { c: SopContent; sopId?: string }) {
   // Detailed SOPs (schemaVersion 2) carry sub-processes; older versions carry a flat procedure.
   const subProcesses = c.subProcesses ?? [];
   const detailed = subProcesses.length > 0;
@@ -40,10 +80,7 @@ export function SopDocView({ c }: { c: SopContent }) {
             {p.objective && <p><strong>Objective:</strong> {p.objective}</p>}
             {p.owner && <p><strong>Process owner:</strong> {p.owner}</p>}
             <div className="sop-wide">
-              <DataTable
-                headers={["Step", "Who", "Action", "System / screen", "Input → Output", "Control"]}
-                rows={p.steps.map((s) => [s.no, s.role, s.action, s.system, [s.input, s.output].filter(Boolean).join(" → "), s.control])}
-              />
+              <StepTable p={p} sopId={sopId} />
             </div>
             {differences.length > 0 && (
               <>
@@ -118,6 +155,10 @@ export function SopDocView({ c }: { c: SopContent }) {
         .sop-doc .sop-flow { margin: 10px 0 16px; }
         .sop-doc .sop-flow-box { border: 1px solid #cdc9ee; background: #f7f6ff; border-radius: 8px; padding: 8px 12px; text-align: center; font-weight: 600; width: 70%; margin: 0 auto; font-size: 12.5px; }
         .sop-doc .sop-flow-arrow { text-align: center; color: #8a86a8; font-size: 18px; line-height: 1.2; }
+        .sop-doc .sop-screens td { background: #fafafe; text-align: center; }
+        .sop-doc figure { margin: 8px auto; }
+        .sop-doc figure img { display: inline-block; max-width: 100%; max-height: 520px; border: 1px solid #e4e3ee; border-radius: 6px; }
+        .sop-doc figcaption { font-size: 12px; color: #6b6880; font-style: italic; margin-top: 4px; }
       `}</style>
     </div>
   );

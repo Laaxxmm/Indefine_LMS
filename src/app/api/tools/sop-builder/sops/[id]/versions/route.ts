@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canEditSop } from "@/lib/sop/access";
-import { buildVersion, normDept, createBodyZ, resolveCreator } from "@/lib/sop/service";
+import { addVersion, buildVersion, fileToOneDrive, normDept, createBodyZ, resolveCreator } from "@/lib/sop/service";
 import { validationMessage, failureSentence } from "@/lib/errors";
 import { readJsonCapped } from "@/lib/hardening/json-body";
+import type { SopContent } from "@/lib/sop/types";
 
 export const maxDuration = 60;
 
@@ -35,16 +36,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   let versionData;
   try {
-    versionData = await buildVersion({ brief, rawProcedure, purpose, versionNumber: nextNumber, revision: `${nextNumber}.0`, creator });
+    const previous = sop.versions[0]?.content as unknown as SopContent | undefined;
+    versionData = await buildVersion({ brief, rawProcedure, purpose, versionNumber: nextNumber, revision: `${nextNumber}.0`, creator, previous });
   } catch (e) {
     return NextResponse.json({ error: failureSentence(e, "The new SOP version could not be saved.", "Try again in a minute.") }, { status: 502 });
   }
 
-  const version = await prisma.sopVersion.create({ data: { sopId: id, ...versionData } });
-  await prisma.sop.update({
-    where: { id },
-    data: { currentVersionId: version.id, title: brief.title, department: normDept(brief.department), workCategory: brief.workCategory },
-  });
+  // Writing the version takes up to a minute; a version saved meanwhile (screens, another edit)
+  // would be lost under this one, so it is refused instead.
+  const versionId = await addVersion(id, sop.versions[0]?.id ?? null, versionData, { title: brief.title, department: normDept(brief.department), workCategory: brief.workCategory });
+  if (!versionId)
+    return NextResponse.json({ error: "Someone saved a newer version of this SOP while this one was being written. Open the SOP again and make your change on the newest version." }, { status: 409 });
+  await fileToOneDrive(id, versionId, creator.id);
 
-  return NextResponse.json({ id, versionId: version.id }, { status: 201 });
+  return NextResponse.json({ id, versionId }, { status: 201 });
 }
