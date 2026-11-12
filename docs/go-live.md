@@ -189,7 +189,7 @@ only, through the Neo Centra Turia sign-in. Nothing is ever written to Turia. St
 1. **Preconditions.** `FIRM_OS_ENABLED` on (the owner's pilot); `NEO_TURIA_ORG_ID` and
    `NEO_TURIA_COOKIE_KEY` set (already, for Neo Centra); the Neo Centra extension pushing the sign-in
    (/admin/firm-os/turia-sync shows "Turia sign-in: Fresh"); `CRON_SECRET` set in Railway and as the
-   repository secret; the migration `20261106120000_turia_pull` applied (it is additive and re-runnable).
+   repository secret; the migration `20261112120000_turia_pull` applied (it is additive and re-runnable).
 2. **Dry run.** Set `FIRM_OS_TURIA_PULL=dry-run` in Railway, redeploy, open /admin/firm-os/turia-sync
    and select **Sync now** (or wait for the 15-minute run). No job, client or close record is created.
 3. **Check the preview.** Every row says "Would create …" (service · title · period · FY, with where the
