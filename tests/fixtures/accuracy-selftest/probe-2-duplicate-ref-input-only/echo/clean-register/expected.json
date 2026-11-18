@@ -1,0 +1,38 @@
+{
+  "description": "AUDIT PROBE 2 (must FAIL): input/register.csv row 4 ref changed INV-3 -> INV-2 (a duplicate reference); recorded.json and expected.json unchanged. The duplicate-refs rule reads the parsed input, so an unexpected block flag is raised.",
+  "category": "clean",
+  "job": {
+    "fy": "2026-27",
+    "period": "2026-10"
+  },
+  "flags": [],
+  "figures": {
+    "rowCount": 3,
+    "totalPaise": 4745649,
+    "largestPaise": 2345650
+  },
+  "deliverables": [
+    {
+      "name": "Echo register",
+      "sheets": [
+        {
+          "name": "Register",
+          "columns": [
+            "Ref",
+            "Party",
+            "Date",
+            "Amount"
+          ]
+        },
+        {
+          "name": "Summary",
+          "columns": [
+            "Figure",
+            "Amount",
+            "Count"
+          ]
+        }
+      ]
+    }
+  ]
+}

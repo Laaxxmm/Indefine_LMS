@@ -1,0 +1,44 @@
+{
+  "gst.classify-ledgers": {
+    "ledgers": [
+      {
+        "ledger": "Office Rent",
+        "blockedCategory": "none",
+        "rcmService": "none",
+        "note": "rent of office premises (not a works contract)",
+        "evidence": {
+          "quote": "Office Rent",
+          "location": "purchase-register.csv row 4"
+        }
+      },
+      {
+        "ledger": "Packing Material",
+        "blockedCategory": "none",
+        "rcmService": "none",
+        "note": "ordinary business input",
+        "evidence": {
+          "quote": "Packing Material",
+          "location": "purchase-register.csv row 3"
+        }
+      },
+      {
+        "ledger": "Raw Material Purchases",
+        "blockedCategory": "none",
+        "rcmService": "none",
+        "note": "ordinary business input",
+        "evidence": {
+          "quote": "Raw Material Purchases",
+          "location": "purchase-register.csv row 2"
+        }
+      }
+    ]
+  },
+  "gst.check:gst.free-supplies": {
+    "status": "pass",
+    "message": "No free supply, gift, sample or personal use described",
+    "evidence": {
+      "quote": "Corrugated boxes",
+      "location": "purchase-register.csv row 3"
+    }
+  }
+}

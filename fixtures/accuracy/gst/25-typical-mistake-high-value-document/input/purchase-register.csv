@@ -1,0 +1,4 @@
+Date,Particulars,Voucher Type,Voucher No.,Supplier Invoice No.,Supplier Invoice Date,GSTIN/UIN,Place of Supply,Purchase Ledger,Item Description,GST Rate,Taxable Value,IGST,CGST,SGST/UTGST,Cess,Gross Total,Reverse Charge
+05-10-2026,Sunrise Steel,Purchase,PUR-0001,SS/1001,05-10-2026,29AAGCS6101U1ZN,29-Karnataka,Raw Material Purchases,MS rods,18,60000.00,,5400.00,5400.00,,70800.00,No
+08-10-2026,Westline Packaging,Purchase,PUR-0002,WP-778,08-10-2026,27AAJCW6303W1ZC,29-Karnataka,Packing Material,Corrugated boxes,18,10000.00,1800.00,,,,11800.00,No
+12-10-2026,Prime Components,Purchase,PUR-0003,PP/26-27/07,12-10-2026,29AAHCP6202V1ZL,29-Karnataka,Office Rent,Rent for October 2026,18,25000.00,,2250.00,2250.00,,29500.00,No

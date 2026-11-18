@@ -1,0 +1,22 @@
+{
+  "tax.check:tax.foreign-asset": {
+    "status": "pass",
+    "evidence": {
+      "quote": "No foreign assets, accounts or income.",
+      "location": "organiser.json profile.notes line 1"
+    }
+  },
+  "tax.match-ais": {
+    "matches": [
+      {
+        "aisId": "A1",
+        "outcome": "matched",
+        "bookId": "B1",
+        "evidence": {
+          "quote": "B1 | savings-interest | SBI Savings Account",
+          "location": "organiser.json otherSources[0]"
+        }
+      }
+    ]
+  }
+}

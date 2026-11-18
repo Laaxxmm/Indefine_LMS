@@ -1,0 +1,16 @@
+{
+  "seed": "FIXTURE-FY2025-26",
+  "populations": {
+    "sales": {
+      "method": "mus",
+      "sampleSize": 25,
+      "tbLedgers": [
+        "Sales - Domestic"
+      ]
+    },
+    "expenses": {
+      "method": "mus",
+      "seed": "AUD-EXP/FY2025-26/v1"
+    }
+  }
+}

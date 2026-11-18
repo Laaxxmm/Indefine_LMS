@@ -37,7 +37,6 @@ export async function loadQuizForAttempt(quizId: string) {
   return prisma.quiz.findUnique({
     where: { id: quizId },
     include: {
-      video: { include: { progresses: true } },
       questions: {
         orderBy: { order: "asc" },
         include: { options: true },

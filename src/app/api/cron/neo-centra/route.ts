@@ -7,6 +7,7 @@ import { resolveDirectors, saveSnapshot } from "@/lib/neo-centra/incentive";
 import { currentQuarter } from "@/lib/neo-centra/period";
 import { TuriaSessionError } from "@/lib/neo-centra/turia";
 import { cronUnauthorized } from "@/lib/cron-auth";
+import { failureSentence } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -21,6 +22,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: true, quarter: q.label, directors: summary.directors.length, generatedAt: summary.generatedAt });
   } catch (e) {
     if (e instanceof TuriaSessionError) return NextResponse.json({ ok: false, reason: "turia-cookie-expired", error: e.message }, { status: 200 });
-    return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 502 });
+    return NextResponse.json({ ok: false, error: failureSentence(e, "The Neo Centra refresh from Turia failed.", "It will run again at the next scheduled time.") }, { status: 502 });
   }
 }

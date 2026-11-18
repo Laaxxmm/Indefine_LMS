@@ -1,0 +1,17 @@
+{
+  "description": "Typical gap: the register points to a note that was not supplied, so the related-party rule cannot be decided. The model abstains (insufficient_evidence) and the rule becomes a reviewer question (na + insufficient-evidence), never a guess.",
+  "category": "typical-gap",
+  "job": { "fy": "2026-27", "period": "2026-10" },
+  "flags": [],
+  "figures": { "rowCount": 2, "totalPaise": 5050000, "largestPaise": 3200000 },
+  "deliverables": [
+    {
+      "name": "Echo register",
+      "sheets": [
+        { "name": "Register", "columns": ["Ref", "Party", "Date", "Amount"] },
+        { "name": "Summary", "columns": ["Figure", "Amount", "Count"] }
+      ]
+    }
+  ],
+  "guardrails": { "insufficientEvidence": ["echo.related-party"] }
+}

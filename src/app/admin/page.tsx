@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { ConfirmButton } from "@/components/ConfirmButton";
 import { isAdmin } from "@/lib/access";
+import { failureSentence } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +47,7 @@ async function syncAction(): Promise<void> {
   } catch (e) {
     cookieStore.set(
       "admin_flash",
-      `videos:error:${(e as Error).message.slice(0, 240)}`,
+      `videos:error:${failureSentence(e, "The video sync from OneDrive failed.", "Try again in a minute.").slice(0, 240)}`,
       { maxAge: 10, httpOnly: false }
     );
   }
@@ -140,7 +141,7 @@ async function syncUsersAction(): Promise<void> {
   } catch (e) {
     cookieStore.set(
       "admin_flash",
-      `users:error:${(e as Error).message.slice(0, 240)}`,
+      `users:error:${failureSentence(e, "The staff sync from Microsoft 365 failed.", "Try again in a minute.").slice(0, 240)}`,
       { maxAge: 10, httpOnly: false }
     );
   }

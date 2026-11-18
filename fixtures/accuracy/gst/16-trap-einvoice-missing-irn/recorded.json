@@ -1,0 +1,24 @@
+{
+  "gst.classify-ledgers": {
+    "ledgers": [
+      {
+        "ledger": "Raw Material Purchases",
+        "blockedCategory": "none",
+        "rcmService": "none",
+        "note": "ordinary business input",
+        "evidence": {
+          "quote": "Raw Material Purchases",
+          "location": "purchase-register.csv row 2"
+        }
+      }
+    ]
+  },
+  "gst.check:gst.free-supplies": {
+    "status": "pass",
+    "message": "No free supply, gift, sample or personal use described",
+    "evidence": {
+      "quote": "Raw Material Purchases",
+      "location": "purchase-register.csv row 2"
+    }
+  }
+}

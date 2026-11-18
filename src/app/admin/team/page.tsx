@@ -12,6 +12,7 @@ import {
   levelLabel,
 } from "@/lib/ca-firm";
 import { isAdmin } from "@/lib/access";
+import { stripSelfAccessEdits } from "@/lib/team-admin";
 
 export const dynamic = "force-dynamic";
 
@@ -56,9 +57,9 @@ async function saveHierarchy(formData: FormData) {
     updates.set(userId, cur);
   }
 
-  // Never let an admin change their own role here — prevents self-lockout.
-  const self = updates.get(meId);
-  if (self && "role" in self) delete self.role;
+  // Never let an admin change their own role (self-lockout) or their own level (self-promotion to
+  // PARTNER would grant partner rights): src/lib/team-admin.ts. Another admin makes that change.
+  stripSelfAccessEdits(updates, meId);
 
   for (const [userId, data] of updates) {
     if (Object.keys(data).length > 0) {
@@ -234,21 +235,27 @@ export default async function AdminTeamPage({
                       )}
                     </td>
                     <td className="p-3">
-                      <select
-                        name={`level_${u.id}`}
-                        defaultValue={
-                          ACTIVE_LEVELS.includes(u.level)
-                            ? u.level
-                            : "EXECUTIVE"
-                        }
-                        className="bg-white border border-border rounded-lg px-2 py-1.5 text-xs"
-                      >
-                        {ACTIVE_LEVELS.map((lv) => (
-                          <option key={lv} value={lv}>
-                            {levelLabel(lv)}
-                          </option>
-                        ))}
-                      </select>
+                      {isSelf ? (
+                        <span className="inline-flex items-center text-xs text-ink-soft" title="You can't change your own level. Ask another admin.">
+                          {levelLabel(u.level)} · you
+                        </span>
+                      ) : (
+                        <select
+                          name={`level_${u.id}`}
+                          defaultValue={
+                            ACTIVE_LEVELS.includes(u.level)
+                              ? u.level
+                              : "EXECUTIVE"
+                          }
+                          className="bg-white border border-border rounded-lg px-2 py-1.5 text-xs"
+                        >
+                          {ACTIVE_LEVELS.map((lv) => (
+                            <option key={lv} value={lv}>
+                              {levelLabel(lv)}
+                            </option>
+                          ))}
+                        </select>
+                      )}
                     </td>
                     <td className="p-3">
                       <select

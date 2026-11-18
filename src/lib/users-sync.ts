@@ -9,10 +9,11 @@
 
 import { prisma } from "@/lib/prisma";
 import { getAppOnlyToken, getUserGraphToken, listOrgUsers } from "@/lib/graph";
+import { normalizeEmail } from "@/lib/auth-tenant";
 
 const adminEmails = (process.env.ADMIN_EMAILS ?? "")
   .split(",")
-  .map((e) => e.trim().toLowerCase())
+  .map(normalizeEmail)
   .filter(Boolean);
 
 export async function syncOrgUsers(opts: { fallbackUserId?: string } = {}) {
@@ -31,16 +32,23 @@ export async function syncOrgUsers(opts: { fallbackUserId?: string } = {}) {
   const seenEmails = new Set<string>();
 
   for (const u of orgUsers) {
-    const email = (u.mail || u.userPrincipalName || "").toLowerCase().trim();
+    const email = normalizeEmail(u.mail || u.userPrincipalName || "");
     if (!email) continue;
     seenEmails.add(email);
 
-    const existing = await prisma.user.findUnique({ where: { email } });
+    // Case-insensitive: a row created by an older sign-in may carry Entra's capitalisation
+    // ("John.Doe@Firm.in"); an exact match would miss it and create a duplicate. If several rows
+    // differ only by case, the exact lower-case one (else the oldest) is the person's row.
+    const matches = await prisma.user.findMany({ where: { email: { equals: email, mode: "insensitive" } }, orderBy: { createdAt: "asc" } });
+    const existing = matches.find((m) => m.email === email) ?? matches[0] ?? null;
+    if (matches.length > 1) console.warn(`[users-sync] ${matches.length} user rows differ only by e-mail case (${matches.map((m) => m.id).join(", ")}); using ${existing?.id}; the others need merging by hand.`);
     const isAdmin = adminEmails.includes(email);
 
     if (existing) {
       const wasInactive = !existing.active;
       const data: Record<string, unknown> = {};
+      // Store the address in lower case from now on (only when no other row already has it).
+      if (existing.email !== email && matches.length === 1) data.email = email;
       if (existing.name !== (u.displayName ?? existing.name)) {
         data.name = u.displayName ?? existing.name;
       }
@@ -70,10 +78,14 @@ export async function syncOrgUsers(opts: { fallbackUserId?: string } = {}) {
   // Anyone in our DB whose email no longer shows up in the Graph response
   // (or who's there but disabled — we filtered those out in listOrgUsers)
   // gets marked inactive. We never delete.
-  const stale = await prisma.user.findMany({
-    where: { active: true, email: { notIn: Array.from(seenEmails) } },
-    select: { id: true },
-  });
+  // Compared in lower case: `notIn` is case-sensitive, so a mixed-case row of someone still in
+  // the tenant would otherwise be deactivated (and locked out).
+  const stale = (
+    await prisma.user.findMany({
+      where: { active: true },
+      select: { id: true, email: true },
+    })
+  ).filter((s) => !seenEmails.has(normalizeEmail(s.email)));
   if (stale.length > 0) {
     const staleIds = stale.map((s) => s.id);
     await prisma.user.updateMany({

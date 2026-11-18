@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import type { BillingCycle, SubscriptionKind } from "@prisma/client";
 import { canUseClientOps, draftReminder } from "@/lib/client-ops/core";
 import { runChecks } from "@/lib/client-ops/refresh";
+import { HostRefusedError, validateHostname } from "@/lib/hardening/net";
 
 const KINDS: SubscriptionKind[] = ["DOMAIN", "HOSTING", "VERCEL", "RAILWAY", "EMAIL", "OTHER"];
 const CYCLES: BillingCycle[] = ["MONTHLY", "YEARLY"];
@@ -30,6 +31,22 @@ function day(fd: FormData, key: string): Date | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
   const d = new Date(`${raw}T00:00:00.000Z`);
   return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * The certificate-check host: a plain public DNS name (validateHostname — no IP address, port,
+ * path or internal name), lower-cased; null when left empty; "refused" when it is not one, and the
+ * save is then refused like any other invalid field (the daily check never connects to it).
+ */
+function sslHostOf(fd: FormData): string | null | "refused" {
+  const raw = optional(fd, "sslHost");
+  if (!raw) return null;
+  try {
+    return validateHostname(raw);
+  } catch (e) {
+    if (e instanceof HostRefusedError) return "refused";
+    throw e;
+  }
 }
 
 function refreshPaths(id?: string) {
@@ -90,6 +107,8 @@ export async function addSubscription(formData: FormData) {
   const cycle = text(formData, "cycle") as BillingCycle;
   if (!clientId || !provider || !expiresOn || chargeAmount === null) return;
   if (!KINDS.includes(kind) || !CYCLES.includes(cycle)) return;
+  const sslHost = sslHostOf(formData);
+  if (sslHost === "refused") return;
 
   await prisma.opsSubscription.create({
     data: {
@@ -102,7 +121,7 @@ export async function addSubscription(formData: FormData) {
       costPaid: money(formData, "costPaid"),
       renewalLink: optional(formData, "renewalLink"),
       domain: optional(formData, "domain"),
-      sslHost: optional(formData, "sslHost"),
+      sslHost,
       createdById: user.id,
     },
   });
@@ -116,6 +135,8 @@ export async function updateSubscription(formData: FormData) {
   const expiresOn = day(formData, "expiresOn");
   const chargeAmount = money(formData, "chargeAmount");
   if (!id || !expiresOn || chargeAmount === null) return;
+  const sslHost = sslHostOf(formData);
+  if (sslHost === "refused") return;
 
   await prisma.opsSubscription.update({
     where: { id },
@@ -126,7 +147,7 @@ export async function updateSubscription(formData: FormData) {
       provider: text(formData, "provider") || undefined,
       renewalLink: optional(formData, "renewalLink"),
       domain: optional(formData, "domain"),
-      sslHost: optional(formData, "sslHost"),
+      sslHost,
       notes: optional(formData, "notes"),
     },
   });

@@ -1,0 +1,50 @@
+{
+  "profile": {
+    "name": "Fixture Traders (proprietor)",
+    "status": "individual",
+    "dateOfBirth": "1980-01-10",
+    "residentialStatus": "resident",
+    "regimeClaimed": "new",
+    "businessKind": "business",
+    "plannedFilingDate": "2026-07-31",
+    "notes": "Proprietor of Fixture Traders, wholesale stationery, Bengaluru. No foreign assets, accounts or income.",
+    "presumptive": "44AD",
+    "itrFormPlanned": "ITR-4"
+  },
+  "otherSources": [
+    {
+      "id": "B1",
+      "nature": "savings-interest",
+      "payer": "Canara Bank Savings",
+      "amount": "10,000"
+    }
+  ],
+  "tdsInBooks": [],
+  "business": {
+    "turnover": "2,10,00,000",
+    "cashReceipts": "6,00,000",
+    "nonAccountPayeeChequeReceipts": "5,00,000",
+    "digitalReceipts": "1,99,00,000",
+    "booksProfit": "14,00,000",
+    "cashPayments": "1,00,000",
+    "totalPayments": "1,96,00,000"
+  },
+  "advanceTax": [
+    {
+      "date": "2025-06-14",
+      "amount": "15,000"
+    },
+    {
+      "date": "2025-09-12",
+      "amount": "30,000"
+    },
+    {
+      "date": "2025-12-15",
+      "amount": "25,000"
+    },
+    {
+      "date": "2026-03-14",
+      "amount": "25,160"
+    }
+  ]
+}

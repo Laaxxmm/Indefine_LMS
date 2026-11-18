@@ -1,0 +1,9 @@
+{
+  "roc.check:roc.aoc2-related-party": {
+    "status": "pass",
+    "evidence": {
+      "quote": "No other contracts or arrangements with related parties were entered into during the year.",
+      "location": "notes.txt line 4"
+    }
+  }
+}

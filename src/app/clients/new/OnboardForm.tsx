@@ -9,6 +9,7 @@ import { departmentLabel } from "@/lib/ca-firm";
 import { KYC_DOC_TYPES } from "@/lib/clients/core";
 import type { Handler } from "@/lib/clients/services";
 import { ClientFields, emptyClient, field, label, type ClientFormValue } from "../ClientFields";
+import { userMessage, responseError } from "@/lib/errors";
 
 type Props = { services: ServiceType[]; handlers: Handler[]; fys: string[]; meId: string };
 type Pending = { file: File; docType: string };
@@ -43,7 +44,7 @@ export function OnboardForm({ services, handlers, fys, meId }: Props) {
         body: JSON.stringify({ client, job: { serviceTypeId: job.serviceTypeId, fy: job.fy, handlerId: job.handlerId, dueOn: job.dueOn, fees: job.fees } }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) { setError({ text: data.error || "Could not save", existingId: data.existingId }); return; }
+      if (!res.ok) { setError({ text: responseError(res.status, data), existingId: data.existingId }); return; }
       createdId = data.id;
 
       // Upload KYC files one doc type at a time; a failed file never blocks the others.
@@ -57,10 +58,10 @@ export function OnboardForm({ services, handlers, fys, meId }: Props) {
         for (const f of fs) fd.append("files", f);
         try {
           const up = await fetch(`/api/clients/${data.id}/documents`, { method: "POST", body: fd });
-          const r = await up.json().catch(() => ({ failed: fs.map((f) => ({ name: f.name, error: "Upload failed" })) }));
+          const r = await up.json().catch(() => ({ failed: fs.map((f) => ({ name: f.name, error: "the upload failed; try it again from the client page" })) }));
           for (const f of r.failed ?? []) failed.push(`${f.name}: ${f.error}`);
         } catch {
-          for (const f of fs) failed.push(`${f.name}: network error`);
+          for (const f of fs) failed.push(`${f.name}: the upload could not reach the server; try it again from the client page`);
         }
       }
       if (failed.length) {
@@ -71,7 +72,7 @@ export function OnboardForm({ services, handlers, fys, meId }: Props) {
       }
       router.push(`/clients/${data.id}`);
     } catch (err) {
-      setError({ text: (err as Error).message, ...(createdId ? { existingId: createdId } : {}) });
+      setError({ text: userMessage(err), ...(createdId ? { existingId: createdId } : {}) });
     } finally {
       setBusy(null);
     }

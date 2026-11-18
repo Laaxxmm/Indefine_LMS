@@ -3,12 +3,14 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canUseNeoCentra, isNeoCentraAdmin } from "@/lib/neo-centra/access";
+import { validationMessage } from "@/lib/errors";
+import { readJsonCapped } from "@/lib/hardening/json-body";
 
 // Bucket 4 planned-hours allocations. Any director may view; admins edit. Applied on
 // the next Sync (it feeds the incentive compute, like the Bucket 3 profit split).
 export async function GET() {
   const session = await auth();
-  if (!session?.user || !canUseNeoCentra(session.user)) return NextResponse.json({ error: "Not permitted" }, { status: 403 });
+  if (!session?.user || !canUseNeoCentra(session.user)) return NextResponse.json({ error: "You don't have access to Neo Centra. Ask an admin to give you access." }, { status: 403 });
   const rows = await prisma.neoHoursSplit.findMany({ orderBy: { taskName: "asc" } });
   return NextResponse.json(rows);
 }
@@ -23,13 +25,15 @@ const Body = z.object({
   turiaTaskId: z.string().optional(),
   hours: z.record(z.string(), z.number().min(0).max(10000)),
 }).refine((b) => Object.keys(b.hours).length >= 1, { message: "Set hours for at least one partner" })
-  .refine((b) => b.turiaTaskId || b.taskIdentity, { message: "Task id required" });
+  .refine((b) => b.turiaTaskId || b.taskIdentity, { message: "Choose the Turia task first." });
 
 export async function POST(req: Request) {
   const session = await auth();
-  if (!session?.user || !isNeoCentraAdmin(session.user)) return NextResponse.json({ error: "Admins only" }, { status: 403 });
-  const parsed = Body.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid" }, { status: 400 });
+  if (!session?.user || !isNeoCentraAdmin(session.user)) return NextResponse.json({ error: "Only Neo Centra admins can change this. Ask an admin." }, { status: 403 });
+  const jsonBody = await readJsonCapped(req); // re-audit NEW-6: capped as it streams in
+  if (!jsonBody.ok) return jsonBody.res;
+  const parsed = Body.safeParse(jsonBody.value);
+  if (!parsed.success) return NextResponse.json({ error: validationMessage(parsed.error) }, { status: 400 });
   const { taskIdentity, turiaTaskId, hours } = parsed.data;
   const taskName = parsed.data.taskName?.trim() || taskIdentity || turiaTaskId || "Untitled task";
 
@@ -47,11 +51,11 @@ export async function POST(req: Request) {
 // Clear a task's allocation (partners fall back to having no target).
 export async function DELETE(req: Request) {
   const session = await auth();
-  if (!session?.user || !isNeoCentraAdmin(session.user)) return NextResponse.json({ error: "Admins only" }, { status: 403 });
+  if (!session?.user || !isNeoCentraAdmin(session.user)) return NextResponse.json({ error: "Only Neo Centra admins can change this. Ask an admin." }, { status: 403 });
   const url = new URL(req.url);
   const turiaTaskId = url.searchParams.get("turiaTaskId");
   const taskIdentity = url.searchParams.get("taskIdentity");
-  if (!turiaTaskId && !taskIdentity) return NextResponse.json({ error: "Task id required" }, { status: 400 });
+  if (!turiaTaskId && !taskIdentity) return NextResponse.json({ error: "Choose the Turia task first." }, { status: 400 });
   await prisma.neoHoursSplit.deleteMany({ where: turiaTaskId ? { turiaTaskId } : { taskIdentity: taskIdentity! } });
   return NextResponse.json({ ok: true });
 }

@@ -1,0 +1,2 @@
+invoice_no,gstin,invoice_date,taxable_value,igst
+S-101,29ABCDE1234F1Z5,2026-10-05,10000.00,1800.00

@@ -1,0 +1,9 @@
+{
+  "echo.check:echo.related-party": {
+    "status": "pass",
+    "evidence": {
+      "quote": "Juniper Foods",
+      "location": "register.csv row 3"
+    }
+  }
+}

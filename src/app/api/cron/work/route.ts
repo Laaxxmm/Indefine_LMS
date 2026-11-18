@@ -37,5 +37,5 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ sent: r.ok, missing: missing.map((u) => u.email), error: r.error });
   }
 
-  return NextResponse.json({ error: "job must be morning, friday or close" }, { status: 400 });
+  return NextResponse.json({ error: "This scheduled task needs to know which job to run (morning, friday or close). Nothing was run." }, { status: 400 });
 }

@@ -4,10 +4,14 @@ import { pickerTemplates } from "@/lib/certificates/registry";
 
 export const dynamic = "force-dynamic";
 
-export default function FormatPicker() {
+export default async function FormatPicker({ searchParams }: { searchParams?: Promise<{ clientId?: string }> }) {
   const isProd = process.env.NODE_ENV === "production";
   // In production show only enabled (verifier-passed + human-signed) templates (§3.2).
   const templates = pickerTemplates(isProd);
+  // Re-audit NEW-8: opened from a client record (?clientId=), the chosen format keeps the link; the
+  // format page checks the id and the issue route stores it (src/lib/privacy/client-link.ts).
+  const clientId = (await searchParams)?.clientId;
+  const keep = clientId && /^[A-Za-z0-9_-]{1,64}$/.test(clientId) ? `?clientId=${encodeURIComponent(clientId)}` : "";
 
   return (
     <div>
@@ -40,7 +44,7 @@ export default function FormatPicker() {
         {templates.map((t) => (
           <Link
             key={t.id}
-            href={`/tools/certificate-generator/${t.id}`}
+            href={`/tools/certificate-generator/${t.id}${keep}`}
             className="group bg-card border border-border rounded-[18px] p-5 shadow-lift hover:-translate-y-0.5 transition block"
           >
             <div className="flex items-center gap-2.5 mb-3">

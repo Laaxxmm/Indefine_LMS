@@ -1,0 +1,38 @@
+{
+  "description": "AUDIT PROBE 1 (must FAIL): input/register.csv INV-1 changed 15000.00 -> 15001.00; recorded.json (still holding the pre-audit extraction) and expected.json unchanged. Echo parses the input in code, so totalPaise is Rs 1 over and the fixture fails on figures.",
+  "category": "clean",
+  "job": {
+    "fy": "2026-27",
+    "period": "2026-10"
+  },
+  "flags": [],
+  "figures": {
+    "rowCount": 3,
+    "totalPaise": 4745649,
+    "largestPaise": 2345650
+  },
+  "deliverables": [
+    {
+      "name": "Echo register",
+      "sheets": [
+        {
+          "name": "Register",
+          "columns": [
+            "Ref",
+            "Party",
+            "Date",
+            "Amount"
+          ]
+        },
+        {
+          "name": "Summary",
+          "columns": [
+            "Figure",
+            "Amount",
+            "Count"
+          ]
+        }
+      ]
+    }
+  ]
+}

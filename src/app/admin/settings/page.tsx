@@ -7,6 +7,8 @@ import { getSettings } from "@/lib/settings";
 import { SubmitButton } from "@/components/SubmitButton";
 import { isAdmin } from "@/lib/access";
 import Link from "next/link";
+import { Alert } from "@/components/firm-os";
+import { graphTokenStorageStatus } from "@/lib/graph";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +57,8 @@ async function applyToAll() {
 export default async function AdminSettingsPage() {
   await requireAdmin();
   const [settings, quizCount] = await Promise.all([getSettings(), prisma.quiz.count()]);
+  // GRAPH_TOKEN_KEY missing in production: delegated Microsoft 365 tokens are not stored (platform hardening).
+  const tokenStorage = graphTokenStorageStatus();
 
   return (
     <main className="px-6 py-8 max-w-2xl mx-auto">
@@ -75,6 +79,12 @@ export default async function AdminSettingsPage() {
           </p>
         </div>
       </div>
+
+      {!tokenStorage.ok && (
+        <Alert tone="warning" title="Microsoft 365 sign-in tokens are not being saved" className="mb-6">
+          {tokenStorage.message}
+        </Alert>
+      )}
 
       <section className="rounded-2xl bg-white border border-border shadow-soft p-6 mb-6">
         <h2 className="font-display text-lg font-bold mb-1">Microsoft 365 connection</h2>

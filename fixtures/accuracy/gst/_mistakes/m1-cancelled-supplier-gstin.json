@@ -1,0 +1,44 @@
+{
+  "id": "gst-m1-cancelled-supplier",
+  "pattern": "Reviewer: ITC was taken on a bill from a supplier whose GSTIN had been cancelled; v1.0.0 only checks the checksum. Partner approved a watch-list rule.",
+  "ruleProposal": {
+    "id": "gst.mistake-cancelled-supplier",
+    "title": "Supplier GSTIN on the cancelled-registration watch list",
+    "severity": "block",
+    "kind": "deterministic",
+    "check": "gst.party-listed",
+    "evidence": "the GSTIN and the purchase row",
+    "params": { "gstins": ["29AANCB6707A1ZQ"], "reason": "Supplier registration cancelled; ITC not admissible on bills after the cancellation date" }
+  },
+  "example": {
+    "extracted": {
+      "period": "2026-10",
+      "fy": "2026-27",
+      "profile": { "gstin": "29AAFCZ1001K1ZC", "legalName": "Synthetic Client Pvt Ltd", "aatoPaise": 2000000000, "filingFrequency": "monthly", "expectedFilingDate": null, "dueDate": null },
+      "sales": [],
+      "purchases": [
+        {
+          "loc": "purchase-register.csv row 2",
+          "docType": "INV",
+          "number": "BB/77",
+          "date": "2026-10-09",
+          "supplier": "Bharat Bearings",
+          "gstin": "29AANCB6707A1ZQ",
+          "pos": "29",
+          "reverseCharge": false,
+          "value": 5900000,
+          "lines": [{ "rateBps": 1800, "taxable": 5000000, "tax": { "igst": 0, "cgst": 450000, "sgst": 450000, "cess": 0 }, "hsn": null, "description": "Ball bearings", "qty": null, "uqc": null }],
+          "ledger": "Raw Material Purchases",
+          "paidOn": null
+        }
+      ],
+      "payables": [],
+      "gstr2b": [],
+      "prev": null,
+      "ledgers": [],
+      "hsnReads": [],
+      "sources": { "sales": { "file": "sales-register.csv" }, "purchases": { "file": "purchase-register.csv" }, "gstr2b": { "file": "gstr2b.json" } },
+      "notes": []
+    }
+  }
+}

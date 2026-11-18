@@ -188,3 +188,12 @@ export function canManageClients(user: U): boolean {
 export function isClientsAdmin(user: U): boolean {
   return canViewClients(user) && isAdmin(user);
 }
+
+/**
+ * Inline edits on a client's job (handler, status, due date, fees, notes): management, the
+ * client's primary handler, or the person the job is assigned to — not every active user.
+ */
+export function canEditClientJob(user: U, job: { handlerId: string | null; client: { primaryHandlerId: string | null } }): boolean {
+  if (!user || !canViewClients(user)) return false;
+  return canManageClients(user) || user.id === job.client.primaryHandlerId || user.id === job.handlerId;
+}

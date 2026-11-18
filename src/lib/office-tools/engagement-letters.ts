@@ -5,7 +5,7 @@
 import { ensureFolder, getAppOnlyToken, uploadFileContent } from "@/lib/graph";
 import { folderName } from "@/lib/clients/core";
 
-export const MAX_PDF_BYTES = 3 * 1024 * 1024; // sendMail takes the whole message in one 4 MB request
+export const MAX_PDF_BYTES = 3 * 1024 * 1024; // keeps the Outlook-draft attachment inline (larger ones would need an upload session)
 
 export type FileKind = "draft" | "signed" | "client";
 
@@ -41,7 +41,7 @@ export async function uploadLetterPdf(clientName: string, fy: string, kind: File
 }
 
 export type LetterData = Record<string, unknown> & {
-  client?: string; salutation?: string; sigTitle?: string; sigName?: string; email?: string; sigEmail?: string;
+  client?: string; sigTitle?: string; sigName?: string; email?: string; sigEmail?: string;
   extraSigs?: { email?: string }[];
 };
 
@@ -56,7 +56,7 @@ export function defaultRecipients(data: LetterData): string[] {
 /** The standard covering emails (draft for approval / signed letter), same for every client. Editable before sending. */
 export function emailTemplate(data: LetterData, fy: string, senderName: string, kind: "draft" | "signed") {
   // Same default as the letter: "Mr. Ravi Kumar".
-  const salute = (data.salutation || [data.sigTitle, (data.sigName ?? "").trim()].filter(Boolean).join(" ") || "Sir/Madam").trim();
+  const salute = [data.sigTitle, (data.sigName ?? "").trim()].filter(Boolean).join(" ") || "Sir/Madam";
   const sign = `Regards,
 ${senderName}
 Streamlining Workflows Consultancy Private Limited

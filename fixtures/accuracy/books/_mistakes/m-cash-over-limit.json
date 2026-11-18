@@ -1,0 +1,47 @@
+{
+  "id": "m-cash-over-limit",
+  "pattern": "Reviewer: cash in hand of ₹3.45 lakh at month end was not called out; the firm's SOP flags cash above ₹2 lakh (s.269ST / s.40A(3) exposure).",
+  "ruleProposal": {
+    "id": "books.m-cash-over-limit",
+    "title": "Cash in hand above ₹2,00,000 at month end",
+    "severity": "warn",
+    "kind": "deterministic",
+    "check": "books.ledger-over-limit",
+    "evidence": "cash ledger, balance and TB row",
+    "params": {
+      "ledgerPatterns": [
+        "^cash",
+        "^petty cash"
+      ],
+      "groupPatterns": [
+        "cash[ -]in[ -]hand"
+      ],
+      "limitPaise": 20000000,
+      "verify": "Firm SOP limit ₹2,00,000 for month-end cash; partner to confirm."
+    }
+  },
+  "example": {
+    "runId": "books-run-0007",
+    "extracted": {
+      "tb": {
+        "file": "trial-balance.csv",
+        "rows": [
+          {
+            "row": 4,
+            "ledger": "Cash in Hand",
+            "group": "Cash-in-Hand",
+            "debitPaise": 34500000,
+            "creditPaise": 0
+          },
+          {
+            "row": 5,
+            "ledger": "Capital",
+            "group": "Capital Account",
+            "debitPaise": 0,
+            "creditPaise": 34500000
+          }
+        ]
+      }
+    }
+  }
+}

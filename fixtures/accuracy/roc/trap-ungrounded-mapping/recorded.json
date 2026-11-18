@@ -1,0 +1,133 @@
+{
+  "roc.check:roc.aoc2-related-party": {
+    "status": "pass",
+    "evidence": {
+      "quote": "No other contracts or arrangements with related parties were entered into during the year.",
+      "location": "notes.txt line 4"
+    }
+  },
+  "roc.map-ledgers": {
+    "mappings": [
+      {
+        "ledger": "Share Capital",
+        "head": "shareCapital",
+        "evidence": {
+          "quote": "Share Capital",
+          "location": "financials.json trialBalance[0]"
+        }
+      },
+      {
+        "ledger": "Profit and Loss Account (opening)",
+        "head": "reservesSurplus",
+        "evidence": {
+          "quote": "Profit and Loss Account (opening)",
+          "location": "financials.json trialBalance[1]"
+        }
+      },
+      {
+        "ledger": "Loan from Director",
+        "head": "shortTermBorrowings",
+        "evidence": {
+          "quote": "Loan from Director",
+          "location": "financials.json trialBalance[2]"
+        }
+      },
+      {
+        "ledger": "Sundry Creditors",
+        "head": "tradePayables",
+        "evidence": {
+          "quote": "Sundry Creditors",
+          "location": "financials.json trialBalance[3]"
+        }
+      },
+      {
+        "ledger": "Provision for Tax",
+        "head": "otherLiabilities",
+        "evidence": {
+          "quote": "Provision for Tax",
+          "location": "financials.json trialBalance[4]"
+        }
+      },
+      {
+        "ledger": "Plant and Machinery",
+        "head": "fixedAssets",
+        "evidence": {
+          "quote": "Plant and Machinery",
+          "location": "financials.json trialBalance[5]"
+        }
+      },
+      {
+        "ledger": "Closing Stock",
+        "head": "inventories",
+        "evidence": {
+          "quote": "Closing Stock",
+          "location": "financials.json trialBalance[6]"
+        }
+      },
+      {
+        "ledger": "Sundry Debtors",
+        "head": "tradeReceivables",
+        "evidence": {
+          "quote": "Sundry Debtors",
+          "location": "financials.json trialBalance[7]"
+        }
+      },
+      {
+        "ledger": "HDFC Bank Current Account",
+        "head": "cashAndBank",
+        "evidence": {
+          "quote": "HDFC Bank Current Account",
+          "location": "financials.json trialBalance[8]"
+        }
+      },
+      {
+        "ledger": "GST Input Credit",
+        "head": "otherAssets",
+        "evidence": {
+          "quote": "Input tax credit ledger",
+          "location": "financials.json trialBalance[9]"
+        }
+      },
+      {
+        "ledger": "Sales",
+        "head": "revenueFromOperations",
+        "evidence": {
+          "quote": "Sales",
+          "location": "financials.json trialBalance[10]"
+        }
+      },
+      {
+        "ledger": "Interest Received",
+        "head": "otherIncome",
+        "evidence": {
+          "quote": "Interest Received",
+          "location": "financials.json trialBalance[11]"
+        }
+      },
+      {
+        "ledger": "Purchases (net of stock change)",
+        "head": "totalExpenses",
+        "evidence": {
+          "quote": "Purchases (net of stock change)",
+          "location": "financials.json trialBalance[12]"
+        }
+      },
+      {
+        "ledger": "Salaries and Wages",
+        "head": "totalExpenses",
+        "evidence": {
+          "quote": "Salaries and Wages",
+          "location": "financials.json trialBalance[13]"
+        }
+      },
+      {
+        "ledger": "Income Tax Expense",
+        "head": "taxExpense",
+        "evidence": {
+          "quote": "Income Tax Expense",
+          "location": "financials.json trialBalance[14]"
+        }
+      }
+    ]
+  }
+}

@@ -3,16 +3,41 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Pencil } from "lucide-react";
+import { call } from "@/components/ui";
 import type { Handler } from "@/lib/clients/services";
+import { EDIT_PRIVATE_FIELDS } from "@/lib/clients/pii";
 import { ClientFields, type ClientFormValue } from "../ClientFields";
 
+// The page sends the client's personal fields (PAN, GSTIN, contact details, referral, growth note)
+// blank: their full values are loaded only when the form is opened, through the audited reveal
+// route ({ purpose: "edit" }, one AuditEvent per opening), so a page load hands out none of them.
 export function EditClient({ client, handlers }: { client: ClientFormValue & { id: string; active: boolean }; handlers: Handler[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [value, setValue] = useState<ClientFormValue>(client);
   const [active, setActive] = useState(client.active);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  async function openForm() {
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await call(`/api/clients/${encodeURIComponent(client.id)}/reveal`, { purpose: "edit" });
+      if (!r.ok) return setError(r.error);
+      const loaded = (r.data.values ?? {}) as Record<string, unknown>;
+      const full: ClientFormValue = { ...client };
+      for (const f of EDIT_PRIVATE_FIELDS) full[f] = typeof loaded[f] === "string" ? (loaded[f] as string) : "";
+      setValue(full);
+      setActive(client.active);
+      setOpen(true);
+    } catch {
+      setError("The client's details could not be loaded for editing. Check your connection and try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -23,10 +48,20 @@ export function EditClient({ client, handlers }: { client: ClientFormValue & { i
     setBusy(false);
     if (!res.ok) { setError(data.error || "Could not save"); return; }
     setOpen(false);
+    setValue(client);
     router.refresh();
   }
 
-  if (!open) return <button onClick={() => setOpen(true)} className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-border bg-card text-sm font-semibold hover:bg-muted"><Pencil className="w-4 h-4" /> Edit</button>;
+  if (!open) {
+    return (
+      <span className="inline-flex items-center gap-2 flex-wrap">
+        <button onClick={() => void openForm()} disabled={loading} aria-busy={loading} title="Opening the form loads the client's full details, and this is recorded." className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-border bg-card text-sm font-semibold hover:bg-muted disabled:opacity-60">
+          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Pencil className="w-4 h-4" />} Edit
+        </button>
+        {error && <span role="alert" className="text-[12.5px] text-rose-600">{error}</span>}
+      </span>
+    );
+  }
 
   return (
     <form onSubmit={save} className="rounded-2xl bg-card border border-border shadow-lift p-5 mb-6">

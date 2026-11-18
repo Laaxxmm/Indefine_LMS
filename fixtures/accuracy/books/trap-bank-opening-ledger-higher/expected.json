@@ -1,0 +1,146 @@
+{
+  "description": "Trap (unreconciled opening difference, ledger higher): a September receipt of ₹2,750 from Alpha Retail was posted in the books but never reached the bank, so the bank ledger opens at ₹2,52,750 while the statement opens at ₹2,50,000 (TB: HDFC Bank ₹3,45,250, Alpha Retail ₹2,07,250 — totals unchanged at 13,96,600). Every October line still matches (7 pairs; cheque 452 ₹4,250 unpresented). BRS: balance per books 2,52,750 + 1,50,000 - 1,00,000 - 54,000 - 1,26,000 + 2,40,000 - 12,000 - 4,250 - 1,250 = 3,45,250 (34525000 paise); + unpresented 4,250 = 3,49,500 adjusted; balance per bank 3,46,750 (34675000) -> difference 3,46,750 - 3,49,500 = -2,750 (-275000 paise) = statement opening - ledger opening -> block books.bank-recon-difference.",
+  "category": "trap",
+  "flags": [
+    {
+      "ruleId": "books.bank-recon-difference",
+      "severity": "block"
+    }
+  ],
+  "figures": {
+    "tbDebitPaise": 139660000,
+    "tbCreditPaise": 139660000,
+    "tbDifferencePaise": 0,
+    "tbLedgerCount": 17,
+    "bankMatchedCount": 7,
+    "bankUnmatchedStatementCount": 0,
+    "bankUnmatchedLedgerCount": 1,
+    "balancePerBankPaise": 34675000,
+    "balancePerBooksPaise": 34525000,
+    "bankReconDifferencePaise": -275000,
+    "tdsDeductedPaise": 2000000,
+    "tdsDepositedPaise": 2000000,
+    "tdsShortfallPaise": 0,
+    "gstAbsDifferencePaise": 0,
+    "suspensePaise": 0,
+    "cashBalancePaise": 1825000,
+    "suggestionCount": 0,
+    "classificationQuestionCount": 0,
+    "parseIssueCount": 0,
+    "bankAmountOnlyCount": 0
+  },
+  "deliverables": [
+    {
+      "name": "Month-end pack",
+      "sheets": [
+        {
+          "name": "Summary",
+          "columns": [
+            "Item",
+            "Amount",
+            "Count",
+            "Note"
+          ]
+        },
+        {
+          "name": "Trial balance",
+          "columns": [
+            "Ledger",
+            "Group",
+            "Debit",
+            "Credit"
+          ]
+        },
+        {
+          "name": "Bank reconciliation",
+          "columns": [
+            "Particulars",
+            "Amount",
+            "Note"
+          ]
+        },
+        {
+          "name": "Bank matching",
+          "columns": [
+            "Side",
+            "Line",
+            "Date",
+            "Reference",
+            "Narration",
+            "Amount",
+            "Status",
+            "Matched with",
+            "Note"
+          ]
+        },
+        {
+          "name": "Expense suggestions",
+          "columns": [
+            "Line",
+            "Date",
+            "Narration",
+            "Amount",
+            "Suggested ledger",
+            "Confidence",
+            "Reason",
+            "Status"
+          ]
+        },
+        {
+          "name": "Suspense and unreconciled",
+          "columns": [
+            "Item",
+            "Source",
+            "Date",
+            "Amount",
+            "Age (days)",
+            "Note"
+          ]
+        },
+        {
+          "name": "Accrual-prepaid reminders",
+          "columns": [
+            "Type",
+            "Item",
+            "Ledger",
+            "Amount",
+            "Note"
+          ]
+        },
+        {
+          "name": "TDS check",
+          "columns": [
+            "Section",
+            "Month",
+            "Deducted",
+            "Deposited",
+            "Shortfall",
+            "Due date",
+            "Last deposit",
+            "Status"
+          ]
+        },
+        {
+          "name": "GST tie-out",
+          "columns": [
+            "Head",
+            "Per books",
+            "Per return",
+            "Difference",
+            "Status"
+          ]
+        },
+        {
+          "name": "Checklist",
+          "columns": [
+            "Rule",
+            "Severity",
+            "Status",
+            "Message",
+            "Evidence"
+          ]
+        }
+      ]
+    }
+  ]
+}

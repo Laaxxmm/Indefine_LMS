@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams;
   const from = q.get("from") ?? istDay(-6);
   const to = q.get("to") ?? istDay(0);
-  if (!DAY.test(from) || !DAY.test(to) || from > to) return NextResponse.json({ error: "from/to must be YYYY-MM-DD, from <= to" }, { status: 400 });
+  if (!DAY.test(from) || !DAY.test(to) || from > to) return NextResponse.json({ error: "The start and end dates are not valid (the start must be on or before the end). Nothing was run." }, { status: 400 });
   if (busy) return NextResponse.json({ ok: true, started: false, reason: "already running" });
 
   busy = true;

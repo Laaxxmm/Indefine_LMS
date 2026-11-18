@@ -1,0 +1,225 @@
+// Golden path (Phase 8 QA gate, orchestrator "E2E CHECKLIST"): onboard a client → the assignee runs
+// the agent on one of its jobs → Submit for review → the reviewer approves (two-step confirm) → the
+// Final file is in SharePoint → the assignee records "Mark filed" with the acknowledgement (ARN) →
+// "Record Turia close" with the minutes → the close gate sets DONE. Negative case: filed but the Turia
+// close skipped → the job stays CLOSING and DONE is refused (403). Third: re-run with a note from
+// AGENT_DONE, then a partner retracts a filing recorded by mistake. Firm OS never files anything: the
+// person files on the portal and records it; every step asserts there is no portal / submit / send
+// action. More close-loop negatives (Final missing, wrong path, DONE refused for every role) are in
+// close-loop.spec.ts.
+//
+// Runs under `npm run e2e:db` (playwright.db.config.ts, testDir tests/e2e-db, --repeat-each=3).
+// Environment (tests/e2e-db/support/env.ts):
+//   E2E_BASE_URL, DATABASE_URL
+//   E2E_PARTNER_STATE    PARTNER (onboards the client; retracts a filing)
+//   E2E_ASSIGNEE_STATE   the staff member named E2E_ASSIGNEE_NAME (runs the agent, marks filed, closes Turia)
+//   E2E_REVIEWER_STATE   the staff member named E2E_REVIEWER_NAME (approves)
+//   E2E_ASSIGNEE_NAME / E2E_REVIEWER_NAME   display names the onboarding sentence uses (default Priya / Ravi)
+//   E2E_AGENT            agent route key (default "echo": the framework agent on the client's first Books
+//                        job; the app must run with FIRM_OS_ECHO_AGENT=1 on staging). "gst" is registered
+//                        and can be used once a GST input set for the FIRST open period of a freshly
+//                        onboarded client (2026-11, its GSTIN) exists: set E2E_AGENT=gst and
+//   E2E_INPUT_DIR        folder of the gst agent's input files, uploaded to the job's ClientDocs
+//                        (echo needs none: the spec uploads a generated register.csv)
+// SharePoint must be real on staging (SP_PNP_* and the Graph app registration, in the app AND in this
+// process): onboarding creates CL-{code} and the FY tree, the spec uploads the inputs create-only into
+// ClientDocs, the agent writes Working, approval copies to Final, and the close gate checks the Final
+// file live. Turia runs through the MANUAL bridge: the person closes the task in Turia and types the
+// task ref and minutes here.
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { expect, test, type Page } from "@playwright/test";
+import type { FirmService } from "@prisma/client";
+import { deliverablePath, type Period } from "@/lib/integrations/sharepoint/paths";
+import {
+  approvePack, bar, closeCard, closeDb, createFromPlan, expectNoPortalAction, onboardToPlan, openDb, runTag, signedIn, submitForReview, uploadToClientDocs,
+  type Session,
+} from "./support";
+
+const SPEC = "golden-path.spec.ts";
+const AGENT = process.env.E2E_AGENT ?? "echo";
+const SERVICE: FirmService = AGENT === "gst" ? "GST" : "Books";
+const ACK_LABEL = SERVICE === "GST" ? "GST ARN (required)" : "Acknowledgement reference (optional)";
+const ARN = "AA2711260012345"; // a GST ARN shape (AA + state 27 + MMYY + serial); stored, never checked against a portal
+const code = `E2E${runTag().slice(-6)}`; // fresh client code per run
+
+/** echo's input: a clean register (unique refs, weekday dates, non-round amounts → no block finding). */
+const ECHO_REGISTER = ["ref,party,date,amount", "E2E-1,Fixture Traders,2026-11-03,15234.50", "E2E-2,Sample Supplies,2026-11-04,8999.99", "E2E-3,Demo Logistics,2026-11-05,23456.75"].join("\n");
+
+const db = openDb();
+let partner: Session;
+let staff: Session;
+let checker: Session;
+
+test.describe.configure({ mode: "serial" });
+
+test.beforeAll(async ({ browser }) => {
+  partner = await signedIn(browser, "partner", SPEC);
+  staff = await signedIn(browser, "assignee", SPEC);
+  checker = await signedIn(browser, "reviewer", SPEC);
+  const plan = await onboardToPlan(partner.page, code, `E2E Golden Path ${code} Pvt Ltd`);
+  await expect(plan).toContainText(code);
+  await createFromPlan(partner.page);
+});
+
+test.afterAll(async () => {
+  await Promise.all([partner?.close(), staff?.close(), checker?.close()]);
+  await closeDb();
+});
+
+// ------------------------------------------------------------------ steps
+
+/** The n-th (0-based) ASSIGNED job of the agent's service for the onboarded client, earliest due first. */
+async function jobFor(n: number) {
+  const fc = await db.firmClient.findUniqueOrThrow({ where: { clientCode: code } });
+  const jobs = await db.jobTask.findMany({
+    where: { firmClientId: fc.id, service: SERVICE, state: "ASSIGNED" },
+    orderBy: [{ statutoryDueOn: "asc" }, { createdAt: "asc" }],
+    select: { id: true, title: true, period: true, fy: true },
+  });
+  expect(jobs.length, `ASSIGNED ${SERVICE} jobs for ${code}`).toBeGreaterThan(n);
+  return jobs[n];
+}
+
+/** The agent's inputs, uploaded create-only into the job's ClientDocs folder (never overwrites). */
+async function uploadInputs(job: { fy: string; period: string }) {
+  const dir = process.env.E2E_INPUT_DIR;
+  if (AGENT !== "echo" && !dir) throw new Error(`E2E_INPUT_DIR must name the ${AGENT} agent's input files`);
+  const files = AGENT === "echo" ? [{ name: "register.csv", bytes: Buffer.from(ECHO_REGISTER) }] : readdirSync(dir!).map((name) => ({ name, bytes: readFileSync(join(dir!, name)) }));
+  expect(files.length, "agent input files").toBeGreaterThan(0);
+  await uploadToClientDocs({ clientCode: code, fy: job.fy, service: SERVICE, period: job.period }, files);
+}
+
+/**
+ * Assignee runs the agent (and, with `rerunNote`, re-runs it once from AGENT_DONE with that note)
+ * and submits; reviewer approves; the Final file is recorded. Returns the run URL.
+ */
+async function prepareApproved(job: { id: string; title: string; period: string; fy: string }, opts: { rerunNote?: string } = {}): Promise<string> {
+  await uploadInputs(job);
+
+  const page = await staff.ctx.newPage();
+  await page.goto(`/agents/${AGENT}`);
+  const row = page.getByRole("row").filter({ hasText: code }).filter({ hasText: job.period });
+  await row.getByRole("button", { name: `Run agent on ${job.title} for ${code}` }).click();
+  await page.waitForURL(new RegExp(`/agents/${AGENT}/runs/`), { timeout: 180_000 });
+  let runUrl = new URL(page.url()).pathname;
+  await expect(page.getByRole("heading", { name: "Checklist" })).toBeVisible();
+  await expectNoPortalAction(page);
+  if (opts.rerunNote) {
+    // "Re-run with a note" (secondary): the first click opens the note box, the second re-runs.
+    await bar(page).getByRole("button", { name: "Re-run with a note" }).click();
+    await expect(bar(page).getByRole("button", { name: "Submit for review" })).toHaveCount(0);
+    await expect(bar(page)).toContainText("Re-running moves the job back to IN_PREP");
+    await bar(page).getByLabel("Why re-run?").fill(opts.rerunNote);
+    await bar(page).getByRole("button", { name: "Re-run agent with this note" }).click();
+    await page.waitForURL((u) => u.pathname !== runUrl && u.pathname.startsWith(`/agents/${AGENT}/runs/`), { timeout: 180_000 });
+    runUrl = new URL(page.url()).pathname;
+    await expect(page.getByText(/attempt 2/)).toBeVisible();
+    await expect(page.getByText(opts.rerunNote)).toBeVisible();
+    await expectNoPortalAction(page);
+  }
+  await submitForReview(page);
+  await page.close();
+
+  const review = await checker.ctx.newPage();
+  await review.goto(runUrl);
+  await approvePack(review);
+  await expect(closeCard(review)).toContainText("In the Final folder");
+  await review.close();
+
+  // Final file present: a Final Deliverable row in the Path A Final folder (the gate re-checks it live in SharePoint).
+  const finals = await db.deliverable.findMany({ where: { jobTaskId: job.id, kind: "Final" } });
+  expect(finals.length).toBeGreaterThan(0);
+  const finalFolder = deliverablePath(code, job.fy, SERVICE, job.period as Period, "Final").serverRelativeUrl;
+  expect(finals.every((f) => f.spPath === finalFolder && !!f.driveItemId && f.sizeBytes > 0)).toBe(true);
+  return runUrl;
+}
+
+async function markFiled(page: Page, runUrl: string) {
+  await page.goto(runUrl);
+  await expect(bar(page)).toContainText("Filed by you on the portal — record the acknowledgement here.");
+  await bar(page).getByLabel(ACK_LABEL).fill(ARN);
+  await bar(page).getByRole("button", { name: "Mark filed" }).click();
+  await expect(page.getByTitle("Job state: CLOSING").first()).toBeVisible();
+  await expect(bar(page).getByRole("button", { name: "Record Turia close" })).toBeVisible();
+  await expect(closeCard(page)).toContainText(ARN);
+  await expect(bar(page).getByRole("button", { name: "Retract filing" })).toHaveCount(0); // the assignee is staff
+  await expectNoPortalAction(page);
+}
+
+// ------------------------------------------------------------------ tests
+
+test("golden path: run agent → submit → approve → Final file → Mark filed (ARN) → Record Turia close (minutes) → DONE", async () => {
+  const job = await jobFor(0);
+  const runUrl = await prepareApproved(job);
+  const page = await staff.ctx.newPage();
+  await markFiled(page, runUrl);
+
+  await bar(page).getByLabel("Turia task ref", { exact: true }).fill(`TT-${code}`);
+  await bar(page).getByLabel("Minutes logged in Turia", { exact: true }).fill("75");
+  await bar(page).getByRole("button", { name: "Record Turia close" }).click();
+  await expect(page.getByTitle("Job state: DONE").first()).toBeVisible({ timeout: 60_000 });
+  await expect(closeCard(page)).toContainText(/Closed \d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2} IST · cycle time/);
+  await expect(bar(page).getByRole("button")).toHaveCount(0);
+  await expectNoPortalAction(page);
+
+  const row = await db.jobTask.findUniqueOrThrow({ where: { id: job.id }, select: { state: true, ackRef: true, doneAt: true } });
+  expect(row).toMatchObject({ state: "DONE", ackRef: ARN });
+  expect(row.doneAt).not.toBeNull();
+  const doneEvent = await db.jobTaskEvent.findFirst({ where: { jobTaskId: job.id, toState: "DONE" } });
+  expect(doneEvent).toMatchObject({ fromState: "CLOSING", actorId: "system:close-gate" });
+  const sync = await db.turiaSync.findFirst({ where: { jobTaskId: job.id, operation: "closeTask", status: "CLOSED" } });
+  expect(sync).toMatchObject({ turiaRef: `TT-${code}`, minutesLogged: 75 });
+  await page.close();
+});
+
+test("negative: marked filed but the Turia close skipped → stays CLOSING, DONE refused", async () => {
+  const job = await jobFor(0); // the first job is DONE now, so this is the next ASSIGNED one
+  const runUrl = await prepareApproved(job);
+  const page = await staff.ctx.newPage();
+  await markFiled(page, runUrl);
+
+  // No Turia close recorded: the card says so, and DONE cannot be set through the API.
+  await expect(closeCard(page)).toContainText("Not recorded yet");
+  const refused = await page.request.post(`/api/firm-os/jobs/${job.id}/state`, { data: { to: "DONE", expectedState: "CLOSING" }, failOnStatusCode: false });
+  expect(refused.status()).toBe(403);
+  expect(await refused.json()).toMatchObject({ code: "gate-required" });
+
+  await page.reload();
+  await expect(page.getByTitle("Job state: CLOSING").first()).toBeVisible();
+  await expect(page.getByTitle("Job state: DONE")).toHaveCount(0);
+  const row = await db.jobTask.findUniqueOrThrow({ where: { id: job.id }, select: { state: true, doneAt: true } });
+  expect(row).toEqual({ state: "CLOSING", doneAt: null });
+  expect(await db.jobTaskEvent.count({ where: { jobTaskId: job.id, toState: "DONE" } })).toBe(0);
+  expect(await db.turiaSync.count({ where: { jobTaskId: job.id, operation: "closeTask", status: "CLOSED" } })).toBe(0);
+  await page.close();
+});
+
+test("re-run with a note from AGENT_DONE; a partner retracts a filing recorded by mistake → APPROVED, ARN cleared and kept in the history", async () => {
+  const job = await jobFor(0); // the next ASSIGNED job
+  const runUrl = await prepareApproved(job, { rerunNote: "Re-run with the corrected register" });
+  const rerunEvent = await db.jobTaskEvent.findFirst({ where: { jobTaskId: job.id, fromState: "AGENT_DONE", toState: "IN_PREP" } });
+  expect(rerunEvent?.note).toContain("Re-run with the corrected register");
+  const page = await staff.ctx.newPage();
+  await markFiled(page, runUrl);
+  await page.close();
+
+  const p = await partner.ctx.newPage();
+  await p.goto(runUrl);
+  await expect(p.getByTitle("Job state: CLOSING").first()).toBeVisible();
+  await bar(p).getByRole("button", { name: "Retract filing" }).click();
+  await expect(bar(p).getByRole("button", { name: "Record Turia close" })).toHaveCount(0);
+  await expect(bar(p)).toContainText("is kept in the job's history with your note");
+  await bar(p).getByLabel("Why is the filing being retracted?").fill("Filed under the wrong period");
+  await bar(p).getByRole("button", { name: "Confirm retraction" }).click();
+  await expect(p.getByTitle("Job state: APPROVED").first()).toBeVisible();
+  await expect(bar(p).getByRole("button", { name: "Mark filed" })).toBeVisible();
+  await expectNoPortalAction(p);
+
+  const row = await db.jobTask.findUniqueOrThrow({ where: { id: job.id }, select: { state: true, ackRef: true, filedAt: true, filedById: true } });
+  expect(row).toEqual({ state: "APPROVED", ackRef: null, filedAt: null, filedById: null });
+  const retracted = await db.jobTaskEvent.findFirst({ where: { jobTaskId: job.id, toState: "APPROVED", fromState: "CLOSING" } });
+  expect(retracted?.note).toContain("Filed under the wrong period");
+  expect(retracted?.note).toContain(`retracted ack ref ${ARN}`);
+  await p.close();
+});

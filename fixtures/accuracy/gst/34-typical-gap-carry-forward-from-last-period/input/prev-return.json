@@ -1,0 +1,37 @@
+{
+  "period": "2026-09",
+  "gstr1Liability": {
+    "igst": 0,
+    "cgst": 31000,
+    "sgst": 31000
+  },
+  "gstr3bLiability": {
+    "igst": 0,
+    "cgst": 31000,
+    "sgst": 31000
+  },
+  "closingCreditBalance": {
+    "igst": 0,
+    "cgst": 0,
+    "sgst": 0
+  },
+  "filedOn": "2026-10-19",
+  "dueOn": "2026-10-20",
+  "carriedForward": {
+    "outputTax": {
+      "igst": 36000,
+      "cgst": 0,
+      "sgst": 0
+    },
+    "reverseChargeTax": {
+      "igst": 0,
+      "cgst": 2700,
+      "sgst": 2700
+    },
+    "reverseChargeCredit": {
+      "igst": 0,
+      "cgst": 2700,
+      "sgst": 2700
+    }
+  }
+}

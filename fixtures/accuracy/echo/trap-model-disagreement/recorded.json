@@ -1,0 +1,11 @@
+{
+  "echo.check:echo.related-party": {
+    "status": "fail",
+    "message": "Patel Brothers is described as a partner's relative",
+    "evidence": { "quote": "Patel Brothers (partner's relative?)", "location": "register.csv row 3" }
+  },
+  "echo.check:echo.related-party#2": {
+    "status": "pass",
+    "evidence": { "quote": "Nova Traders", "location": "register.csv row 2" }
+  }
+}

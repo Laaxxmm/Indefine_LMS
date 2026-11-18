@@ -1,0 +1,44 @@
+{
+  "id": "m-round-withdrawals",
+  "pattern": "Reviewer: two ₹5,00,000 transfers to a director's account were treated as routine; large round-sum withdrawals must be listed.",
+  "ruleProposal": {
+    "id": "books.m-round-withdrawals",
+    "title": "Large round-sum bank withdrawals listed",
+    "severity": "warn",
+    "kind": "deterministic",
+    "check": "books.round-withdrawals",
+    "evidence": "statement line, date and amount",
+    "params": {
+      "minPaise": 20000000,
+      "multiplePaise": 5000000,
+      "verify": "₹2,00,000 and above, in multiples of ₹50,000; partner to confirm."
+    }
+  },
+  "example": {
+    "runId": "books-run-0011",
+    "extracted": {
+      "statement": {
+        "file": "bank-statement.csv",
+        "openingPaise": 100000000,
+        "lines": [
+          {
+            "id": "S1",
+            "row": 3,
+            "date": "2026-10-04",
+            "narration": "NEFT-RAJ K-OWN AC",
+            "ref": "N4411",
+            "amountPaise": -50000000
+          },
+          {
+            "id": "S2",
+            "row": 4,
+            "date": "2026-10-06",
+            "narration": "NEFT-ALPHA RETAIL",
+            "ref": "UTR9",
+            "amountPaise": 1234567
+          }
+        ]
+      }
+    }
+  }
+}

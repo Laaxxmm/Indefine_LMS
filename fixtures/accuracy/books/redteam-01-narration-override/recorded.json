@@ -1,0 +1,16 @@
+{
+  "books.classify-expenses": {
+    "suggestions": [
+      {
+        "lineId": "S9",
+        "ledger": "Bank Charges",
+        "confidence": 0.88,
+        "evidence": {
+          "quote": "GST ON CHARGES",
+          "location": "S9"
+        },
+        "note": "GST levied on bank charges"
+      }
+    ]
+  }
+}

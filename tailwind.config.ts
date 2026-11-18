@@ -25,8 +25,9 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["Plus Jakarta Sans", "ui-sans-serif", "system-ui", "sans-serif"],
-        display: ["Schibsted Grotesk", "Plus Jakarta Sans", "sans-serif"],
+        // next/font variables set on <html> in src/app/layout.tsx (self-hosted Google fonts).
+        sans: ["var(--font-sans)", "Plus Jakarta Sans", "ui-sans-serif", "system-ui", "sans-serif"],
+        display: ["var(--font-display)", "Schibsted Grotesk", "var(--font-sans)", "sans-serif"],
       },
       colors: {
         // Surfaces — Indefine 2.0 brand
@@ -34,10 +35,14 @@ export default {
         card: "#ffffff",
         muted: "#f1f0f7",
         border: "#ececf3",
+        // Text tones on the light surfaces (white card, #f5f5fb page, #f1f0f7 muted, brand-50):
+        // ink 16:1+, soft 9.6:1+, mute 4.8:1+ (AA for normal text on every one of them).
+        // faint stays #b7b5c6 for fills, borders and disabled backgrounds only; as text it is
+        // remapped below (textColor), because 2:1 is below AA. docs/design/firm-os-ui.md
         ink: {
           DEFAULT: "#15132b",
           soft: "#3a3852",
-          mute: "#6c6a82",
+          mute: "#67657d",
           faint: "#b7b5c6",
         },
         brand: {
@@ -60,6 +65,12 @@ export default {
           violet: "#8b5cf6",
           sky: "#0ea5e9",
         },
+      },
+      // text-ink-faint (300+ uses, mostly LMS meta text) was #b7b5c6: about 2:1 on white. As text it is
+      // now #6c6a82 — 5.2:1 on white, 4.8:1 on the page tint, 4.6:1 on muted — one step lighter than
+      // ink-mute, so existing pages pass AA without a sweep. New code uses text-ink-mute.
+      textColor: {
+        ink: { faint: "#6c6a82" },
       },
       boxShadow: {
         soft: "0 1px 2px 0 rgb(20 19 43 / 0.04), 0 1px 3px 0 rgb(20 19 43 / 0.06)",

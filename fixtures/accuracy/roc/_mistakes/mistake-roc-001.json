@@ -1,0 +1,128 @@
+{
+  "id": "mistake-roc-001",
+  "pattern": "Private company with a single director was passed; s.149(1) needs two",
+  "ruleProposal": {
+    "id": "roc.mistake-min-directors",
+    "title": "Minimum number of directors (s.149(1))",
+    "severity": "block",
+    "kind": "deterministic",
+    "check": "roc.min-directors",
+    "evidence": "count of active directors in directors.csv",
+    "params": {
+      "private": 2,
+      "public": 3,
+      "opc": 1
+    }
+  },
+  "example": {
+    "extracted": {
+      "fy": "2025-26",
+      "company": {
+        "name": "Fixture Widgets Private Limited",
+        "cin": "U74999KA2018PTC000001",
+        "companyClass": "private",
+        "listed": false,
+        "section8": false,
+        "holdingOrSubsidiary": false,
+        "specialAct": false,
+        "governmentCompany": false,
+        "firstFinancialYear": false,
+        "agmDate": "2026-09-25",
+        "previousAgmDate": "2025-09-26",
+        "agmExtendedTo": null,
+        "declaredAnnualReturnForm": "MGT-7A",
+        "estimateFilingOn": "2026-10-15",
+        "authorisedCapitalPaise": 500000000,
+        "paidUpCapitalPaise": 100000000,
+        "csrNetProfitHistoryPaise": [],
+        "deposits": {
+          "depositsOutstandingPaise": 0,
+          "loansNotDepositsPaise": 50000000,
+          "dpt3FiledOn": "2026-06-25"
+        }
+      },
+      "directors": [
+        {
+          "din": "01000001",
+          "name": "Asha Rao",
+          "designation": "Managing Director",
+          "dinStatus": "active",
+          "kycCompletedOn": "2026-08-20",
+          "residentInIndia": true
+        }
+      ],
+      "shareholding": [
+        {
+          "folio": "F-001",
+          "holder": "Asha Rao",
+          "shareClass": "Equity",
+          "shares": 60000,
+          "faceValuePaise": 1000,
+          "paidUpPerSharePaise": 1000
+        },
+        {
+          "folio": "F-002",
+          "holder": "Vikram Shetty",
+          "shareClass": "Equity",
+          "shares": 40000,
+          "faceValuePaise": 1000,
+          "paidUpPerSharePaise": 1000
+        }
+      ],
+      "auditor": {
+        "name": "Fixture & Co LLP",
+        "frn": "000001S",
+        "type": "firm",
+        "termStartFy": "2022-23",
+        "termYears": 5,
+        "consecutiveYearsBeforeTerm": 0,
+        "reappointedAtThisAgm": false,
+        "newAuditorAtThisAgm": false,
+        "casualVacancy": false
+      },
+      "financials": {
+        "source": "summary",
+        "current": {
+          "shareCapital": 100000000,
+          "reservesSurplus": 350000000,
+          "longTermBorrowings": 0,
+          "shortTermBorrowings": 50000000,
+          "tradePayables": 120000000,
+          "otherLiabilities": 30000000,
+          "fixedAssets": 200000000,
+          "investments": 0,
+          "inventories": 150000000,
+          "tradeReceivables": 180000000,
+          "cashAndBank": 70000000,
+          "otherAssets": 50000000,
+          "revenueFromOperations": 2400000000,
+          "otherIncome": 20000000,
+          "totalExpenses": 2300000000,
+          "taxExpense": 30000000
+        },
+        "previous": {
+          "shareCapital": 100000000,
+          "reservesSurplus": 260000000,
+          "longTermBorrowings": 0,
+          "shortTermBorrowings": 40000000,
+          "tradePayables": 100000000,
+          "otherLiabilities": 20000000,
+          "fixedAssets": 180000000,
+          "investments": 0,
+          "inventories": 120000000,
+          "tradeReceivables": 140000000,
+          "cashAndBank": 50000000,
+          "otherAssets": 30000000,
+          "revenueFromOperations": 2000000000,
+          "otherIncome": 10000000,
+          "totalExpenses": 1920000000,
+          "taxExpense": 25000000
+        },
+        "unmappedLedgers": [],
+        "ledgerQuestions": []
+      },
+      "msme": [],
+      "notes": null
+    }
+  }
+}

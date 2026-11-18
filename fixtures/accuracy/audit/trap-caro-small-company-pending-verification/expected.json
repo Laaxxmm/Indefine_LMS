@@ -1,0 +1,169 @@
+{
+  "description": "Trap (small-company limits awaiting partner verification): private company, not a holding/subsidiary, paid-up capital Rs6,00,00,000 (entity.json = TB Share Capital), preceding-year turnover Rs1,00,00,000 (entity.json = PY TB Sales). Verified limits applied (2022 Rules: paid-up <= Rs4 cr AND turnover <= Rs40 cr): 6 cr > 4 cr -> not small; private-company exemption: paid-up + reserves 6,00,00,000 + 15,50,000 = 6,15,50,000 > Rs1 cr -> fails -> CARO 2020 applies (info audit.caro-applicable). Unverified limits from 01-12-2025 (Rs10 cr / Rs100 cr, never applied): 6 cr <= 10 cr, 1 cr <= 100 cr -> would be small -> CARO not applicable -> outcome differs -> warn audit.caro-small-company-pending-verification. Clauses: 21 less 3(vi) cost records (to determine), 3(xii) Nidhi (n/a), 3(xiv) internal audit (private, turnover 1.2 cr < 200 cr, borrowings 24L < 100 cr -> n/a), 3(xx) CSR (to determine), 3(xxi) consolidation (n/a) = 16 applicable (TB has PPE, inventory, investments/deposits, borrowings). TB: the clean file plus Fixed Deposit - HDFC (Investments) Rs5,90,00,000 Dr and share capital Rs6,00,00,000 Cr in both years. CY debits = credits = 1,86,00,000 + 5,90,00,000 = 7,76,00,000 (7760000000 paise); PY 1,64,60,000 + 5,90,00,000 = 7,54,60,000 (7546000000 paise); 20 ledgers; 14 lead schedules (L-F Investments added), none unmapped. Materiality unchanged: 1% of revenue 1,20,00,000 = 1,20,000 (12000000 paise), PM 75% = 90,000 (9000000). Variances: L-F 5.9 cr vs 5.9 cr (nil); L-A 6,15,50,000 vs 6,13,70,000 (diff 1,80,000 >= PM but 2.9% < 20%) -> not material; the six explained variances of the clean file remain -> 6 material, 0 unexplained. Samples as the clean file (sales MUS 25 of 40, interval 4,80,000; expenses random 25).",
+  "category": "trap",
+  "job": {
+    "fy": "2025-26",
+    "period": "Annual",
+    "title": "Statutory audit FY 2025-26"
+  },
+  "flags": [
+    {
+      "ruleId": "audit.caro-small-company-pending-verification",
+      "severity": "warn"
+    },
+    {
+      "ruleId": "audit.caro-applicable",
+      "severity": "info"
+    }
+  ],
+  "figures": {
+    "tbDebitPaise": 7760000000,
+    "tbCreditPaise": 7760000000,
+    "tbDifferencePaise": 0,
+    "ledgerCount": 20,
+    "priorTbDebitPaise": 7546000000,
+    "priorTbCreditPaise": 7546000000,
+    "leadScheduleCount": 14,
+    "unmappedLedgerCount": 0,
+    "revenuePaise": 1200000000,
+    "materialityPaise": 12000000,
+    "performanceMaterialityPaise": 9000000,
+    "caroApplicable": 1,
+    "caroClausesApplicable": 16,
+    "materialVarianceCount": 6,
+    "unexplainedVarianceCount": 0,
+    "samplePopulationCount": 2,
+    "sampleItemsSelected": 50,
+    "parseIssueCount": 0,
+    "sample.sales.populationPaise": 1200000000,
+    "sample.sales.plannedSize": 25,
+    "sample.sales.intervalPaise": 48000000,
+    "sample.sales.selected": 25,
+    "sample.sales.selectedPaise": 750000000,
+    "sample.expenses.populationPaise": 79500000,
+    "sample.expenses.plannedSize": 25,
+    "sample.expenses.selected": 25,
+    "sample.expenses.fingerprint48": 77961382352025,
+    "sample.sales.randomStart": 4344147,
+    "sample.sales.fingerprint48": 223368761907135
+  },
+  "deliverables": [
+    {
+      "name": "Audit working papers",
+      "sheets": [
+        {
+          "name": "WP index",
+          "columns": [
+            "Ref",
+            "Section",
+            "SA reference",
+            "Description",
+            "Status"
+          ]
+        },
+        {
+          "name": "Materiality",
+          "columns": [
+            "Basis",
+            "Amount",
+            "Note"
+          ]
+        },
+        {
+          "name": "Lead schedules",
+          "columns": [
+            "WP ref",
+            "Area",
+            "Current year",
+            "Prior year",
+            "Variance",
+            "Variance %",
+            "Explanation"
+          ]
+        },
+        {
+          "name": "Lead detail",
+          "columns": [
+            "WP ref",
+            "Ledger",
+            "Group",
+            "Current year",
+            "Prior year",
+            "Variance"
+          ]
+        },
+        {
+          "name": "Sampling plan",
+          "columns": [
+            "Population",
+            "Method",
+            "Seed",
+            "Items",
+            "Population value",
+            "Sample size",
+            "Interval",
+            "Random start",
+            "Selected",
+            "Selected value",
+            "Fingerprint"
+          ]
+        },
+        {
+          "name": "Sample selections",
+          "columns": [
+            "Population",
+            "Pick",
+            "Row",
+            "Reference",
+            "Date",
+            "Party",
+            "Amount",
+            "Selection point"
+          ]
+        },
+        {
+          "name": "Review notes",
+          "columns": [
+            "No",
+            "WP ref",
+            "Note",
+            "Severity",
+            "Source",
+            "Status",
+            "Response"
+          ]
+        },
+        {
+          "name": "Pending information",
+          "columns": [
+            "No",
+            "Item",
+            "Reason",
+            "Requested from"
+          ]
+        },
+        {
+          "name": "CARO 2020",
+          "columns": [
+            "Clause",
+            "Title",
+            "Applicability",
+            "Basis",
+            "Information required",
+            "WP ref"
+          ]
+        },
+        {
+          "name": "Checklist",
+          "columns": [
+            "Rule",
+            "Severity",
+            "Status",
+            "Message",
+            "Evidence"
+          ]
+        }
+      ]
+    }
+  ]
+}

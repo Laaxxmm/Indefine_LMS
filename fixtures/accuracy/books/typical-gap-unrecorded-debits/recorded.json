@@ -1,0 +1,26 @@
+{
+  "books.classify-expenses": {
+    "suggestions": [
+      {
+        "lineId": "S8",
+        "ledger": "insufficient_evidence",
+        "confidence": 0.4,
+        "evidence": {
+          "quote": "UPI-SWIFT COURIERS-DOCS",
+          "location": "S8"
+        },
+        "note": "No courier or postage ledger in the client's chart"
+      },
+      {
+        "lineId": "S9",
+        "ledger": "Bank Charges",
+        "confidence": 0.88,
+        "evidence": {
+          "quote": "GST ON CHARGES",
+          "location": "S9"
+        },
+        "note": "GST levied on bank charges"
+      }
+    ]
+  }
+}

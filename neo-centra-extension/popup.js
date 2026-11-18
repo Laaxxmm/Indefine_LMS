@@ -1,29 +1,29 @@
+// Popup: shows the pinned LMS address (not editable — it is fixed when the extension is built) and
+// takes the relay token. Everything else happens in the service worker.
 const statusEl = document.getElementById("status");
-const lmsEl = document.getElementById("lmsUrl");
+const lmsEl = document.getElementById("lmsOrigin");
 const tokenEl = document.getElementById("relayToken");
 const saveBtn = document.getElementById("save");
 const syncBtn = document.getElementById("sync");
 
 function renderStatus(s) {
-  if (!s) { statusEl.textContent = 'Not synced yet. Set the LMS URL + token, then "Sync now".'; statusEl.className = "status neutral"; return; }
+  if (!s) { statusEl.textContent = 'Not synced yet. Set the relay token, then "Sync now".'; statusEl.className = "status neutral"; return; }
   const stamp = s.ts ? ` · ${new Date(s.ts).toLocaleTimeString()}` : "";
   statusEl.textContent = s.msg + stamp;
-  statusEl.className = "status " + (s.ok ? "ok" : s.reason === "no-cookies" || s.reason === "no-token" || s.reason === "no-config" ? "warn" : "bad");
+  statusEl.className = "status " + (s.ok ? "ok" : s.reason === "no-token" || s.reason === "no-config" ? "warn" : "bad");
 }
 
 async function loadState() {
   const state = await chrome.runtime.sendMessage({ type: "GET_STATE" });
-  lmsEl.value = state?.lmsUrl || "https://lms.indefine.in";
+  lmsEl.textContent = state?.lmsOrigin || "(invalid build — rebuild the extension)";
   tokenEl.value = state?.relayToken || "";
   renderStatus(state?.lastStatus);
 }
 
 saveBtn.addEventListener("click", async () => {
-  const lmsUrl = lmsEl.value.trim().replace(/\/$/, "");
   const relayToken = tokenEl.value.trim();
-  if (!/^https:\/\//.test(lmsUrl)) { renderStatus({ ok: false, msg: "LMS URL must start with https:// (the relay token and cookie travel over it)." }); return; }
   if (!relayToken) { renderStatus({ ok: false, reason: "no-config", msg: "Enter the relay token." }); return; }
-  await chrome.runtime.sendMessage({ type: "SET_CONFIG", lmsUrl, relayToken });
+  await chrome.runtime.sendMessage({ type: "SET_CONFIG", relayToken });
   renderStatus({ ok: true, msg: "Saved. Click Sync now.", ts: Date.now() });
 });
 

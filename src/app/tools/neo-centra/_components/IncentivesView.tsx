@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, RefreshCw, AlertTriangle, Link2, ChevronDown, ChevronRight, TrendingUp, Receipt, PiggyBank, Wrench, CheckCircle2, Flag, Flame, Trophy } from "lucide-react";
 import type { DirectorIncentive, IncentiveSummary, InternalTaskResult, DirectorTaskDrill } from "@/lib/neo-centra/incentive";
+import { PlainError, userMessage } from "@/lib/errors";
 
 type Snapshot = (IncentiveSummary & { viewer?: { directorId: string | null; isAdmin: boolean } }) | null;
 
@@ -92,18 +93,18 @@ export function IncentivesView({
     try {
       const res = await fetch(`/api/tools/neo-centra/incentives?from=${period.fromMs}&to=${period.toMs}`, { method: "POST" });
       const data = await res.json();
-      if (!res.ok) { if (data.turiaExpired) { setConnected(false); setCookieOpen(true); } throw new Error(data.error || "Sync failed"); }
+      if (!res.ok) { if (data.turiaExpired) { setConnected(false); setCookieOpen(true); } throw new PlainError(data.error || "The sync from Turia failed. Try again in a minute."); }
       setSnapshot(data.snapshot);
-    } catch (e) { setError((e as Error).message); } finally { setSyncing(false); }
+    } catch (e) { setError(userMessage(e)); } finally { setSyncing(false); }
   }
   async function saveCookie() {
     if (cookie.trim().length < 10) { setError("Paste the full Turia cookie."); return; }
     setSavingCookie(true); setError(null);
     try {
       const res = await fetch("/api/tools/neo-centra/turia-cookie", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ cookie: cookie.trim() }) });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Could not save cookie");
+      if (!res.ok) throw new PlainError((await res.json().catch(() => ({}))).error || "The Turia cookie could not be saved. Try again.");
       setConnected(true); setCookieOpen(false); setCookie("");
-    } catch (e) { setError((e as Error).message); } finally { setSavingCookie(false); }
+    } catch (e) { setError(userMessage(e)); } finally { setSavingCookie(false); }
   }
 
   // Auto-sync every 5 minutes while the tab is visible (skips if a fresh snapshot
@@ -555,14 +556,14 @@ function HoursSplitEditor({ task, partners }: { task: InternalTaskResult; partne
     setSaving(true); setMsg(null);
     try {
       const hours = Object.fromEntries(Object.entries(hrs).filter(([, v]) => Number(v) > 0));
-      if (Object.keys(hours).length === 0) throw new Error("Set hours for at least one partner");
+      if (Object.keys(hours).length === 0) throw new PlainError("Set hours for at least one partner.");
       const res = await fetch("/api/tools/neo-centra/hours-splits", {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ taskName: task.name, taskIdentity: task.identity, turiaTaskId: task.taskId, hours }),
       });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Save failed");
+      if (!res.ok) throw new PlainError((await res.json().catch(() => ({}))).error || "The change could not be saved. Try again.");
       setMsg("Saved · hit Sync to apply");
-    } catch (e) { setMsg((e as Error).message); } finally { setSaving(false); }
+    } catch (e) { setMsg(userMessage(e)); } finally { setSaving(false); }
   }
   return (
     <div className="ml-[86px] mt-1.5 rounded-lg bg-amber-50/60 border border-amber-100 px-2.5 py-2 flex items-center flex-wrap gap-x-3 gap-y-1.5 text-[11px]">
@@ -614,9 +615,9 @@ function ProfitSplitEditor({ task, isAdmin }: { task: DirectorTaskDrill; isAdmin
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ taskName: task.name, taskIdentity: task.identity, turiaTaskId: task.taskId, splits: pct }),
       });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Save failed");
+      if (!res.ok) throw new PlainError((await res.json().catch(() => ({}))).error || "The change could not be saved. Try again.");
       setMsg("Saved · hit Sync to apply");
-    } catch (e) { setMsg((e as Error).message); } finally { setSaving(false); }
+    } catch (e) { setMsg(userMessage(e)); } finally { setSaving(false); }
   }
   return (
     <div className="ml-[86px] mt-1.5 rounded-lg bg-amber-50/60 border border-amber-100 px-2.5 py-2 flex items-center flex-wrap gap-x-3 gap-y-1.5 text-[11px]">

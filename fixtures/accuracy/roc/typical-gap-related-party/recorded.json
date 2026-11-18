@@ -1,0 +1,10 @@
+{
+  "roc.check:roc.aoc2-related-party": {
+    "status": "fail",
+    "message": "Rent arrangement with a director's relative not in the ordinary course / not at arm's length: annex AOC-2.",
+    "evidence": {
+      "quote": "it was not entered into in the ordinary course of business",
+      "location": "notes.txt line 4"
+    }
+  }
+}

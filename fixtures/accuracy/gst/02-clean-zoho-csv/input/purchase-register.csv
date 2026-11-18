@@ -1,0 +1,3 @@
+Bill Date,Bill Number,Vendor Name,Vendor GSTIN,Place of Supply,Account,Item Name,Item Tax %,Item Total,IGST,CGST,SGST,CESS,Total,Is Reverse Charge Applied,Transaction Type
+02/10/2026,TS/88,Tellapur Grains,36AALCY6505Y1Z1,Karnataka (29),Cost of Goods Sold - Flour,Wheat flour,5,80000.00,4000.00,,,,84000.00,false,Bill
+09/10/2026,KS-2026-415,Sunrise Steel,29AAGCS6101U1ZN,Karnataka (29),Packaging Materials,Printed wrappers,18,15000.00,,1350.00,1350.00,,17700.00,false,Bill

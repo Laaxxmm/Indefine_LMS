@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Loader2, AlertTriangle, FileDown, Upload, FileText, X } from "lucide-react";
+import { PlainError, userMessage } from "@/lib/errors";
 
 function filenameFrom(disposition: string): string {
   const m = disposition.match(/filename="(.+?)"/);
@@ -38,7 +39,7 @@ export function TaxTool({ tool, title, subtitle }: { tool: string; title: string
       const res = await fetch(`/api/tools/office-tools/tax/${tool}`, { method: "POST", body: fd });
       if (!res.ok) {
         const j = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(j.error || "Processing failed.");
+        throw new PlainError(j.error || "The PDFs could not be processed. Check them and try again.");
       }
       const blob = await res.blob();
       const name = filenameFrom(res.headers.get("Content-Disposition") || "");
@@ -52,7 +53,7 @@ export function TaxTool({ tool, title, subtitle }: { tool: string; title: string
       URL.revokeObjectURL(url);
       setDone(`Processed ${files.length} file${files.length === 1 ? "" : "s"} — check your downloads.`);
     } catch (e) {
-      setError((e as Error).message);
+      setError(userMessage(e));
     } finally {
       setBusy(false);
     }

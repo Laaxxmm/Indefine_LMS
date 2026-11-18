@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, Plus } from "lucide-react";
 import type { ServiceType } from "@prisma/client";
 import { DEPARTMENTS, departmentLabel } from "@/lib/ca-firm";
+import { userMessage, responseError } from "@/lib/errors";
 
 export function ServicesManager({ services }: { services: ServiceType[] }) {
   const router = useRouter();
@@ -19,11 +20,11 @@ export function ServicesManager({ services }: { services: ServiceType[] }) {
     try {
       const res = await fetch(url, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) { setError(data.error || "Failed"); return false; }
+      if (!res.ok) { setError(responseError(res.status, data)); return false; }
       router.refresh();
       return true;
     } catch (e) {
-      setError((e as Error).message || "Network error");
+      setError(userMessage(e));
       return false;
     } finally {
       setBusy(null);

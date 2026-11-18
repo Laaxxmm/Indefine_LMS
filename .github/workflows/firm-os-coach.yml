@@ -1,0 +1,62 @@
+# Firm OS daily coach (Phase 9): three jobs on /api/cron/firm-os/coach. GitHub cron is UTC;
+# IST = UTC + 5:30, so
+#   "30 3 * * 1-6"    -> 09:00 IST Mon-Sat            morning board, then reminders
+#   "30 4-12 * * 1-6" -> 10:00, 11:00 ... 18:00 IST   reminders
+#   "0 4-13 * * 1-6"  -> 09:30, 10:30 ... 18:30 IST   reminders
+#   "30 10 * * 5"     -> 16:00 IST Fri                weekly cycle-time summary
+# Together the reminder schedules fire every 30 minutes from 09:00 to 18:30 IST (a 19:00 run would
+# be outside the window). Each job also checks its own IST window (working day, holidays from
+# FIRM_OS_HOLIDAYS) and no-ops outside it, and every nudge is idempotent (CoachEvent.dedupeKey).
+# Base URL: repository variable LMS_BASE_URL (staging), default https://lms.indefine.in (inventory G-11).
+# Uses the same CRON_SECRET repo secret as the other cron workflows; sent as a bearer header only.
+name: Firm OS coach
+
+on:
+  schedule:
+    - cron: "30 3 * * 1-6"
+    - cron: "30 4-12 * * 1-6"
+    - cron: "0 4-13 * * 1-6"
+    - cron: "30 10 * * 5"
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "morning | reminders | summary"
+        required: true
+        default: "reminders"
+
+jobs:
+  coach:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pick jobs from schedule
+        id: pick
+        env:
+          INPUT_JOB: ${{ github.event.inputs.job }}
+        run: |
+          case "${{ github.event.schedule }}" in
+            "30 3 * * 1-6")    echo "jobs=morning reminders" >> "$GITHUB_OUTPUT" ;;
+            "30 4-12 * * 1-6") echo "jobs=reminders" >> "$GITHUB_OUTPUT" ;;
+            "0 4-13 * * 1-6")  echo "jobs=reminders" >> "$GITHUB_OUTPUT" ;;
+            "30 10 * * 5")     echo "jobs=summary" >> "$GITHUB_OUTPUT" ;;
+            *)
+              case "$INPUT_JOB" in
+                morning|reminders|summary) echo "jobs=$INPUT_JOB" >> "$GITHUB_OUTPUT" ;;
+                *) echo "Unknown job: $INPUT_JOB" >&2; exit 1 ;;
+              esac
+              ;;
+          esac
+      - name: Call coach cron endpoint
+        env:
+          BASE_URL: ${{ vars.LMS_BASE_URL || 'https://lms.indefine.in' }}
+          JOBS: ${{ steps.pick.outputs.jobs }}
+        run: |
+          if [ -z "${{ secrets.CRON_SECRET }}" ]; then
+            echo "CRON_SECRET repo secret not set - skipping."
+            exit 0
+          fi
+          for job in $JOBS; do
+            curl -fsS --max-time 150 \
+              -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+              "${BASE_URL%/}/api/cron/firm-os/coach?job=$job"
+            echo
+          done

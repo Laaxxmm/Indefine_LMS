@@ -1,0 +1,4 @@
+Date,Particulars,Voucher Type,Voucher No.,GSTIN/UIN,Place of Supply,HSN/SAC,Item Description,Quantity,GST Rate,Taxable Value,IGST,CGST,SGST/UTGST,Cess,Gross Total,Original Invoice No.,Original Invoice Date,IRN
+03-10-2026,Tanvir Traders,Sales,INV/26/601,29AABCT5101P1Z3,29-Karnataka,7318,Steel bolts M10,1000,18,200000.00,,18000.00,18000.00,,236000.00,,,
+25-10-2026,Tanvir Traders,Credit Note,CN/26/011,29AABCT5101P1Z3,29-Karnataka,7318,Rate difference allowed,,18,20000.00,,1800.00,1800.00,,23600.00,,,
+26-10-2026,Kaveri Retail,Credit Note,CN/26/012,29AACCR5202Q1Z0,29-Karnataka,7318,Goods returned,,18,10000.00,,900.00,900.00,,11800.00,INV/24/990,15-03-2025,

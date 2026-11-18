@@ -1,0 +1,4 @@
+Date,Particulars,Voucher Type,Voucher No.,Supplier Invoice No.,Supplier Invoice Date,GSTIN/UIN,Supplier State,Place of Supply,Purchase Ledger,Item Description,GST Rate,Taxable Value,IGST,CGST,SGST/UTGST,Cess,Gross Total,Reverse Charge
+08-10-2026,Adv. Kavita Deshmukh & Associates,Purchase,PUR-0001,KD/91,08-10-2026,,29-Karnataka,29-Karnataka,Legal and Professional Fees,Legal fees - contract review,18,20000.00,,,,,20000.00,Yes
+15-10-2026,Sunrise Steel,Purchase,PUR-0002,SS/3101,15-10-2026,29AAGCS6101U1ZN,,29-Karnataka,Raw Material Purchases,MS rods,18,100000.00,,9000.00,9000.00,,118000.00,No
+20-10-2026,Adv. Kavita Deshmukh & Associates,Credit Note,PCN-0001,KD/CN/12,20-10-2026,,29-Karnataka,29-Karnataka,Legal and Professional Fees,Fee reduction on arbitration bill KD/64 of August,18,50000.00,,,,,50000.00,Yes

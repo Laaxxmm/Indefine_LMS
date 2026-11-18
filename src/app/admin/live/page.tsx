@@ -18,7 +18,6 @@ import {
   FolderInput,
 } from "lucide-react";
 import {
-  scheduleRecurring,
   updateLiveSession,
   moveSessionFolder,
   cancelLiveSession,
@@ -37,6 +36,7 @@ import ScheduleLiveForm from "./ScheduleLiveForm";
 import AddPastSessionForm from "./AddPastSessionForm";
 import { AutoIngest } from "./AutoIngest";
 import { isAdmin } from "@/lib/access";
+import { failureSentence } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 
@@ -47,76 +47,7 @@ async function requireAdmin() {
   return session;
 }
 
-async function scheduleSession(formData: FormData) {
-  "use server";
-  const session = await requireAdmin();
-  const title = String(formData.get("title") || "").trim();
-  const courseTitle = String(formData.get("courseTitle") || "").trim();
-  const folderParent = String(formData.get("folderParent") || "").trim() || null;
-  const description = String(formData.get("description") || "").trim() || null;
-  const startLocal = String(formData.get("startLocal") || "");
-  const durationMin = Number(formData.get("durationMin") || 60);
-  const attendeeUserIds = formData
-    .getAll("attendeeIds")
-    .map(String)
-    .filter(Boolean);
-  const repeat = String(formData.get("repeat") || "none") as
-    | "none"
-    | "daily"
-    | "weekly";
-  const occurrences = Number(formData.get("occurrences") || 1);
-
-  // Attached material files → { name, bytes } for upload into the course folder.
-  const materials: { name: string; bytes: ArrayBuffer }[] = [];
-  for (const f of formData.getAll("materials")) {
-    if (f instanceof File && f.size > 0) {
-      materials.push({ name: f.name, bytes: await f.arrayBuffer() });
-    }
-  }
-
-  if (!title || !courseTitle || !startLocal) return;
-
-  // Organizer = the Teams meeting host. The meeting is created with THEIR
-  // delegated token (on their calendar), so they must have signed in to the
-  // LMS at least once. Falls back to the scheduling admin.
-  let organizerId = String(formData.get("organizerId") || "") || session.user.id;
-  if (organizerId !== session.user.id) {
-    const ok = await prisma.account.findFirst({
-      where: { userId: organizerId, provider: "microsoft-entra-id" },
-      select: { id: true },
-    });
-    if (!ok) organizerId = session.user.id;
-  }
-
-  // redirect() throws internally, so keep it OUT of the try/catch.
-  let errMsg: string | null = null;
-  try {
-    await scheduleRecurring(
-      {
-        title,
-        courseTitle,
-        folderParent,
-        description,
-        startLocal,
-        durationMin: Number.isFinite(durationMin) ? durationMin : 60,
-        attendeeUserIds,
-        materials,
-      },
-      organizerId,
-      repeat,
-      Number.isFinite(occurrences) ? occurrences : 1
-    );
-  } catch (e) {
-    errMsg = (e as Error).message;
-  }
-
-  if (errMsg) {
-    redirect(`/admin/live?error=${encodeURIComponent(errMsg)}`);
-  }
-  revalidatePath("/admin/live");
-  revalidatePath("/dashboard");
-  redirect("/admin/live?tab=sessions&scheduled=1");
-}
+// Scheduling a session (with material files) is a route handler (re-audit NEW-6): POST /api/admin/live/schedule.
 
 async function editSession(formData: FormData) {
   "use server";
@@ -139,7 +70,7 @@ async function editSession(formData: FormData) {
       durationMin: Number.isFinite(durationMin) ? durationMin : 60,
     });
   } catch (e) {
-    errMsg = (e as Error).message;
+    errMsg = failureSentence(e, "The session could not be changed.", "Check the details and try again.");
   }
   if (errMsg) {
     redirect(`/admin/live?tab=sessions&error=${encodeURIComponent(errMsg)}`);
@@ -160,7 +91,7 @@ async function moveFolderAction(formData: FormData) {
   try {
     await moveSessionFolder(id, folderParent);
   } catch (e) {
-    errMsg = (e as Error).message;
+    errMsg = failureSentence(e, "The recording folder could not be moved.", "Try again in a minute.");
   }
   revalidatePath("/admin/live");
   redirect(
@@ -271,7 +202,7 @@ async function addPastSession(formData: FormData) {
       select: { id: true },
     });
   } catch (e) {
-    back((e as Error).message || "Could not create the session.");
+    back(failureSentence(e, "The past session could not be added.", "Check the details and try again."));
   }
 
   // Copy the recording in and run the normal pipeline (video + allotment).
@@ -437,6 +368,12 @@ export default async function AdminLivePage({
           Schedule a Teams meeting from here. Attendees get the invite by email,
           and the recording lands in a folder named after the course.
         </p>
+        <p className="mt-2 text-sm">
+          <Link href="/admin/live/parked" className="font-semibold text-brand-600 hover:underline">
+            Sessions parked for review
+          </Link>
+          <span className="text-ink-mute"> · transcripts with client details the AI could not hide</span>
+        </p>
       </div>
 
       {scheduled && (
@@ -526,7 +463,7 @@ export default async function AdminLivePage({
           organizers={organizers}
           currentUserId={currentUserId}
           existingFolders={existingFolders}
-          action={scheduleSession}
+          action="/api/admin/live/schedule"
           defaultStart={defaultStart}
         />
 

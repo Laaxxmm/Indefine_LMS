@@ -1,0 +1,38 @@
+{
+  "description": "AUDIT PROBE 3 (documents behaviour, PASSES): recorded.json carries a stale pre-audit system.echo-extract whose INV-1 amount is changed by Rs 1; input/ and expected.json unchanged. Echo never asks for that task, so deterministic figures and flags come from the input and the fixture passes; the harness reports the stale recording as a note.",
+  "category": "clean",
+  "job": {
+    "fy": "2026-27",
+    "period": "2026-10"
+  },
+  "flags": [],
+  "figures": {
+    "rowCount": 3,
+    "totalPaise": 4745649,
+    "largestPaise": 2345650
+  },
+  "deliverables": [
+    {
+      "name": "Echo register",
+      "sheets": [
+        {
+          "name": "Register",
+          "columns": [
+            "Ref",
+            "Party",
+            "Date",
+            "Amount"
+          ]
+        },
+        {
+          "name": "Summary",
+          "columns": [
+            "Figure",
+            "Amount",
+            "Count"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -18,6 +18,7 @@
     button.secondary { background: #fff; color: #1c1c28; border: 1px solid #e4e4ee; }
     button:hover:not(:disabled) { filter: brightness(1.05); }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .origin { font-family: "SF Mono", Menlo, monospace; font-size: 12px; padding: 7px 9px; border: 1px dashed #e4e4ee; border-radius: 6px; background: #fff; }
     .muted { color: #8a8aa0; font-size: 10px; margin-top: 10px; line-height: 1.5; }
   </style>
 </head>
@@ -25,8 +26,8 @@
   <h2>Neo Centra · Turia Cookie Sync</h2>
   <div id="status" class="status neutral">Loading…</div>
 
-  <label for="lmsUrl">LMS URL</label>
-  <input id="lmsUrl" type="text" placeholder="https://lms.indefine.in" autocomplete="off" />
+  <label>Sends to (fixed in this build)</label>
+  <div id="lmsOrigin" class="origin">…</div>
 
   <label for="relayToken">Relay token</label>
   <input id="relayToken" type="password" placeholder="NEO_TURIA_RELAY_TOKEN value" autocomplete="off" />
@@ -36,7 +37,7 @@
     <button id="sync">Sync now</button>
   </div>
 
-  <p class="muted">Keep a logged-in practice.turia.in tab open. This pushes Turia's session cookie to the LMS every 5 min and whenever the token rotates.</p>
+  <p class="muted">Keep a logged-in practice.turia.in tab open. This sends only Turia's accessToken cookie to the LMS above every 5 min and whenever the token rotates.</p>
   <script src="popup.js"></script>
 </body>
 </html>

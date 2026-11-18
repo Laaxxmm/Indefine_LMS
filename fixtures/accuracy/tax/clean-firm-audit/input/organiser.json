@@ -1,0 +1,45 @@
+{
+  "profile": {
+    "name": "Fixture & Partners",
+    "status": "firm",
+    "residentialStatus": "resident",
+    "businessKind": "business",
+    "auditPlanned": true,
+    "plannedFilingDate": "2026-10-20",
+    "itrFormPlanned": "ITR-5",
+    "notes": "Partnership firm trading in electrical goods, Bengaluru. No foreign assets, accounts or income."
+  },
+  "business": {
+    "turnover": "12,00,00,000",
+    "cashReceipts": "10,00,000",
+    "digitalReceipts": "11,90,00,000",
+    "booksProfit": "40,00,000",
+    "cashPayments": "20,00,000",
+    "totalPayments": "11,50,00,000"
+  },
+  "tdsInBooks": [
+    {
+      "tan": "BLRK00007H",
+      "deductor": "Fixture Retail Ltd",
+      "amount": "1,20,000"
+    }
+  ],
+  "advanceTax": [
+    {
+      "date": "2025-06-15",
+      "amount": "1,70,000"
+    },
+    {
+      "date": "2025-09-15",
+      "amount": "3,40,000"
+    },
+    {
+      "date": "2025-12-15",
+      "amount": "3,36,000"
+    },
+    {
+      "date": "2026-03-15",
+      "amount": "2,82,000"
+    }
+  ]
+}

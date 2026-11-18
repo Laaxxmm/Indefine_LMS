@@ -1,0 +1,46 @@
+{
+  "gst.classify-ledgers": {
+    "ledgers": [
+      {
+        "ledger": "Miscellaneous Expenses",
+        "blockedCategory": "insufficient_evidence",
+        "rcmService": "insufficient_evidence",
+        "note": "ledger and description do not say what was bought",
+        "evidence": {
+          "quote": "Miscellaneous Expenses",
+          "location": "purchase-register.csv row 3"
+        }
+      },
+      {
+        "ledger": "Raw Material Purchases",
+        "blockedCategory": "none",
+        "rcmService": "none",
+        "note": "ordinary business input",
+        "evidence": {
+          "quote": "Raw Material Purchases",
+          "location": "purchase-register.csv row 2"
+        }
+      }
+    ]
+  },
+  "gst.check:gst.free-supplies": {
+    "status": "pass",
+    "message": "No free supply, gift, sample or personal use described",
+    "evidence": {
+      "quote": "Sundry items as per bill",
+      "location": "purchase-register.csv row 3"
+    }
+  },
+  "gst.read-hsn": {
+    "items": [
+      {
+        "description": "Assorted items as per PO 5521",
+        "hsn": "insufficient_evidence",
+        "evidence": {
+          "quote": "Assorted items as per PO 5521",
+          "location": "sales-register.csv row 2"
+        }
+      }
+    ]
+  }
+}

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canViewSop } from "@/lib/sop/access";
-import { renderSopDocx } from "@/lib/sop/render";
+import { renderVersionDocx } from "@/lib/sop/service";
 import type { SopContent } from "@/lib/sop/types";
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -11,21 +11,21 @@ const slug = (s: string) => s.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g,
 // Regenerate the .docx from the stored structured content (nothing read from disk).
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!canViewSop(session.user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!session?.user) return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
+  if (!canViewSop(session.user)) return NextResponse.json({ error: "You don't have access to SOPs. Ask an admin to give you access." }, { status: 403 });
 
   const { id } = await params;
   const vid = new URL(req.url).searchParams.get("v");
   const sop = await prisma.sop.findUnique({ where: { id }, select: { title: true, currentVersionId: true } });
-  if (!sop) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!sop) return NextResponse.json({ error: "That SOP wasn't found. Go back to the SOP list and open it again." }, { status: 404 });
 
   const version = await prisma.sopVersion.findFirst({
     where: { sopId: id, id: vid ?? sop.currentVersionId ?? undefined },
     select: { content: true, versionNumber: true },
   });
-  if (!version) return NextResponse.json({ error: "Version not found" }, { status: 404 });
+  if (!version) return NextResponse.json({ error: "That version of the SOP wasn't found. Go back to the SOP and pick a version." }, { status: 404 });
 
-  const buffer = await renderSopDocx(version.content as unknown as SopContent);
+  const buffer = await renderVersionDocx(version.content as unknown as SopContent, id);
   const filename = `${slug(sop.title)}_v${version.versionNumber}.docx`;
   return new NextResponse(new Uint8Array(buffer), {
     status: 200,

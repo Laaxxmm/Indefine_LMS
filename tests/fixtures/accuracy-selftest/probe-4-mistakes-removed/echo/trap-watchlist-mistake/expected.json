@@ -1,0 +1,43 @@
+{
+  "description": "AUDIT PROBE 4 (must FAIL): copy of trap-watchlist-mistake with no _mistakes/ folder, so echo.watch-shadow is never promoted. The expected warn flag is missed and the harness reports a rule missing from the pack.",
+  "category": "trap",
+  "job": {
+    "fy": "2026-27",
+    "period": "2026-10"
+  },
+  "flags": [
+    {
+      "ruleId": "echo.watch-shadow",
+      "severity": "warn"
+    }
+  ],
+  "figures": {
+    "rowCount": 2,
+    "totalPaise": 1090000,
+    "largestPaise": 990000
+  },
+  "deliverables": [
+    {
+      "name": "Echo register",
+      "sheets": [
+        {
+          "name": "Register",
+          "columns": [
+            "Ref",
+            "Party",
+            "Date",
+            "Amount"
+          ]
+        },
+        {
+          "name": "Summary",
+          "columns": [
+            "Figure",
+            "Amount",
+            "Count"
+          ]
+        }
+      ]
+    }
+  ]
+}

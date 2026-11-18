@@ -3,18 +3,22 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isSopAdmin } from "@/lib/sop/access";
+import { validationMessage } from "@/lib/errors";
+import { readJsonCapped } from "@/lib/hardening/json-body";
 
 // Grant a user global SOP create/edit rights (admins only).
 export async function POST(req: Request) {
   const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!isSopAdmin(session.user)) return NextResponse.json({ error: "Admins only" }, { status: 403 });
+  if (!session?.user) return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
+  if (!isSopAdmin(session.user)) return NextResponse.json({ error: "Only admins can give access to the SOP builder. Ask an admin." }, { status: 403 });
 
-  const parsed = z.object({ userId: z.string().min(1) }).safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  const jsonBody = await readJsonCapped(req); // re-audit NEW-6: capped as it streams in
+  if (!jsonBody.ok) return jsonBody.res;
+  const parsed = z.object({ userId: z.string().min(1) }).safeParse(jsonBody.value);
+  if (!parsed.success) return NextResponse.json({ error: validationMessage(parsed.error) }, { status: 400 });
 
   const user = await prisma.user.findUnique({ where: { id: parsed.data.userId }, select: { id: true, name: true, email: true, active: true } });
-  if (!user || !user.active) return NextResponse.json({ error: "User not found or inactive" }, { status: 400 });
+  if (!user || !user.active) return NextResponse.json({ error: "That person isn't an active member of staff. Pick someone from the list." }, { status: 400 });
 
   const editor = await prisma.sopEditor.upsert({
     where: { userId: user.id },

@@ -1,0 +1,11 @@
+{
+  "name": "Fixture Components Pvt Ltd",
+  "companyClass": "private",
+  "holdingOrSubsidiary": false,
+  "holdingOrSubsidiaryOfPublic": false,
+  "paidUpCapital": 60000000,
+  "reserves": 1550000,
+  "maxBorrowings": 2400000,
+  "turnover": 12000000,
+  "priorTurnover": 10000000
+}

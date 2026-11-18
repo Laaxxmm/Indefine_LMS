@@ -1,0 +1,161 @@
+{
+  "description": "Clean file with a MIXED-SIZE sales population (MUS paths scored). Same TB, PY TB, profile, explanations and notes as clean-private-small-company; the 40 sales invoices still total Rs1,20,00,000 (ties to Sales - Domestic) but range from Rs50,000 to Rs12,00,000. MUS working (independent calculator from the documented algorithm, not the agent's code): BV = 1,200,000,000 paise; n = 25 (plan); J = floor(BV / 25) = 48000000; seed \"FIXTURE-FY2025-26/sales\" -> FNV-1a -> mulberry32 -> r = 1 + nextInt(J) = 4344147; points r + kJ for k = 0..24 (last 1156344147 <= BV). Items >= J always selected: INV-007, INV-015, INV-021, INV-023, INV-031, INV-033, INV-038. INV-007 (Rs12,00,000, range 115,000,000-235,000,000] holds points 148,344,147 and 196,344,147; INV-015 (Rs9,60,000 = 2J, range 390,000,000-486,000,000] holds 436,344,147 and 484,344,147 -> each counted once: 25 points, 23 distinct items. Selected value Rs94,50,000 (945000000 paise); fingerprint 0b4eff84ec7134f4 -> first 48 bits 12433922255985. Expenses random sample unchanged: 25 of 30, 67000000 paise, fingerprint48 77961382352025. sampleItemsSelected = 23 + 25 = 48. No flags.",
+  "category": "clean",
+  "job": {
+    "fy": "2025-26",
+    "period": "Annual",
+    "title": "Statutory audit FY 2025-26"
+  },
+  "flags": [],
+  "figures": {
+    "tbDebitPaise": 1860000000,
+    "tbCreditPaise": 1860000000,
+    "tbDifferencePaise": 0,
+    "ledgerCount": 19,
+    "priorTbDebitPaise": 1646000000,
+    "priorTbCreditPaise": 1646000000,
+    "leadScheduleCount": 13,
+    "unmappedLedgerCount": 0,
+    "revenuePaise": 1200000000,
+    "materialityPaise": 12000000,
+    "performanceMaterialityPaise": 9000000,
+    "caroApplicable": 0,
+    "caroClausesApplicable": 0,
+    "materialVarianceCount": 6,
+    "unexplainedVarianceCount": 0,
+    "samplePopulationCount": 2,
+    "sampleItemsSelected": 48,
+    "parseIssueCount": 0,
+    "sample.sales.populationPaise": 1200000000,
+    "sample.sales.plannedSize": 25,
+    "sample.sales.intervalPaise": 48000000,
+    "sample.sales.selected": 23,
+    "sample.sales.selectedPaise": 945000000,
+    "sample.expenses.populationPaise": 79500000,
+    "sample.expenses.plannedSize": 25,
+    "sample.expenses.selected": 25,
+    "sample.expenses.selectedPaise": 67000000,
+    "sample.expenses.fingerprint48": 77961382352025,
+    "sample.sales.randomStart": 4344147,
+    "sample.sales.fingerprint48": 12433922255985
+  },
+  "deliverables": [
+    {
+      "name": "Audit working papers",
+      "sheets": [
+        {
+          "name": "WP index",
+          "columns": [
+            "Ref",
+            "Section",
+            "SA reference",
+            "Description",
+            "Status"
+          ]
+        },
+        {
+          "name": "Materiality",
+          "columns": [
+            "Basis",
+            "Amount",
+            "Note"
+          ]
+        },
+        {
+          "name": "Lead schedules",
+          "columns": [
+            "WP ref",
+            "Area",
+            "Current year",
+            "Prior year",
+            "Variance",
+            "Variance %",
+            "Explanation"
+          ]
+        },
+        {
+          "name": "Lead detail",
+          "columns": [
+            "WP ref",
+            "Ledger",
+            "Group",
+            "Current year",
+            "Prior year",
+            "Variance"
+          ]
+        },
+        {
+          "name": "Sampling plan",
+          "columns": [
+            "Population",
+            "Method",
+            "Seed",
+            "Items",
+            "Population value",
+            "Sample size",
+            "Interval",
+            "Random start",
+            "Selected",
+            "Selected value",
+            "Fingerprint"
+          ]
+        },
+        {
+          "name": "Sample selections",
+          "columns": [
+            "Population",
+            "Pick",
+            "Row",
+            "Reference",
+            "Date",
+            "Party",
+            "Amount",
+            "Selection point"
+          ]
+        },
+        {
+          "name": "Review notes",
+          "columns": [
+            "No",
+            "WP ref",
+            "Note",
+            "Severity",
+            "Source",
+            "Status",
+            "Response"
+          ]
+        },
+        {
+          "name": "Pending information",
+          "columns": [
+            "No",
+            "Item",
+            "Reason",
+            "Requested from"
+          ]
+        },
+        {
+          "name": "CARO 2020",
+          "columns": [
+            "Clause",
+            "Title",
+            "Applicability",
+            "Basis",
+            "Information required",
+            "WP ref"
+          ]
+        },
+        {
+          "name": "Checklist",
+          "columns": [
+            "Rule",
+            "Severity",
+            "Status",
+            "Message",
+            "Evidence"
+          ]
+        }
+      ]
+    }
+  ]
+}

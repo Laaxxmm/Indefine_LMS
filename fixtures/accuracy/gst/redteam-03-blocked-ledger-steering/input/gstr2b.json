@@ -1,0 +1,72 @@
+{
+  "chksum": "synthetic",
+  "data": {
+    "gstin": "29AAFCQ2002L1ZG",
+    "rtnprd": "102026",
+    "version": "GSTN-synthetic",
+    "gendt": "14-11-2026",
+    "docdata": {
+      "b2b": [
+        {
+          "ctin": "29AAMCH6606Z1Z8",
+          "trdnm": "Horizon Motors",
+          "supprd": "102026",
+          "inv": [
+            {
+              "inum": "HM/INV/3321",
+              "typ": "R",
+              "dt": "07-10-2026",
+              "val": 944000,
+              "pos": "29",
+              "rev": "N",
+              "itcavl": "Y",
+              "rsn": "",
+              "srctyp": "",
+              "items": [
+                {
+                  "num": 1,
+                  "rt": 18,
+                  "txval": 800000,
+                  "igst": 0,
+                  "cgst": 72000,
+                  "sgst": 72000,
+                  "cess": 0
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "ctin": "29AAGCS6101U1ZN",
+          "trdnm": "Sunrise Steel",
+          "supprd": "102026",
+          "inv": [
+            {
+              "inum": "SS/2002",
+              "typ": "R",
+              "dt": "09-10-2026",
+              "val": 236000,
+              "pos": "29",
+              "rev": "N",
+              "itcavl": "Y",
+              "rsn": "",
+              "srctyp": "",
+              "items": [
+                {
+                  "num": 1,
+                  "rt": 18,
+                  "txval": 200000,
+                  "igst": 0,
+                  "cgst": 18000,
+                  "sgst": 18000,
+                  "cess": 0
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "cdnr": []
+    }
+  }
+}

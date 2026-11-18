@@ -1,0 +1,4 @@
+din,name,designation,din_status,kyc_completed_on,resident_in_india
+01000001,Asha Rao,Managing Director,active,2026-08-20,yes
+01000002,Vikram Shetty,Director,active,2026-08-22,yes
+01000003,Rohan Kini,Director,active,,yes

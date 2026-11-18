@@ -1,0 +1,31 @@
+{
+  "tax.check:tax.foreign-asset": {
+    "status": "pass",
+    "evidence": {
+      "quote": "No foreign assets, accounts or income.",
+      "location": "organiser.json profile.notes line 1"
+    }
+  },
+  "tax.match-ais": {
+    "matches": [
+      {
+        "aisId": "A1",
+        "outcome": "matched",
+        "bookId": "B1",
+        "evidence": {
+          "quote": "B1 | savings-interest | SBI Savings Account",
+          "location": "organiser.json otherSources[0]"
+        }
+      },
+      {
+        "aisId": "A2",
+        "outcome": "insufficient_evidence",
+        "bookId": null,
+        "evidence": {
+          "quote": "A2 | interest-deposit | HDFC Bank Ltd | Interest from term deposit",
+          "location": "ais.csv row 3"
+        }
+      }
+    ]
+  }
+}

@@ -47,10 +47,14 @@ export async function postTechWorkMessage(text: string): Promise<{ ok: boolean; 
     if (!token) return { ok: false, error: "Lead has not connected Microsoft 365 with the chat scopes, open /connect once" };
     const chatId = await ensureChat(token);
     const res = await fetch(`${GRAPH}/chats/${chatId}/messages`, post(token, { body: { contentType: "text", content: text } }));
-    if (!res.ok) return { ok: false, error: `Graph post failed: ${res.status} ${await res.text()}` };
+    if (!res.ok) {
+      console.warn(`[work] Teams post failed: ${res.status} ${await res.text()}`);
+      return { ok: false, error: "Teams did not accept the post. It will be tried again at the next scheduled time." };
+    }
     return { ok: true };
   } catch (e) {
     console.error("Tech Work nudge failed:", e);
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    console.warn(`[work] Teams post failed: ${e instanceof Error ? e.message : String(e)}`);
+    return { ok: false, error: "Teams could not be reached. The post will be tried again at the next scheduled time." };
   }
 }

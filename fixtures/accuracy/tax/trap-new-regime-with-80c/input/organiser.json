@@ -1,0 +1,48 @@
+{
+  "profile": {
+    "name": "Fixture Salaried",
+    "status": "individual",
+    "dateOfBirth": "1985-06-15",
+    "residentialStatus": "resident",
+    "regimeClaimed": "new",
+    "businessKind": "none",
+    "plannedFilingDate": "2026-07-20",
+    "itrFormPlanned": "ITR-1",
+    "notes": "Salaried employee of Fixture Tech Pvt Ltd, Bengaluru. No foreign assets, accounts or income."
+  },
+  "salary": {
+    "gross": "15,00,000",
+    "professionalTax": "2,400",
+    "basicDa": "7,50,000"
+  },
+  "otherSources": [
+    {
+      "id": "B1",
+      "nature": "savings-interest",
+      "payer": "SBI Savings Account",
+      "amount": "8,000"
+    },
+    {
+      "id": "B2",
+      "nature": "deposit-interest",
+      "payer": "HDFC Bank Fixed Deposit",
+      "amount": "42,000"
+    }
+  ],
+  "tdsInBooks": [
+    {
+      "tan": "BLRF00001A",
+      "deductor": "Fixture Tech Pvt Ltd",
+      "amount": "1,01,100"
+    },
+    {
+      "tan": "MUMH00001B",
+      "deductor": "HDFC Bank Ltd",
+      "amount": "4,200"
+    }
+  ],
+  "deductions": {
+    "80C": "1,50,000",
+    "80DSelf": "25,000"
+  }
+}

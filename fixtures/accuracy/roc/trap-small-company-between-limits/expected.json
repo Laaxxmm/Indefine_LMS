@@ -1,0 +1,136 @@
+{
+  "description": "Trap (between the two limit sets): private company, not a holding/subsidiary, paid-up Rs6,00,00,000 and preceding-year turnover Rs70,00,00,000. Verified limits applied (2022 Rules: paid-up <= Rs4 cr AND turnover <= Rs40 cr): paid-up 6 cr > 4 cr -> NOT small -> MGT-7; declared MGT-7 -> roc.annual-return-form passes. Unverified limits from 01-12-2025 (Rs10 cr / Rs100 cr, not applied): 6 cr <= 10 cr and 70 cr <= 100 cr -> would be small -> MGT-7A -> classification differs -> warn roc.small-company-pending-verification (the reviewer must get the limits verified; the agent does not pick MGT-7A). Working: shares 36,00,000 + 24,00,000 = 60,00,000 x Rs10 = Rs6,00,00,000 = 60000000 rupees (6000000000 paise) = paid-up, diff 0. Current BS: equity 6,00,00,000 + 4,50,00,000 = 10,50,00,000 (10500000000 paise); liabilities 0 + 2,00,00,000 + 3,00,00,000 + 50,00,000 = 5,50,00,000; total 16,00,00,000; assets 6,00,00,000 + 0 + 3,00,00,000 + 5,00,00,000 + 1,50,00,000 + 50,00,000 = 16,00,00,000 (16000000000 paise), diff 0; share capital 6 cr = paid-up. PBT = 75,00,00,000 + 20,00,000 - 72,20,00,000 = 3,00,00,000 (3000000000 paise). CSR: preceding PBT 70,00,00,000 + 10,00,000 - 67,60,00,000 = 2,50,00,000 (< 5 cr), net worth 8,25,00,000 (< 500 cr), turnover 70 cr (< 1,000 cr) -> not applicable, obligation 0. Rotation class: private paid-up 6 cr < 50 cr, borrowings 2 cr < 50 cr -> no; auditor (firm) term began FY 2022-23 -> year 4 of 5, no ADT-1. AGM due 30-09-2026, held 25-09-2026 (previous 26-09-2025, gap limit 26-12-2026); AOC-4 24-10-2026 and MGT-7 23-11-2026 (shared calendar, AGM day counted); planned filing 15-10-2026 -> no delay, no fee. Normal fee: authorised Rs10,00,00,000 (>= Rs1 cr slab) -> Rs600 (60000 paise). KYC both done Aug 2026 -> 0 pending. DPT-3: money not treated as deposits Rs2,00,00,000 -> applicable, filed 25-06-2026. MSME: 30 days -> not applicable.",
+  "category": "trap",
+  "job": {
+    "fy": "2025-26",
+    "period": "Annual",
+    "title": "ROC annual filing"
+  },
+  "flags": [
+    {
+      "ruleId": "roc.small-company-pending-verification",
+      "severity": "warn"
+    }
+  ],
+  "figures": {
+    "paidUpCapitalPaise": 6000000000,
+    "shareholdingTotalPaise": 6000000000,
+    "shareholdingDiffPaise": 0,
+    "sharesTotal": 6000000,
+    "turnoverPaise": 75000000000,
+    "turnoverPreviousPaise": 70000000000,
+    "netWorthPaise": 10500000000,
+    "profitBeforeTaxPaise": 3000000000,
+    "totalAssetsPaise": 16000000000,
+    "balanceSheetDiffPaise": 0,
+    "smallCompany": 0,
+    "mgt7a": 0,
+    "csrApplicable": 0,
+    "csrObligationPaise": 0,
+    "agmDueDate": 20260930,
+    "agmDelayDays": 0,
+    "aoc4DueDate": 20261024,
+    "mgt7DueDate": 20261123,
+    "adt1DueDate": 0,
+    "dir3KycDueDate": 20260930,
+    "aoc4DelayDays": 0,
+    "mgt7DelayDays": 0,
+    "directorsKycPending": 0,
+    "auditorTermYear": 4,
+    "adt1Required": 0,
+    "msme1Applicable": 0,
+    "dpt3Applicable": 1,
+    "normalFeePaise": 60000,
+    "aoc4AdditionalFeePaise": 0,
+    "mgt7AdditionalFeePaise": 0,
+    "adt1AdditionalFeePaise": 0,
+    "dirKycLateFeePaise": 0,
+    "additionalFeeTotalPaise": 0
+  },
+  "deliverables": [
+    {
+      "name": "ROC data sheets",
+      "sheets": [
+        {
+          "name": "AOC-4",
+          "columns": [
+            "Item",
+            "FY 2025-26",
+            "Previous year"
+          ]
+        },
+        {
+          "name": "MGT-7",
+          "columns": [
+            "Item",
+            "Value"
+          ]
+        },
+        {
+          "name": "Shareholding",
+          "columns": [
+            "Folio",
+            "Holder",
+            "Class",
+            "Shares",
+            "Paid up per share",
+            "Paid-up amount"
+          ]
+        },
+        {
+          "name": "DIR-3 KYC",
+          "columns": [
+            "DIN",
+            "Director",
+            "Designation",
+            "DIN status",
+            "KYC completed on",
+            "Action"
+          ]
+        },
+        {
+          "name": "ADT-1 check",
+          "columns": [
+            "Check",
+            "Result"
+          ]
+        },
+        {
+          "name": "Due dates and fees",
+          "columns": [
+            "Form",
+            "Applicable",
+            "Basis",
+            "Statutory due",
+            "Planned filing",
+            "Days late",
+            "Normal fee",
+            "Additional fee",
+            "Note"
+          ]
+        },
+        {
+          "name": "Checklist",
+          "columns": [
+            "Rule",
+            "Severity",
+            "Status",
+            "Finding",
+            "Evidence"
+          ]
+        },
+        {
+          "name": "Verify",
+          "columns": [
+            "Rate / threshold / date",
+            "Partner to verify"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Board and AGM resolutions",
+      "sheets": []
+    }
+  ]
+}

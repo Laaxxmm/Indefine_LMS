@@ -1,0 +1,40 @@
+{
+  "profile": {
+    "name": "Fixture Legacy Limited",
+    "status": "company",
+    "residentialStatus": "resident",
+    "companyRegime": "normal",
+    "companyTurnoverPy2": "3,00,00,00,000",
+    "businessKind": "business",
+    "auditPlanned": true,
+    "plannedFilingDate": "2026-10-25",
+    "itrFormPlanned": "ITR-6",
+    "notes": "Unlisted public company, engineering services, Bengaluru. No foreign assets, accounts or income."
+  },
+  "business": {
+    "turnover": "20,00,00,000",
+    "cashReceipts": "0",
+    "digitalReceipts": "20,00,00,000",
+    "booksProfit": "50,00,000",
+    "cashPayments": "10,00,000",
+    "totalPayments": "19,50,00,000"
+  },
+  "advanceTax": [
+    {
+      "date": "2025-06-15",
+      "amount": "1,95,000"
+    },
+    {
+      "date": "2025-09-15",
+      "amount": "3,90,000"
+    },
+    {
+      "date": "2025-12-15",
+      "amount": "3,90,000"
+    },
+    {
+      "date": "2026-03-15",
+      "amount": "3,25,000"
+    }
+  ]
+}

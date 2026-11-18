@@ -1,0 +1,25 @@
+{
+  "profile": {
+    "name": "Fixture Retail (proprietor)",
+    "status": "individual",
+    "dateOfBirth": "1980-01-10",
+    "residentialStatus": "resident",
+    "regimeClaimed": "new",
+    "businessKind": "business",
+    "plannedFilingDate": "2026-07-31",
+    "notes": "Proprietor of Fixture Retail, grocery store, Mysuru. No foreign assets, accounts or income.",
+    "presumptive": "44AD",
+    "itrFormPlanned": "ITR-4"
+  },
+  "otherSources": [],
+  "tdsInBooks": [],
+  "business": {
+    "turnover": "90,00,000",
+    "cashReceipts": "10,00,000",
+    "digitalReceipts": "80,00,000",
+    "booksProfit": "4,50,000",
+    "declaredIncome": "4,50,000",
+    "cashPayments": "1,00,000",
+    "totalPayments": "85,50,000"
+  }
+}

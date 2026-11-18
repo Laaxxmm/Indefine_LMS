@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { confirmSessionEnded, ensureMeetingSettings } from "./schedule";
 import { ensureTranscriptQuiz, ingestRecording, normaliseTitle, stripExt } from "./ingest";
 import { captureAttendance, creditLiveAttendees } from "./attendance";
+import { failureSentence } from "@/lib/errors";
 
 /**
  * One pass of the hands-off pipeline: keep auto-record settings applied to
@@ -79,7 +80,7 @@ export async function runIngestSweep(): Promise<{
       const r = await ingestRecording(s.id);
       results.push({ id: s.id, title: s.title, status: r.status, message: r.message });
     } catch (e) {
-      results.push({ id: s.id, title: s.title, status: "error", message: (e as Error).message });
+      results.push({ id: s.id, title: s.title, status: "error", message: failureSentence(e, "The recording could not be brought in.", "It will be tried again on the next run.") });
     }
   }
 

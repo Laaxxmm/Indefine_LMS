@@ -96,6 +96,13 @@ async function setStatus(formData: FormData) {
   if (!owner) return;
   // Only the owner can transition; admin uses /admin/approvals.
   if (owner.userId !== session.user.id) return;
+  // Same transitions the buttons offer. FUNDED is the manager's call, and SHIPPED counts
+  // toward the trajectory score, so an owner can't jump PITCHED → SHIPPED by posting it.
+  const allowed =
+    (next === "ACTIVE" && owner.status === "FUNDED") ||
+    (next === "SHIPPED" && owner.status === "ACTIVE") ||
+    (next === "ARCHIVED" && owner.status !== "ARCHIVED" && owner.status !== "SHIPPED");
+  if (!allowed) return;
 
   await prisma.initiative.update({
     where: { id },

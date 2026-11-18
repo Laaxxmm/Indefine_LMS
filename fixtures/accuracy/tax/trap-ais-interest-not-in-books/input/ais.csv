@@ -1,0 +1,5 @@
+id,category,source,description,amount
+A1,interest-savings,State Bank of India,Interest from savings account,"8,000"
+A2,interest-deposit,HDFC Bank Ltd,Interest from term deposit,"42,000"
+A3,salary,Fixture Tech Pvt Ltd,Salary received,"15,00,000"
+A4,interest-deposit,ICICI Bank Ltd,Interest from term deposit,"25,000"

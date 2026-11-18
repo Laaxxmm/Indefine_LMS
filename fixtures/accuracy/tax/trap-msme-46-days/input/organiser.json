@@ -1,0 +1,46 @@
+{
+  "profile": {
+    "name": "Fixture Components (proprietor)",
+    "status": "individual",
+    "dateOfBirth": "1980-01-10",
+    "residentialStatus": "resident",
+    "regimeClaimed": "old",
+    "businessKind": "business",
+    "plannedFilingDate": "2026-07-31",
+    "notes": "Proprietor of Fixture Components, small manufacturer, Peenya. No foreign assets, accounts or income.",
+    "form10IEAFiledOn": "2026-07-10",
+    "itrFormPlanned": "ITR-3"
+  },
+  "otherSources": [],
+  "tdsInBooks": [],
+  "business": {
+    "turnover": "90,00,000",
+    "cashReceipts": "50,000",
+    "digitalReceipts": "89,50,000",
+    "booksProfit": "20,00,000",
+    "cashPayments": "40,000",
+    "totalPayments": "70,00,000"
+  },
+  "deductions": {
+    "80C": "1,50,000",
+    "80DSelf": "25,000"
+  },
+  "advanceTax": [
+    {
+      "date": "2025-06-13",
+      "amount": "70,200"
+    },
+    {
+      "date": "2025-09-15",
+      "amount": "1,40,400"
+    },
+    {
+      "date": "2025-12-12",
+      "amount": "1,40,400"
+    },
+    {
+      "date": "2026-03-13",
+      "amount": "1,17,000"
+    }
+  ]
+}

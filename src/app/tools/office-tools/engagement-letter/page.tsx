@@ -29,6 +29,8 @@ const ACTION: Record<string, string> = {
   approved: "Approved by client",
   "signed-upload": "Signed PDF uploaded",
   sent: "Signed letter emailed",
+  "draft-outlook-draft": "Approval email created as an Outlook draft",
+  "signed-outlook-draft": "Signed-letter email created as an Outlook draft",
   "client-signed-upload": "Client-signed copy uploaded",
 };
 
@@ -56,7 +58,8 @@ export default async function EngagementLetterRegister() {
           <h1 className="font-display font-extrabold text-2xl sm:text-[28px] tracking-[-0.02em] mb-1">Engagement letters</h1>
           <p className="text-ink-mute text-[14px] max-w-2xl">
             Save the letter, email the unsigned draft for approval, record the client&apos;s approval, then sign (DSC in Acrobat
-            or by hand), upload and email the signed letter for countersignature. Files are
+            or by hand), upload and email the signed letter for countersignature. Each email is created as a draft in your own
+            Outlook mailbox with the PDF attached; you check it and send it from Outlook. Files are
             stored in SharePoint under <b>{elRoot()}/&lt;client&gt;</b>; re-uploading replaces the file and SharePoint keeps the
             earlier versions.
           </p>
@@ -86,9 +89,9 @@ export default async function EngagementLetterRegister() {
                     <div className="font-display font-bold text-lg leading-tight">{l.clientName}</div>
                     <div className="text-[13px] text-ink-mute mt-0.5">
                       FY {fyLabel(l.fy)} · v{saves.length} · updated {fmt(l.updatedAt)} by {l.updatedByName}
-                      {l.draftSentAt && <> · draft sent {fmt(l.draftSentAt)}</>}
+                      {l.draftSentAt && <> · draft emailed {fmt(l.draftSentAt)}</>}
                       {l.approvedAt && <> · approved {fmt(l.approvedAt)}</>}
-                      {l.sentAt && <> · signed letter sent {fmt(l.sentAt)}</>}
+                      {l.sentAt && <> · signed letter emailed {fmt(l.sentAt)}</>}
                     </div>
                   </div>
                   <span className={`text-[11px] font-extrabold tracking-wide uppercase px-2 py-1 rounded-full ${STATUS_CLS[l.status]}`}>{STATUS_LABEL[l.status]}</span>

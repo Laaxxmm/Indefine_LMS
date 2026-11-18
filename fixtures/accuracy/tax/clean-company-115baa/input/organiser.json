@@ -1,0 +1,46 @@
+{
+  "profile": {
+    "name": "Fixture Industries Private Limited",
+    "status": "company",
+    "residentialStatus": "resident",
+    "companyRegime": "115BAA",
+    "businessKind": "business",
+    "auditPlanned": true,
+    "plannedFilingDate": "2026-10-25",
+    "itrFormPlanned": "ITR-6",
+    "notes": "Private company manufacturing packaging, Bengaluru. No foreign assets, accounts or income."
+  },
+  "business": {
+    "turnover": "30,00,00,000",
+    "cashReceipts": "0",
+    "digitalReceipts": "30,00,00,000",
+    "booksProfit": "2,00,00,000",
+    "cashPayments": "25,00,000",
+    "totalPayments": "27,50,00,000"
+  },
+  "tdsInBooks": [
+    {
+      "tan": "BLRK00008J",
+      "deductor": "Fixture Buyers Ltd",
+      "amount": "5,00,000"
+    }
+  ],
+  "advanceTax": [
+    {
+      "date": "2025-06-15",
+      "amount": "6,81,000"
+    },
+    {
+      "date": "2025-09-15",
+      "amount": "13,60,000"
+    },
+    {
+      "date": "2025-12-15",
+      "amount": "13,60,000"
+    },
+    {
+      "date": "2026-03-15",
+      "amount": "11,32,600"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "tax.check:tax.foreign-asset": {
+    "status": "pass",
+    "evidence": {
+      "quote": "No foreign assets, accounts or income.",
+      "location": "organiser.json profile.notes line 1"
+    }
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "gst.classify-ledgers": {
+    "ledgers": [
+      {
+        "ledger": "Legal and Professional Fees",
+        "blockedCategory": "none",
+        "rcmService": "legal",
+        "note": "legal fees to an advocate firm for an arbitration",
+        "evidence": {
+          "quote": "Legal and Professional Fees",
+          "location": "purchase-register.csv row 2"
+        }
+      },
+      {
+        "ledger": "Raw Material Purchases",
+        "blockedCategory": "none",
+        "rcmService": "none",
+        "note": "ordinary business input",
+        "evidence": {
+          "quote": "Raw Material Purchases",
+          "location": "purchase-register.csv row 3"
+        }
+      }
+    ]
+  },
+  "gst.check:gst.free-supplies": {
+    "status": "pass",
+    "message": "No free supply, gift, sample or personal use described",
+    "evidence": {
+      "quote": "Legal fees - arbitration at Mumbai",
+      "location": "purchase-register.csv row 2"
+    }
+  }
+}

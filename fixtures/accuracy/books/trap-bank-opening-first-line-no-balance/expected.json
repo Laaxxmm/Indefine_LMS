@@ -1,0 +1,144 @@
+{
+  "description": "Trap (formula re-audit NEW-3, MEDIUM: the statement's opening balance was taken from a later row when the first line printed no balance, giving a false BRS difference and a block). Same month as trap-bank-statement-cr-dr-balances, but the bank statement has no opening row and its FIRST line (03-10 NEFT Alpha Retail, deposit 1,50,000) has a blank Balance cell; the first printed balance is on 05-10 (cheque 451, withdrawal 1,00,000): 1,00,000.00 Cr (+1,00,000). Opening per bank = that balance less every line read up to and including it: 1,00,000 - (1,50,000 - 1,00,000) = 50,000 (the old code subtracted only the 05-10 line: 1,00,000 + 1,00,000 = 2,00,000, so balance per bank became 2,96,750 and the BRS showed a false 1,50,000 difference - block books.bank-recon-difference). Movements: deposits 1,50,000 + 2,40,000 = 3,90,000; withdrawals 1,00,000 + 54,000 + 1,26,000 + 12,000 + 1,250 = 2,93,250; balance per bank 50,000 + 3,90,000 - 2,93,250 = 1,46,750 (= last row 1,46,750.00 Cr). Ledger opens 50,000 Dr: receipts 3,90,000, payments 2,97,500; balance per books 1,42,500 = TB HDFC Bank. 7 matched, cheque 452 (4,250) unpresented: 1,42,500 + 4,250 = 1,46,750 -> difference 0, no flag. TB 13,96,600 both sides; TDS, GST, cash, prior TB as the clean month.",
+  "category": "trap",
+  "flags": [],
+  "figures": {
+    "tbDebitPaise": 139660000,
+    "tbCreditPaise": 139660000,
+    "tbDifferencePaise": 0,
+    "tbLedgerCount": 17,
+    "priorTbDebitPaise": 20710000,
+    "priorTbCreditPaise": 20710000,
+    "priorTbDifferencePaise": 0,
+    "bankMatchedCount": 7,
+    "bankUnmatchedStatementCount": 0,
+    "bankUnmatchedLedgerCount": 1,
+    "balancePerBankPaise": 14675000,
+    "balancePerBooksPaise": 14250000,
+    "bankReconDifferencePaise": 0,
+    "tdsDeductedPaise": 2000000,
+    "tdsDepositedPaise": 2000000,
+    "tdsShortfallPaise": 0,
+    "gstAbsDifferencePaise": 0,
+    "suspensePaise": 0,
+    "cashBalancePaise": 1825000,
+    "suggestionCount": 0,
+    "classificationQuestionCount": 0,
+    "parseIssueCount": 0,
+    "bankAmountOnlyCount": 0
+  },
+  "deliverables": [
+    {
+      "name": "Month-end pack",
+      "sheets": [
+        {
+          "name": "Summary",
+          "columns": [
+            "Item",
+            "Amount",
+            "Count",
+            "Note"
+          ]
+        },
+        {
+          "name": "Trial balance",
+          "columns": [
+            "Ledger",
+            "Group",
+            "Debit",
+            "Credit"
+          ]
+        },
+        {
+          "name": "Bank reconciliation",
+          "columns": [
+            "Particulars",
+            "Amount",
+            "Note"
+          ]
+        },
+        {
+          "name": "Bank matching",
+          "columns": [
+            "Side",
+            "Line",
+            "Date",
+            "Reference",
+            "Narration",
+            "Amount",
+            "Status",
+            "Matched with",
+            "Note"
+          ]
+        },
+        {
+          "name": "Expense suggestions",
+          "columns": [
+            "Line",
+            "Date",
+            "Narration",
+            "Amount",
+            "Suggested ledger",
+            "Confidence",
+            "Reason",
+            "Status"
+          ]
+        },
+        {
+          "name": "Suspense and unreconciled",
+          "columns": [
+            "Item",
+            "Source",
+            "Date",
+            "Amount",
+            "Age (days)",
+            "Note"
+          ]
+        },
+        {
+          "name": "Accrual-prepaid reminders",
+          "columns": [
+            "Type",
+            "Item",
+            "Ledger",
+            "Amount",
+            "Note"
+          ]
+        },
+        {
+          "name": "TDS check",
+          "columns": [
+            "Section",
+            "Month",
+            "Deducted",
+            "Deposited",
+            "Shortfall",
+            "Due date",
+            "Last deposit",
+            "Status"
+          ]
+        },
+        {
+          "name": "GST tie-out",
+          "columns": [
+            "Head",
+            "Per books",
+            "Per return",
+            "Difference",
+            "Status"
+          ]
+        },
+        {
+          "name": "Checklist",
+          "columns": [
+            "Rule",
+            "Severity",
+            "Status",
+            "Message",
+            "Evidence"
+          ]
+        }
+      ]
+    }
+  ]
+}

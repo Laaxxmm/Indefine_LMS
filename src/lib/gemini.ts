@@ -5,6 +5,9 @@
 // with "model not found". Instead we ask the key what it has (ListModels) and pick
 // a stable multimodal flash model. Result is cached for the server process.
 
+import { gateForGemini } from "@/lib/ai/legacy-gate";
+import type { DictionaryEntry } from "@/lib/ai/types";
+
 const BASE = "https://generativelanguage.googleapis.com";
 
 let cached: string | null = null;
@@ -70,18 +73,24 @@ export async function resolveGeminiModel(apiKey: string): Promise<string> {
 
 // One JSON-mode generateContent call with this key's resolved model. `schema` is a
 // Gemini responseSchema; the caller still validates the parsed result.
+//
+// DPDP (security audit #7, ADR-002): the prompt is masked and gated (src/lib/ai/legacy-gate.ts)
+// before anything leaves — client and staff names through `dictionary`, identifiers by pattern —
+// and a prompt the leak detector still flags is refused (LegacyGateError, nothing sent). The
+// answer gets the original values back.
 const CALL_TIMEOUT_MS = 45_000;
 
-export async function callGemini(prompt: string, schema?: object): Promise<string> {
+export async function callGemini(prompt: string, schema?: object, opts: { dictionary?: DictionaryEntry[]; what?: string } = {}): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY is not set on the server.");
+  const gated = gateForGemini(prompt, opts);
   const model = await resolveGeminiModel(apiKey);
   const thinking = isThinkingModel(model);
 
   // 429 / 5xx ("model is currently experiencing high demand") are usually gone in seconds: retry twice.
   let res: Response;
   for (let attempt = 0; ; attempt++) {
-    res = await generate(apiKey, model, thinking, prompt, schema);
+    res = await generate(apiKey, model, thinking, gated.prompt, schema);
     if (res.ok || attempt === 2 || !(res.status === 429 || res.status >= 500)) break;
     await new Promise((r) => setTimeout(r, attempt === 0 ? 3_000 : 10_000));
   }
@@ -100,7 +109,7 @@ export async function callGemini(prompt: string, schema?: object): Promise<strin
   if (json.promptFeedback?.blockReason) throw new Error(`Request was blocked by the model (${json.promptFeedback.blockReason}).`);
   const text = (json.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("").trim();
   if (!text) throw new Error("Gemini returned no content.");
-  return text;
+  return gated.restore(text);
 }
 
 function generate(apiKey: string, model: string, thinking: boolean, prompt: string, schema?: object): Promise<Response> {

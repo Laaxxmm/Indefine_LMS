@@ -1,0 +1,34 @@
+{
+  "gst.classify-ledgers": {
+    "ledgers": [
+      {
+        "ledger": "Raw Material Purchases",
+        "blockedCategory": "none",
+        "rcmService": "none",
+        "note": "ordinary business input",
+        "evidence": {
+          "quote": "Raw Material Purchases",
+          "location": "purchase-register.csv row 2"
+        }
+      },
+      {
+        "ledger": "Sales Promotion",
+        "blockedCategory": "gifts-free-samples",
+        "rcmService": "none",
+        "note": "gift hampers given free to dealers",
+        "evidence": {
+          "quote": "Sales Promotion",
+          "location": "purchase-register.csv row 3"
+        }
+      }
+    ]
+  },
+  "gst.check:gst.free-supplies": {
+    "status": "fail",
+    "message": "Gift hampers given free to dealers with ITC taken",
+    "evidence": {
+      "quote": "Diwali gift hampers distributed free to dealers",
+      "location": "purchase-register.csv row 3"
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "Fixture Widgets Private Limited",
+  "cin": "U74999KA2018PTC000001",
+  "companyClass": "private",
+  "authorisedCapital": "50,00,000",
+  "paidUpCapital": "10,00,000",
+  "agmDate": "2026-09-25",
+  "previousAgmDate": "2025-09-26",
+  "declaredAnnualReturnForm": "MGT-7A",
+  "csrNetProfitHistory": [
+    "5,00,00,000",
+    "4,20,00,000",
+    "3,10,00,000"
+  ],
+  "deposits": {
+    "depositsOutstanding": "0",
+    "loansNotDeposits": "5,00,000",
+    "dpt3FiledOn": "2026-06-25"
+  },
+  "estimateFilingOn": "2026-10-15"
+}

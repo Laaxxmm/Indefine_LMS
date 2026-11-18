@@ -1,0 +1,46 @@
+{
+  "gst.classify-ledgers": {
+    "ledgers": [
+      {
+        "ledger": "Cost of Goods Sold - Flour",
+        "blockedCategory": "none",
+        "rcmService": "none",
+        "note": "ordinary business input",
+        "evidence": {
+          "quote": "Cost of Goods Sold - Flour",
+          "location": "purchase-register.csv row 2"
+        }
+      },
+      {
+        "ledger": "Packaging Materials",
+        "blockedCategory": "none",
+        "rcmService": "none",
+        "note": "ordinary business input",
+        "evidence": {
+          "quote": "Packaging Materials",
+          "location": "purchase-register.csv row 3"
+        }
+      }
+    ]
+  },
+  "gst.check:gst.free-supplies": {
+    "status": "pass",
+    "message": "No free supply, gift, sample or personal use described",
+    "evidence": {
+      "quote": "Cost of Goods Sold - Flour",
+      "location": "purchase-register.csv row 2"
+    }
+  },
+  "gst.read-hsn": {
+    "items": [
+      {
+        "description": "Butter cookies 200g (tariff 1905.31)",
+        "hsn": "190531",
+        "evidence": {
+          "quote": "tariff 1905.31",
+          "location": "sales-register.csv row 4"
+        }
+      }
+    ]
+  }
+}

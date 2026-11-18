@@ -1,0 +1,10 @@
+{
+  "audit.check:audit.related-party-disclosure": {
+    "status": "na",
+    "message": "insufficient_evidence: no disclosure notes were supplied, so disclosure cannot be checked.",
+    "evidence": {
+      "quote": "(no disclosure notes supplied)",
+      "location": "Disclosure notes"
+    }
+  }
+}

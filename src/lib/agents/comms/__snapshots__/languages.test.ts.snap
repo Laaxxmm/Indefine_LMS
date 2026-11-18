@@ -1,0 +1,29 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`translation > Kannada: translated draft with the English alongside (recorded model response) 1`] = `
+"ಆತ್ಮೀಯ Ravi Kumar,
+
+ನಿಮ್ಮ October 2026 ರ GSTR-3B ಕುರಿತು ಇದು ಮಾಹಿತಿ.
+
+ಅದನ್ನು ಸಿದ್ಧಪಡಿಸಲಾಗಿದೆ ಮತ್ತು ನಮ್ಮ ತಂಡ ಅದನ್ನು ಪರಿಶೀಲಿಸುತ್ತಿದೆ.
+
+ಫೈಲ್ ಮಾಡಲು ಕೊನೆಯ ದಿನಾಂಕ 20 Nov 2026.
+
+ವಂದನೆಗಳು,
+Priya Sharma
+Indefine
+
+----- English -----
+
+Dear Ravi Kumar,
+
+This is an update on your GSTR-3B for October 2026.
+
+It is prepared and our team is reviewing it.
+
+The due date for filing is 20 Nov 2026.
+
+Regards,
+Priya Sharma
+Indefine"
+`;

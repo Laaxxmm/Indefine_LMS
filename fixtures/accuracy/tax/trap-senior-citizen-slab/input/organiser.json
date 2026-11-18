@@ -1,0 +1,39 @@
+{
+  "profile": {
+    "name": "Fixture Senior",
+    "status": "individual",
+    "dateOfBirth": "1965-08-10",
+    "residentialStatus": "resident",
+    "regimeClaimed": "old",
+    "businessKind": "none",
+    "plannedFilingDate": "2026-07-20",
+    "itrFormPlanned": "ITR-1",
+    "notes": "Retired; pension from Fixture Tech Pvt Ltd. No foreign assets, accounts or income."
+  },
+  "salary": {
+    "gross": "6,00,000",
+    "professionalTax": "0",
+    "basicDa": "0"
+  },
+  "otherSources": [
+    {
+      "id": "B1",
+      "nature": "deposit-interest",
+      "payer": "SBI Term Deposit",
+      "amount": "3,00,000"
+    }
+  ],
+  "tdsInBooks": [
+    {
+      "tan": "BLRS00002C",
+      "deductor": "State Bank of India",
+      "amount": "30,000"
+    }
+  ],
+  "deductions": {
+    "80C": "1,50,000",
+    "80DSelf": "50,000",
+    "80TTB": "50,000",
+    "80TTA": "10,000"
+  }
+}

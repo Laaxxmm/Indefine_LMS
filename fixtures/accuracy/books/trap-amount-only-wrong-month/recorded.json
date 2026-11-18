@@ -1,0 +1,16 @@
+{
+  "books.classify-expenses": {
+    "suggestions": [
+      {
+        "lineId": "S1",
+        "ledger": "Purchases",
+        "confidence": 0.62,
+        "evidence": {
+          "quote": "CHQ PAID-EPSILON TRADERS",
+          "location": "S1"
+        },
+        "note": "Cheque to a trading party; may be a supplier payment from a prior month"
+      }
+    ]
+  }
+}

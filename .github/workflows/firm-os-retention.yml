@@ -1,0 +1,30 @@
+# Firm OS DPDP retention (ADR-006, Phase 11): daily at 02:30 IST (21:00 UTC the day before).
+# Clears AgentRun.inputs past 30 days (rows kept), deletes break-nudge heartbeats older than 7 days,
+# mirrors model escalations into AuditEvent. See docs/dpdp/retention.md.
+# Base URL: repository variable LMS_BASE_URL (staging), default https://lms.indefine.in (inventory G-11).
+# Uses the same CRON_SECRET repo secret as the other cron workflows.
+name: Firm OS retention
+
+on:
+  schedule:
+    - cron: "0 21 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  retention:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call retention cron endpoint
+        env:
+          BASE_URL: ${{ vars.LMS_BASE_URL || 'https://lms.indefine.in' }}
+        run: |
+          if [ -z "${{ secrets.CRON_SECRET }}" ]; then
+            echo "CRON_SECRET repo secret not set - skipping."
+            exit 0
+          fi
+          curl -fsS --max-time 150 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${BASE_URL%/}/api/cron/firm-os/retention"
