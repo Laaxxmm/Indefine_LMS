@@ -358,6 +358,8 @@ const PREPOSITION_VERBS: Readonly<Record<string, ReadonlySet<string>>> = {
   FROM: new Set(["COLLECT", "OBTAIN", "GET", "TAKE", "RECEIVE", "REQUEST", "SEEK", "ASK"]),
   BY: new Set(["PREPARED", "REVIEWED", "APPROVED", "CHECKED", "VERIFIED", "SIGNED", "AUTHORISED", "AUTHORIZED", "DONE", "MADE", "ASSIGNED", "OWNED", "RAISED", "SUBMITTED", "UPLOADED", "ENTERED", "RECORDED"]),
 };
+/** First letters of the prepositions above (lower case), a cheap test before the lookup. */
+const PREPOSITION_FIRST: ReadonlySet<number> = new Set([0x74, 0x77, 0x66, 0x62]);
 /** Verbs before a possessive name: "Track Suresh's invoices", "Complete Ramesh's ITR". */
 const POSSESSIVE_VERBS: ReadonlySet<string> = new Set([
   "TRACK", "COMPLETE", "REVIEW", "SAVE", "CHECK", "FILE", "UPDATE", "VERIFY", "PREPARE", "SUBMIT", "SEND", "OPEN", "CLOSE", "DOWNLOAD",
@@ -701,13 +703,16 @@ function announcedRun(text: string, toks: Tok[], first: number, reason: PersonNa
 function instructionSpans(text: string, toks: Tok[], out: PersonNameSpan[]) {
   for (let k = 0; k + 1 < toks.length; k++) {
     const t = toks[k];
+    if (t.glued) continue; // a camelCase part is never a verb or a preposition
     if (verbIn(t, PERSON_VERBS)) announcedRun(text, toks, k + 1, "instruction", out);
     if (verbIn(t, POSSESSIVE_VERBS) && possessiveName(toks[k + 1]) && joinable(text, toks, k + 1)) {
       const p = toks[k + 1];
       out.push({ start: p.s, end: p.e - 2, kind: "NAME", reason: "instruction" });
     }
-    const verbs = t.w.length <= 4 ? PREPOSITION_VERBS[tokUp(t)] : undefined;
-    if (!verbs || t.glued || k === 0) continue;
+    // "to" / "with" / "from" / "by": a cheap first-letter test before the lookup (this runs once per word).
+    if (k === 0 || t.w.length > 4 || !PREPOSITION_FIRST.has(t.w.charCodeAt(0) | 0x20)) continue;
+    const verbs = PREPOSITION_VERBS[tokUp(t)];
+    if (!verbs) continue;
     // The verb is at most four words before the preposition, in the same clause.
     for (let v = k - 1; v >= 0 && v >= k - 5; v--) {
       if (CLAUSE_BREAK.test(text.slice(toks[v].e, toks[v + 1].s))) break;
