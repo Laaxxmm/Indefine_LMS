@@ -8,7 +8,7 @@ import { formatDateTimeIst } from "@/lib/agents/core/format";
 import { fail, ok, type ServiceResult } from "@/lib/corrections/result";
 import type { SessionUser } from "@/lib/access";
 import { mask, withTextNames, type PiiKind } from "@/lib/ai/anonymizer";
-import { DATASETS, EXTERNAL_SYSTEMS, RESIDUE_DATASETS, SHARED_WITH, nameOnlyRecords, nameOnlySentence, type PrivacyDb, type Row } from "./inventory";
+import { DATASETS, EXTERNAL_SYSTEMS, RESIDUE_DATASETS, SHARED_WITH, nameOnlyRecords, nameOnlySentence, sopManualChecks, type PrivacyDb, type Row } from "./inventory";
 import { matchingIdentifiers } from "./identifier-only";
 import { normaliseIdentifier, type Identifier, type IdentifierKind } from "./locator";
 import { PRINCIPAL_LABELS, type PrincipalType } from "./policy";
@@ -41,6 +41,7 @@ const NOT_INCLUDED = [
   "Cached inputs of agent runs (sales and purchase registers and similar). They also name the client's customers and suppliers, so the file says only whether a copy is held and when it is purged (at most 30 days after the run).",
   "The names of firm staff who worked on the records.",
   "Files in SharePoint themselves: they are listed by name and link; a partner shares copies on request.",
+  "SOP screenshots themselves: they are listed by step, caption and link; a partner shares copies on request.",
   "Copies of the person's name or identifiers inside the firm's work records (review comments and notes, checklist findings, computed figures, Turia checklists, Turia pull run reports, reminders, logs). They sit in records about the engagement that also hold staff notes and other people's data; they are erased (replaced with \"[erased]\") when the person's erasure request is carried out.",
 ];
 
@@ -141,6 +142,8 @@ export async function buildAccessExport(db: PrivacyDb, requestId: string, now: D
     if (scope.kind !== "client") continue;
     const sentence = nameOnlySentence(await nameOnlyRecords(db, scope.client));
     if (sentence) manualChecks.push(sentence);
+    // SOP review H1: a screenshot cannot be searched for the person; a partner looks through them.
+    for (const m of await sopManualChecks(db)) if (!manualChecks.includes(m.detail)) manualChecks.push(m.detail);
   }
   const held = datasets.filter((d) => d.records.length > 0);
   const total = held.reduce((n, d) => n + d.records.length, 0);

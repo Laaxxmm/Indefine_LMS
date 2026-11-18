@@ -59,6 +59,20 @@ describe("callWithRetry", () => {
     }
   });
 
+  it("aborts an abandoned try at once (SOP review L1), so it never runs beside the next one", async () => {
+    const aborted: boolean[] = [];
+    callGemini
+      .mockImplementationOnce((_p: string, _s: object, opts: { signal?: AbortSignal }) => new Promise<string>((_, reject) => opts.signal?.addEventListener("abort", () => (aborted.push(true), reject(Object.assign(new Error("aborted"), { name: "AbortError" }))))))
+      .mockResolvedValueOnce("ok");
+    const out = callWithRetry("p", {}, []);
+    await vi.advanceTimersByTimeAsync(15_000);
+    await expect(out).resolves.toBe("ok");
+    expect(aborted).toEqual([true]); // at 15 s, not at callGemini's own 45 s timeout
+    const [first, second] = callGemini.mock.calls.map((c) => (c[2] as { signal?: AbortSignal }).signal);
+    expect(first?.aborted).toBe(true);
+    expect(second?.aborted).toBe(false);
+  });
+
   it("does not retry other failures (for example the leak gate refusing to send)", async () => {
     callGemini.mockRejectedValueOnce(new Error("blocked"));
     await expect(callWithRetry("p", {}, [])).rejects.toThrow("blocked");

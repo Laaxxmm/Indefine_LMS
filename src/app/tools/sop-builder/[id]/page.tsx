@@ -2,7 +2,8 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { canViewSop, canEditSop, isSopAdmin } from "@/lib/sop/access";
+import { canViewSop, canEditSop, canRemoveSopScreen, isSopAdmin } from "@/lib/sop/access";
+import { removedScreens, staleInOneDrive } from "@/lib/sop/service";
 import { departmentLabel } from "@/lib/sop/labels";
 import { SopDocView } from "../SopDocView";
 import { OneDriveRetry } from "../OneDriveRetry";
@@ -24,6 +25,10 @@ export default async function SopPage({ params, searchParams }: { params: Promis
   const selected = sop.versions.find((x) => x.id === v) ?? sop.versions.find((x) => x.id === sop.currentVersionId) ?? sop.versions[0];
   const content = selected.content as unknown as SopContent;
   const [canEdit, admin] = [await canEditSop(session.user, sop.department), isSopAdmin(session.user)];
+  const removedAt = await removedScreens(id);
+  const removed = new Set(removedAt.keys());
+  // The Word file in OneDrive was written before one of its screens was removed (SOP review H1).
+  const stale = staleInOneDrive(selected, removedAt);
   // Screens go on the latest version; the older format has no step rows to put them under.
   const screensReady = !!(sop.versions[0].content as unknown as SopContent).subProcesses?.length;
 
@@ -45,7 +50,15 @@ export default async function SopPage({ params, searchParams }: { params: Promis
           <h1 className="font-display font-extrabold text-2xl sm:text-[28px] tracking-[-0.02em] mt-1.5 leading-tight">{sop.title}</h1>
           <p className="text-xs text-ink-faint font-bold mt-1">v{selected.versionNumber} · by {selected.creatorName}{selected.creatorDesignation ? ` (${selected.creatorDesignation})` : ""} · {fmt(selected.createdAt)}</p>
           <p className="text-xs mt-1 flex items-center gap-2 flex-wrap">
-            {selected.graphWebUrl ? (
+            {selected.graphWebUrl && stale ? (
+              <>
+                <span className="font-bold text-amber-700">The Word file in OneDrive still shows a removed screen.</span>
+                {canEdit && <OneDriveRetry sopId={id} versionId={selected.id} />}
+                <a href={selected.graphWebUrl} target="_blank" rel="noopener" className="inline-flex items-center gap-1 font-bold text-brand-700 hover:underline">
+                  <ExternalLink className="w-3.5 h-3.5" /> Open in OneDrive to delete it by hand
+                </a>
+              </>
+            ) : selected.graphWebUrl ? (
               <a href={selected.graphWebUrl} target="_blank" rel="noopener" className="inline-flex items-center gap-1 font-bold text-brand-700 hover:underline">
                 <ExternalLink className="w-3.5 h-3.5" /> Open in OneDrive
               </a>
@@ -76,7 +89,7 @@ export default async function SopPage({ params, searchParams }: { params: Promis
 
       <div className="grid lg:grid-cols-[minmax(0,1fr)_260px] gap-6 items-start">
         <div className="rounded-[20px] bg-card border border-border shadow-lift p-6 sm:p-8">
-          <SopDocView c={content} sopId={id} />
+          <SopDocView c={content} sopId={id} removed={removed} canRemove={canRemoveSopScreen(session.user)} />
         </div>
 
         <div className="flex flex-col gap-4">

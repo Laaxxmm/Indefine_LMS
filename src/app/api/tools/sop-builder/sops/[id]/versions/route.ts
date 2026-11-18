@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canEditSop } from "@/lib/sop/access";
-import { addVersion, buildVersion, fileToOneDrive, normDept, createBodyZ, resolveCreator } from "@/lib/sop/service";
-import { validationMessage, failureSentence } from "@/lib/errors";
+import { addVersion, aiFailure, buildVersion, fileAfterSave, normDept, createBodyZ, removedScreenIds, resolveCreator } from "@/lib/sop/service";
+import { withoutScreens } from "@/lib/sop/screens";
+import { validationMessage } from "@/lib/errors";
 import { readJsonCapped } from "@/lib/hardening/json-body";
+import { enforceRateLimit } from "@/lib/hardening/rate-limit";
 import type { SopContent } from "@/lib/sop/types";
 
 export const maxDuration = 60;
@@ -30,16 +32,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // The edit may move the SOP to another department; the editor must be allowed there too.
   if (!(await canEditSop(session.user, normDept(brief.department))))
     return NextResponse.json({ error: "You can only move SOPs into your own department." }, { status: 403 });
+  const limited = await enforceRateLimit("sop-generate", session.user.id);
+  if (limited) return limited;
 
   const nextNumber = (sop.versions[0]?.versionNumber ?? 0) + 1;
   const creator = await resolveCreator(session.user);
 
   let versionData;
   try {
-    const previous = sop.versions[0]?.content as unknown as SopContent | undefined;
+    // A removed screen does not come back on the new version.
+    const last = sop.versions[0]?.content as unknown as SopContent | undefined;
+    const previous = last ? withoutScreens(last, await removedScreenIds(id)) : undefined;
     versionData = await buildVersion({ brief, rawProcedure, purpose, versionNumber: nextNumber, revision: `${nextNumber}.0`, creator, previous });
   } catch (e) {
-    return NextResponse.json({ error: failureSentence(e, "The new SOP version could not be saved.", "Try again in a minute.") }, { status: 502 });
+    const f = aiFailure(e, "The new SOP version could not be saved.", "Try again in a minute.");
+    return NextResponse.json(f.body, { status: f.status });
   }
 
   // Writing the version takes up to a minute; a version saved meanwhile (screens, another edit)
@@ -47,7 +54,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const versionId = await addVersion(id, sop.versions[0]?.id ?? null, versionData, { title: brief.title, department: normDept(brief.department), workCategory: brief.workCategory });
   if (!versionId)
     return NextResponse.json({ error: "Someone saved a newer version of this SOP while this one was being written. Open the SOP again and make your change on the newest version." }, { status: 409 });
-  await fileToOneDrive(id, versionId, creator.id);
+  const filed = await fileAfterSave(id, versionId, creator.id);
 
-  return NextResponse.json({ id, versionId }, { status: 201 });
+  return NextResponse.json({ id, versionId, ...(filed.notice ? { notice: filed.notice } : {}) }, { status: 201 });
 }

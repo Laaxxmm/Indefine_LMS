@@ -4,6 +4,8 @@ import { redirect, notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { canEditSop } from "@/lib/sop/access";
 import type { SopContent } from "@/lib/sop/types";
+import { removedScreenIds } from "@/lib/sop/service";
+import { withoutScreens } from "@/lib/sop/screens";
 import { ScreensEditor } from "../../ScreensEditor";
 import { ArrowLeft } from "lucide-react";
 
@@ -18,7 +20,8 @@ export default async function SopScreensPage({ params }: { params: Promise<{ id:
   if (!sop) notFound();
   if (!(await canEditSop(session.user, sop.department))) redirect(`/tools/sop-builder/${id}`);
   const latest = sop.versions[0];
-  const content = latest.content as unknown as SopContent;
+  // A screen an admin or partner removed is not offered again.
+  const content = withoutScreens(latest.content as unknown as SopContent, await removedScreenIds(id));
   const parts = (content.subProcesses ?? []).map((p) => ({
     code: p.code,
     name: p.name,

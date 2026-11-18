@@ -65,17 +65,21 @@ export function stripBriefSecrets(b: SopBrief): SopBrief {
 // for one prompt in up to a third of tries. Schema maxItems is refused ("too many states") and
 // maxLength is not enforced, and a prompt rule did not lower the rate. A runaway is random, so
 // give each try 15 s and ask again, up to 3 tries: worst case 45 s, under the routes' 60 s.
-// The abandoned request is still aborted by callGemini's own 45 s timeout.
+// An abandoned try is aborted at once (SOP review L1), so it never keeps running beside the next one.
 const CALL_LIMIT_MS = 15_000;
 const ATTEMPTS = 3;
 export async function callWithRetry(prompt: string, schema: object, dictionary: DictionaryEntry[]): Promise<string> {
   const once = () => {
+    const abandon = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     const limit = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(Object.assign(new Error("The AI took too long to answer. Try again in a minute."), { name: "TimeoutError" })), CALL_LIMIT_MS);
+      timer = setTimeout(() => {
+        reject(Object.assign(new Error("The AI took too long to answer. Try again in a minute."), { name: "TimeoutError" }));
+        abandon.abort(); // stop the abandoned request now, not at callGemini's 45 s timeout
+      }, CALL_LIMIT_MS);
     });
-    // Promise.race keeps listening to an abandoned call, so its later 45 s abort is handled.
-    return Promise.race([callGemini(prompt, schema, { dictionary, what: "This procedure" }), limit]).finally(() => clearTimeout(timer));
+    // Promise.race keeps listening to the abandoned call, so its rejection (the abort) is handled.
+    return Promise.race([callGemini(prompt, schema, { dictionary, what: "This procedure", signal: abandon.signal }), limit]).finally(() => clearTimeout(timer));
   };
   for (let attempt = 1; ; attempt++) {
     try {

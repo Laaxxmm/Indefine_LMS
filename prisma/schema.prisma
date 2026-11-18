@@ -806,10 +806,14 @@ model SopVersion {
   content            Json // the structured SOP (sections, tables, flowchart)
   graphItemId        String? // OneDrive .docx item id for this version
   graphWebUrl        String?
+  // When the Word file in OneDrive was last written. A screen of this version removed after it (or a
+  // file written before this was recorded) means the file may still show the screen: the SOP page
+  // flags it until it is filed again (src/lib/sop/service.ts staleInOneDrive).
+  graphFiledAt       DateTime?
   createdById        String
   creatorName        String
   creatorDesignation String
-  createdAt          DateTime @default(now())
+  createdAt          DateTime  @default(now())
 
   @@index([sopId])
 }
@@ -817,16 +821,20 @@ model SopVersion {
 // A screenshot shown under a step (SopDetailStep.screens). Marked up in the browser before it is
 // sent, so a hidden area is already black here; the unmarked original never leaves the browser.
 // Never sent to the AI. Versions point at images by id, so a new version does not copy them.
+// DPDP class A (may): a screenshot can still show a client (docs/dpdp/data-inventory.md).
+// "Remove this screen" (admins and partners) blanks the bytes and sets removedAt; rows are never deleted.
 model SopImage {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   sopId       String
-  sop         Sop      @relation(fields: [sopId], references: [id], onDelete: Cascade)
+  sop         Sop       @relation(fields: [sopId], references: [id], onDelete: Cascade)
   mime        String // image/png | image/jpeg
   bytes       Bytes
   width       Int
   height      Int
   createdById String
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
+  removedAt   DateTime?
+  removedById String?
 
   @@index([sopId])
 }

@@ -43,6 +43,7 @@ export const LARGE_BODY_ROUTES: readonly LargeBodyRoute[] = [
   { pattern: /^\/api\/clients\/[^/]+\/documents\/?$/, maxBytes: 51 * MB, auth: "session", why: "client document upload: 50 MB per file (MAX_UPLOAD_BYTES) + multipart framing" },
   { pattern: /^\/api\/tools\/office-tools\/tax\/[^/]+\/?$/, maxBytes: 50 * MB, auth: "session", why: "return PDFs for the tax tools (~100 KB each, several at once)" },
   { pattern: /^\/api\/tools\/engagement-letters\/[^/]+\/file\/?$/, maxBytes: 4 * MB, auth: "session", why: "engagement-letter PDF (3 MB limit in the route)" },
+  { pattern: /^\/api\/tools\/sop-builder\/sops\/[^/]+\/images\/?$/, maxBytes: 3 * MB + 64 * KB, auth: "session", why: "SOP screenshot: 3 MB (SCREEN_MAX_BYTES in src/lib/sop/screens.ts) + multipart framing (MULTIPART_FRAMING_BYTES)" },
   { pattern: /^\/api\/admin\/video\/[^/]+\/materials\/?$/, maxBytes: 51 * MB, auth: "session", why: "course handout upload: 50 MB per file (MATERIAL_MAX_BYTES) + multipart framing" },
   { pattern: /^\/api\/admin\/live\/schedule\/?$/, maxBytes: 51 * MB, auth: "session", why: "live-session materials: 50 MB in all (MATERIAL_MAX_BYTES) + multipart framing" },
   { pattern: /^\/api\/tools\/statutory\/ingest\/?$/, maxBytes: 24 * MB, auth: "bearer", why: "statutory extension: 3 items per post, PDFs up to 4 MB each as base64" },

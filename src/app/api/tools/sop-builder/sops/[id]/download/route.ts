@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { logAudit } from "@/lib/audit/log";
 import { canViewSop } from "@/lib/sop/access";
 import { renderVersionDocx } from "@/lib/sop/service";
 import type { SopContent } from "@/lib/sop/types";
@@ -8,7 +9,8 @@ import type { SopContent } from "@/lib/sop/types";
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const slug = (s: string) => s.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "SOP";
 
-// Regenerate the .docx from the stored structured content (nothing read from disk).
+// Regenerate the .docx from the stored structured content (nothing read from disk). Removed screens
+// are left out. A download hands the screenshots out of the firm's systems, so it is audited.
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
@@ -21,11 +23,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
   const version = await prisma.sopVersion.findFirst({
     where: { sopId: id, id: vid ?? sop.currentVersionId ?? undefined },
-    select: { content: true, versionNumber: true },
+    select: { id: true, content: true, versionNumber: true },
   });
   if (!version) return NextResponse.json({ error: "That version of the SOP wasn't found. Go back to the SOP and pick a version." }, { status: 404 });
 
   const buffer = await renderVersionDocx(version.content as unknown as SopContent, id);
+  await logAudit(prisma, { actorId: session.user.id, action: "sop.download", entity: "SopVersion", entityId: version.id, meta: { sopId: id, versionNumber: version.versionNumber } });
   const filename = `${slug(sop.title)}_v${version.versionNumber}.docx`;
   return new NextResponse(new Uint8Array(buffer), {
     status: 200,
