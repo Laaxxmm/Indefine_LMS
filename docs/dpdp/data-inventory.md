@@ -15,7 +15,7 @@
 |---|---|---|
 | **A** | Client personal data: PAN, Aadhaar, GSTIN of a person (proprietor), bank account / IFSC, DOB, phone, email, postal address, individuals' names, DIN, anything linking these to a person | Only masked by `Anonymizer` (tokens such as `⟨PAN_1⟩`); `local-only` tasks never |
 | **B** | Staff personal data: names, emails, attendance, performance, activity heartbeats | No (a staff member's own name in a draft is the one exception) |
-| **C** | Firm and public data: SOP text, checklists, circulars, company GSTIN/CIN of a non-individual, computed totals without identifiers | Yes, unmasked (`privacy: 'public'`), still logged |
+| **C** | Firm and public data: Firm OS SOP packs (`SopPack` checklists), circulars, company GSTIN/CIN of a non-individual, computed totals without identifiers. SOP Builder text and screenshots are **not** class C (see below) | Yes, unmasked (`privacy: 'public'`), still logged |
 | **—** | No personal data (ids, states, timestamps, hashes, counts) | n/a |
 
 When unsure, a field is class **A**. A column marked **A (may)** holds class A data for some clients
@@ -114,6 +114,38 @@ Columns not listed hold ids, enums, booleans, counts or timestamps only (class �
 | `CertificateIssue` | `clientName`, `payload` | A | Not read by Firm OS (listed for completeness, inventory §7) |
 | `ClientDocument` | pointers to legacy SharePoint files | — | Read-only |
 
+## SOP Builder (LMS Tools, `/tools/sop-builder`)
+
+Reclassified after the SOP Builder review (2026-11-18, finding H1). SOPs are firm guidance, but staff type
+clients' names into descriptions, gap answers and captions, and a screenshot of Tally or a portal can show
+a client even after the author hid what they saw. Nothing links a SOP to a client, so the inventory finds
+these by the person's identifiers in the SOP text (`sop-text`, `sop-screenshots` in `src/lib/privacy/inventory.ts`).
+
+| Table | Column | Class | Notes |
+|---|---|---|---|
+| `SopImage` | `bytes` | **A (may)** | Screenshot under a step. The author must tick "No client details are visible in this screenshot (I have hidden any)" with every upload; the server refuses a screen without it (the hiding itself is done in the browser and cannot be checked). Never sent to the AI. Served `no-store`. **Remove this screen** (admins and partners) blanks the bytes and sets `removedAt` (UPDATE, never a delete), audited; the versions' Word files in OneDrive are filed again, and any OneDrive would not take are named and flagged on the SOP page for removal by hand |
+| | `createdById`, `removedById` | B | Who added / removed it |
+| `SopVersion` | `rawProcedure` (description and gap answers), `purpose`, `brief`, `content` (steps and screen captions) | **A (may)** | Masked and gated before Gemini (`gateForGemini`); stored as typed. Erasure replaces the person's names and identifiers with `[erased]` in place |
+| | `content.preparedBy`, `creatorName`, `createdById` | B | The author; cleaned on a staff erasure once the employment-records duty ends |
+| | `graphItemId`, `graphWebUrl`, `graphFiledAt` | — | The version's Word file in OneDrive and when it was last written (a screen removed after it means the file may still show it) |
+| `Sop` | `title`, `workCategory` | C (may) | Normally a process name; erasure does not touch it |
+| | `createdByName`, `createdById` | B | |
+| `SopView` | `userId`, `userName` | B | Who opened which SOP |
+
+**OneDrive.** Each SOP's Word files (with the screenshots in them) are saved under
+`<L&D folder>/SOP/<Department>/<Title>/`. Those folders are made inside the shared L&D folder and
+**inherit its OneDrive permissions**: everyone the L&D folder is shared with can open every SOP's Word
+file. The app never shares or unshares them; who can see them is set on the L&D folder. OneDrive keeps
+earlier copies of a file in its version history: when a screen is removed or erased, an admin deletes
+those copies there by hand.
+
+**Access and erasure.** The access export lists the screenshots under steps that name the person (step,
+caption and link; a partner shares copies on request) and adds a manual check: a picture cannot be
+searched, so a partner looks through the SOPs and uses Remove this screen on any that shows the person.
+Erasure blanks those screenshots (no retention duty: a how-to picture, not a working paper), cleans the
+SOP text, and adds a manual step to file the affected Word files again (Save to OneDrive on each
+flagged version).
+
 ## Audit
 
 Every create / approve / close / export / model escalation / retract / spot-check / onboard /
@@ -144,6 +176,7 @@ other parties' data. Each carries its own legal-hold basis:
 | Model call errors | `ModelCall.error` | No |
 | Onboarding runs never linked to a client | `OnboardingRun.prompt`, `spec`, `plan`, `error`, `steps` | No: no engagement started |
 | Privacy register notes | `PrivacyRequest.notes`, `outcome`; `AuditEvent.meta` of the person's requests | No: the request itself is kept, names in its notes are cleaned |
+| SOP text (SOP Builder) | `SopVersion.purpose`, `rawProcedure`, `brief`, `content`, `creatorName` | No for a client (firm guidance; a copy). A staff author's name is held with their employment records |
 
 A company's contact person gets only their own name, email and phone cleaned out of the company's
 records. The audit PoC that found 36 surviving copies after a confirmed erasure is a permanent test

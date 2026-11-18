@@ -59,7 +59,7 @@ export function ScreensEditor({ sopId, baseVersionId, nextVersion, parts }: { so
         <ShieldAlert className="w-4 h-4 mt-0.5 shrink-0" />
         <div>
           <p className="font-bold">Use the Tally demo company or a test client for screenshots.</p>
-          <p>If a real client name, PAN, bank account or amount shows, cover it with the Hide tool before adding the screen. Everyone who reads SOPs sees these screens. They are never sent to the AI.</p>
+          <p>If a real client name, PAN, bank account or amount shows, cover it with the Hide tool before adding the screen. Everyone who reads SOPs sees these screens, and so does everyone with access to the shared L&amp;D folder in OneDrive, where the Word files are saved. They are never sent to the AI.</p>
           <p className="mt-1">To take a screenshot: Win+Shift+S on Windows, Cmd+Ctrl+Shift+4 on a Mac. Then click Add screen and press Ctrl+V.</p>
         </div>
       </div>

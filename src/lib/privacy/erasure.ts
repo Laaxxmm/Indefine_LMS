@@ -28,7 +28,7 @@ import type { SessionUser } from "@/lib/access";
 import { formatDate } from "@/lib/agents/core/format";
 import { Refusal, fail, ok, type ServiceResult } from "@/lib/corrections/result";
 import { canDecideErasure } from "./access";
-import { DATASETS, EXTERNAL_SYSTEMS, RESIDUE_DATASETS, eraseOnboardingRun, nameOnlyRecords, nameOnlySentence, scrubberOf, type DataSet, type ModelName, type PrivacyReadDb, type Row } from "./inventory";
+import { DATASETS, EXTERNAL_SYSTEMS, RESIDUE_DATASETS, eraseOnboardingRun, nameOnlyRecords, nameOnlySentence, scrubberOf, sopManualChecks, type DataSet, type ModelName, type PrivacyReadDb, type Row } from "./inventory";
 import type { DutyId, RequestStatus } from "./policy";
 import { guardRegister, loadOpen, requireResolved, requireVerified, resolutionOf, writeAudit, type PrivacyDeps, type Tx } from "./register";
 import { restrictInTx } from "./consent";
@@ -274,6 +274,11 @@ export async function planErasure(db: PrivacyReadDb, requestId: string, now: Dat
           consequence: nameOnly,
         });
       }
+      // SOP review H1: SOP screenshots cannot be searched, and erased ones stay in OneDrive's Word files until re-filed.
+      const erasingScreens = items.some((i) => i.dataset === "sop-screenshots" && i.action === "anonymise");
+      for (const m of await sopManualChecks(db, { erasing: erasingScreens })) {
+        items.push({ key: `${m.key}:${String(scope.client.id)}`, dataset: m.key, label: m.label, model: null, recordId: null, fields: [], action: "manual", basis: [], holdUntil: null, holdUntilLabel: null, consequence: m.detail });
+      }
       for (const sys of EXTERNAL_SYSTEMS) {
         const relevant = sys.key === "audit-log" || (sys.key === "turia" ? !!scope.firmClient?.turiaClientRef : !!(scope.firmClient?.clSiteUrl || scope.client.graphFolderId));
         if (!relevant) continue;
@@ -344,6 +349,9 @@ const ENTITY_OF: Record<string, string> = {
   coachEvent: "CoachEvent",
   modelCall: "ModelCall",
   privacyRequest: "PrivacyRequest",
+  // SOP Builder (SOP review H1)
+  sopVersion: "SopVersion",
+  sopImage: "SopImage",
 };
 
 type Updater = { update(args: { where: { id: string }; data: Row }): Promise<unknown> };

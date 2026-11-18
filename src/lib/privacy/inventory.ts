@@ -52,6 +52,8 @@ export type PrivacyDb = Pick<
   | "auditEvent"
   | "privacyRequest"
   | "breachIncident"
+  | "sopVersion"
+  | "sopImage"
   | "$transaction"
 >;
 
@@ -435,6 +437,21 @@ export const DATASETS: readonly DataSet[] = [
     erasure: { kind: "keep", reason: "Removed automatically after 7 days by the coach's clean-up." },
     rows: async (db, s) => (staffOf(s) ? finder(db, "activityHeartbeat").findMany({ where: { userId: staffOf(s)!.user.id }, orderBy: { at: "asc" }, take: 5000 }) : []),
   },
+  // ------------------------------------------------------------------ SOP Builder (SOP review H1; see the block at the end)
+  {
+    key: "sop-screenshots",
+    label: "SOP screenshots (Tools > SOP Builder)",
+    model: "sopImage",
+    principals: CLIENT_ANY,
+    purpose:
+      "Pictures of the firm's software under SOP steps, showing a new joiner where to click. They should show a demo company; these are the ones under steps whose words name the person, so they may show the person's details.",
+    fields: [f("stepNo", "Step", "C"), f("caption", "Caption"), f("bytes", "Screenshot"), f("createdAt", "Added at", "C"), f("removedAt", "Removed at", "C")],
+    // The picture itself is not put in the file: its link opens it for a partner, who shares a copy on request.
+    derived: (r) => ({ bytes: `/api/tools/sop-builder/sops/${String(r.sopId)}/images/${String(r.id)}` }),
+    // No retention duty (a how-to picture, not a working paper): the picture is blanked in place, never deleted.
+    erasure: { kind: "anonymise", duties: [], set: () => ({ bytes: new Uint8Array(0), removedAt: new Date() }), applies: (r) => r.removedAt == null },
+    rows: (db, s) => sopScreenshotRows(db, s),
+  },
 ];
 
 export const datasetsFor = (t: PrincipalType) => DATASETS.filter((d) => d.principals.includes(t));
@@ -735,6 +752,18 @@ export const RESIDUE_DATASETS: readonly DataSet[] = [
       return list.length ? finder(db, "auditEvent").findMany({ where: { entity: "PrivacyRequest", entityId: { in: list } }, orderBy: { createdAt: "asc" } }) : [];
     },
   },
+  // ------------------------------------------------------------------ SOP Builder (SOP review H1; see the block at the end)
+  {
+    key: "sop-text",
+    label: "SOP text: descriptions, gap answers, captions and authors (Tools > SOP Builder)",
+    model: "sopVersion",
+    principals: [...CLIENT_ANY, ...STAFF],
+    purpose:
+      "SOPs are firm guidance. A client's name typed into a description, a gap answer or a caption is a copy, cleaned in place. A staff author's name (Prepared by, version author) is kept with their employment records, then cleaned.",
+    fields: [f("purpose", "Purpose"), f("rawProcedure", "Description and gap answers"), f("brief", "Brief"), f("content", "SOP text, captions and Prepared by"), f("creatorName", "Version author", "B")],
+    erasure: scrubRule(["purpose", "rawProcedure", "brief", "content", "creatorName"], ["staff-records"]),
+    rows: (db, s) => sopVersionRows(db, s),
+  },
 ];
 
 /**
@@ -786,3 +815,74 @@ export const SHARED_WITH = [
   "Turia, the firm's practice-management system.",
   "Cloud AI models (Anthropic Claude; xAI Grok as a fallback) only after names and identifiers are masked (ADR-006). Masked text is not personal data in the form it is sent.",
 ] as const;
+
+// ------------------------------------------------------------------ SOP Builder (SOP review H1)
+//
+// SOPs are firm guidance, not client records, so nothing links them to a client. But staff type
+// clients' names into descriptions, gap answers and captions, and a screenshot can show a client
+// despite the hiding (ADR-006 class A, may). They are found by the person's needles in the SOP text:
+//   sop-text         (residue) every SOP version whose free text holds the person's needles
+//   sop-screenshots  (dataset) the screenshots under steps whose words or caption hold them
+// A picture itself cannot be searched, so the access export and the erasure plan also carry a
+// manual check for a partner (sopManualChecks). An erased screenshot is blanked in the database at
+// once; the SOPs' Word files in OneDrive keep it until they are filed again (the SOP page flags them).
+
+/** How many SOP versions one plan reads (newest first). */
+const SOP_SCAN_LIMIT = 5000;
+const SOP_TEXT_COLUMNS = ["purpose", "rawProcedure", "brief", "content", "creatorName"] as const;
+
+type SopStepText = { no?: string; role?: string; action?: string; system?: string; input?: string; output?: string; ifThen?: string[]; screens?: { imageId: string; caption?: string }[] };
+const sopSteps = (content: unknown): SopStepText[] => ((content as { subProcesses?: { steps?: SopStepText[] }[] } | null)?.subProcesses ?? []).flatMap((p) => p.steps ?? []);
+
+/** SOP versions whose free text holds one of the person's needles. */
+async function sopVersionRows(db: PrivacyReadDb, s: Scope): Promise<Row[]> {
+  const sc = scrubberOf(s);
+  const rows = await finder(db, "sopVersion").findMany({
+    where: {},
+    select: { id: true, sopId: true, versionNumber: true, purpose: true, rawProcedure: true, brief: true, content: true, creatorName: true, createdAt: true },
+    orderBy: { createdAt: "desc" },
+    take: SOP_SCAN_LIMIT,
+  });
+  return rows.filter((r) => sc.hits(SOP_TEXT_COLUMNS.map((c) => r[c])));
+}
+
+/** Live screenshots under steps whose words or caption hold one of the person's needles (never the picture bytes). */
+async function sopScreenshotRows(db: PrivacyReadDb, s: Scope): Promise<Row[]> {
+  if (!clientOf(s)) return [];
+  const sc = scrubberOf(s);
+  const found = new Map<string, { stepNo: string; caption: string }>();
+  for (const v of await sopVersionRows(db, s)) {
+    for (const st of sopSteps(v.content)) {
+      for (const x of st.screens ?? []) {
+        if (sc.hits([st.role, st.action, st.system, st.input, st.output, st.ifThen, x.caption])) found.set(x.imageId, { stepNo: st.no ?? "", caption: x.caption ?? "" });
+      }
+    }
+  }
+  if (!found.size) return [];
+  const images = await finder(db, "sopImage").findMany({ where: { id: { in: [...found.keys()] }, removedAt: null }, select: { id: true, sopId: true, createdAt: true, removedAt: true } });
+  return images.map((r) => ({ ...r, ...found.get(String(r.id)) }));
+}
+
+/**
+ * The partner's manual steps for SOP screenshots: pictures cannot be searched for a person's details,
+ * and an erased screenshot stays in the SOPs' Word files in OneDrive until they are filed again.
+ * Empty when the SOP Builder holds no screenshot.
+ */
+export async function sopManualChecks(db: PrivacyReadDb, opts: { erasing?: boolean } = {}): Promise<{ key: string; label: string; detail: string }[]> {
+  const live = (await finder(db, "sopImage").findMany({ where: { removedAt: null }, select: { id: true }, take: 100_000 })).length;
+  const out: { key: string; label: string; detail: string }[] = [];
+  if (live)
+    out.push({
+      key: "sop-screenshots-manual",
+      label: "SOP screenshots (Tools > SOP Builder)",
+      detail: `The SOP Builder holds ${live} screenshot${live === 1 ? "" : "s"} of the firm's software. A picture cannot be searched for a person's details, so only the screenshots under SOP steps that name this person are listed. A partner should look through the SOPs and use Remove this screen on any screenshot that shows the person.`,
+    });
+  if (opts.erasing)
+    out.push({
+      key: "sop-onedrive",
+      label: "SOP Word files in OneDrive (shared L&D folder)",
+      detail:
+        "Erased SOP screenshots are blanked at once in the SOP Builder, but the SOPs' Word files in OneDrive keep them until they are saved again. After confirming, open each SOP: the page marks every version whose Word file still shows a removed screen. Use Save to OneDrive on each, then delete the earlier copies from the file's version history in OneDrive.",
+    });
+  return out;
+}

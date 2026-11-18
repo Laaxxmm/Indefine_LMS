@@ -63,6 +63,16 @@ export const FIRM_OS_DIRS = [
 ];
 export const isFirmOs = (p: string) => FIRM_OS_DIRS.some((d) => under(norm(p), d));
 
+/**
+ * Route directories outside Firm OS whose handlers verify:rbac and verify:audit-coverage check like
+ * Firm OS routes (auth + a policy, an AuditEvent on every write). Only those two checks: the other
+ * Firm OS rules (no-delete, no-portal, AI boundary) do not apply to these LMS tools.
+ *   src/app/api/tools/sop-builder  SOP review M2: SOP screenshots are probable client data (class A)
+ */
+export const GUARDED_ROUTE_DIRS = ["src/app/api/tools/sop-builder"];
+/** Is this a route file verify:rbac / verify:audit-coverage must check (Firm OS, or GUARDED_ROUTE_DIRS)? */
+export const isGuardedRoute = (p: string) => isFirmOs(p) || GUARDED_ROUTE_DIRS.some((d) => under(norm(p), d));
+
 // ------------------------------------------------------------------ no-skip
 
 const NO_SKIP_ROOTS = ["src", "tests", "scripts"];

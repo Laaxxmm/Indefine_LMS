@@ -4,7 +4,7 @@ import { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canEditSop } from "@/lib/sop/access";
-import { addVersion, fileToOneDrive, resolveCreator, versionString } from "@/lib/sop/service";
+import { addVersion, fileAfterSave, resolveCreator, versionString } from "@/lib/sop/service";
 import { stripSecrets } from "@/lib/sop/gemini";
 import { applyScreens, CAPTION_MAX, SCREENS_PER_STEP } from "@/lib/sop/screens";
 import type { SopContent } from "@/lib/sop/types";
@@ -49,8 +49,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: "This SOP is in the older format. Make a new version first, then add screens." }, { status: 400 });
 
   const ids = [...new Set(Object.values(screens).flatMap((list) => list.map((s) => s.imageId)))];
-  if ((await prisma.sopImage.count({ where: { id: { in: ids }, sopId: id } })) !== ids.length)
+  const found = await prisma.sopImage.findMany({ where: { id: { in: ids }, sopId: id }, select: { id: true, removedAt: true } });
+  if (found.length !== ids.length)
     return NextResponse.json({ error: "A screen could not be found. Reload the page and add it again." }, { status: 400 });
+  // A removed screen never comes back on a new version.
+  if (found.some((f) => f.removedAt))
+    return NextResponse.json({ error: "An admin or partner removed one of these screens. Reload the page, then save again." }, { status: 409 });
   // A credential typed into a caption is never stored, as in every other SOP field.
   const captioned = Object.fromEntries(Object.entries(screens).map(([no, list]) => [no, list.map((s) => ({ imageId: s.imageId, caption: stripSecrets(s.caption.trim()) }))]));
   const applied = applyScreens(content, captioned);
@@ -59,18 +63,24 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const versionNumber = latest.versionNumber + 1;
   const next: SopContent = { ...applied.content, revision: `${versionNumber}.0`, effectiveDate: new Date().toLocaleDateString("en-GB") };
   const creator = await resolveCreator(session.user);
-  const versionId = await addVersion(id, latest.id, {
-    versionNumber,
-    versionString: versionString(sop.title, versionNumber),
-    purpose: latest.purpose,
-    rawProcedure: latest.rawProcedure,
-    brief: latest.brief === null ? Prisma.JsonNull : (latest.brief as Prisma.InputJsonValue),
-    content: next as unknown as Prisma.InputJsonValue,
-    createdById: creator.id,
-    creatorName: creator.name,
-    creatorDesignation: creator.designation,
-  });
+  const versionId = await addVersion(
+    id,
+    latest.id,
+    {
+      versionNumber,
+      versionString: versionString(sop.title, versionNumber),
+      purpose: latest.purpose,
+      rawProcedure: latest.rawProcedure,
+      brief: latest.brief === null ? Prisma.JsonNull : (latest.brief as Prisma.InputJsonValue),
+      content: next as unknown as Prisma.InputJsonValue,
+      createdById: creator.id,
+      creatorName: creator.name,
+      creatorDesignation: creator.designation,
+    },
+    {},
+    "sop.screens-save",
+  );
   if (!versionId) return NextResponse.json({ error: CONFLICT }, { status: 409 });
-  await fileToOneDrive(id, versionId, creator.id);
-  return NextResponse.json({ id, versionId }, { status: 201 });
+  const filed = await fileAfterSave(id, versionId, creator.id);
+  return NextResponse.json({ id, versionId, ...(filed.notice ? { notice: filed.notice } : {}) }, { status: 201 });
 }

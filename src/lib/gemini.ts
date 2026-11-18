@@ -78,9 +78,22 @@ export async function resolveGeminiModel(apiKey: string): Promise<string> {
 // before anything leaves — client and staff names through `dictionary`, identifiers by pattern —
 // and a prompt the leak detector still flags is refused (LegacyGateError, nothing sent). The
 // answer gets the original values back.
+//
+// `signal` (SOP review L1): a caller that gives up on a call (the SOP Builder's 15 s retry) aborts it,
+// so the request, and any wait between its own 429 / 5xx retries, stops at once instead of running on
+// to the 45 s timeout.
 const CALL_TIMEOUT_MS = 45_000;
 
-export async function callGemini(prompt: string, schema?: object, opts: { dictionary?: DictionaryEntry[]; what?: string } = {}): Promise<string> {
+/** Wait `ms`, or reject at once when `signal` aborts. */
+function pause(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((ok, fail) => {
+    if (signal?.aborted) return fail(signal.reason);
+    const t = setTimeout(ok, ms);
+    signal?.addEventListener("abort", () => (clearTimeout(t), fail(signal.reason)), { once: true });
+  });
+}
+
+export async function callGemini(prompt: string, schema?: object, opts: { dictionary?: DictionaryEntry[]; what?: string; signal?: AbortSignal } = {}): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY is not set on the server.");
   const gated = gateForGemini(prompt, opts);
@@ -90,9 +103,9 @@ export async function callGemini(prompt: string, schema?: object, opts: { dictio
   // 429 / 5xx ("model is currently experiencing high demand") are usually gone in seconds: retry twice.
   let res: Response;
   for (let attempt = 0; ; attempt++) {
-    res = await generate(apiKey, model, thinking, gated.prompt, schema);
+    res = await generate(apiKey, model, thinking, gated.prompt, schema, opts.signal);
     if (res.ok || attempt === 2 || !(res.status === 429 || res.status >= 500)) break;
-    await new Promise((r) => setTimeout(r, attempt === 0 ? 3_000 : 10_000));
+    await pause(attempt === 0 ? 3_000 : 10_000, opts.signal);
   }
 
   if (!res.ok) {
@@ -112,7 +125,7 @@ export async function callGemini(prompt: string, schema?: object, opts: { dictio
   return gated.restore(text);
 }
 
-function generate(apiKey: string, model: string, thinking: boolean, prompt: string, schema?: object): Promise<Response> {
+function generate(apiKey: string, model: string, thinking: boolean, prompt: string, schema?: object, signal?: AbortSignal): Promise<Response> {
   return fetch(`${BASE}/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
     method: "POST",
     headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
@@ -126,6 +139,6 @@ function generate(apiKey: string, model: string, thinking: boolean, prompt: stri
         ...(thinking ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
       },
     }),
-    signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
+    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(CALL_TIMEOUT_MS)]) : AbortSignal.timeout(CALL_TIMEOUT_MS),
   });
 }

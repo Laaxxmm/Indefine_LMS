@@ -7,7 +7,10 @@ import { crossSiteRefusal } from "@/lib/hardening/uploads";
 
 export const maxDuration = 60;
 
-// Put a version's Word file in the SOP's OneDrive folder again, for a save that never got there.
+const NOT_TAKEN = "OneDrive did not take the file. Try again in a minute; if it keeps failing, tell an admin.";
+
+// Put a version's Word file in the SOP's OneDrive folder again: for a save that never got there, or a
+// file that still shows a removed screen. Each try is audited (sop.onedrive-file).
 export async function POST(req: Request, { params }: { params: Promise<{ id: string; versionId: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
@@ -22,7 +25,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!(await prisma.sopVersion.findFirst({ where: { id: versionId, sopId: id }, select: { id: true } })))
     return NextResponse.json({ error: "That version of the SOP wasn't found. Reload the page and try again." }, { status: 404 });
 
-  const webUrl = await fileToOneDrive(id, versionId, session.user.id);
-  if (!webUrl) return NextResponse.json({ error: "OneDrive did not take the file. Try again in a minute; if it keeps failing, tell an admin." }, { status: 502 });
+  let webUrl: string | null = null;
+  try {
+    webUrl = await fileToOneDrive(id, versionId, session.user.id);
+  } catch (e) {
+    console.error("SOP OneDrive retry failed:", (e as Error).message);
+  }
+  if (!webUrl) return NextResponse.json({ error: NOT_TAKEN }, { status: 502 });
   return NextResponse.json({ webUrl });
 }

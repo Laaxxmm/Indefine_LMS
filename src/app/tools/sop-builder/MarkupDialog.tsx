@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, EyeOff, ImagePlus, Loader2, Square, Undo2, X } from "lucide-react";
 import type { SopScreen } from "@/lib/sop/types";
 import { userMessage } from "@/lib/errors";
-import { CAPTION_MAX, SCREEN_MAX_HEIGHT, SCREEN_MAX_WIDTH } from "@/lib/sop/screens";
+import { CAPTION_MAX, NO_CLIENT_DETAILS_FIELD, NO_CLIENT_DETAILS_LABEL, SCREEN_MAX_HEIGHT, SCREEN_MAX_WIDTH } from "@/lib/sop/screens";
 
 type Mark = { kind: "hide" | "highlight"; x: number; y: number; w: number; h: number }; // canvas pixels
 type Point = { x: number; y: number };
@@ -28,6 +28,8 @@ const toBlob = (cv: HTMLCanvasElement, type: string, quality?: number) =>
 
 // Paste or pick a screenshot, mark it up, upload it. Marks are drawn into the pixels before
 // upload, so a hidden area is black in the stored picture and the original never leaves the browser.
+// The author must tick that no client detail is visible (SOP review M1); the box is sent with the
+// picture and the upload route refuses a screen without it.
 export function MarkupDialog({ sopId, stepNo, onAdded, onClose }: { sopId: string; stepNo: string; onAdded: (s: SopScreen) => void; onClose: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const start = useRef<Point | null>(null);
@@ -36,6 +38,7 @@ export function MarkupDialog({ sopId, stepNo, onAdded, onClose }: { sopId: strin
   const [draft, setDraft] = useState<Mark | null>(null);
   const [tool, setTool] = useState<Mark["kind"]>("hide");
   const [caption, setCaption] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,6 +52,7 @@ export function MarkupDialog({ sopId, stepNo, onAdded, onClose }: { sopId: strin
       const k = Math.min(1, SCREEN_MAX_WIDTH / bitmap.width, SCREEN_MAX_HEIGHT / bitmap.height);
       setPicture({ bitmap, w: Math.round(bitmap.width * k), h: Math.round(bitmap.height * k) });
       setMarks([]);
+      setConfirmed(false);
       setError(null);
     } catch {
       setError("That picture could not be opened. Take the screenshot again.");
@@ -103,6 +107,7 @@ export function MarkupDialog({ sopId, stepNo, onAdded, onClose }: { sopId: strin
       }
       const form = new FormData();
       form.append("file", new File([blob], name, { type: blob.type }));
+      form.append(NO_CLIENT_DETAILS_FIELD, confirmed ? "yes" : "no");
       const res = await fetch(`/api/tools/sop-builder/sops/${sopId}/images`, { method: "POST", body: form });
       const data = (await res.json().catch(() => ({}))) as { id?: string; error?: string };
       if (!res.ok || !data.id) {
@@ -197,6 +202,18 @@ export function MarkupDialog({ sopId, stepNo, onAdded, onClose }: { sopId: strin
               Caption <span className="font-normal text-ink-faint">(optional)</span>
             </label>
             <input id="screen-caption" value={caption} onChange={(e) => setCaption(e.target.value)} maxLength={CAPTION_MAX} placeholder="What this screen shows, e.g. Bank Reconciliation screen" className={input} />
+            <div className="mt-3 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2.5 text-[12.5px] text-amber-900">
+              <p className="flex items-start gap-1.5">
+                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                <span>
+                  Everyone who reads SOPs sees this screen, and it goes into the Word file in the shared L&amp;D folder in OneDrive. Check the whole picture for a client name, PAN, GSTIN, bank account, phone, email or amount, and cover each with Hide.
+                </span>
+              </p>
+              <label className="mt-2 flex items-start gap-2 font-semibold cursor-pointer">
+                <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} disabled={busy} className="mt-0.5 w-4 h-4 accent-brand-500" />
+                <span>{NO_CLIENT_DETAILS_LABEL}</span>
+              </label>
+            </div>
           </>
         )}
 
@@ -209,7 +226,7 @@ export function MarkupDialog({ sopId, stepNo, onAdded, onClose }: { sopId: strin
           <button onClick={onClose} disabled={busy} className="px-4 py-2.5 rounded-xl border border-border bg-card text-sm font-semibold text-ink-soft hover:bg-muted transition">
             Cancel
           </button>
-          <button onClick={add} disabled={!picture || busy} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 disabled:bg-ink-faint text-white text-sm font-bold shadow-pop transition">
+          <button onClick={add} disabled={!picture || !confirmed || busy} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 disabled:bg-ink-faint text-white text-sm font-bold shadow-pop transition">
             {busy && <Loader2 className="w-4 h-4 animate-spin" />} Add screen
           </button>
         </div>

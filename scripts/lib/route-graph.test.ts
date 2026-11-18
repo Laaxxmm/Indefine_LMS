@@ -19,8 +19,16 @@ describe("discovery", () => {
         "src/app/api/firm-os/jobs/[id]/state/helpers.ts",
         "src\\app\\api\\firm-os\\onboard\\start\\route.ts",
         "src/lib/audit/route.ts", // a lib file named route.ts is not a route handler
+        "src/app/api/tools/sop-builder/sops/[id]/images/route.ts", // GUARDED_ROUTE_DIRS (SOP review M2)
+        "src/app/api/tools/certificate-generator/issue/route.ts", // other LMS tools are not in scope
       ]),
-    ).toEqual(["src/app/api/cron/firm-os/retention/route.ts", "src/app/api/firm-os/comms/drafts/route.ts", "src/app/api/firm-os/jobs/[id]/state/route.ts", "src/app/api/firm-os/onboard/start/route.ts"]);
+    ).toEqual([
+      "src/app/api/cron/firm-os/retention/route.ts",
+      "src/app/api/firm-os/comms/drafts/route.ts",
+      "src/app/api/firm-os/jobs/[id]/state/route.ts",
+      "src/app/api/firm-os/onboard/start/route.ts",
+      "src/app/api/tools/sop-builder/sops/[id]/images/route.ts",
+    ]);
     expect(routePath("src/app/api/firm-os/jobs/[id]/state/route.ts")).toBe("/api/firm-os/jobs/[id]/state");
   });
 

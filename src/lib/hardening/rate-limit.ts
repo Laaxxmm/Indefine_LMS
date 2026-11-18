@@ -7,7 +7,7 @@
 //
 // Limits are configuration: DEFAULT_LIMITS below, overridable per scope by env
 //   RATE_LIMIT_ONBOARD="30/1h"   RATE_LIMIT_AGENT_RUN="20/1h"   RATE_LIMIT_COMMS_DRAFT="30/1h"
-//   RATE_LIMIT_IDENTIFIER_SEARCH="10/10m"   RATE_LIMIT_COMPANION="20/1m"
+//   RATE_LIMIT_IDENTIFIER_SEARCH="10/10m"   RATE_LIMIT_COMPANION="20/1m"   RATE_LIMIT_SOP_GENERATE="20/1h"
 // ("<requests>/<window>", window in s, m or h). A malformed value is ignored with a warning (the
 // default stays); changing a limit is a threshold change (partner, src/lib/rbac/policy.ts).
 //
@@ -27,7 +27,7 @@
 // src/lib/agents/service.ts), so a burst cannot exhaust the 5-connection pool in the first place.
 import { NextResponse } from "next/server";
 
-export const RATE_LIMIT_SCOPES = ["onboard", "agent-run", "comms-draft", "identifier-search", "companion"] as const;
+export const RATE_LIMIT_SCOPES = ["onboard", "agent-run", "comms-draft", "identifier-search", "companion", "sop-generate"] as const;
 export type RateLimitScope = (typeof RATE_LIMIT_SCOPES)[number];
 export type RateLimitRule = { limit: number; windowMs: number };
 
@@ -38,6 +38,7 @@ export const DEFAULT_LIMITS: Readonly<Record<RateLimitScope, RateLimitRule>> = {
   "comms-draft": { limit: 30, windowMs: HOUR },
   "identifier-search": { limit: 10, windowMs: 10 * 60_000 }, // per person: exact PAN / GSTIN / phone / email lookups (no enumeration)
   companion: { limit: 20, windowMs: 60_000 }, // per pairing token: the side panel polls once a minute
+  "sop-generate": { limit: 20, windowMs: HOUR }, // per person: one SOP Generate is up to 9 Gemini calls (frame + 8 sub-processes)
 };
 
 /**
@@ -52,6 +53,7 @@ export const FAILURE_MODE: Readonly<Record<RateLimitScope, "closed" | "open">> =
   // with no fallback they refuse rather than run unmetered.
   "identifier-search": "closed",
   companion: "closed",
+  "sop-generate": "closed", // Gemini calls: never unmetered
 };
 
 /** Seconds a client is asked to wait after a 503 (blind limiter, full agent-run queue). */
@@ -183,6 +185,7 @@ const SCOPE_LABEL: Record<RateLimitScope, string> = {
   "comms-draft": "draft messages",
   "identifier-search": "searches by PAN, GSTIN, phone or email",
   companion: "Companion refreshes",
+  "sop-generate": "SOP generations",
 };
 
 /** "an hour", "10 minutes", "a minute", "30 seconds": the window in words for a 429 sentence. */
