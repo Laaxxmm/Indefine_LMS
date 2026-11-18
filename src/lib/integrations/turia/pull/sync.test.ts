@@ -6,6 +6,7 @@ import { checkTuria } from "@/lib/close-loop/gate";
 import type { TuriaSyncRow } from "@/lib/close-loop/db";
 import { createPullWorld, rawTask, type PullWorld } from "../../../../../tests/fakes/turia-pull-world";
 import { saveClientLink, savePersonLink } from "./admin";
+import { ERASED_CLIENT_NOTE, erasedClientKey, isErasedKey } from "./erased";
 import { CANCELLED_NOTE, MISSING_NOTE } from "./plan";
 import { BUSY_MESSAGE, FAILED_MESSAGE, MODE_INVALID_MESSAGE, PULL_OFF_MESSAGE, SESSION_MESSAGE, TIMEOUT_MESSAGE } from "./messages";
 import { PULL_ACTOR, runTuriaPull, type PullDeps } from "./sync";
@@ -360,5 +361,129 @@ describe("sign-in, lock and limits", () => {
     expect(w.turia.calls.filter((c) => c.startsWith("task/list"))).toEqual(["task/list p1 n2 updatedon"]);
     expect(r.status).toBe("ok");
     expect(r.counts.missing).toBe(0);
+  });
+});
+
+describe("DPDP: erased and restricted clients, erased people", () => {
+  const ACME = "acme traders private limited";
+  /** What a confirmed erasure leaves for Acme (src/lib/privacy/inventory.ts "turia-tasks", "turia-client-links"). */
+  function eraseAcme(w: PullWorld): string {
+    const key = erasedClientKey(ACME, w.env.AUTH_SECRET);
+    for (const m of w.db.turiaTaskMirror.rows) if (m.clientKey === ACME) Object.assign(m, { taskName: "[erased]", clientName: "[erased]", clientKey: key, clientCode: null, hash: "[erased]" });
+    Object.assign(w.db.turiaClientLink.rows.find((l) => l.key === ACME)!, { key, turiaName: ERASED_CLIENT_NOTE, turiaCode: null, status: "ignored" });
+    Object.assign(w.db.client.rows.find((c) => c.id === "c-acme")!, { name: "[erased] c-acme" });
+    return key;
+  }
+  const restrict = (w: PullWorld, lmsClientId: string, at: string) =>
+    w.db.auditEvent.rows.push({ id: `r-${at}`, action: "restrict-processing", entity: "Client", entityId: lmsClientId, meta: { restrictions: ["ai-processing", "comms-drafts", "marketing"], privacyRequestId: "pr-1", why: "consent-withdrawal" }, createdAt: new Date(at) });
+
+  it("an erased key is keyed, stable, carries no name, and is never erased twice", () => {
+    const a = erasedClientKey(ACME, "s1");
+    expect(a).toMatch(/^erased:[0-9a-f]{40}$/);
+    expect(erasedClientKey(ACME, "s1")).toBe(a);
+    expect(erasedClientKey(ACME, "s2")).not.toBe(a);
+    expect(erasedClientKey(a, "s2")).toBe(a);
+    expect(isErasedKey(a)).toBe(true);
+    expect(isErasedKey(ACME)).toBe(false);
+    expect(isErasedKey(null)).toBe(false);
+  });
+
+  it("an erased client is not re-created by the next pull run: its rows are not rewritten from Turia, its match is not re-made and it gets no job", async () => {
+    const w = world([rawTask({ id: "101" })]);
+    w.env.FIRM_OS_TURIA_PULL = "dry-run";
+    await run(w);
+    const key = eraseAcme(w);
+    const erasedRow = structuredClone(w.db.turiaTaskMirror.rows[0]);
+    w.env.FIRM_OS_TURIA_PULL = "on";
+    // Turia is not cleaned yet: it still lists the client, with the task changed and a new one.
+    w.turia.pages = [[rawTask({ id: "101", taskname: "GSTR-3B Oct 2026 revised", clientcode: "ACME" }), rawTask({ id: "102", taskname: "GSTR-1 Oct 2026" })]];
+    w.advance(60_000);
+    const r = await run(w);
+    expect(r.counts).toMatchObject({ fetched: 2, erased: 2, new: 0, changed: 0, create: 0, link: 0 });
+    expect(w.db.turiaTaskMirror.rows).toEqual([erasedRow]);
+    expect(w.db.turiaClientLink.rows.map((l) => [l.key, l.status])).toEqual([[key, "ignored"]]);
+    expect(w.db.jobTask.rows).toEqual([]);
+    expect(w.db.firmClient.rows).toHaveLength(1);
+    expect(JSON.stringify([w.db.turiaTaskMirror.rows, w.db.turiaClientLink.rows, w.db.turiaPullRun.rows[1]])).not.toMatch(/acme traders/i);
+    // A complete scan without the task leaves the erased row exactly as the erasure wrote it.
+    w.turia.pages = [[]];
+    w.advance(60_000);
+    expect((await run(w)).counts.missing).toBe(0);
+    expect(w.db.turiaTaskMirror.rows).toEqual([erasedRow]);
+  });
+
+  it("an erased mirror row is never rewritten even when its match is not recognised, and an erased client found by its kept code gets no job", async () => {
+    const w = world([rawTask({ id: "101" })]);
+    w.env.FIRM_OS_TURIA_PULL = "dry-run";
+    await run(w);
+    eraseAcme(w);
+    // The secret changed since the erasure: the erased match is no longer recognised from the client's name.
+    w.env.AUTH_SECRET = "rotated";
+    w.env.FIRM_OS_TURIA_PULL = "on";
+    const erasedRow = structuredClone(w.db.turiaTaskMirror.rows[0]);
+    w.turia.pages = [[rawTask({ id: "101", taskname: "GSTR-3B Oct 2026 revised" }), rawTask({ id: "103", taskname: "GSTR-1 Oct 2026", clientcode: "ACME" })]];
+    w.advance(60_000);
+    const r = await run(w);
+    expect(r.counts).toMatchObject({ erased: 1, create: 0 });
+    expect(w.db.turiaTaskMirror.rows.find((m) => m.id === "101")).toEqual(erasedRow);
+    expect(w.db.jobTask.rows).toEqual([]);
+    // No match is written for the client again (its key would be its name).
+    expect(w.db.turiaClientLink.rows.map((l) => String(l.key).startsWith("erased:"))).toEqual([true]);
+    expect(r.preview.find((p) => p.task.startsWith("TSK00103"))).toMatchObject({ action: "wait", detail: expect.stringMatching(/set to ignore/) });
+  });
+
+  it("a restricted client is still mirrored and matched but gets no new job, not even a link to an existing one; lifting the restriction lets the next run make it", async () => {
+    const w = world([rawTask({ id: "101" }), rawTask({ id: "102", taskname: "GSTR-1 Oct 2026" })]);
+    w.db.jobTask.rows.push({ id: "job-onboard", firmClientId: "fc-acme", service: "GST", fy: "2026-27", period: "2026-10", title: "GSTR-1", state: "IN_PREP", assigneeId: "u-ravi", reviewerId: null, internalDueOn: null, turiaTaskId: null, turiaMissingAt: null, turiaNote: null, agentless: false, source: null });
+    restrict(w, "c-acme", "2026-11-01T00:00:00Z");
+    w.env.FIRM_OS_TURIA_PULL = "dry-run";
+    const dry = await run(w);
+    expect(dry.counts).toMatchObject({ new: 2, restricted: 2, create: 0, link: 0 });
+    expect(dry.preview.map((p) => [p.action, p.detail])).toEqual([
+      ["wait", expect.stringMatching(/^No job made: this client has restricted processing under a privacy request\./)],
+      ["wait", expect.stringMatching(/restricted processing/)],
+    ]);
+    w.env.FIRM_OS_TURIA_PULL = "on";
+    w.advance(60_000);
+    const r = await run(w);
+    expect(r.counts).toMatchObject({ restricted: 2, create: 0, link: 0 });
+    expect(w.db.turiaTaskMirror.rows.map((m) => m.id)).toEqual(["101", "102"]);
+    expect(w.db.turiaClientLink.rows[0]).toMatchObject({ key: ACME, status: "matched", lmsClientId: "c-acme", firmClientId: "fc-acme" });
+    expect(w.db.jobTask.rows).toEqual([expect.objectContaining({ id: "job-onboard", turiaTaskId: null })]);
+    expect(w.db.engagement.rows).toEqual([]);
+
+    w.db.auditEvent.rows.push({ id: "l-1", action: "lift-restriction", entity: "Client", entityId: "c-acme", meta: { restrictions: ["ai-processing", "comms-drafts", "marketing"], privacyRequestId: "pr-1", reason: "Written consent received" }, createdAt: new Date("2026-11-02T00:00:00Z") });
+    w.advance(60_000);
+    const lifted = await run(w);
+    expect(lifted.counts).toMatchObject({ restricted: 0, create: 1, link: 1 });
+    expect(jobOf(w, "101")).toMatchObject({ firmClientId: "fc-acme", title: "GSTR-3B" });
+    expect(jobOf(w, "102")).toMatchObject({ id: "job-onboard" });
+  });
+
+  it("a job a restricted client already has still follows Turia (people and due date only)", async () => {
+    const w = world();
+    await run(w);
+    restrict(w, "c-acme", "2026-11-01T00:00:00Z");
+    w.turia.pages = [[rawTask({ id: "101", assignee: [{ id: "t-ravi", name: "Ravi K" }] }), rawTask({ id: "104", taskname: "GSTR-1 Oct 2026" })]];
+    w.advance(60_000);
+    const r = await run(w);
+    expect(r.counts).toMatchObject({ update: 1, restricted: 1, create: 0 });
+    expect(jobOf(w, "101")).toMatchObject({ assigneeId: "u-ravi" });
+    expect(jobOf(w, "104")).toBeUndefined();
+  });
+
+  it("an erased Turia person is never matched again, and their name is written as [erased] in every task list mirrored", async () => {
+    const w = world();
+    await run(w);
+    Object.assign(w.db.turiaPersonLink.rows.find((p) => p.turiaUserId === "t-priya")!, { turiaName: "[erased]", turiaEmail: null, userId: null, matchedBy: "erased" });
+    w.turia.pages = [[rawTask({ id: "101", taskname: "GSTR-3B Oct 2026" }), rawTask({ id: "105", taskname: "GSTR-1 Oct 2026", reviewer: [{ id: "t-priya", name: "Priya S" }], assignee: [{ id: "t-ravi", name: "Ravi K" }] })]];
+    w.advance(60_000);
+    await run(w);
+    expect(w.db.turiaPersonLink.rows.find((p) => p.turiaUserId === "t-priya")).toMatchObject({ turiaName: "[erased]", turiaEmail: null, userId: null, matchedBy: "erased" });
+    expect(w.db.turiaTaskMirror.rows.find((m) => m.id === "101")!.assignees).toEqual([{ id: "t-priya", name: "[erased]" }]);
+    expect(w.db.turiaTaskMirror.rows.find((m) => m.id === "105")!.reviewers).toEqual([{ id: "t-priya", name: "[erased]" }]);
+    expect(JSON.stringify([w.db.turiaTaskMirror.rows, w.db.turiaPersonLink.rows])).not.toMatch(/Priya/);
+    // The new task still gets its job for the mapped assignee, with no reviewer from the erased person.
+    expect(jobOf(w, "105")).toMatchObject({ assigneeId: "u-ravi", reviewerId: null });
   });
 });

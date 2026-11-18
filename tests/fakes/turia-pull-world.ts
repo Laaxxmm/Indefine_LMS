@@ -24,6 +24,7 @@ function matchField(value: unknown, cond: unknown): boolean {
     if (op === "in" && !(arg as unknown[]).some((a) => same(value, a))) return false;
     if (op === "not" && (arg === null ? value == null : same(value, arg))) return false;
     if (op === "equals" && !same(value, arg)) return false;
+    if (op === "startsWith" && !(typeof value === "string" && value.startsWith(String(arg)))) return false;
     if (op === "lt" && !(value != null && cmp(value, arg) < 0)) return false;
     if (op === "lte" && !(value != null && cmp(value, arg) <= 0)) return false;
     if (op === "gt" && !(value != null && cmp(value, arg) > 0)) return false;
@@ -36,7 +37,7 @@ function matchField(value: unknown, cond: unknown): boolean {
 function flatten(where: Where = {}): Where {
   const out: Where = {};
   for (const [k, v] of Object.entries(where)) {
-    if (k.includes("_") && isPlain(v) && !Object.keys(v).some((x) => ["in", "not", "lt", "lte", "gt", "gte", "equals"].includes(x))) Object.assign(out, v);
+    if (k.includes("_") && isPlain(v) && !Object.keys(v).some((x) => ["in", "not", "lt", "lte", "gt", "gte", "equals", "startsWith"].includes(x))) Object.assign(out, v);
     else out[k] = v;
   }
   return out;
@@ -48,6 +49,8 @@ export function matches(row: Row, where: Where = {}): boolean {
       if (!(cond as Where[]).some((w) => matches(row, w))) return false;
     } else if (k === "AND") {
       if (!(cond as Where[]).every((w) => matches(row, w))) return false;
+    } else if (k === "NOT") {
+      if (matches(row, cond as Where)) return false;
     } else if (!matchField(row[k], cond)) return false;
   }
   return true;

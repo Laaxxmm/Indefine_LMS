@@ -1,7 +1,8 @@
 // /admin/firm-os/turia-sync saves and page data: who may, what is valid, and an AuditEvent for each save.
 import { describe, expect, it } from "vitest";
 import { createPullWorld } from "../../../../../tests/fakes/turia-pull-world";
-import { MANAGERS_ONLY, loadTuriaSyncPage, saveClientLink, savePersonLink, saveRule } from "./admin";
+import { CLIENT_ERASED, MANAGERS_ONLY, PERSON_ERASED, loadTuriaSyncPage, saveClientLink, savePersonLink, saveRule } from "./admin";
+import { ERASED_CLIENT_NOTE, erasedClientKey } from "./erased";
 import { SEED_RULES } from "./rules";
 
 const user = (over: Record<string, unknown> = {}) => ({ id: "u-admin", name: "Asha", email: "a@x.test", role: "ADMIN", level: "STAFF", active: true, ...over }) as never;
@@ -106,5 +107,26 @@ describe("page data", () => {
     expect(p.users.map((u) => u.id)).not.toContain("u-old");
     const stale = await loadTuriaSyncPage(w.adminDb, { present: true, updatedAt: new Date("2026-11-06T04:00:00Z") }, now, {});
     expect(stale).toMatchObject({ mode: "off", firmOsOn: false, session: { fresh: false } });
+  });
+});
+
+describe("DPDP: erased matches stay as the erasure left them", () => {
+  it("an erased Turia person cannot be matched to anyone again", async () => {
+    const w = world();
+    w.db.turiaPersonLink.rows.push({ turiaUserId: "t-gone", turiaName: "[erased]", turiaEmail: null, userId: null, matchedBy: "erased", lastSeenAt: new Date() });
+    expect(await savePersonLink(w.adminDb, partner, { turiaUserId: "t-gone", userId: "u-priya" })).toEqual({ ok: false, status: 409, error: PERSON_ERASED });
+    expect(w.db.turiaPersonLink.rows.find((p) => p.turiaUserId === "t-gone")).toMatchObject({ userId: null, matchedBy: "erased" });
+    expect(w.db.auditEvent.rows).toHaveLength(0);
+  });
+
+  it("an erased Turia client cannot be linked, or put back to automatic matching", async () => {
+    const w = world();
+    const key = erasedClientKey("gamma exports", "k");
+    w.db.turiaClientLink.rows.push({ key, turiaName: ERASED_CLIENT_NOTE, turiaCode: null, lmsClientId: "c-acme", firmClientId: null, status: "ignored", lastSeenAt: new Date() });
+    for (const input of [{ key, action: "link" as const, lmsClientId: "c-beta" }, { key, action: "auto" as const }]) {
+      expect(await saveClientLink(w.adminDb, partner, input)).toEqual({ ok: false, status: 409, error: CLIENT_ERASED });
+    }
+    expect(w.db.turiaClientLink.rows.find((l) => l.key === key)).toMatchObject({ status: "ignored", lmsClientId: "c-acme" });
+    expect(w.db.auditEvent.rows).toHaveLength(0);
   });
 });

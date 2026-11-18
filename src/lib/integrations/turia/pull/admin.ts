@@ -11,6 +11,7 @@ import { canManageTuriaSync } from "@/lib/rbac/policy";
 import { firmOsEnabled } from "@/lib/workspace/flag";
 import { SERVICE_LABELS } from "../adapter";
 import { PULL_LIMITS, turiaPullMode, type PullMode } from "./config";
+import { ERASED_PERSON, isErasedKey } from "./erased";
 import { FREQUENCIES } from "./period";
 import { ensureSeedRules, loadRules, type PreviewItem, type PullCounts } from "./sync";
 import { AGENT_SERVICES, parsePattern, SEED_RULES, type RuleRow } from "./rules";
@@ -29,6 +30,8 @@ const CLIENT_GONE = "That client wasn't found in the client list. Reload the pag
 const CLIENT_PICK_NEEDED = "Choose the client to link, then save.";
 const RULE_GONE = "That rule wasn't found. Reload the page and try again.";
 const PATTERN_EMPTY = "Enter at least one word to look for in the Turia task name.";
+export const PERSON_ERASED = "This Turia person was erased under a privacy request, so they are not matched to anyone again. Erase or anonymise them in Turia too.";
+export const CLIENT_ERASED = "This Turia client was erased under a privacy request, so it stays ignored. Erase or anonymise it in Turia too.";
 
 const SERVICES = Object.keys(SERVICE_LABELS) as [FirmService, ...FirmService[]];
 
@@ -59,6 +62,7 @@ export async function savePersonLink(db: TuriaAdminDb, actor: SessionUser, input
   if (!canManageTuriaSync(actor) || !actor) return forbidden();
   const link = await db.turiaPersonLink.findUnique({ where: { turiaUserId: input.turiaUserId } });
   if (!link) return { ok: false, status: 404, error: PERSON_GONE };
+  if (link.matchedBy === ERASED_PERSON) return { ok: false, status: 409, error: PERSON_ERASED };
   if (input.userId) {
     const u = await db.user.findFirst({ where: { id: input.userId, active: true }, select: { id: true } });
     if (!u) return { ok: false, status: 400, error: USER_GONE };
@@ -82,6 +86,7 @@ export async function saveClientLink(db: TuriaAdminDb, actor: SessionUser, input
   if (!canManageTuriaSync(actor) || !actor) return forbidden();
   const link = await db.turiaClientLink.findUnique({ where: { key: input.key } });
   if (!link) return { ok: false, status: 404, error: CLIENT_LINK_GONE };
+  if (isErasedKey(link.key)) return { ok: false, status: 409, error: CLIENT_ERASED };
   let data: { status: string; lmsClientId: string | null; firmClientId: string | null };
   if (input.action === "link") {
     if (!input.lmsClientId) return { ok: false, status: 400, error: CLIENT_PICK_NEEDED };

@@ -12,7 +12,10 @@
 //   - a task Turia already shows completed or cancelled when first seen makes no job (history is
 //     not imported); a linked task that completes is recorded for the close gate;
 //   - a task that disappears from Turia, or is cancelled, flags the job (turiaMissingAt), never
-//     removes it; the flag clears if the task comes back.
+//     removes it; the flag clears if the task comes back;
+//   - a client whose processing is restricted under the DPDP Act (consent withdrawal, or a legal
+//     hold during an erasure: src/lib/privacy/consent.ts) gets no new job; its tasks are still
+//     mirrored and a job it already has still follows Turia.
 import type { FirmService, JobTaskState } from "@prisma/client";
 import { isCancelled, isCompleted, type MirrorFields } from "./normalise";
 import { monthPeriodOf, parsePeriod, type Frequency, type PeriodResult } from "./period";
@@ -22,7 +25,9 @@ export type ClientState =
   | { status: "ready"; firmClientId: string; clientCode: string }
   | { status: "new"; lmsClientId: string; clientCode: string }
   | { status: "unmatched" }
-  | { status: "ignored" };
+  | { status: "ignored" }
+  /** Matched, but processing is restricted (DPDP): mirrored, never given a new job. */
+  | { status: "restricted" };
 
 export type LinkedJob = {
   id: string;
@@ -72,7 +77,7 @@ export type JobChange =
   | { field: "flag"; to: { at: Date; note: string } }
   | { field: "unflag" };
 
-export type WaitReason = "client-unmatched" | "client-ignored" | "no-assignee" | "assignee-unmatched" | "closed-in-turia";
+export type WaitReason = "client-unmatched" | "client-ignored" | "client-restricted" | "no-assignee" | "assignee-unmatched" | "closed-in-turia";
 
 export type Plan =
   | { kind: "create"; draft: JobDraft; reviewerUnmatched: boolean }
@@ -168,6 +173,7 @@ export function planTask(ctx: PlanContext, now: Date): Plan {
   if (isCompleted(m) || isCancelled(m) || m.missingSince) return { kind: "wait", reason: "closed-in-turia" };
   if (ctx.client.status === "unmatched") return { kind: "wait", reason: "client-unmatched" };
   if (ctx.client.status === "ignored") return { kind: "wait", reason: "client-ignored" };
+  if (ctx.client.status === "restricted") return { kind: "wait", reason: "client-restricted" };
   if (!m.assignees.length) return { kind: "wait", reason: "no-assignee" };
   const assignee = firstMapped(m.assignees, ctx.personOf);
   if (!assignee.userId) return { kind: "wait", reason: "assignee-unmatched" };

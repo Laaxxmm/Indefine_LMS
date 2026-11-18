@@ -1,7 +1,8 @@
 # DPDP data inventory: Firm OS
 
 - **Status:** Phase 11, 2026-11-05; updated 2026-11-06 after the DPDP data-coverage audit (erasure
-  residue, retention schedule, write-time masking). Owner: Firm OS lead engineer. Reviewer: partner
+  residue, retention schedule, write-time masking); updated 2026-11-18 (Turia pull tables in the access
+  export and erasure). Owner: Firm OS lead engineer. Reviewer: partner
   (data fiduciary decisions).
 - **Rules this applies:** [ADR-006](../adr/ADR-006-dpdp-data-classes.md) data classes and retention;
   [ADR-002](../adr/ADR-002-model-router.md) (every cloud model call is masked first);
@@ -74,11 +75,11 @@ Columns not listed hold ids, enums, booleans, counts or timestamps only (class �
 | | `evidence` | **A** | Manual-bridge checklist with prefilled client values (name, PAN/GSTIN where Turia needs them) for the person to type into Turia. Kept with the record as the evidence of the manual step the partner spot-checks (ADR-005); erasure cleans the person's values at once (Turia holds the record); the idempotency `key` stays |
 | | `confirmedById`, `spotCheckedById` | B | |
 | | `spotCheckNote` | B | Partner's spot-check note |
-| `TuriaTaskMirror` (Turia pull, ADR-003 Amendment 1) | `clientName`, `clientKey`, `clientCode`, `taskName` | A (may) / C | A copy of Turia's task list, the minimum a job needs: client name / code, task name, department, status, dates. **No descriptions, comments or amounts are stored.** Turia holds the record and the next run rewrites the copy, so an erasure must be done in Turia first; the erasure plan does not walk this table yet (see "Open items") |
-| | `assignees`, `reviewers` | B | Turia user ids and names |
-| `TuriaPersonLink` | `turiaName`, `turiaEmail`, `userId` | B | Turia user -> LMS user match (staff only) |
-| `TuriaClientLink` | `turiaName`, `turiaCode`, `lmsClientId` | A (may) / C | Turia client -> LMS client match |
-| `TuriaPullRun` | `counts`, `preview` | A (may) / B | Per-run counts and the preview rows (task number, task name, client name, preparer names); kept as the run's report |
+| `TuriaTaskMirror` (Turia pull, ADR-003 Amendment 1) | `clientName`, `clientKey`, `clientCode`, `taskName` | A (may) / C | A copy of Turia's task list, the minimum a job needs: client name / code, task name, department, status, dates. **No descriptions, comments or amounts are stored.** Exported to the client (dataset `turia-tasks`, without staff names). Erasure, once no duty applies: `clientName` and `taskName` → `[erased]`, `clientCode` → null, `clientKey` → the erased key (below), `hash` / `appliedHash` → `[erased]`; the row, its Turia task id, dates and job link stay. Held with the client's records while a duty applies. A client's rows are found by its Turia client keys (below) |
+| | `assignees`, `reviewers` | B | Turia user ids and names. Exported to the staff member (dataset `staff-turia-tasks`: their own name only; other people's names and the client's name in the task name withheld). Erasure replaces their name with `[erased]` in their own entries only (held while the employment-records duty applies) |
+| `TuriaPersonLink` | `turiaName`, `turiaEmail`, `userId` | B | Turia user -> LMS user match (staff only). Exported to the staff member (`staff-turia-link`). Erasure: name → `[erased]`, email and `userId` cleared, `matchedBy` → `erased`; the pull then never matches that Turia user again and mirrors their name as `[erased]`. Kept as it is while the employment-records duty applies (legal hold) |
+| `TuriaClientLink` | `key`, `turiaName`, `turiaCode`, `lmsClientId` | A (may) / C | Turia client -> LMS client match; `key` is the client's normalised Turia name. Exported to the client (`turia-client-links`). Erasure: `status` → `ignored`, `key` → the erased key, `turiaName` → a privacy note (`[erased] Erased under a DPDP request …`), `turiaCode` → null; `lmsClientId` stays so a later request still finds it. The admin page refuses to re-link or re-match an erased match. Held while a duty applies |
+| `TuriaPullRun` | `counts`, `preview` | A (may) / B | Per-run counts and the preview rows (task number, task name, client name, preparer names); kept as the run's report. Erasure (residue, a copy): a client's lines get `client` → `[erased]` and its names and identifiers in `task` / `detail` erased; a staff member's name is erased wherever it appears (not a name another user shares). `counts` hold no personal data |
 | `OnboardingRun` | `prompt` | **A** | The partner's plain-English sentence (may name people, carry PAN/GSTIN). **Retention: replaced by `[cleared by retention]` 30 days after the run last changed** (done, failed or abandoned) |
 | | `spec`, `plan` | **A** | Extracted client details (PAN, GSTIN, contact name, phone, email) and the plan. **Retention: cleared with the prompt** (`spec` → `{ cleared: true }`, `plan` → null). A run that never reached a client record (`firmClientId` null) is found for erasure by identifiers that pin the person alone (PAN / GSTIN / CIN, an email or phone no other client shares), never by a name; for a person no record matches, by the request's identifier hash (they are then "known only by identifiers", rights.md) |
 | | `steps`, `error` | C | Saga progress. A failure is stored as a classification for IT, never the thrown text: known errors as fixed text (no client, file or sheet name, path or received value), anything else masked with the run's names or withheld (`src/lib/agents/onboarding/run-errors.ts`); the page shows a plain sentence (`onboardingFailureMessage`) |
@@ -149,10 +150,41 @@ other parties' data. Each carries its own legal-hold basis:
 | Model call errors | `ModelCall.error` | No |
 | Onboarding runs never linked to a client | `OnboardingRun.prompt`, `spec`, `plan`, `error`, `steps` | No: no engagement started |
 | Privacy register notes | `PrivacyRequest.notes`, `outcome`; `AuditEvent.meta` of the person's requests | No: the request itself is kept, names in its notes are cleaned |
+| Turia client match audit trail | `AuditEvent.entityId` (the old `TuriaClientLink.key`) and `meta` of `turia-pull.client-link` rows | Yes, with the match: `entityId` moves to the erased key, so the trail still points at the record |
+| Turia pull run reports | `TuriaPullRun.preview` (client: its lines; staff: their name) | No: a copy of Turia's task list |
 
 A company's contact person gets only their own name, email and phone cleaned out of the company's
 records. The audit PoC that found 36 surviving copies after a confirmed erasure is a permanent test
-(`src/lib/privacy/erasure-coverage.test.ts`): 0 survivors, UPDATEs only.
+(`src/lib/privacy/erasure-coverage.test.ts`): 0 survivors, UPDATEs only, now with the Turia pull's
+tables seeded for a client and for a former staff member.
+
+### The Turia pull's copy (ADR-003 Amendment 1)
+
+Turia holds the record; Firm OS holds a copy it rewrites from Turia every 15 minutes. So erasure
+marks the copy in a way the pull recognises (`src/lib/integrations/turia/pull/erased.ts`, honoured in
+`sync.ts` and `admin.ts`), instead of relying on Turia being cleaned first:
+
+- **Which rows are a client's.** Its Turia client keys (`TuriaClientLink.key` = `TuriaTaskMirror.clientKey`):
+  links pointing at the client record (the pull's match or an admin's pick), plus the keys the pull
+  would match to it — Turia's client code equal to its FirmClient code, or its exact normalised name
+  when no other client has that name — unless a link points the key at another client or an admin set
+  it to ignore (the single-principal rule). Staff: the `TuriaPersonLink` rows pointing at their user,
+  and the mirror rows whose assignee or reviewer list holds one of those Turia user ids.
+- **Erased key.** `erased:` + an HMAC-SHA256 of the old key, keyed with the privacy register's secret
+  (`AUTH_SECRET`). The pull hashes each task's client key the same way: a task of an erased client is
+  skipped (the mirror row is not rewritten, no match is re-created, nothing is planned), an already
+  erased mirror row is never rewritten even if the hash no longer matches, and an LMS client erased in
+  place (`[erased] …`) is never given work when Turia's code still matches it.
+- **Erased person.** `TuriaPersonLink.matchedBy = "erased"`: never matched again; their name is mirrored
+  as `[erased]` in every assignee / reviewer list.
+- **Hold and restriction.** While a duty applies, the mirror rows and the match are held as they are and
+  the erasure restricts the client's processing (as for every held client). The pull treats a client
+  with restricted AI processing (`isAiProcessingRestricted`: a consent withdrawal or an erasure hold) as
+  **restricted**: its tasks are still mirrored and matched, but no new job is created or linked for it
+  ("No job made: this client has restricted processing …"); a job it already has still follows Turia's
+  people and due date. Lifting the restriction lets the next run make the jobs.
+- **Turia itself** stays a partner's manual step (the erasure plan lists it): until the Turia admin
+  archives or anonymises the client there, its tasks remain in Turia, but not in Firm OS.
 
 ## Keeping this inventory true
 
@@ -166,4 +198,4 @@ records. The audit PoC that found 36 surviving copies after a confirmed erasure 
 2. Resolved: `OnboardingRun.prompt` / `spec` / `plan` are cleared 30 days after the run last changed (retention.md). Partner to confirm the 30 days (a threshold: ADR-006 retention table to be amended). `TuriaSync.evidence` stays with the record as spot-check evidence.
 3. Resolved in code: reviewer comments and transition notes are masked when written and swept nightly. Staff guidance should still say "no PAN/Aadhaar in comments": a first name typed alone, a nickname or a misspelling is not recognised as the client's.
 4. Resolved: the note of a re-run is stored on the new run (`AgentRun.reviewNotes`) masked, like the other notes (`src/lib/agents/core/runner.ts`); the agent itself still receives it as typed.
-5. Open (Turia pull, ADR-003 Amendment 1): `TuriaTaskMirror`, `TuriaClientLink` and `TuriaPullRun.preview` are copies of Turia's task list and are not yet walked by the erasure plan or the access export (`src/lib/privacy/inventory.ts`). Because the next run rewrites the copy from Turia, an erasure must first be done in Turia; then add these tables as residue datasets (anonymise `clientName`, `taskName`, `turiaName`, preview rows). Until then, a DPDP erasure that involves a Turia client is completed by hand in Turia and noted on the request.
+5. Resolved (Turia pull, ADR-003 Amendment 1): `TuriaTaskMirror`, `TuriaClientLink`, `TuriaPersonLink` and `TuriaPullRun.preview` are in the access export and the erasure plan, and the pull skips an erased client or person on later runs (see "The Turia pull's copy" above). Partner to note: the erased key is keyed with `AUTH_SECRET`; if that secret is rotated, the pull no longer recognises an erased client from its Turia name, so a new task Turia still lists for it would be mirrored again and its name shown as an unmatched Turia client (already erased rows stay erased, and no job is made for a client whose LMS record was erased). Rotating `AUTH_SECRET` already breaks the privacy register's identifier hash, so it needs a re-keying step either way. Erasing in Turia itself remains the manual step.

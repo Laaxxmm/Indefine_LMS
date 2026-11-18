@@ -245,6 +245,8 @@ describe("plan", () => {
   it("waits for mappings, and makes no job for a closed task", () => {
     expect(planTask(ctx({ client: { status: "unmatched" } }), now)).toEqual({ kind: "wait", reason: "client-unmatched" });
     expect(planTask(ctx({ client: { status: "ignored" } }), now)).toEqual({ kind: "wait", reason: "client-ignored" });
+    // DPDP: a client whose processing is restricted gets no new job.
+    expect(planTask(ctx({ client: { status: "restricted" } }), now)).toEqual({ kind: "wait", reason: "client-restricted" });
     expect(planTask(ctx({ mirror: { ...m, assignees: [] } }), now)).toEqual({ kind: "wait", reason: "no-assignee" });
     expect(planTask(ctx({ personOf: () => null }), now)).toEqual({ kind: "wait", reason: "assignee-unmatched" });
     expect(planTask(ctx({ mirror: { ...m, status: "3" } }), now)).toEqual({ kind: "wait", reason: "closed-in-turia" });

@@ -155,6 +155,13 @@ most 20 timesheet reads a run.
 7. **Gone or cancelled.** Missing from a complete scan, or a status name containing "cancel": the job is
    flagged (`turiaMissingAt`, `turiaNote`), never removed; the flag clears if the task returns. A task
    first seen completed or cancelled makes no job.
+8. **Privacy (DPDP).** A client erased under a privacy request has its match set to ignore under an
+   erased key (`pull/erased.ts`): its tasks are skipped — never mirrored again, matched or planned — and
+   its already erased mirror rows are never rewritten. A Turia person erased the same way is never matched
+   again and is mirrored as `[erased]`. A client whose processing is restricted (consent withdrawal, or an
+   erasure hold) is still mirrored and matched but gets no new job ("No job made: this client has
+   restricted processing …"); lifting the restriction lets the next run make it. The admin page refuses
+   to re-link an erased client or person. Details: `docs/dpdp/data-inventory.md` ("The Turia pull's copy").
 
 ### Seeded rules
 

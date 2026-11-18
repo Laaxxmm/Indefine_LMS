@@ -15,6 +15,15 @@
 // Turia is only read (read-client.ts allowlist). Nothing is deleted. A job's state is never moved
 // here (a new job starts ASSIGNED, like onboarding's). DONE stays with the close gate: a completion
 // in Turia only adds the closeTask record the gate's "Turia task closed" check reads.
+//
+// DPDP (src/lib/privacy/inventory.ts, erased.ts):
+//   erased client      its link key and its mirror rows' client key are erased keys. A task whose
+//                      client key hashes to an erased link, or whose mirror row is already erased,
+//                      is skipped: never written back to the mirror, never planned, never re-mapped
+//   erased person      a TuriaPersonLink marked "erased" is never matched again, and that person's
+//                      name is written as "[erased]" in every assignee / reviewer list mirrored
+//   restricted client  (consent withdrawal or an erasure hold, isAiProcessingRestricted): still
+//                      mirrored and mapped, but no new job is created or linked for it
 import { randomUUID } from "node:crypto";
 import { Prisma, type FirmService } from "@prisma/client";
 import type { prisma } from "@/lib/prisma";
@@ -22,8 +31,10 @@ import { logAudit } from "@/lib/audit/log";
 import { formatDate } from "@/lib/agents/core/format";
 import { firmOsEnabled, FIRM_OS_OFF_MESSAGE } from "@/lib/workspace/flag";
 import { TuriaSessionError } from "@/lib/neo-centra/turia";
+import { isAiProcessingRestricted } from "@/lib/privacy/consent";
 import { SERVICE_LABELS } from "../adapter";
 import { PULL_LIMITS, pullSortColumn, turiaPullMode, type PullLimits, type PullMode } from "./config";
+import { ERASED_KEY_PREFIX, ERASED_NAME, ERASED_PERSON, erasedClientKey, isErasedKey } from "./erased";
 import { clientCodeFor, matchClient, matchPerson, type LmsClientRow } from "./match";
 import { BUSY_MESSAGE, FAILED_MESSAGE, MODE_INVALID_MESSAGE, PULL_OFF_MESSAGE, SESSION_MESSAGE, TIMEOUT_MESSAGE, runResultMessage } from "./messages";
 import { mirrorHash, normaliseTask, sortedByUpdateDesc, type MirrorFields, type TuriaPerson } from "./normalise";
@@ -83,6 +94,10 @@ export type PullCounts = {
   closedInTuria: number;
   unmatchedPeople: number;
   unmatchedClients: number;
+  /** Tasks of a client whose processing is restricted (DPDP): mirrored, no new job. */
+  restricted: number;
+  /** Tasks of an erased client (DPDP): skipped, the mirror is not written. */
+  erased: number;
   errors: number;
 };
 
@@ -109,7 +124,7 @@ export const PULL_ACTOR = "system:turia-pull";
 
 const emptyCounts = (): PullCounts => ({
   pages: 0, fetched: 0, unchanged: 0, new: 0, changed: 0, missing: 0, create: 0, link: 0, update: 0, completed: 0, completedNoTime: 0,
-  flagged: 0, agentless: 0, waitingClient: 0, waitingPeople: 0, closedInTuria: 0, unmatchedPeople: 0, unmatchedClients: 0, errors: 0,
+  flagged: 0, agentless: 0, waitingClient: 0, waitingPeople: 0, closedInTuria: 0, unmatchedPeople: 0, unmatchedClients: 0, restricted: 0, erased: 0, errors: 0,
 });
 
 const LINKED_SELECT = {
@@ -182,6 +197,7 @@ const taskLabel = (m: Pick<MirrorFields, "identity" | "id" | "taskName">) => `${
 const WAIT_WORDS: Record<WaitReason, string> = {
   "client-unmatched": "Waiting: the Turia client is not matched to a client in the client list. Pick it in Clients below.",
   "client-ignored": "Skipped: this Turia client is set to ignore.",
+  "client-restricted": "No job made: this client has restricted processing under a privacy request. The task is still listed here; a partner can lift the restriction on the privacy request.",
   "no-assignee": "Waiting: the task has no assignee in Turia.",
   "assignee-unmatched": "Waiting: the Turia assignee is not matched to one of the firm's users. Pick them in People below.",
   "closed-in-turia": "No job made: Turia already shows this task completed or cancelled.",
@@ -241,6 +257,18 @@ export async function runTuriaPull(deps: PullDeps, opts: { trigger: "cron" | "ma
     const seenPeople = new Map<string, { name: string; email: string | null }>();
     for (const u of await call(deps.reader.orgUsers())) seenPeople.set(u.id, { name: u.name, email: u.email });
 
+    // ---------------------------------------------------------------- DPDP erasures
+    const secret = env.AUTH_SECRET;
+    const erasedPeople = new Set([...links.values()].filter((l) => l.matchedBy === ERASED_PERSON).map((l) => l.turiaUserId));
+    const hideErased = (list: TuriaPerson[]) => (erasedPeople.size ? list.map((p) => (erasedPeople.has(p.id) ? { ...p, name: ERASED_NAME } : p)) : list);
+    const clientLinks = new Map((await db.turiaClientLink.findMany()).map((l) => [l.key, l]));
+    const erasedKeys = new Map<string, boolean>();
+    const erasedClient = (clientKey: string): boolean => {
+      let hit = erasedKeys.get(clientKey);
+      if (hit === undefined) erasedKeys.set(clientKey, (hit = isErasedKey(clientKey) || clientLinks.has(erasedClientKey(clientKey, secret))));
+      return hit;
+    };
+
     // ---------------------------------------------------------------- scan
     const sort = pullSortColumn(env);
     const lastFull = await db.turiaPullRun.findFirst({ where: { complete: true }, orderBy: { startedAt: "desc" }, select: { startedAt: true } });
@@ -258,11 +286,19 @@ export async function runTuriaPull(deps: PullDeps, opts: { trigger: "cron" | "ma
       const fields = rows.map(normaliseTask).filter((f): f is MirrorFields => !!f && !seenTasks.has(f.id));
       for (const f of fields) seenTasks.add(f.id);
       counts.fetched += fields.length;
-      const known = new Map(
-        (await db.turiaTaskMirror.findMany({ where: { id: { in: fields.map((f) => f.id) } }, select: { id: true, hash: true } })).map((r) => [r.id, r.hash]),
-      );
+      const knownRows = await db.turiaTaskMirror.findMany({ where: { id: { in: fields.map((f) => f.id) } }, select: { id: true, hash: true, clientKey: true } });
+      const known = new Map(knownRows.map((r) => [r.id, r.hash]));
+      const erasedRows = new Set(knownRows.filter((r) => isErasedKey(r.clientKey)).map((r) => r.id));
       const unchanged: string[] = [];
-      for (const f of fields) {
+      let skipped = 0;
+      for (const raw of fields) {
+        // An erased client's task is never copied back from Turia (the erasure must be done there too).
+        if (erasedRows.has(raw.id) || erasedClient(raw.clientKey)) {
+          counts.erased++;
+          skipped++;
+          continue;
+        }
+        const f: MirrorFields = { ...raw, assignees: hideErased(raw.assignees), reviewers: hideErased(raw.reviewers) };
         for (const p of [...f.assignees, ...f.reviewers]) if (!seenPeople.has(p.id)) seenPeople.set(p.id, { name: p.name, email: null });
         const hash = mirrorHash(f);
         const before = known.get(f.id);
@@ -281,20 +317,25 @@ export async function runTuriaPull(deps: PullDeps, opts: { trigger: "cron" | "ma
         complete = true;
         break;
       }
-      if (mayStopEarly && unchanged.length === fields.length && sortedByUpdateDesc(rows)) {
+      if (mayStopEarly && unchanged.length + skipped === fields.length && sortedByUpdateDesc(rows)) {
         stoppedEarly = true;
         break;
       }
       await sleep(L.pageDelayMs);
     }
     if (complete && !stoppedEarly) {
-      const r = await db.turiaTaskMirror.updateMany({ where: { lastSeenAt: { lt: runStart }, missingSince: null }, data: { missingSince: runStart } });
+      const r = await db.turiaTaskMirror.updateMany({
+        // An erased client's rows stay exactly as the erasure wrote them.
+        where: { lastSeenAt: { lt: runStart }, missingSince: null, NOT: { clientKey: { startsWith: ERASED_KEY_PREFIX } } },
+        data: { missingSince: runStart },
+      });
       counts.missing = r.count;
     }
 
     // ---------------------------------------------------------------- people links
     for (const [id, p] of seenPeople) {
       const link = links.get(id);
+      if (link?.matchedBy === ERASED_PERSON) continue; // erased (DPDP): never matched or renamed again
       const auto = link?.matchedBy === "manual" ? null : matchPerson(p, activeUsers);
       const next = link?.matchedBy === "manual" ? { userId: link.userId, matchedBy: "manual" } : { userId: auto?.userId ?? null, matchedBy: auto?.matchedBy ?? "none" };
       const email = p.email ?? link?.turiaEmail ?? null;
@@ -314,7 +355,9 @@ export async function runTuriaPull(deps: PullDeps, opts: { trigger: "cron" | "ma
     counts.unmatchedPeople = [...links.values()].filter((l) => !l.userId).length;
 
     // ---------------------------------------------------------------- plan inputs
-    const mirrors = await db.turiaTaskMirror.findMany({ where: { OR: [{ jobTaskId: { not: null } }, { lastSeenAt: { gte: runStart } }] }, orderBy: { id: "asc" } });
+    const mirrors = (await db.turiaTaskMirror.findMany({ where: { OR: [{ jobTaskId: { not: null } }, { lastSeenAt: { gte: runStart } }] }, orderBy: { id: "asc" } })).filter(
+      (r) => !isErasedKey(r.clientKey), // an erased client is never planned: no job created, linked or changed
+    );
     const jobs = new Map(
       (await db.jobTask.findMany({ where: { turiaTaskId: { not: null } }, select: LINKED_SELECT })).map((j) => [j.turiaTaskId as string, j]),
     );
@@ -325,7 +368,6 @@ export async function runTuriaPull(deps: PullDeps, opts: { trigger: "cron" | "ma
     const statutoryDue = deps.loadStatutoryDue ? await deps.loadStatutoryDue().catch(() => undefined) : undefined;
 
     // ---------------------------------------------------------------- clients
-    const clientLinks = new Map((await db.turiaClientLink.findMany()).map((l) => [l.key, l]));
     let lmsClients: LmsClientRow[] | null = null;
     const takenCodes = new Set<string>();
     const clientState = new Map<string, ClientState>();
@@ -340,7 +382,10 @@ export async function runTuriaPull(deps: PullDeps, opts: { trigger: "cron" | "ma
       let state: ClientState;
       let lmsId: string | null = null;
       let linkStatus: string;
-      if (link?.status === "ignored") {
+      let firmClientId: string | null = null;
+      // An erased client's match is never written again (its name would be the key).
+      let writeLink = !erasedClient(m.clientKey);
+      if (link?.status === "ignored" || !writeLink) {
         state = { status: "ignored" };
         linkStatus = "ignored";
       } else {
@@ -348,7 +393,15 @@ export async function runTuriaPull(deps: PullDeps, opts: { trigger: "cron" | "ma
         const found = manual ?? (m.clientKey ? matchClient({ name: m.clientName, code: m.clientCode }, lmsClients) : null);
         linkStatus = manual ? "manual" : found ? "matched" : "unmatched";
         lmsId = found?.id ?? null;
+        firmClientId = found?.firmClient?.id ?? null;
         if (!found) state = { status: "unmatched" };
+        // An LMS client anonymised by an erasure (matched by the client code it keeps) never gets work again.
+        else if (found.name.startsWith(ERASED_NAME)) {
+          state = { status: "ignored" };
+          writeLink = false;
+        }
+        // Consent withdrawn, or held during an erasure: mirrored and mapped, but no new job (consent.ts).
+        else if (await isAiProcessingRestricted(db, { lmsClientId: found.id })) state = { status: "restricted" };
         else if (found.firmClient) state = { status: "ready", firmClientId: found.firmClient.id, clientCode: found.firmClient.clientCode };
         else {
           const code = clientCodeFor(found.name, m.clientCode, takenCodes);
@@ -356,8 +409,7 @@ export async function runTuriaPull(deps: PullDeps, opts: { trigger: "cron" | "ma
           state = { status: "new", lmsClientId: found.id, clientCode: code };
         }
       }
-      const firmClientId = state.status === "ready" ? state.firmClientId : null;
-      if (m.clientKey && (!link || link.status !== linkStatus || link.lmsClientId !== lmsId || link.firmClientId !== firmClientId || link.turiaName !== m.clientName || link.turiaCode !== m.clientCode)) {
+      if (writeLink && m.clientKey && (!link || link.status !== linkStatus || link.lmsClientId !== lmsId || link.firmClientId !== firmClientId || link.turiaName !== m.clientName || link.turiaCode !== m.clientCode)) {
         const data = { turiaName: m.clientName, turiaCode: m.clientCode, lmsClientId: lmsId, firmClientId, status: linkStatus, lastSeenAt: runStart };
         clientLinks.set(m.clientKey, await db.turiaClientLink.upsert({ where: { key: m.clientKey }, create: { key: m.clientKey, ...data }, update: data }));
       }
@@ -422,7 +474,8 @@ export async function runTuriaPull(deps: PullDeps, opts: { trigger: "cron" | "ma
         const label = taskLabel(m);
 
         if (plan.kind === "wait") {
-          if (plan.reason === "client-unmatched" || plan.reason === "client-ignored") counts.waitingClient++;
+          if (plan.reason === "client-restricted") counts.restricted++;
+          else if (plan.reason === "client-unmatched" || plan.reason === "client-ignored") counts.waitingClient++;
           else if (plan.reason === "closed-in-turia") counts.closedInTuria++;
           else counts.waitingPeople++;
           if (plan.reason !== "closed-in-turia") add({ action: "wait", task: label, client: m.clientName, detail: WAIT_WORDS[plan.reason] });

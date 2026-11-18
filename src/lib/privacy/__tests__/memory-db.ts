@@ -1,7 +1,7 @@
 // Test fake for the corrections and privacy modules: an in-memory stand-in for the Prisma client
 // with any model name, the subset of the query API those modules call (findUnique / findFirst /
 // findMany / count / create / update / updateMany, `where` with equality, equals + mode, in, not,
-// lt/lte/gt/gte, contains, OR/AND/NOT, flat `select`, `orderBy`, `take`), unique constraints and
+// lt/lte/gt/gte, contains, startsWith, JSON array_contains, OR/AND/NOT, flat `select`, `orderBy`, `take`), unique constraints and
 // `$transaction(fn)` with rollback on throw.
 //
 // Every call is recorded in `calls` as "model.method". The fake implements no method that removes
@@ -35,6 +35,13 @@ export class FakeUniqueError extends Error {
   readonly code = "P2002";
 }
 
+/** jsonb @> : every element of an array is contained in some element; objects by their listed keys. */
+function jsonContains(v: unknown, part: unknown): boolean {
+  if (Array.isArray(part)) return Array.isArray(v) && part.every((p) => v.some((x) => jsonContains(x, p)));
+  if (part && typeof part === "object") return !!v && typeof v === "object" && !Array.isArray(v) && Object.entries(part).every(([k, p]) => jsonContains((v as Row)[k], p));
+  return same(v, part);
+}
+
 function matches(row: Row, where: Row | undefined): boolean {
   if (!where) return true;
   for (const [key, cond] of Object.entries(where)) {
@@ -64,6 +71,9 @@ function matches(row: Row, where: Row | undefined): boolean {
       if ("gt" in c && !(v != null && cmp(v, c.gt) > 0)) return false;
       if ("gte" in c && !(v != null && cmp(v, c.gte) >= 0)) return false;
       if ("contains" in c && !(typeof v === "string" && (ci ? v.toLowerCase().includes(String(c.contains).toLowerCase()) : v.includes(String(c.contains))))) return false;
+      if ("startsWith" in c && !(typeof v === "string" && v.startsWith(String(c.startsWith)))) return false;
+      // JSON column: Postgres containment (jsonb @>), e.g. { assignees: { array_contains: [{ id: "t-1" }] } }.
+      if ("array_contains" in c && !jsonContains(v, c.array_contains)) return false;
       continue;
     }
     if (!same(v ?? null, cond)) return false;
