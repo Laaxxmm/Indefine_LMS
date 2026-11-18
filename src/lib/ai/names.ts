@@ -209,13 +209,16 @@ export function dedupeDictionary(entries: Iterable<DictionaryEntry | null | unde
 // A name typed into a free-text column — an item description ("Consultancy by Yashwanth Gowda
 // Patil for Oct"), a ledger ("Rent - Ravindra Hegde"), a Form 16 line ("Name of Employee: RAJESH
 // KUMAR SHARMA"), a UPI narration, a note, a file name — is in no party column, so no dictionary
-// knows it. personNameSpans() finds such names deterministically, with five rules:
+// knows it. personNameSpans() finds such names deterministically, with six rules:
 //
-//   honorific  Mr / Mrs / Ms / Dr / Shri / Smt / Sri / Kum. (+ M/s for a firm) then 1–4 name words
+//   honorific  Mr / Mrs / Ms / Dr / Shri / Smt / Sri / Kum. (+ M/s for a firm) then 1–4 name words;
+//              a job title or CA / CS works the same way ("Cashier Lakshmi", "Senior Priya", "CA Ramesh")
 //   label      `Name of Employee:`, `Payee:`, `employee:`, `landlord:`, `proprietor:` … then the value
 //   json       "employee": "…" (string values of name-like keys)
 //   rail       the payee after UPI/P2A/<digits>/ and in NEFT- / IMPS- / RTGS- segments (one word is
 //              enough there), plus the multi-word narration payees of narrationNameSpans()
+//   instruction  one name word after a verb aimed at a person: "Ask Suresh", "Assign to Gurpreet",
+//              "Prepared by Ramesh", "Track Suresh's invoices" (PERSON_VERBS and the lists beside it)
 //   sequence   2–4 capitalised (Title or ALL CAPS) words in a row, none of them a business,
 //              accounting, product, place or instruction word (BUSINESS_WORDS); an organisation
 //              suffix ("Traders", "Pvt Ltd") makes it an organisation
@@ -229,7 +232,8 @@ export function dedupeDictionary(entries: Iterable<DictionaryEntry | null | unde
 // again over the MASKED payload (a name that survives stops the call). Linear in the text length.
 // Limits: ASCII (Latin-script) names only — a name written in Devanagari or Kannada is caught only
 // when the dictionary knows it (anonymizer transliteration); a single capitalised word outside a
-// label / honorific / payment rail is never treated as a name.
+// label / honorific / job title / instruction / payment rail is never treated as a name, and neither is a
+// lower-case name outside a label ("manager suresh": no word list can tell it from "manager approves").
 
 /** Business, accounting, product, place, calendar and instruction words: never part of a person's name in a sequence. Upper case. */
 const BUSINESS_TEXT = `
@@ -303,13 +307,14 @@ TRANSPORTATION CARRIAGE CARTAGE DELIVERY SHIPPING INSURANCE PREMIA POLICY MEDICL
 OFFICE SHOP FACTORY GODOWN WAREHOUSE PREMISES SITE PROJECT HOSTEL GUEST RESIDENTIAL COMMERCIAL
 FEE CONSULTANCY CONSULTATION ADVISORY RETAINERSHIP BOOKKEEPING TAXATION NOTARY ADMIN ADMINISTRATIVE GENERAL MISC SUNDRIES
 ROUNDING EXCHANGE FOREX GAIN
+CITIZEN CERTIFICATE EXAM EXAMINATION DATA DEADLINE SECONDARY PRIMARY MINISTER JUSTICE DRIVE ONEDRIVE SHAREPOINT OUTLOOK TURIA EOD COB HELPDESK HELPLINE
 ONBOARD ONBOARDING CREATE ADD SETUP SET OPEN UPDATE CHANGE REMOVE DELETE CLOSE SEND CALL MEET FOLLOW VERIFY CONFIRM PAY RECEIVE
 COLLECT RAISE GENERATE DOWNLOAD UPLOAD SUBMIT PREPARE REMIND REMINDER ASK TELL INFORM NOTIFY GET GIVE MAKE TAKE USE NEED WANT
 ENSURE KEEP HOLD REGARDING RE SUBJECT FWD FW CC BCC NEW EXAMPLE SAMPLE TEST DEMO DUMMY TEMPLATE
 SENIOR ACCOUNTANT ACCOUNTANCY CHARTERED EXECUTIVE ASSOCIATE ANALYST OFFICER TRAINEE INTERN ARTICLE ARTICLED
 CONSULTANT SUPERVISOR COORDINATOR CASHIER INCHARGE DEPUTY CHIEF PROCEDURE PROCESS SUBPROCESS STEP BRIEF CONFIRMED
 CLARIFICATION AUTHOR PURPOSE RESPONSIBILITY DEFINITION CONTROL KPI FLOWCHART WORKFLOW FOLDER BANKING NETBANKING
-GATEWAY SAVE PERFORM RECORD RECONCILE RESOLVE STORE PRINT SELECT ENTER CLICK NAVIGATE TICK SIGN LOGIN LOGOUT RENAME
+GATEWAY PERFORM RECORD RECONCILE RESOLVE STORE PRINT SELECT ENTER CLICK NAVIGATE TICK SIGN LOGIN LOGOUT RENAME
 ATTACH SCAN IDENTIFY INVESTIGATE CORRECT COMPARE COMPLETE OBTAIN ESCALATE ASSIGN TRACK VALIDATE FILL SEARCH
 APPROVAL REMARK COMMENT SIGNATURE APPOINTMENT IDENTIFICATION COMMISSIONER COMMITTEE TENURE DESIGNATION RATING STIPEND COUNTER
 AGREEMENT CONSENT
@@ -322,9 +327,11 @@ SHAREHOLDER BORROWER GUARANTOR KARTA TRUSTEE SETTLOR REMITTER DRAWER DRAWEE PATI
 // surnames stay out (Holder, Seller(s), Owner, Member, Given(s), Witness, Buyer, Payer, Lender, Sender).
 
 // Job titles are business words (so "Senior Accountant" is never a name), but they also announce one, like an
-// honorific: a labelled value skips them ("Employee: Senior Accountant Asha") and a role noun followed by name
-// words marks those words ("Cashier Lakshmi", "Senior Accountant Kiran Kumar"). A modifier alone does not
-// ("Chief Financial Officer"). Words that are also given names or surnames (Junior, Clerk, Banks) stay out.
+// honorific: a labelled value skips them ("Employee: Senior Accountant Asha") and any job title followed by name
+// words marks those words — a role noun ("Cashier Lakshmi", "Senior Accountant Kiran Kumar") and a modifier
+// ("Senior Priya", "Chief Suresh", "Head Anil"). A title followed by another title or a business word is a job,
+// not a name ("Chief Financial Officer", "Senior Citizen", "Head Office"). Words that are also given names or
+// surnames (Junior, Clerk, Banks) stay out.
 const ROLE_NOUNS: ReadonlySet<string> = new Set([
   "ACCOUNTANT", "CASHIER", "INTERN", "TRAINEE", "EXECUTIVE", "ASSOCIATE", "ANALYST", "OFFICER", "CONSULTANT", "SUPERVISOR",
   "COORDINATOR", "INCHARGE", "ASSISTANT", "MANAGER", "REVIEWER", "PREPARER", "PARTNER", "DIRECTOR", "AUDITOR", "COMMISSIONER",
@@ -333,7 +340,38 @@ const ROLE_NOUNS: ReadonlySet<string> = new Set([
 ]);
 /** Role words that may start a labelled value before the name ("Payee: Owner Ravi"); not business words (surnames). */
 const LABEL_ROLES: ReadonlySet<string> = new Set(["OWNER", "HOLDER", "MEMBER", "WITNESS", "BUYER", "SELLER", "PAYER", "LENDER", "SENDER"]);
-const JOB_TITLES: ReadonlySet<string> = new Set([...ROLE_NOUNS, "SENIOR", "CHIEF", "DEPUTY", "CHARTERED", "ARTICLE", "ARTICLED", "HEAD"]);
+// CLERK and JUNIOR are titles but not business words (surnames): "Articled Clerk" is a job, "Ms. Junior" a name.
+const JOB_TITLES: ReadonlySet<string> = new Set([...ROLE_NOUNS, "SENIOR", "CHIEF", "DEPUTY", "CHARTERED", "ARTICLE", "ARTICLED", "HEAD", "CLERK", "JUNIOR"]);
+/** Professional prefixes that announce a name like a job title does ("CA Ramesh", "CS Asha"); business words themselves. */
+const PROFESSION_PREFIXES: ReadonlySet<string> = new Set(["CA", "CS"]);
+
+// Instructions (SOP steps, review notes) name the person they are about with one word: "Ask Suresh to sign",
+// "Assign to Gurpreet", "Prepared by Ramesh", "Track Suresh's invoices". After these verbs a capitalised word that
+// is not a business word is a name. The verb must come first in its clause ("Send the BRS to Meera"), so a
+// "to" or "by" on its own ("Go to Gateway", "Due by Friday") announces nothing.
+/** Verbs whose object is a person: "Ask Suresh", "Remind Asha". */
+const PERSON_VERBS: ReadonlySet<string> = new Set(["ASK", "TELL", "INFORM", "NOTIFY", "REMIND", "CC", "CALL", "EMAIL", "PING", "MEET", "CONTACT"]);
+/** Verb … preposition → a person after the preposition: "Assign to Gurpreet", "Check with Asha", "Prepared by Ramesh". */
+const PREPOSITION_VERBS: Readonly<Record<string, ReadonlySet<string>>> = {
+  TO: new Set(["ASSIGN", "REASSIGN", "SEND", "FORWARD", "GIVE", "HAND", "ESCALATE", "REPORT", "MARK", "EMAIL", "MAIL", "PASS", "ALLOCATE", "DELEGATE", "SHOW", "SUBMIT", "WRITE", "SPEAK", "TALK", "EXPLAIN"]),
+  WITH: new Set(["CHECK", "CONFIRM", "DISCUSS", "COORDINATE", "SHARE", "SPEAK", "TALK", "FOLLOW", "VERIFY", "MEET", "LIAISE", "CONSULT"]),
+  FROM: new Set(["COLLECT", "OBTAIN", "GET", "TAKE", "RECEIVE", "REQUEST", "SEEK", "ASK"]),
+  BY: new Set(["PREPARED", "REVIEWED", "APPROVED", "CHECKED", "VERIFIED", "SIGNED", "AUTHORISED", "AUTHORIZED", "DONE", "MADE", "ASSIGNED", "OWNED", "RAISED", "SUBMITTED", "UPLOADED", "ENTERED", "RECORDED"]),
+};
+/** Verbs before a possessive name: "Track Suresh's invoices", "Complete Ramesh's ITR". */
+const POSSESSIVE_VERBS: ReadonlySet<string> = new Set([
+  "TRACK", "COMPLETE", "REVIEW", "SAVE", "CHECK", "FILE", "UPDATE", "VERIFY", "PREPARE", "SUBMIT", "SEND", "OPEN", "CLOSE", "DOWNLOAD",
+  "UPLOAD", "RECONCILE", "APPROVE", "SIGN", "PRINT", "SCAN", "ATTACH", "SELECT", "ENTER", "RECORD", "STORE", "RENAME", "FILL", "MATCH",
+  "COMPARE", "CORRECT", "VALIDATE", "COLLECT", "OBTAIN", "GET", "TAKE", "GIVE", "MAKE", "USE", "KEEP", "HOLD", "PAY", "RAISE", "GENERATE",
+  "CREATE", "ADD", "SET", "CHANGE", "REMOVE", "FOLLOW", "CONFIRM", "ESCALATE", "ASSIGN", "SEARCH", "IDENTIFY", "INVESTIGATE", "COMPUTE",
+  "PROCESS", "POST", "PASS", "CLEAR", "MARK", "FORWARD", "ARCHIVE", "FINALISE", "FINALIZE", "CALCULATE", ...PERSON_VERBS,
+]);
+/**
+ * Verbs that are also surnames ("Hemant Save"). They are not business words — so a labelled, honorific or
+ * dictionary "Save" is masked like any surname, and "Hemant Save" is a name — but they never start a capitalised
+ * sequence, so the step "Save BRS PDF" is not read as a name (which would hide "Save" in every step).
+ */
+const SEQUENCE_BREAKERS: ReadonlySet<string> = new Set(["SAVE"]);
 
 /** Every word of BUSINESS_TEXT plus the narration stopwords. Upper case. */
 export const BUSINESS_WORDS: ReadonlySet<string> = new Set([...NAME_STOPWORDS, ...BUSINESS_TEXT.split(/\s+/).filter(Boolean)]);
@@ -350,15 +388,17 @@ export function isBusinessWord(word: string): boolean {
   return false;
 }
 
-export type PersonNameReason = "honorific" | "label" | "json" | "rail" | "sequence";
+export type PersonNameReason = "honorific" | "label" | "json" | "rail" | "instruction" | "sequence";
 export type PersonNameSpan = NameSpan & { reason: PersonNameReason };
 
 type WordClass = "title" | "caps" | "initial" | "lower";
-type Tok = { s: number; e: number; w: string; cls: WordClass; glued: boolean; biz?: boolean; org?: boolean };
+type Tok = { s: number; e: number; w: string; cls: WordClass; glued: boolean; biz?: boolean; org?: boolean; up?: string };
 
 /** isBusinessWord / isOrgSuffix of a token, computed once. */
 const tokBiz = (t: Tok) => (t.biz ??= isBusinessWord(t.w));
-const tokOrg = (t: Tok) => (t.org ??= ORG_SUFFIX_WORDS.has(t.w.toUpperCase()));
+const tokOrg = (t: Tok) => (t.org ??= ORG_SUFFIX_WORDS.has(tokUp(t)));
+/** The word in upper case, computed once. */
+const tokUp = (t: Tok) => (t.up ??= t.w.toUpperCase());
 
 const isAsciiLetter = (c: number) => (c >= 65 && c <= 90) || (c >= 97 && c <= 122);
 const isUpper = (c: number) => c >= 65 && c <= 90;
@@ -458,10 +498,12 @@ function joinable(text: string, toks: Tok[], k: number): boolean {
 }
 
 /** A capitalised job title ("Senior", "Accountant"); see JOB_TITLES. */
-const jobTitle = (t: Tok, set: ReadonlySet<string> = JOB_TITLES) => !t.glued && (t.cls === "title" || t.cls === "caps") && set.has(t.w.toUpperCase());
+const jobTitle = (t: Tok, set: ReadonlySet<string> = JOB_TITLES) => !t.glued && (t.cls === "title" || t.cls === "caps") && set.has(tokUp(t));
 
 /** A capitalised word that can be part of a name (an organisation suffix counts; business words do not). */
 const nameWord = (t: Tok) => (t.cls === "title" || t.cls === "caps" || t.cls === "initial") && (tokOrg(t) || !tokBiz(t));
+/** The first word of a capitalised sequence: also not a verb that doubles as a surname (SEQUENCE_BREAKERS). */
+const sequenceStart = (t: Tok) => nameWord(t) && !SEQUENCE_BREAKERS.has(tokUp(t));
 /** A core name word: not an initial, not a two-letter all-capitals code ("KA", "MS"), not an organisation suffix. */
 const coreWord = (t: Tok) => t.cls !== "initial" && !(t.cls === "caps" && t.w.length < 3) && !tokOrg(t);
 
@@ -490,10 +532,10 @@ function runSpan(toks: Tok[], i: number, j: number, reason: PersonNameReason, mi
 }
 
 /** Runs of name words in toks[from..to] (joined), each turned into a span with runSpan. */
-function runsIn(text: string, toks: Tok[], from: number, to: number, reason: PersonNameReason, minCore: number, out: PersonNameSpan[], accept: (t: Tok) => boolean = nameWord) {
+function runsIn(text: string, toks: Tok[], from: number, to: number, reason: PersonNameReason, minCore: number, out: PersonNameSpan[], accept: (t: Tok) => boolean = nameWord, canStart: (t: Tok) => boolean = accept) {
   let k = from;
   while (k <= to) {
-    if (!accept(toks[k]) || isHonorificAt(text, toks, k)) {
+    if (!canStart(toks[k]) || isHonorificAt(text, toks, k)) {
       k++;
       continue;
     }
@@ -524,7 +566,8 @@ const ROLE =
   "father|mother|spouse|husband|wife|guardian|assessee|taxpayer|applicant|shareholder|member|auditor|consultant|borrower|lender|guarantor|" +
   "witness|individual|person|karta|trustee|settlor|accountant|client|party|recipient|sender|remitter|drawer|drawee|patient|student)";
 const LABEL_SOURCE =
-  `(?:name\\s+of\\s+(?:the\\s+)?${ROLE}|${ROLE}(?:['’]s)?(?:\\s+(?:full\\s+)?name)?|(?:full|first|last|middle|given|sur|party|person|contact|beneficiary|holder)\\s*name|surname|name|` +
+  // A role may carry one qualifying word: "Control owner:", "Engagement partner:", "Joint holder:".
+  `(?:name\\s+of\\s+(?:the\\s+)?${ROLE}|(?:[A-Za-z]{2,20}[ \\t]+)?${ROLE}(?:['’]s)?(?:\\s+(?:full\\s+)?name)?|(?:full|first|last|middle|given|sur|party|person|contact|beneficiary|holder)\\s*name|surname|name|` +
   "attn|attention|c\\/o|s\\/o|d\\/o|w\\/o|son\\s+of|daughter\\s+of|wife\\s+of|husband\\s+of)";
 /** `label :` at the start of the text, a line or a cell. */
 const LABEL_RE = new RegExp(`(?:^|(?<=[\\n\\r|;\\t{,(]))[ \\t"'*-]{0,4}${LABEL_SOURCE}[ \\t"']{0,3}[:=][ \\t"']{0,3}`, "gi");
@@ -612,8 +655,9 @@ function honorificSpans(text: string, toks: Tok[], out: PersonNameSpan[]) {
   for (let k = 0; k + 1 < toks.length; k++) {
     // "M/s Sunrise Steel": a firm.
     const firm = (toks[k].w === "M" || toks[k].w === "m") && /^\/[sS]\.?\s/.test(text.slice(toks[k].e, toks[k].e + 4));
-    // A role noun works like an honorific when a name word follows it: "Cashier Lakshmi".
-    const role = !firm && jobTitle(toks[k], ROLE_NOUNS) && !jobTitle(toks[k + 1]);
+    // A job title (role noun or modifier) or a professional prefix works like an honorific when a name word
+    // follows it: "Cashier Lakshmi", "Senior Priya", "CA Ramesh". Another title after it makes it a job.
+    const role = !firm && (jobTitle(toks[k]) || jobTitle(toks[k], PROFESSION_PREFIXES)) && !jobTitle(toks[k + 1]);
     if (!firm && !role && !isHonorificAt(text, toks, k)) continue;
     let first = k + 1;
     if (firm) {
@@ -629,6 +673,49 @@ function honorificSpans(text: string, toks: Tok[], out: PersonNameSpan[]) {
     if (span) out.push(firm ? { ...span, kind: "ORG" } : span);
     // A role noun that found no name must not swallow what follows ("Landlord M/s Sunrise Steel").
     if (span || !role) k = j;
+  }
+}
+
+/** An instruction verb (any case): toks[k] upper-cased is in `set`. */
+const verbIn = (t: Tok, set: ReadonlySet<string>) => !t.glued && set.has(tokUp(t));
+/** A possessive name word: "Suresh's" (Title or ALL CAPS, the part before 's not a business word). */
+const possessiveName = (t: Tok) => (t.cls === "title" || t.cls === "caps") && /^[A-Za-z]{3,}['’][sS]$/.test(t.w) && !isBusinessWord(t.w.slice(0, -2)) && !tokOrg(t);
+/** Sentence punctuation between a verb and its preposition ends the clause ("Done. To Ravi:" is two). */
+const CLAUSE_BREAK = /[.;:!?\n\r|]/;
+
+/** Name words from toks[first] on (up to four, joined), as one span; the run a person-announcing word starts. */
+function announcedRun(text: string, toks: Tok[], first: number, reason: PersonNameReason, out: PersonNameSpan[]) {
+  if (first >= toks.length || !joinable(text, toks, first) || jobTitle(toks[first]) || isHonorificAt(text, toks, first)) return;
+  let j = first - 1;
+  while (j + 1 < toks.length && j + 1 - first < 4 && nameWord(toks[j + 1]) && !isHonorificAt(text, toks, j + 1) && (j + 1 === first || joinable(text, toks, j + 1))) j++;
+  if (j < first) return;
+  const span = runSpan(toks, first, j, reason, 1);
+  if (span) out.push(span);
+}
+
+/**
+ * Instructions that name a person with one word (see PERSON_VERBS): "Ask Suresh to sign", "Assign to Gurpreet",
+ * "Send the BRS to Meera for review", "Prepared by Ramesh", "Track Suresh's invoices". A job title after the verb
+ * is left to the title rule ("Ask Chief Suresh"); a business word is never a name ("Send to Partner").
+ */
+function instructionSpans(text: string, toks: Tok[], out: PersonNameSpan[]) {
+  for (let k = 0; k + 1 < toks.length; k++) {
+    const t = toks[k];
+    if (verbIn(t, PERSON_VERBS)) announcedRun(text, toks, k + 1, "instruction", out);
+    if (verbIn(t, POSSESSIVE_VERBS) && possessiveName(toks[k + 1]) && joinable(text, toks, k + 1)) {
+      const p = toks[k + 1];
+      out.push({ start: p.s, end: p.e - 2, kind: "NAME", reason: "instruction" });
+    }
+    const verbs = t.w.length <= 4 ? PREPOSITION_VERBS[tokUp(t)] : undefined;
+    if (!verbs || t.glued || k === 0) continue;
+    // The verb is at most four words before the preposition, in the same clause.
+    for (let v = k - 1; v >= 0 && v >= k - 5; v--) {
+      if (CLAUSE_BREAK.test(text.slice(toks[v].e, toks[v + 1].s))) break;
+      if (verbIn(toks[v], verbs)) {
+        announcedRun(text, toks, k + 1, "instruction", out);
+        break;
+      }
+    }
   }
 }
 
@@ -705,8 +792,9 @@ export function personNameSpans(text: string): PersonNameSpan[] {
   if (text.includes(":") || text.includes("=")) labelSpans(text, toks, found);
   honorificSpans(text, toks, found);
   titleFirmSpans(text, toks, found);
+  instructionSpans(text, toks, found);
   if (RAIL_PRESENT.test(text)) railSpans(text, toks, found);
-  runsIn(text, toks, 0, toks.length - 1, "sequence", 2, found);
+  runsIn(text, toks, 0, toks.length - 1, "sequence", 2, found, nameWord, sequenceStart);
   found.sort((a, b) => a.start - b.start || b.end - a.end);
   const out: PersonNameSpan[] = [];
   let lastEnd = -1;
