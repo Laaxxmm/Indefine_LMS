@@ -14,13 +14,32 @@
 import { detectPii, mask, unmask, withTextNames, type PiiKind } from "./anonymizer";
 import type { DictionaryEntry } from "./types";
 
+/** What each detector kind is, in the words a person reads (never the kind's code, e.g. BANK_AC). */
+const KIND_WORDS: Partial<Record<string, string>> = {
+  BANK_AC: "bank account number",
+  PHONE: "phone number",
+  EMAIL: "email address",
+  UPI: "UPI address",
+  AADHAAR: "Aadhaar number",
+  DOB: "date of birth",
+  PASSPORT: "passport number",
+  VOTER_ID: "voter card number",
+  VEHICLE: "vehicle number",
+  NAME: "person's name",
+  ORG: "business name",
+  ADDRESS: "address",
+  PIN: "PIN code",
+  LITERAL: "client detail",
+};
+
 /** A legacy Gemini call refused because client details could not be hidden (nothing was sent). */
 export class LegacyGateError extends Error {
   constructor(
     readonly kinds: readonly string[],
     what = "This text",
   ) {
-    super(`${what} contains client details that could not be hidden from the AI (${kinds.join(", ")}), so it was not sent. Remove them and try again, or ask an admin.`);
+    const words = [...new Set(kinds.map((k) => KIND_WORDS[k] ?? k))];
+    super(`${what} contains client details that could not be hidden from the AI (${words.join(", ")}), so it was not sent. Remove them and try again, or ask an admin.`);
     this.name = "LegacyGateError";
   }
 }

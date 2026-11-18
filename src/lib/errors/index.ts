@@ -113,6 +113,8 @@ export function userMessage(err: unknown, context: MessageContext = {}): string 
 
   // Messages written for a person.
   if (PLAIN_ERROR_NAMES.includes(name) && message && isPlainMessage(message)) return message;
+  // The legacy Gemini mask gate refused the text: its own sentence when plain, else this one (never "try again in a minute").
+  if (name === "LegacyGateError") return LEGACY_GATE_MESSAGE;
   if ((name === "BlockedError" || name === "TuriaBlockedError") && typeof e.action === "string") return isPlainMessage(e.action) ? e.action : USER_MESSAGES.microsoftNotSetUp();
 
   // The AI router and the guardrails.
@@ -141,7 +143,11 @@ export function userMessage(err: unknown, context: MessageContext = {}): string 
   return networkMessage(e) ?? USER_MESSAGES.unexpected(context);
 }
 
+/** A legacy Gemini call (SOP Builder, quizzes) refused by the mask gate: nothing was sent, and only the author can fix it. */
+export const LEGACY_GATE_MESSAGE = "The text contains client details that could not be hidden from the AI, so nothing was sent. Remove them and try again.";
+
 const AI_CAUSES: Record<string, string> = {
+  LegacyGateError: LEGACY_GATE_MESSAGE,
   NoProviderAvailableError: "The AI service was unavailable.",
   ProviderUnavailableError: "The AI service is not set up on the server.",
   ProviderOutputError: "The AI answer could not be used.",
