@@ -180,5 +180,5 @@ These need the deployed environment (M365 + Gemini + Postgres). Tick each on sta
 npm install
 npx tsc --noEmit        # types
 npm run build           # production build (compiles all routes)
-npm audit               # dependency vulnerabilities (currently 1 moderate, non-applicable)
+npm audit               # dependency vulnerabilities (current state and decisions: docs/runbooks/dependency-upgrades.md)
 ```
