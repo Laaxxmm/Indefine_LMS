@@ -128,7 +128,7 @@ Summary: 71 rows · 67 pass · 0 fail · 4 n/a (Run review CLOSING and DONE need
 | 13 Admin — Cycle time | 1280 | ✅ | ✅* | ✅ | ✅ 21 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — |  |
 | 13 Admin — Cycle time | 1440 | ✅ | ✅* | ✅ | ✅ 21 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — |  |
 | 13 Admin — Cycle time | 390 | ✅ | ✅* | ✅ | ✅ 4 stops | ✅ axe 0 | ✅ | ✅ | ✅ | montage-390-*.png |  |
-| 14 Client page — Firm OS jobs card | 1280 | ✅ | ✅* | ✅ | ✅ 14 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — | The Firm OS card meets the bar (44 px rows and head). The page's own LMS Jobs table keeps its compact 33 px head row (LMS look); its controls got labels and the table a focusable scroll region. |
+| 14 Client page — Firm OS jobs card | 1280 | ✅ | ✅* | ✅ | ✅ 14 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — | The Firm OS card meets the bar (44 px rows and head). The page's own LMS Jobs table head is 44 px too since the leftovers pass (shared `thead`, `scope="col"`, a caption; was 33 px); its controls got labels and the table a focusable scroll region. |
 | 14 Client page — Firm OS jobs card | 1440 | ✅ | ✅* | ✅ | ✅ 14 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — |  |
 | 14 Client page — Firm OS jobs card | 390 | ✅ | ✅* | ✅ | ✅ 14 stops | ✅ axe 0 | ✅ | ✅ | ✅ | montage-390-*.png |  |
 | 15 Job workspace | 1280 | ✅ | ✅* | ✅ | ✅ 9 stops | ✅ axe 0 | ✅ | ✅ | ✅ | — |  |
@@ -174,6 +174,20 @@ every module on and keeps the Firm OS switch on while React renders, so the head
   `/admin/firm-os/privacy/[id]`, `/admin/firm-os/breaches/[id]`. They use the same layouts, so the same
   header and title edge; their help entries are covered by the registry test.
 
+### Leftovers pass (18 Nov 2026)
+
+* `/focus` empty state: its eyebrow says "Next task", the page's name in every menu (was "Focus").
+* Client page Jobs table head: 44 px with the shared `thead` token, `scope="col"` and a caption (was 33 px).
+  `node tests/regression/visual-check.mjs`: 84 / 84 page × width checks pass, axe 0 on every page.
+* Dashboard: the round "?" button is named "Replay the tour" (name and tooltip), beside the Help button; the
+  dashboard's help calls it the same.
+* Contrast of what the static check cannot see, measured with axe-core color-contrast and the WCAG formula on the
+  visual render with each menu panel un-hidden and the Help panel's markup placed in the page (390 and 1280):
+  no violations, nothing changed. Lowest ratios: menu links 11.25:1 (ink-soft on white), current link in the
+  phone Menu 9.62:1 (on brand-50), group headings in the dashboard Menu 5.62:1 (ink-mute on white), hover
+  15.99:1 (ink on muted), "Ctrl K" chip 5.18:1 (ink-mute on the page tint), Help panel text 5.62:1 at its lowest
+  (the "Help" eyebrow).
+
 ## Known before the staging pass
 
 From the UI audit (PROGRESS "UI audit", "Known gaps") and the design consistency pass (06 Nov 2026,
@@ -187,7 +201,7 @@ From the UI audit (PROGRESS "UI audit", "Known gaps") and the design consistency
 - LMS debts left as they are (owner decisions or LMS look, not Firm OS fails): emoji and gamification on
   `/dashboard` (👋 🎉 🔥 ⚡ 🎬 🏅 🚀 📡 💬 ✨ 🕑 💼 ✅), `/` (sign-in), `/leaderboard`, `/recap`, `/team/[userId]`,
   `/initiatives`, `/tools/neo-centra` (+ how-it-works), `/admin/auto-quiz`, `/admin/live`, `/admin/trajectory`;
-  the client page's own Jobs table head is 33 px; LMS pages that format dates with en-IN directly
+  LMS pages that format dates with en-IN directly
   (`/clients` list, `/tools/sop-builder`, office-tools history, certificate history, `src/lib/client-ops/core.ts`)
   still write "Sept" — they do not go through `src/lib/ist.ts`.
 - Local visual render (06 Nov 2026, design pass): 28 renders — every Firm OS page in the list above plus the LMS

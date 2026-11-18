@@ -7,7 +7,7 @@ import type { ClientDocType, JobStatus, ServiceType } from "@prisma/client";
 import { departmentLabel } from "@/lib/ca-firm";
 import { DOC_TYPES, JOB_DOC_TYPES, JOB_STATUSES, KYC_DOC_TYPES, keysOf } from "@/lib/clients/core";
 import type { Handler } from "@/lib/clients/services";
-import { card, focusRing, h2 } from "@/components/ui";
+import { card, focusRing, h2, thead } from "@/components/ui";
 import { DEFAULT_MESSAGE, responseError } from "@/lib/errors";
 
 export type JobView = { id: string; fy: string; department: ServiceType["department"]; service: string; handlerId: string; status: JobStatus; dueOn: string; fees: string; notes: string; folderStatus: string; docCount: number; folderHref?: string };
@@ -19,6 +19,9 @@ type Props = {
 };
 
 const field = "rounded-lg border border-border bg-page/60 px-2.5 py-1.5 text-[13px]";
+// Jobs table head as the shared table (DataTable: thead in ui.ts, 44 px head row, scope="col", a
+// caption), with this card's compact cell padding so the heads sit over their cells (as FirmOsJobs).
+const th = "py-2 pr-3 h-11 font-bold";
 
 async function call(url: string, init: RequestInit): Promise<{ ok: boolean; data: Record<string, unknown> }> {
   const res = await fetch(url, init);
@@ -85,10 +88,17 @@ export function ClientPanels({ clientId, folderStatus, jobs, documents, services
 
       <section className={card}>
         <h2 className={h2}>Jobs ({jobs.length})</h2>
-        <div role="region" aria-label="Jobs" tabIndex={0} className={`overflow-x-auto rounded-lg ${focusRing}`}>
+        {/* `relative` keeps the sr-only caption and head inside the scroll box (as tableWrap in ui.ts); otherwise they widen the page on a phone. */}
+        <div role="region" aria-label="Jobs" tabIndex={0} className={`relative overflow-x-auto rounded-lg ${focusRing}`}>
           <table className="w-full text-[13px]">
-            <thead className="text-[11px] uppercase tracking-wide text-ink-faint text-left">
-              <tr><th className="py-2 pr-3">FY</th><th className="py-2 pr-3">Department</th><th className="py-2 pr-3">Service</th><th className="py-2 pr-3">Handler</th><th className="py-2 pr-3">Status</th><th className="py-2 pr-3">Due</th><th className="py-2 pr-3">Notes</th><th className="py-2 pr-3">Fees (₹)</th><th className="py-2 pr-3">Docs</th><th /></tr>
+            <caption className="sr-only">Jobs for this client</caption>
+            <thead className={thead}>
+              <tr>
+                {["FY", "Department", "Service", "Handler", "Status", "Due", "Notes", "Fees (₹)", "Docs"].map((h) => (
+                  <th key={h} scope="col" className={th}>{h}</th>
+                ))}
+                <th scope="col" className={th}><span className="sr-only">Remove</span></th>
+              </tr>
             </thead>
             <tbody>
               {jobs.map((j) => (
