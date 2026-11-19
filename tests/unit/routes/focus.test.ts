@@ -139,6 +139,9 @@ describe("page", () => {
       as(user(who));
       const html = await page();
       expect(html).toContain(">Everything is up to date</h1>");
+      // The page's name in every menu (Next task), not "Focus".
+      expect(html).toContain(">Next task</p>");
+      expect(html).not.toContain(">Focus</p>");
       expect(html).toContain("Nothing is waiting for you right now");
       expect(html).toContain('href="/focus"');
       expect(html.match(PRIMARY)).toBeNull();

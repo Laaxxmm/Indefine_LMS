@@ -25,7 +25,7 @@ export default async function FocusPage({ searchParams }: { searchParams: Promis
   if (!task) {
     return (
       <div>
-        <PageHeader eyebrow="Focus" title="Everything is up to date" />
+        <PageHeader eyebrow="Next task" title="Everything is up to date" />
         <EmptyState
           title="Nothing is waiting for you right now"
           action={

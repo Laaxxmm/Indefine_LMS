@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { HelpCircle, X, ArrowRight, ArrowLeft } from "lucide-react";
+import { focusRing } from "@/components/ui";
 
 export type TourStep = {
   // CSS selector of the element to highlight. Omit for a centered step.
@@ -101,11 +102,11 @@ export function OnboardingTour({ steps }: { steps: TourStep[] }) {
           setI(0);
           setActive(true);
         }}
-        aria-label="Help and product tour"
-        className="fixed bottom-5 right-5 z-40 w-11 h-11 rounded-full bg-brand-500 hover:bg-brand-600 text-white shadow-lift flex items-center justify-center transition"
-        title="Help & tour"
+        aria-label="Replay the tour"
+        className={`fixed bottom-5 right-5 z-40 w-11 h-11 rounded-full bg-brand-500 hover:bg-brand-600 text-white shadow-lift flex items-center justify-center transition ${focusRing}`}
+        title="Replay the tour"
       >
-        <HelpCircle className="w-5 h-5" />
+        <HelpCircle className="w-5 h-5" aria-hidden="true" />
       </button>
 
       {active && step && (

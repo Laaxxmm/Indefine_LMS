@@ -37,7 +37,7 @@ export const LMS_HELP: HelpEntry[] = [
         meaning: "An admin's setting that opens your home page on your next task, one task at a time, with the rest folded under Show everything.",
       },
       { term: "Account menu", meaning: "Your name at the top right: My team, Admin console for admins, Initiatives and Sign out." },
-      { term: "Tour button", meaning: "The round question mark at the bottom right replays the short tour of this page. This Help panel is the written guide." },
+      { term: "Replay the tour", meaning: "The round question mark at the bottom right plays the short tour of this page again. This Help panel is the written guide." },
     ],
     stuck: [
       {
