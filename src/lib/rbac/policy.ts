@@ -33,6 +33,7 @@
 //   lift a DPDP processing restriction   partner only
 //   search                               every active person (each result type scoped by its own page rule)
 //   workspace settings (modules, focus)  active admins only
+//   Turia sync (sync now, mappings)      active admins and partners
 //   reveal a client's PAN / phone / email  management: whoever may edit the client (canManageClients)
 //
 // Entra group mapping (Partners / Staff security groups) is Blocked: the session does not carry
@@ -308,6 +309,14 @@ export function canManageWorkspace(user: SessionUser): boolean {
  */
 export function canRevealClientPii(user: SessionUser): boolean {
   return canManageClients(user);
+}
+
+/**
+ * The Turia sync (/admin/firm-os/turia-sync): "Sync now" and the people, client and rule mappings
+ * it uses. Active admins and partners (the page itself sits in the admin area). ADR-003 amendment.
+ */
+export function canManageTuriaSync(user: SessionUser): boolean {
+  return isActive(user) && isManagement(user);
 }
 
 /** Labels for chips and messages. */

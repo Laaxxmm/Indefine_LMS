@@ -8,12 +8,13 @@ import { formatDateTimeIst } from "@/lib/agents/core/format";
 import { fail, ok, type ServiceResult } from "@/lib/corrections/result";
 import type { SessionUser } from "@/lib/access";
 import { mask, withTextNames, type PiiKind } from "@/lib/ai/anonymizer";
-import { DATASETS, EXTERNAL_SYSTEMS, RESIDUE_DATASETS, SHARED_WITH, nameOnlyRecords, nameOnlySentence, type PrivacyDb, type Row } from "./inventory";
+import { DATASETS, EXTERNAL_SYSTEMS, RESIDUE_DATASETS, SHARED_WITH, nameOnlyRecords, nameOnlySentence, sopManualChecks, type PrivacyDb, type Row } from "./inventory";
 import { matchingIdentifiers } from "./identifier-only";
 import { normaliseIdentifier, type Identifier, type IdentifierKind } from "./locator";
 import { PRINCIPAL_LABELS, type PrincipalType } from "./policy";
 import { guardRegister, requireResolved, requireVerified, resolutionOf, step, writeAudit, type PrivacyDeps } from "./register";
 import { loadScopes } from "./scope";
+import { WITHHELD_THIRD_PARTY } from "./scrub";
 
 export interface ExportDataset {
   key: string;
@@ -40,7 +41,8 @@ const NOT_INCLUDED = [
   "Cached inputs of agent runs (sales and purchase registers and similar). They also name the client's customers and suppliers, so the file says only whether a copy is held and when it is purged (at most 30 days after the run).",
   "The names of firm staff who worked on the records.",
   "Files in SharePoint themselves: they are listed by name and link; a partner shares copies on request.",
-  "Copies of the person's name or identifiers inside the firm's work records (review comments and notes, checklist findings, computed figures, Turia checklists, reminders, logs). They sit in records about the engagement that also hold staff notes and other people's data; they are erased (replaced with \"[erased]\") when the person's erasure request is carried out.",
+  "SOP screenshots themselves: they are listed by step, caption and link; a partner shares copies on request.",
+  "Copies of the person's name or identifiers inside the firm's work records (review comments and notes, checklist findings, computed figures, Turia checklists, Turia pull run reports, reminders, logs). They sit in records about the engagement that also hold staff notes and other people's data; they are erased (replaced with \"[erased]\") when the person's erasure request is carried out.",
 ];
 
 /** Onboarding runs that never reached a client record: the only data of a person known by identifiers alone. */
@@ -51,8 +53,8 @@ const ORPHAN_EXPORT_FIELDS = [
   { name: "createdAt", label: "Started at" },
 ] as const;
 
-/** What an identifier-only export shows in place of another person's detail. */
-export const WITHHELD_THIRD_PARTY = "[withheld: another person's detail]";
+/** What an export shows in place of another person's detail (identifier-only exports, staff's Turia tasks). */
+export { WITHHELD_THIRD_PARTY };
 
 const TOKEN_KIND: Partial<Record<PiiKind, IdentifierKind>> = { PAN: "pan", GSTIN: "gstin", EMAIL: "email", PHONE: "phone" };
 const sameName = (a: string, b: string) => a.replace(/\s+/g, " ").trim().toLowerCase() === b.replace(/\s+/g, " ").trim().toLowerCase();
@@ -107,7 +109,7 @@ export async function buildAccessExport(db: PrivacyDb, requestId: string, now: D
   if (!request) return null;
   // The one linked person, never every record the identifiers matched (register.ts resolutionOf).
   const resolution = await resolutionOf(db, requestId, hashKey);
-  const scopes = resolution.kind === "principal" ? await loadScopes(db, [resolution.principal]) : [];
+  const scopes = resolution.kind === "principal" ? await loadScopes(db, [resolution.principal], { hashKey }) : [];
   const datasets: ExportDataset[] = [];
   if (resolution.kind === "identifier-only") {
     const ds = RESIDUE_DATASETS.find((d) => d.key === "onboarding-orphans")!;
@@ -128,7 +130,7 @@ export async function buildAccessExport(db: PrivacyDb, requestId: string, now: D
     for (const ds of DATASETS.filter((d) => d.principals.includes(type))) {
       const rows = await ds.rows(db, scope);
       const fields = ds.fields.map((f) => ({ name: f.name, label: f.label }));
-      const records = rows.map((r) => ({ id: String(r.id), values: pickValues(ds.fields, r, ds.derived?.(r)) }));
+      const records = rows.map((r) => ({ id: String(r.id), values: pickValues(ds.fields, r, ds.derived?.(r, scope)) }));
       const existing = datasets.find((d) => d.key === ds.key);
       if (existing) existing.records.push(...records);
       else datasets.push({ key: ds.key, label: ds.label, purpose: ds.purpose, fields, records });
@@ -140,6 +142,8 @@ export async function buildAccessExport(db: PrivacyDb, requestId: string, now: D
     if (scope.kind !== "client") continue;
     const sentence = nameOnlySentence(await nameOnlyRecords(db, scope.client));
     if (sentence) manualChecks.push(sentence);
+    // SOP review H1: a screenshot cannot be searched for the person; a partner looks through them.
+    for (const m of await sopManualChecks(db)) if (!manualChecks.includes(m.detail)) manualChecks.push(m.detail);
   }
   const held = datasets.filter((d) => d.records.length > 0);
   const total = held.reduce((n, d) => n + d.records.length, 0);

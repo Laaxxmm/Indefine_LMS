@@ -75,3 +75,31 @@ export function carryScreens(prev: SopContent | undefined, next: SopContent): So
   if (old.size) check.push(`Screens for ${[...old.keys()].join(", ")} were left out because those steps are gone. Add them again under the right steps.`);
   return { ...next, subProcesses, openPoints: [...(next.openPoints ?? []), ...check] };
 }
+
+/** Screens uploaded on one day that no version uses yet (added on the screens page, not yet saved), per SOP. */
+export const SCREENS_UNSAVED_PER_DAY = 100;
+
+/** Every screen id any of these versions shows. */
+export function screenIdsOf(contents: readonly (SopContent | null | undefined)[]): Set<string> {
+  const out = new Set<string>();
+  for (const c of contents) if (c) for (const id of screenIds(c)) out.add(id);
+  return out;
+}
+
+/** The content without the given screens (removed ones): a step left with none has none. */
+export function withoutScreens(c: SopContent, drop: ReadonlySet<string>): SopContent {
+  if (!drop.size || !c.subProcesses) return c;
+  const subProcesses = c.subProcesses.map((p) => ({
+    ...p,
+    steps: p.steps.map((s) => {
+      if (!s.screens?.length) return s;
+      const kept = s.screens.filter((x) => !drop.has(x.imageId));
+      return { ...s, screens: kept.length ? kept : undefined };
+    }),
+  }));
+  return { ...c, subProcesses };
+}
+
+/** The confirmation an author gives with every screenshot (SOP review M1); the upload route refuses a screen without it. */
+export const NO_CLIENT_DETAILS_FIELD = "noClientDetails";
+export const NO_CLIENT_DETAILS_LABEL = "No client details are visible in this screenshot (I have hidden any).";

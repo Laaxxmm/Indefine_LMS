@@ -238,6 +238,101 @@ describe("SOP Builder: job titles and SOP words are not names", () => {
   });
 });
 
+/**
+ * Review of PR #76 (M3): making job titles business words left a lone first name after them unmasked ("Senior
+ * Priya" had been a two-word sequence), and "Save" became a business word, so the surname in "Employee: Hemant
+ * Save" and the dictionary's own "Save" variant went out. Each case below leaked on main at 3a64c1b.
+ */
+const NAMES_16 = ["Priya", "Suresh", "Ramesh", "Deepa", "Anil", "Gurpreet", "Kiran", "Lakshmi", "Asha", "Ravi", "Meera", "Arjun", "Kavya", "Venkat", "Harish", "Nisha"];
+const LONE_NAME_TEMPLATES = [
+  "Send the draft to Senior {N}",
+  "Ask Chief {N} to approve",
+  "Deputy {N} reviews the BRS",
+  "Article {N} prepares the ledger",
+  "Head {N} signs off",
+  "Articled {N} uploads the statement",
+  "Give the file to Chief {N}",
+  "Senior {N} approves the journal",
+  "Article {N}",
+  "Deputy {N}",
+  "Track {N}'s invoices",
+  "Complete {N}'s ITR",
+  "Review {N}'s workings",
+  "Check {N}'s GSTR-1 before filing",
+  "File {N}'s return",
+  "Update {N}'s ledger",
+  "Verify {N}'s bank statement",
+  "CA {N} signs the audit report",
+  "Head {N} approves the payment",
+  "Assign to {N}",
+  "Send to {N} for review",
+  "Escalate to {N}",
+  "Forward the mail to {N}",
+  "Control owner: {N}",
+  "Process owner: {N}",
+  "Ask {N} to approve",
+  "Remind {N} about the deadline",
+  "Inform {N} once filed",
+  "Tell {N} the ITR is ready",
+  "Prepared by {N}",
+];
+
+describe("M3: a lone first name after a job title or in an instruction is masked", () => {
+  it("the review's cases", () => {
+    const cases: [string, string[]][] = [
+      ["Send the draft to Senior Priya", ["Priya"]],
+      ["Ask Chief Suresh to approve", ["Suresh"]],
+      ["Deputy Ramesh", ["Ramesh"]],
+      ["Article Deepa", ["Deepa"]],
+      ["Track Suresh's invoices", ["Suresh"]],
+      ["Complete Ramesh's ITR", ["Ramesh"]],
+      ["CA Ramesh", ["Ramesh"]],
+      ["Head Anil", ["Anil"]],
+      ["Assign to Gurpreet", ["Gurpreet"]],
+      ["Control owner: Priya", ["Priya"]],
+      ["Employee: Hemant Save", ["Hemant", "Save"]],
+      ["Hemant Save approved the BRS", ["Hemant", "Save"]],
+      ["Mr. Save signed", ["Save"]],
+    ];
+    for (const [t, secrets] of cases) {
+      const masked = mask(t, { now: NOW }).masked;
+      for (const s of secrets) expect(masked, `"${s}" survived in ${masked}`).not.toContain(s);
+      expect(detectPii(t, { names: true }).length, `gate on: ${t}`).toBeGreaterThan(0);
+      expect(detectPii(masked, { names: true }), `gate after masking: ${masked}`).toEqual([]);
+    }
+  });
+
+  it(`${LONE_NAME_TEMPLATES.length * NAMES_16.length} templated instructions: no first name survives`, () => {
+    const leaked: string[] = [];
+    for (const tpl of LONE_NAME_TEMPLATES) for (const n of NAMES_16) {
+      const t = tpl.replace("{N}", n);
+      if (mask(t, { now: NOW }).masked.includes(n)) leaked.push(t);
+    }
+    expect(leaked).toEqual([]);
+  });
+
+  it("a dictionary name's surname that is also a verb is masked on its own (soloWord)", () => {
+    const masked = mask("Save the file. Ask Save to sign", { dictionary: [{ value: "Hemant Save", kind: "NAME" }], now: NOW }).masked;
+    expect(masked).not.toContain("Save");
+  });
+
+  it("job titles, instructions and labels with no name in them stay readable", () => {
+    const plain = [
+      "Senior Citizen savings scheme", "Super Senior Citizen", "Head Office Rent", "Head Count", "Chief Minister's Relief Fund", "Articled Clerk",
+      "Chartered Accountant", "Head of Department", "Chief Financial Officer", "Deputy General Manager", "Senior Secondary", "CA Final", "CA Inter",
+      "CA Firm", "CS Executive", "Send to Partner for review", "Assign to Accounts team", "Escalate to Manager", "Forward to HDFC", "Check with Bank",
+      "Collect from Debtors", "Obtain from MCA portal", "Prepared by Accounts Assistant", "Reviewed by Senior Accountant", "Approved by Partner",
+      "Ask Tally support", "Inform Admin", "Track Client's invoices", "Complete Today's tasks", "Save to OneDrive", "Go to Gateway of Tally",
+      "Upload to Google Drive", "Process owner: Senior Accountant", "Control owner: Partner", "Process owner: Accounts team", "Done by EOD",
+      "Assigned by Turia", "Save BRS PDF", "Click Save Button", "Meet Deadlines", "Verify with Form 26AS", "Reconcile with GSTR-2B",
+    ];
+    for (const t of plain) {
+      expect(personNameSpans(t), t).toEqual([]);
+      expect(mask(t, { now: NOW }).masked, t).toBe(t);
+    }
+  });
+});
+
 describe("NEW-1: the extractor", () => {
   it("rules: honorific, label, json, rail, sequence — with kinds", () => {
     const spans = (t: string) => personNameSpans(t).map((s) => `${s.reason}:${s.kind}:${t.slice(s.start, s.end)}`);

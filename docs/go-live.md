@@ -28,7 +28,8 @@ The final QA gate that must be green before this checklist is used: `docs/qa/pha
       (reason `close-loop`) — `tests/chaos/duplicate-cron-concurrent.test.ts` green after Phase 11.
 - [ ] PR `firm-os/phase-0-inventory → main` reviewed by the owner (the agent never merges).
 - [ ] **Deploy path checked (incident 06 Nov 2026, see §9.1):** the Railway Start / Pre-deploy command
-      is `npm start` only — no `prisma db push` (the boot script `scripts/migrate.mjs` runs
+      is `npm start` only — no `prisma db push` (checked 19 Nov 2026: Start `npm start`, Pre-deploy and
+      Build commands empty; the boot script `scripts/migrate.mjs` runs
       `prisma migrate deploy`); every new migration has been applied to a copy of the production
       database (staging) before merging; the CI step "Firm OS migrations re-run cleanly" is green.
 
@@ -91,6 +92,8 @@ the ensure-* functions.
 | `FIRM_OS_ONBOARD_CONFIRM` | unset (= confirm) — **never `false` in prod** | A partner/manager must click Create before the onboarding saga runs. |
 | `FIRM_OS_TURIA_BRIDGE` | unset (= `MANUAL`) | MANUAL checklists (ADR-003). `UI`/`API` are stubs that block. |
 | `FIRM_OS_TURIA_UI` | unset (off) | UI automation against practice.turia.in — off until Turia confirms it is permitted. |
+| `FIRM_OS_TURIA_PULL` (ADR-003 amendment, 06 Nov 2026) | unset (= `off`) | Read-only Turia → Firm OS task pull through the Neo Centra sign-in. `off` reads nothing; `dry-run` reads Turia and stores only the mirror, the match suggestions and a preview on /admin/firm-os/turia-sync (no job, client or close record changes); `on` creates and updates jobs. Needs `FIRM_OS_ENABLED` on. Rollout: §4.1. Any other value is refused with a plain message and nothing runs. |
+| `FIRM_OS_TURIA_PULL_SORT` | unset (= `createdon`) | task/list sort the pull asks for. `updatedon` lets a run stop at an unchanged page (only when Turia's rows really come back newest-change first and a full scan ran in the last 24 h). Leave unset until a dry run shows Turia honours it. |
 | `FIRM_OS_BREAK_NUDGE` (Phase 9) | unset (off) | LMS activity heartbeats + gentle break nudges (ADR-006: kept 7 days, aggregate only, never reported to managers). Tell staff what is collected **before** turning it on. Off = no heartbeat stored, no ping sent. |
 | `FIRM_OS_HOLIDAYS` (Phase 9) | set to the firm's holidays | Comma-separated `YYYY-MM-DD` the coach skips when counting working days (the LMS has no holiday table); blank = weekends only. Not a feature flag — set it before Stage 1. |
 | `FIRM_OS_COMPANION_EXTENSION_ORIGIN` (merged with Phase 10) | unset unless the extension id differs | CORS origin the companion API answers besides the extension's fixed id (`src/lib/companion/config.ts`). Not in `.env.example` yet. |
@@ -111,6 +114,12 @@ read by the code but missing from `.env.example` — add them there (owner of `.
   only (/coach and the dashboard card) — no Teams or e-mail to staff.
 - `.github/workflows/firm-os-retention.yml` (Phase 11): `/api/cron/firm-os/retention` daily 02:30 IST —
   the DPDP retention purge (docs/dpdp/retention.md). Confirm its first runs on staging (§1).
+- `.github/workflows/firm-os-turia-pull.yml` (ADR-003 amendment): `/api/cron/firm-os/turia-pull` every
+  15 minutes, Mon–Sat 09:00–20:00 IST (base URL from the `LMS_BASE_URL` repository variable, default
+  https://lms.indefine.in). Same `CRON_SECRET` bearer. The route answers 200 `skipped` outside the window
+  and while `FIRM_OS_ENABLED` or `FIRM_OS_TURIA_PULL` is off; a missing or expired Turia sign-in is also a
+  200, recorded on the run and shown on /admin/firm-os/turia-sync. At most one run at a time
+  (TuriaPullLock lease); each run stops after 4 minutes and keeps what it read.
 
 ## 3. Master switch and pilot rollout (`FIRM_OS_ENABLED` + workspace settings)
 
@@ -172,6 +181,36 @@ criteria hold and the owner says so.
 
 Never in prod at any stage: `FIRM_OS_ECHO_AGENT`, `FIRM_OS_ONBOARD_CONFIRM=false`,
 `FIRM_OS_TURIA_UI=true` (until Turia confirms), `LOCAL_LLM_BASE_URL` (until Phase 2b).
+
+### 4.1 Turia task pull (`FIRM_OS_TURIA_PULL`) — dry run first, check the preview, then on
+
+Owner decision 06 Nov 2026 (ADR-003 amendment). Firm OS jobs come from Turia automatically, read
+only, through the Neo Centra Turia sign-in. Nothing is ever written to Turia. Steps, owner only:
+
+1. **Preconditions.** `FIRM_OS_ENABLED` on (the owner's pilot); `NEO_TURIA_ORG_ID` and
+   `NEO_TURIA_COOKIE_KEY` set (already, for Neo Centra); the Neo Centra extension pushing the sign-in
+   (/admin/firm-os/turia-sync shows "Turia sign-in: Fresh"); `CRON_SECRET` set in Railway and as the
+   repository secret; the migration `20261118120000_turia_pull` applied (it is additive and re-runnable).
+2. **Dry run.** Set `FIRM_OS_TURIA_PULL=dry-run` in Railway, redeploy, open /admin/firm-os/turia-sync
+   and select **Sync now** (or wait for the 15-minute run). No job, client or close record is created.
+3. **Check the preview.** Every row says "Would create …" (service · title · period · FY, with where the
+   period came from: name or due date), "Would link to the existing job …", "Would change …", or why a
+   task waits. Fix what is wrong there, each change audited:
+   - **People** not matched → pick the firm user (kept over automatic matching);
+   - **Clients** not matched → pick the client from the client list, or ignore it;
+   - **Task rules** → change the words, service, title or frequency; switch a rule off rather than
+     removing it. Unmapped tasks become jobs **without an agent** (prepared by hand).
+   Also check the Turia fields the pull could not confirm from Neo Centra's code (department, due date,
+   client code, status name; docs/turia-bridge.md "Fields"): if due dates or departments are missing in
+   the preview, tell IT before going on.
+4. **On.** When the preview is right, set `FIRM_OS_TURIA_PULL=on` and redeploy. The next run creates
+   the jobs (state ASSIGNED, for the mapped assignee and reviewer) and keeps them in step with Turia's
+   assignee, reviewer and due date. They show in Next task, My day and Agents for those people only.
+5. **Watch** the first days on /admin/firm-os/turia-sync (last run, counts, jobs flagged) and the
+   AuditEvent `turia-pull.run` rows (counts only).
+
+Rollback: set `FIRM_OS_TURIA_PULL=off` (or `dry-run`). Jobs already created stay (nothing is deleted);
+they simply stop following Turia.
 
 ## 5. Seed the SOP packs — only after partner review
 
@@ -262,24 +301,28 @@ on the build machine).
 
 ### 9.1 Incident 06 Nov 2026 — boot crash loop after the Firm OS merge (resolved)
 
-- **What happened:** PR #70 merged 09:33 IST; Railway deployed `main`. Its start path ran
-  `prisma db push` before `npm start`, which created the Firm OS tables and enums straight from
-  `schema.prisma` without recording migrations. `npm start` then ran `prisma migrate deploy`, and the
-  first Firm OS migration failed on `CREATE TYPE "ModelProviderId"` (already exists). The boot script
-  marks a half-applied migration rolled back and retries it, so every restart failed the same way.
-  lms.indefine.in returned 502 from about 09:44 to 10:15 IST. No LMS data was changed or lost (only
-  new, empty Firm OS objects were created).
+- **What happened:** PR #70 merged 09:33 IST; Railway deployed `main`. On boot `npm start` ran
+  `prisma migrate deploy`, and the first Firm OS migration stopped part-way, leaving some of its
+  tables and enums created but the migration unfinished. The boot script marks a half-applied
+  migration rolled back and retries it; the retry failed on `CREATE TYPE "ModelProviderId"` (already
+  exists), so every restart failed the same way. lms.indefine.in returned 502 from about 09:44 to
+  10:15 IST. No LMS data was changed or lost (only new, empty Firm OS objects were created).
+- **Correction (19 Nov 2026):** an earlier version of this note said Railway ran `prisma db push`
+  before `npm start`. Checked on Railway: the Start command is `npm start` and the Pre-deploy and
+  Build commands are empty, and `package.json` has not run `db push` since 5 Sep 2026 (060a33b). The
+  pre-existing objects came from the half-applied first attempt, not from `db push`.
 - **Fix (PR #71, merged 10:15):** every Firm OS migration is re-runnable (enums and constraints in
   DO blocks that ignore only the duplicate error; `CREATE TABLE / INDEX IF NOT EXISTS`;
   `ADD COLUMN IF NOT EXISTS`). The next boot recorded the migrations over the existing objects and
   started; Firm OS stays off (`FIRM_OS_ENABLED` unset). `tests/unit/migrations-rerunnable.test.ts`
   enforces the pattern and CI re-applies every Firm OS migration with psql on Postgres 16.
-- **Why a rollback would not have helped:** the previous release would also run `db push`, now with
-  the old schema, which tries to drop the new tables (refused without `--accept-data-loss`, so the
-  boot fails). Fix forward instead.
-- **Lessons (now preconditions in §1):** remove `prisma db push` from the Railway start path; apply
-  every migration to a copy of the production database before merging; check how the platform
-  actually starts the app, not only `package.json`.
+- **Why fix forward:** a rollback to the previous release would not have removed the half-created
+  objects or the failed migration record, so the next Firm OS deploy would have hit the same error.
+  Making the migrations re-runnable cleared it for good.
+- **Lessons (now preconditions in §1):** every migration must be safe to apply again over its own
+  partial state; apply every migration to a copy of the production database before merging; keep
+  the Railway Start command `npm start` with no Pre-deploy or Build command that touches the schema
+  (no `prisma db push`, ever, against production).
 
 ## 10. Sign-off
 

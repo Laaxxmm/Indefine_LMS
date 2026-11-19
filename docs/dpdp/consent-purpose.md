@@ -65,6 +65,7 @@ restriction."
 | Re-run / Request changes | `src/lib/agents/service.ts` | Refused before the job moves back to IN_PREP |
 | Onboarding reading | `src/lib/agents/onboarding/service.ts` (start, follow-up sentences) | Refused (409) when the sentence, the spec so far or the run names an existing restricted client (PAN, GSTIN, client code); answers typed into the form never reach a model |
 | Comms drafts | `createDraft` in `src/lib/agents/comms/service.ts` | Refused before drafting or translation; the "no new drafts" restriction is honoured here too |
+| Turia pull (new jobs) | `runTuriaPull` in `src/lib/integrations/turia/pull/sync.ts` | The client's Turia tasks are still mirrored and matched, but no new job is created or linked for it (a new job is what agents run on); a job it already has keeps following Turia's people and due date. The run report says "No job made: this client has restricted processing …" |
 
 Restrictions are read by replaying `restrict-processing` and `lift-restriction` events per request,
 so the newest decision wins and a restriction recorded by another request stays in force. Only a

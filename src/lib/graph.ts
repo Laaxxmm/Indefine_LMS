@@ -720,6 +720,9 @@ export async function uploadFileToFolderId(
   return item.id ? { id: item.id, size: item.size ?? 0, webUrl: item.webUrl ?? "" } : null;
 }
 
+/** How long one SOP folder or file call to Graph may take (a hung call must not hold a 60 s route). */
+const DRIVE_CALL_MS = 15_000;
+
 /** A drive item's name and parent, or null when it is gone (deleted). Other failures throw, so a
  *  passing outage is never mistaken for a deleted item. */
 export async function getDriveItem(
@@ -730,6 +733,7 @@ export async function getDriveItem(
   const res = await fetch(`${GRAPH}/drives/${driveId}/items/${itemId}?$select=id,name,parentReference`, {
     headers: { Authorization: `Bearer ${token}` },
     cache: "no-store",
+    signal: AbortSignal.timeout(DRIVE_CALL_MS),
   });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Graph get item failed: ${res.status} ${await res.text().catch(() => "")}`);
@@ -744,9 +748,30 @@ export async function createFolderIn(driveId: string, parentId: string, name: st
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ name, folder: {}, "@microsoft.graph.conflictBehavior": "rename" }),
+    signal: AbortSignal.timeout(DRIVE_CALL_MS),
   });
   if (!res.ok) throw new Error(`Graph create folder failed: ${res.status} ${await res.text().catch(() => "")}`);
   return ((await res.json()) as { id: string }).id;
+}
+
+/** Replace the content of an existing file (same item id, same link). Returns it, or null when the
+ *  file is gone (404); other failures throw. OneDrive keeps the old content in the file's version history. */
+export async function replaceDriveItemContent(
+  driveId: string,
+  itemId: string,
+  bytes: ArrayBuffer,
+  token: string
+): Promise<{ id: string; webUrl: string } | null> {
+  const res = await fetch(`${GRAPH}/drives/${driveId}/items/${itemId}/content`, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/octet-stream" },
+    body: bytes,
+    signal: AbortSignal.timeout(DRIVE_CALL_MS),
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Graph replace content failed: ${res.status} ${await res.text().catch(() => "")}`);
+  const item = (await res.json()) as { id?: string; webUrl?: string };
+  return { id: item.id ?? itemId, webUrl: item.webUrl ?? "" };
 }
 
 /** The parent folder id of a drive item (used to find the folder holding a

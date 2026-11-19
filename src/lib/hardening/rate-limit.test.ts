@@ -41,13 +41,14 @@ describe("configuration", () => {
     expect(warn).toHaveBeenCalledWith(expect.stringMatching(/RATE_LIMIT_COMMS_DRAFT="lots" is not/));
   });
 
-  it("ships limits for /onboard, agent runs, comms drafting, identifier lookups and the Companion", () => {
+  it("ships limits for /onboard, agent runs, comms drafting, identifier lookups, the Companion and SOP generation", () => {
     expect(DEFAULT_LIMITS).toEqual({
       onboard: { limit: 30, windowMs: 3_600_000 },
       "agent-run": { limit: 20, windowMs: 3_600_000 },
       "comms-draft": { limit: 30, windowMs: 3_600_000 },
       "identifier-search": { limit: 10, windowMs: 600_000 },
       companion: { limit: 20, windowMs: 60_000 },
+      "sop-generate": { limit: 20, windowMs: 3_600_000 },
     });
     expect(envName("identifier-search")).toBe("RATE_LIMIT_IDENTIFIER_SEARCH");
     expect(envName("companion")).toBe("RATE_LIMIT_COMPANION");

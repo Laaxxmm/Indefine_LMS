@@ -18,10 +18,19 @@
 // Deliberately left out of the export: AgentRun inputs and figures (cached registers and
 // computations that also name the client's customers and suppliers — other people's data), staff
 // ids on client records (staff data, ADR-006 class B), and anything matched only by a shared name.
+//
+// The Turia pull's copy of Turia's task list (ADR-003 Amendment 1) is walked like the rest:
+// TuriaTaskMirror and TuriaClientLink for a client (found by the client's links, or by the code
+// and normalised name the pull matches on, src/lib/integrations/turia/pull/match.ts), TuriaPersonLink
+// and the mirror's assignee / reviewer lists for staff, and the run reports (TuriaPullRun.preview).
+// An erased client's link and mirror rows get an erased key (pull/erased.ts) that the pull
+// recognises, so the next run neither copies them back from Turia nor maps the client again.
 import { Prisma } from "@prisma/client";
 import type { prisma } from "@/lib/prisma";
+import { ERASED_CLIENT_NOTE, ERASED_PERSON, erasedClientKey, isErasedKey } from "@/lib/integrations/turia/pull/erased";
+import { normName } from "@/lib/integrations/turia/pull/normalise";
 import type { DutyId, PrincipalType } from "./policy";
-import { ERASED_TOKEN, clientNeedles, codeNeedle, namePartNeedles, panNeedle, phoneNeedle, phraseNeedle, scrubColumns, scrubberFor, type Needle, type Scrubber } from "./scrub";
+import { ERASED_TOKEN, WITHHELD_THIRD_PARTY, clientNeedles, codeNeedle, namePartNeedles, panNeedle, phoneNeedle, phraseNeedle, scrubColumns, scrubberFor, type Needle, type Scrubber } from "./scrub";
 
 export type Row = Record<string, unknown>;
 
@@ -52,6 +61,12 @@ export type PrivacyDb = Pick<
   | "auditEvent"
   | "privacyRequest"
   | "breachIncident"
+  | "turiaTaskMirror"
+  | "turiaClientLink"
+  | "turiaPersonLink"
+  | "turiaPullRun"
+  | "sopVersion"
+  | "sopImage"
   | "$transaction"
 >;
 
@@ -68,11 +83,42 @@ export interface ClientScope {
   jobTasks: Row[];
   jobs: Row[];
   engagements: Row[];
+  /** The Turia pull's view of this client (client persons only; empty for a company's contact). */
+  turia: TuriaClientRefs;
+  /** Key of the erased Turia keys (pull/erased.ts); undefined: AUTH_SECRET, as the pull uses. */
+  hashKey?: string;
+}
+
+/**
+ * The Turia client keys (TuriaClientLink.key = TuriaTaskMirror.clientKey) that are this client's:
+ * the links an admin or the pull pointed at the client record, and the keys the pull would match to
+ * it (its FirmClient code, or its normalised name when no other client has that name), unless a link
+ * points that key at another client or an admin set it to ignore. `names`: how Turia spells the
+ * client, as found in those links and mirror rows (needles for its names in the run reports).
+ */
+export interface TuriaClientRefs {
+  keys: string[];
+  names: string[];
 }
 
 export interface StaffScope {
   kind: "staff";
   user: Row;
+  /** The person's Turia users (TuriaPersonLink rows pointing at the user). */
+  turia: TuriaStaffRefs;
+  hashKey?: string;
+}
+
+/**
+ * `ids`: Turia user ids linked to the user. `names` / `emails`: how Turia names them, kept only when
+ * no other person's link has the same name. `nameShared`: another user has the same LMS name, so
+ * the name alone is not used to find or clean anything.
+ */
+export interface TuriaStaffRefs {
+  ids: string[];
+  names: string[];
+  emails: string[];
+  nameShared: boolean;
 }
 
 export type Scope = ClientScope | StaffScope;
@@ -96,9 +142,11 @@ export type ErasureRule =
       kind: "anonymise";
       /** Duties that put the item on legal hold instead: every duty in force ("client"), or only these. */
       duties: "client" | readonly DutyId[];
+      /** A sentence added to the plan's consequence (what else the UPDATE does). */
+      note?: string;
       /** Column values the UPDATE writes. `s` replaces the person's identifiers in text and JSON. */
-      set: (row: Row, s: Scrubber) => Row;
-      applies?: (row: Row, s: Scrubber) => boolean;
+      set: (row: Row, s: Scrubber, scope: Scope) => Row;
+      applies?: (row: Row, s: Scrubber, scope: Scope) => boolean;
     }
   | { kind: "hold"; duties: "client"; reason: string }
   | { kind: "keep"; reason: string };
@@ -111,9 +159,11 @@ export interface DataSet {
   purpose: string;
   fields: readonly DataField[];
   /** Fields computed for the export instead of read raw (e.g. "inputs cached: yes"). */
-  derived?: (row: Row) => Row;
+  derived?: (row: Row, scope: Scope) => Row;
   erasure: ErasureRule;
   rows(db: PrivacyReadDb, scope: Scope): Promise<Row[]>;
+  /** The UPDATE's `where` for a table whose key is not `id` (rows carry an `id` alias for the plan). */
+  where?: (row: Row) => Row;
 }
 
 type Finder = { findMany(args: { where: Row; select?: Row; orderBy?: Row; take?: number }): Promise<Row[]> };
@@ -124,8 +174,14 @@ const erasedJson = { erased: true } as const;
 const CLIENT_PEOPLE: readonly PrincipalType[] = ["client-person"];
 const CLIENT_ANY: readonly PrincipalType[] = ["client-person", "client-contact"];
 const STAFF: readonly PrincipalType[] = ["staff"];
+const TURIA_SKIP_NOTE = "The Turia pull skips these tasks from now on, so they are not copied back from Turia; erase or anonymise the client in Turia too.";
 
 const f = (name: string, label: string, cls: DataField["cls"] = "A"): DataField => ({ name, label, cls });
+/** A value that is not already erased ("[erased] …", "erased+…@erased.invalid"). */
+export const liveText = (v: unknown): string | null => {
+  const t = typeof v === "string" ? v.trim() : "";
+  return t && !t.startsWith(ERASED_TOKEN) && !t.endsWith("@erased.invalid") ? t : null;
+};
 const ids = (rows: Row[]) => rows.map((r) => String(r.id));
 const clientOf = (s: Scope) => (s.kind === "client" ? s : null);
 const staffOf = (s: Scope) => (s.kind === "staff" ? s : null);
@@ -366,6 +422,67 @@ export const DATASETS: readonly DataSet[] = [
       return c ? finder(db, "engagementLetter").findMany({ where: { clientId: String(c.client.id) }, orderBy: { createdAt: "asc" } }) : [];
     },
   },
+  {
+    key: "turia-tasks",
+    label: "Turia task list copy (Turia pull)",
+    model: "turiaTaskMirror",
+    principals: CLIENT_PEOPLE,
+    purpose:
+      "A copy of the client's tasks in Turia, only what a job needs (task, client name and code, department, status, dates), so the work shows in Firm OS. Turia holds the record; staff names on the tasks are not included here.",
+    fields: [
+      f("identity", "Turia task number", "C"),
+      f("taskName", "Task name"),
+      f("clientName", "Client name in Turia"),
+      f("clientCode", "Client code in Turia", "C"),
+      f("department", "Department", "C"),
+      f("statusName", "Status in Turia", "C"),
+      f("dueOn", "Due on", "C"),
+      f("completedOn", "Completed on", "C"),
+    ],
+    erasure: {
+      kind: "anonymise",
+      duties: "client",
+      note: TURIA_SKIP_NOTE,
+      // The row, its Turia task id, dates, people and the link to the job stay; the erased key makes the pull skip it.
+      set: (r, _s, sc) => ({
+        taskName: ERASED,
+        clientName: ERASED,
+        clientKey: erasedClientKey(String(r.clientKey), sc.hashKey),
+        clientCode: null,
+        hash: ERASED,
+        ...(r.appliedHash != null ? { appliedHash: ERASED } : {}),
+      }),
+      applies: (r) => !isErasedKey(r.clientKey),
+    },
+    rows: async (db, s) => {
+      const keys = clientOf(s)?.turia.keys ?? [];
+      return keys.length ? finder(db, "turiaTaskMirror").findMany({ where: { clientKey: { in: keys } }, orderBy: { id: "asc" } }) : [];
+    },
+  },
+  {
+    key: "turia-client-links",
+    label: "Turia client match (Turia pull)",
+    model: "turiaClientLink",
+    principals: CLIENT_PEOPLE,
+    purpose: "How the Turia pull matches the client in Turia to the client list, so the client's Turia tasks become its jobs.",
+    fields: [f("turiaName", "Client name in Turia"), f("turiaCode", "Client code in Turia", "C"), f("status", "Match", "C")],
+    erasure: {
+      kind: "anonymise",
+      duties: "client",
+      note: "The match is set to ignore under an erased key, with a privacy note as its name, so the Turia pull never maps this client again; erase or anonymise it in Turia too.",
+      set: (r, _s, sc) => ({ key: erasedClientKey(String(r.key), sc.hashKey), turiaName: ERASED_CLIENT_NOTE, turiaCode: null, status: "ignored" }),
+      applies: (r) => !isErasedKey(r.key),
+    },
+    rows: async (db, s) => {
+      const c = clientOf(s);
+      const keys = c?.turia.keys ?? [];
+      if (!c || !keys.length) return [];
+      const links = await finder(db, "turiaClientLink").findMany({ where: { key: { in: keys } }, orderBy: { key: "asc" } });
+      // The row's id in the plan and the audit trail is the key it gets: no name, and the trail still points at it.
+      return links.map((l) => ({ ...l, id: erasedClientKey(String(l.key), c.hashKey) }));
+    },
+    where: (r) => ({ key: r.key }),
+  },
   // ------------------------------------------------------------------ staff (class B)
   {
     key: "staff-profile",
@@ -435,7 +552,143 @@ export const DATASETS: readonly DataSet[] = [
     erasure: { kind: "keep", reason: "Removed automatically after 7 days by the coach's clean-up." },
     rows: async (db, s) => (staffOf(s) ? finder(db, "activityHeartbeat").findMany({ where: { userId: staffOf(s)!.user.id }, orderBy: { at: "asc" }, take: 5000 }) : []),
   },
+  {
+    key: "staff-turia-link",
+    label: "Turia user match (Turia pull)",
+    model: "turiaPersonLink",
+    principals: STAFF,
+    purpose: "How the Turia pull matches the person's Turia user to their staff account, so Turia tasks assigned to them become their jobs.",
+    fields: [f("turiaName", "Name in Turia", "B"), f("turiaEmail", "Email in Turia", "B"), f("matchedBy", "Matched by", "B")],
+    erasure: {
+      kind: "anonymise",
+      duties: ["staff-records"],
+      note: "The match is marked erased and unlinked from the staff account, so the Turia pull never matches this Turia user again and writes \"[erased]\" for their name.",
+      set: () => ({ turiaName: ERASED, turiaEmail: null, userId: null, matchedBy: ERASED_PERSON }),
+      applies: (r) => r.matchedBy !== ERASED_PERSON,
+    },
+    rows: async (db, s) => {
+      const st = staffOf(s);
+      if (!st) return [];
+      const links = await finder(db, "turiaPersonLink").findMany({ where: { userId: st.user.id }, orderBy: { turiaUserId: "asc" } });
+      return links.map((l) => ({ ...l, id: String(l.turiaUserId) }));
+    },
+    where: (r) => ({ turiaUserId: r.turiaUserId }),
+  },
+  {
+    key: "staff-turia-tasks",
+    label: "Turia tasks assigned or reviewed (Turia pull copy)",
+    model: "turiaTaskMirror",
+    principals: STAFF,
+    purpose: "The Turia tasks the person is the assignee or reviewer of, copied so the work shows in Firm OS. Turia holds the record. Other people's names, and the client's, are withheld.",
+    fields: [
+      f("identity", "Turia task number", "C"),
+      f("taskName", "Task name", "C"),
+      f("department", "Department", "C"),
+      f("statusName", "Status in Turia", "C"),
+      f("dueOn", "Due on", "C"),
+      f("role", "Your role", "B"),
+      f("assignees", "Assignees", "B"),
+      f("reviewers", "Reviewers", "B"),
+    ],
+    derived: (r, s) => staffTaskView(r, staffOf(s)?.turia.ids ?? []),
+    erasure: {
+      kind: "anonymise",
+      duties: ["staff-records"],
+      // Only the person's own entries change; the other people on the task, and the task, stay.
+      set: (r, _s, sc) => {
+        const own = new Set(staffOf(sc)?.turia.ids ?? []);
+        return { assignees: hidePeople(r.assignees, own), reviewers: hidePeople(r.reviewers, own) };
+      },
+      applies: (r, _s, sc) => {
+        const own = new Set(staffOf(sc)?.turia.ids ?? []);
+        return [...peopleOf(r.assignees), ...peopleOf(r.reviewers)].some((p) => own.has(p.id) && p.name !== ERASED);
+      },
+    },
+    rows: async (db, s) => {
+      const ids = staffOf(s)?.turia.ids ?? [];
+      if (!ids.length) return [];
+      const OR = ids.flatMap((id) => [{ assignees: { array_contains: [{ id }] } }, { reviewers: { array_contains: [{ id }] } }]);
+      return finder(db, "turiaTaskMirror").findMany({ where: { OR }, orderBy: { id: "asc" } });
+    },
+  },
+  // ------------------------------------------------------------------ SOP Builder (SOP review H1; see the block at the end)
+  {
+    key: "sop-screenshots",
+    label: "SOP screenshots (Tools > SOP Builder)",
+    model: "sopImage",
+    principals: CLIENT_ANY,
+    purpose:
+      "Pictures of the firm's software under SOP steps, showing a new joiner where to click. They should show a demo company; these are the ones under steps whose words name the person, so they may show the person's details.",
+    fields: [f("stepNo", "Step", "C"), f("caption", "Caption"), f("bytes", "Screenshot"), f("createdAt", "Added at", "C"), f("removedAt", "Removed at", "C")],
+    // The picture itself is not put in the file: its link opens it for a partner, who shares a copy on request.
+    derived: (r) => ({ bytes: `/api/tools/sop-builder/sops/${String(r.sopId)}/images/${String(r.id)}` }),
+    // No retention duty (a how-to picture, not a working paper): the picture is blanked in place, never deleted.
+    erasure: { kind: "anonymise", duties: [], set: () => ({ bytes: new Uint8Array(0), removedAt: new Date() }), applies: (r) => r.removedAt == null },
+    rows: (db, s) => sopScreenshotRows(db, s),
+  },
 ];
+
+// ------------------------------------------------------------------ Turia pull helpers
+
+type TuriaPerson = { id: string; name: string };
+const peopleOf = (v: unknown): TuriaPerson[] =>
+  Array.isArray(v) ? (v as Row[]).filter((p) => p && typeof p.id === "string").map((p) => ({ id: String(p.id), name: String(p.name ?? "") })) : [];
+
+/** The list with the given Turia users' names replaced by "[erased]" (ids and everyone else unchanged). */
+function hidePeople(v: unknown, own: ReadonlySet<string>): Prisma.InputJsonValue {
+  if (!Array.isArray(v)) return (v ?? []) as Prisma.InputJsonValue;
+  return (v as Row[]).map((p) => (p && own.has(String(p.id)) ? { ...p, name: ERASED } : p)) as Prisma.InputJsonValue;
+}
+
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** A staff member's view of a mirrored task: their own name, other people's and the client's withheld. */
+function staffTaskView(r: Row, ids: readonly string[]): Row {
+  const own = new Set(ids);
+  const view = (v: unknown) => peopleOf(v).map((p) => (own.has(p.id) ? p.name : WITHHELD_THIRD_PARTY));
+  const client = String(r.clientName ?? "").trim();
+  const taskName = String(r.taskName ?? "");
+  return {
+    taskName: client.length > 2 ? taskName.replace(new RegExp(escapeRe(client), "gi"), WITHHELD_THIRD_PARTY) : taskName,
+    role: [peopleOf(r.assignees).some((p) => own.has(p.id)) ? "assignee" : null, peopleOf(r.reviewers).some((p) => own.has(p.id)) ? "reviewer" : null].filter(Boolean),
+    assignees: view(r.assignees),
+    reviewers: view(r.reviewers),
+  };
+}
+
+type ReportItem = { client?: unknown; task?: unknown; detail?: unknown };
+const reportItems = (preview: unknown): ReportItem[] => (Array.isArray(preview) ? (preview as ReportItem[]).filter((i) => i && typeof i === "object") : []);
+const liveKeys = (keys: readonly string[]) => new Set(keys.filter((k) => k && !isErasedKey(k)));
+const aboutClient = (i: ReportItem, keys: ReadonlySet<string>) => typeof i.client === "string" && keys.has(normName(i.client));
+
+/** Does a run report list a task of this client (by the client key the pull matches on)? */
+function reportMentions(preview: unknown, keys: readonly string[]): boolean {
+  const live = liveKeys(keys);
+  return live.size > 0 && reportItems(preview).some((i) => aboutClient(i, live));
+}
+
+/** The report with this client's lines cleaned: its name withheld, its names and identifiers in the task and detail erased. */
+function scrubReport(preview: unknown, keys: readonly string[], s: Scrubber): Prisma.InputJsonValue {
+  const live = liveKeys(keys);
+  if (!Array.isArray(preview)) return (preview ?? []) as Prisma.InputJsonValue;
+  return (preview as ReportItem[]).map((i) =>
+    i && typeof i === "object" && aboutClient(i, live) ? { ...i, client: ERASED, task: s.text(String(i.task ?? "")), detail: s.text(String(i.detail ?? "")) } : i,
+  ) as Prisma.InputJsonValue;
+}
+
+const RUN_PAGE = 500;
+
+/** The Turia pull run reports that `keep` selects, read in pages (every run keeps its report). */
+async function runReports(db: PrivacyReadDb, keep: (r: Row) => boolean): Promise<Row[]> {
+  const out: Row[] = [];
+  let after: string | null = null;
+  for (;;) {
+    const page: Row[] = await finder(db, "turiaPullRun").findMany({ where: after ? { id: { gt: after } } : {}, orderBy: { id: "asc" }, take: RUN_PAGE, select: { id: true, preview: true } });
+    for (const r of page) if (r.preview != null && keep(r)) out.push(r);
+    if (page.length < RUN_PAGE) return out;
+    after = String(page[page.length - 1].id);
+  }
+}
 
 export const datasetsFor = (t: PrincipalType) => DATASETS.filter((d) => d.principals.includes(t));
 
@@ -447,9 +700,24 @@ export const datasetsFor = (t: PrincipalType) => DATASETS.filter((d) => d.princi
  * a data principal); staff their name and email.
  */
 export function needlesFor(s: Scope): Needle[] {
-  if (s.kind === "staff") return [phraseNeedle(s.user.name, "name"), codeNeedle(s.user.email)].filter((n): n is Needle => n !== null);
-  // A client person's filings are theirs too: acknowledgement numbers (ARN / SRN / ITR ack) found in notes.
-  if (s.principalType === "client-person") return [...clientNeedles(s.client), ...s.jobTasks.map((j) => (j.ackRef ? codeNeedle(j.ackRef) : null)).filter((n): n is Needle => n !== null)];
+  if (s.kind === "staff") {
+    // Turia's spelling of the person counts too; a name another person shares never does.
+    return [
+      s.turia.nameShared || !liveText(s.user.name) ? null : phraseNeedle(s.user.name, "name"),
+      liveText(s.user.email) ? codeNeedle(s.user.email) : null,
+      ...s.turia.names.map((n) => phraseNeedle(n, "name")),
+      ...s.turia.emails.map((e) => codeNeedle(e)),
+    ].filter((n): n is Needle => n !== null);
+  }
+  // A client person's filings are theirs too: acknowledgement numbers (ARN / SRN / ITR ack) found in
+  // notes; and the names Turia gives the client.
+  if (s.principalType === "client-person") {
+    return [
+      ...clientNeedles(s.client),
+      ...s.jobTasks.map((j) => (j.ackRef ? codeNeedle(j.ackRef) : null)),
+      ...s.turia.names.map((n) => phraseNeedle(n, "name")),
+    ].filter((n): n is Needle => n !== null);
+  }
   const c = s.client;
   return [codeNeedle(c.contactEmail), phoneNeedle(c.contactPhone), phraseNeedle(c.contactName, "name"), ...namePartNeedles(c.contactName)].filter((n): n is Needle => n !== null);
 }
@@ -735,6 +1003,68 @@ export const RESIDUE_DATASETS: readonly DataSet[] = [
       return list.length ? finder(db, "auditEvent").findMany({ where: { entity: "PrivacyRequest", entityId: { in: list } }, orderBy: { createdAt: "asc" } }) : [];
     },
   },
+  {
+    key: "turia-client-link-audit",
+    label: "Audit trail of the Turia client match",
+    model: "auditEvent",
+    principals: CLIENT_PEOPLE,
+    purpose:
+      "Who changed how the Turia client is matched. Its record reference is the client's name in Turia: it moves to the erased key with the match, so the trail still points at the record. Held with the match while a retention duty applies.",
+    fields: [f("entityId", "Record reference"), f("meta", "Audit details")],
+    erasure: {
+      kind: "anonymise",
+      duties: "client",
+      set: (r, s, sc) => ({ entityId: erasedClientKey(String(r.entityId), sc.hashKey), ...scrubColumns(r, ["meta"], s) }),
+      applies: (r) => !isErasedKey(r.entityId),
+    },
+    rows: async (db, s) => {
+      const keys = [...liveKeys(clientOf(s)?.turia.keys ?? [])];
+      return keys.length ? finder(db, "auditEvent").findMany({ where: { entity: "TuriaClientLink", entityId: { in: keys } }, orderBy: { createdAt: "asc" } }) : [];
+    },
+  },
+  {
+    key: "turia-pull-reports",
+    label: "Turia pull run reports",
+    model: "turiaPullRun",
+    principals: CLIENT_PEOPLE,
+    purpose: "Each Turia pull run keeps a report of the tasks it planned, with the client's name as Turia spells it. A copy of Turia's task list: the client's lines are cleaned at once.",
+    fields: [f("preview", "Run report")],
+    erasure: {
+      kind: "anonymise",
+      duties: [],
+      set: (r, s, sc) => ({ preview: scrubReport(r.preview, clientOf(sc)?.turia.keys ?? [], s) }),
+      applies: (r, _s, sc) => reportMentions(r.preview, clientOf(sc)?.turia.keys ?? []),
+    },
+    rows: async (db, s) => {
+      const keys = clientOf(s)?.turia.keys ?? [];
+      return liveKeys(keys).size ? runReports(db, (r) => reportMentions(r.preview, keys)) : [];
+    },
+  },
+  {
+    key: "staff-turia-pull-reports",
+    label: "Turia pull run reports",
+    model: "turiaPullRun",
+    principals: STAFF,
+    purpose: "Each Turia pull run keeps a report of the jobs it made or changed, naming the preparer and reviewer. A copy: the person's names are cleaned at once (a name another person shares is left).",
+    fields: [f("preview", "Run report", "B")],
+    erasure: scrubRule(["preview"], []),
+    rows: async (db, s) => {
+      const sc = scrubberOf(s);
+      return sc.needles.length ? runReports(db, (r) => sc.hits(r.preview)) : [];
+    },
+  },
+  // ------------------------------------------------------------------ SOP Builder (SOP review H1; see the block at the end)
+  {
+    key: "sop-text",
+    label: "SOP text: descriptions, gap answers, captions and authors (Tools > SOP Builder)",
+    model: "sopVersion",
+    principals: [...CLIENT_ANY, ...STAFF],
+    purpose:
+      "SOPs are firm guidance. A client's name typed into a description, a gap answer or a caption is a copy, cleaned in place. A staff author's name (Prepared by, version author) is kept with their employment records, then cleaned.",
+    fields: [f("purpose", "Purpose"), f("rawProcedure", "Description and gap answers"), f("brief", "Brief"), f("content", "SOP text, captions and Prepared by"), f("creatorName", "Version author", "B")],
+    erasure: scrubRule(["purpose", "rawProcedure", "brief", "content", "creatorName"], ["staff-records"]),
+    rows: (db, s) => sopVersionRows(db, s),
+  },
 ];
 
 /**
@@ -766,7 +1096,8 @@ export const EXTERNAL_SYSTEMS = [
   {
     key: "turia",
     label: "Turia (practice.turia.in)",
-    detail: "Turia is the firm's record of clients, services and time. Firm OS never changes or deletes Turia records. After the hold date, a partner asks the Turia admin to archive or anonymise the client there.",
+    detail:
+      "Turia is the firm's record of clients, services and time. Firm OS never changes or deletes Turia records. After the hold date, a partner asks the Turia admin to archive or anonymise the client there. Firm OS's own copy of Turia's task list (the Turia pull) is anonymised here, and the client is set to be ignored so the next pull does not copy it back; until Turia is cleaned, the client's tasks stay in Turia.",
   },
   {
     key: "sharepoint",
@@ -786,3 +1117,74 @@ export const SHARED_WITH = [
   "Turia, the firm's practice-management system.",
   "Cloud AI models (Anthropic Claude; xAI Grok as a fallback) only after names and identifiers are masked (ADR-006). Masked text is not personal data in the form it is sent.",
 ] as const;
+
+// ------------------------------------------------------------------ SOP Builder (SOP review H1)
+//
+// SOPs are firm guidance, not client records, so nothing links them to a client. But staff type
+// clients' names into descriptions, gap answers and captions, and a screenshot can show a client
+// despite the hiding (ADR-006 class A, may). They are found by the person's needles in the SOP text:
+//   sop-text         (residue) every SOP version whose free text holds the person's needles
+//   sop-screenshots  (dataset) the screenshots under steps whose words or caption hold them
+// A picture itself cannot be searched, so the access export and the erasure plan also carry a
+// manual check for a partner (sopManualChecks). An erased screenshot is blanked in the database at
+// once; the SOPs' Word files in OneDrive keep it until they are filed again (the SOP page flags them).
+
+/** How many SOP versions one plan reads (newest first). */
+const SOP_SCAN_LIMIT = 5000;
+const SOP_TEXT_COLUMNS = ["purpose", "rawProcedure", "brief", "content", "creatorName"] as const;
+
+type SopStepText = { no?: string; role?: string; action?: string; system?: string; input?: string; output?: string; ifThen?: string[]; screens?: { imageId: string; caption?: string }[] };
+const sopSteps = (content: unknown): SopStepText[] => ((content as { subProcesses?: { steps?: SopStepText[] }[] } | null)?.subProcesses ?? []).flatMap((p) => p.steps ?? []);
+
+/** SOP versions whose free text holds one of the person's needles. */
+async function sopVersionRows(db: PrivacyReadDb, s: Scope): Promise<Row[]> {
+  const sc = scrubberOf(s);
+  const rows = await finder(db, "sopVersion").findMany({
+    where: {},
+    select: { id: true, sopId: true, versionNumber: true, purpose: true, rawProcedure: true, brief: true, content: true, creatorName: true, createdAt: true },
+    orderBy: { createdAt: "desc" },
+    take: SOP_SCAN_LIMIT,
+  });
+  return rows.filter((r) => sc.hits(SOP_TEXT_COLUMNS.map((c) => r[c])));
+}
+
+/** Live screenshots under steps whose words or caption hold one of the person's needles (never the picture bytes). */
+async function sopScreenshotRows(db: PrivacyReadDb, s: Scope): Promise<Row[]> {
+  if (!clientOf(s)) return [];
+  const sc = scrubberOf(s);
+  const found = new Map<string, { stepNo: string; caption: string }>();
+  for (const v of await sopVersionRows(db, s)) {
+    for (const st of sopSteps(v.content)) {
+      for (const x of st.screens ?? []) {
+        if (sc.hits([st.role, st.action, st.system, st.input, st.output, st.ifThen, x.caption])) found.set(x.imageId, { stepNo: st.no ?? "", caption: x.caption ?? "" });
+      }
+    }
+  }
+  if (!found.size) return [];
+  const images = await finder(db, "sopImage").findMany({ where: { id: { in: [...found.keys()] }, removedAt: null }, select: { id: true, sopId: true, createdAt: true, removedAt: true } });
+  return images.map((r) => ({ ...r, ...found.get(String(r.id)) }));
+}
+
+/**
+ * The partner's manual steps for SOP screenshots: pictures cannot be searched for a person's details,
+ * and an erased screenshot stays in the SOPs' Word files in OneDrive until they are filed again.
+ * Empty when the SOP Builder holds no screenshot.
+ */
+export async function sopManualChecks(db: PrivacyReadDb, opts: { erasing?: boolean } = {}): Promise<{ key: string; label: string; detail: string }[]> {
+  const live = (await finder(db, "sopImage").findMany({ where: { removedAt: null }, select: { id: true }, take: 100_000 })).length;
+  const out: { key: string; label: string; detail: string }[] = [];
+  if (live)
+    out.push({
+      key: "sop-screenshots-manual",
+      label: "SOP screenshots (Tools > SOP Builder)",
+      detail: `The SOP Builder holds ${live} screenshot${live === 1 ? "" : "s"} of the firm's software. A picture cannot be searched for a person's details, so only the screenshots under SOP steps that name this person are listed. A partner should look through the SOPs and use Remove this screen on any screenshot that shows the person.`,
+    });
+  if (opts.erasing)
+    out.push({
+      key: "sop-onedrive",
+      label: "SOP Word files in OneDrive (shared L&D folder)",
+      detail:
+        "Erased SOP screenshots are blanked at once in the SOP Builder, but the SOPs' Word files in OneDrive keep them until they are saved again. After confirming, open each SOP: the page marks every version whose Word file still shows a removed screen. Use Save to OneDrive on each, then delete the earlier copies from the file's version history in OneDrive.",
+    });
+  return out;
+}

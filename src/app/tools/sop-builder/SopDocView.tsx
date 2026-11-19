@@ -1,6 +1,10 @@
 import { Fragment } from "react";
 import type { SopContent, SopSubProcess } from "@/lib/sop/types";
 import { departmentLabel } from "@/lib/sop/labels";
+import { RemoveScreenButton } from "./RemoveScreenButton";
+
+/** What a page knows about the SOP's screens: which were removed, and whether the reader may remove one. */
+type ScreenOptions = { removed?: ReadonlySet<string>; canRemove?: boolean };
 
 function DataTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
   return (
@@ -20,8 +24,8 @@ function DataTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
 const List = ({ items }: { items: string[] }) => <ul className="sop-list">{items.map((r, i) => <li key={i}>{r}</li>)}</ul>;
 
 // One sub-process's steps; a step with screens is followed by a full-width row showing them.
-// A screen opens full size in a new tab.
-function StepTable({ p, sopId }: { p: SopSubProcess; sopId?: string }) {
+// A screen opens full size in a new tab; a removed one shows only that it was removed.
+function StepTable({ p, sopId, screens }: { p: SopSubProcess; sopId?: string; screens: ScreenOptions }) {
   const headers = ["Step", "Who", "Action", "System / screen", "Input → Output", "Control"];
   return (
     <table className="sop-table">
@@ -36,6 +40,12 @@ function StepTable({ p, sopId }: { p: SopSubProcess; sopId?: string }) {
               <tr className="sop-screens">
                 <td colSpan={headers.length}>
                   {s.screens.map((sc, k) => {
+                    if (screens.removed?.has(sc.imageId))
+                      return (
+                        <figure key={k}>
+                          <figcaption>Screen {s.no} was removed by an admin or partner.</figcaption>
+                        </figure>
+                      );
                     const src = `/api/tools/sop-builder/sops/${sopId}/images/${sc.imageId}`;
                     const caption = `Screen ${s.no}${sc.caption ? ` — ${sc.caption}` : ""}`;
                     return (
@@ -45,6 +55,7 @@ function StepTable({ p, sopId }: { p: SopSubProcess; sopId?: string }) {
                           <img src={src} alt={caption} loading="lazy" />
                         </a>
                         <figcaption>{caption}</figcaption>
+                        {screens.canRemove && <RemoveScreenButton sopId={sopId} imageId={sc.imageId} />}
                       </figure>
                     );
                   })}
@@ -58,7 +69,7 @@ function StepTable({ p, sopId }: { p: SopSubProcess; sopId?: string }) {
   );
 }
 
-export function SopDocView({ c, sopId }: { c: SopContent; sopId?: string }) {
+export function SopDocView({ c, sopId, removed, canRemove }: { c: SopContent; sopId?: string } & ScreenOptions) {
   // Detailed SOPs (schemaVersion 2) carry sub-processes; older versions carry a flat procedure.
   const subProcesses = c.subProcesses ?? [];
   const detailed = subProcesses.length > 0;
@@ -80,7 +91,7 @@ export function SopDocView({ c, sopId }: { c: SopContent; sopId?: string }) {
             {p.objective && <p><strong>Objective:</strong> {p.objective}</p>}
             {p.owner && <p><strong>Process owner:</strong> {p.owner}</p>}
             <div className="sop-wide">
-              <StepTable p={p} sopId={sopId} />
+              <StepTable p={p} sopId={sopId} screens={{ removed, canRemove }} />
             </div>
             {differences.length > 0 && (
               <>

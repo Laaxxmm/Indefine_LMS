@@ -8,6 +8,7 @@ import { createRequest, verifyIdentity, type PrivacyDeps } from "./register";
 import type { PrivacyDb } from "./inventory";
 import { PAN_PROP, T0, USERS, privacyWorld } from "./__tests__/fixtures";
 import { removalCalls, type MemoryDb } from "./__tests__/memory-db";
+import { ERASED_CLIENT_NOTE, erasedClientKey } from "@/lib/integrations/turia/pull/erased";
 
 type Row = Record<string, unknown>;
 const KEY = "k";
@@ -46,7 +47,65 @@ function seedShadowCopies(db: MemoryDb) {
   db.seed("onboardingRun", [{ id: "ob-old-failed", createdById: USERS.partner.id, prompt: `Onboard ${NAME}, PAN ${PAN}, contact ${CONTACT} ${PHONE}`, spec: { legalName: NAME, pan: PAN, contactName: CONTACT, contactPhone: PHONE, contactEmail: EMAIL }, plan: null, status: "FAILED", steps: null, error: "site creation failed", firmClientId: null }]);
   db.seed("certificateIssue", [{ id: "cert-old", formatId: "i-ufce", formatTitle: "Net worth", templateVersion: "1", templateHash: "h", clientName: NAME, clientId: "c-old", payload: { pan: PAN }, acknowledged: false, createdById: USERS.partner.id, createdAt: new Date("2016-05-01T00:00:00.000Z") }]);
   db.seed("modelCall", [{ id: "mc-old", runId: "run-old", agent: "tax", task: "analyse", provider: "claude", model: "x", tier: "SMART", privacy: "anonymize-then-cloud", difficulty: "sop", escalated: false, escalationLevel: 0, anonymized: true, status: "OK", promptHash: "abc", error: `Provider rejected: assessee ${NAME} PAN ${PAN}` }]);
+  // The Turia pull's copy of Turia's task list (ADR-003 Amendment 1): the client under two Turia
+  // spellings (a pull match and an admin's manual link), and one task found by the kept client code.
+  db.seed("turiaClientLink", [
+    { key: "old ledger accounts", turiaName: NAME, turiaCode: "OLDLED", lmsClientId: "c-old", firmClientId: "fc-old", status: "matched", lastSeenAt: T0 },
+    { key: "old ledger accounts pune", turiaName: `${NAME} (Pune)`, turiaCode: null, lmsClientId: "c-old", firmClientId: "fc-old", status: "manual", updatedById: USERS.admin.id, lastSeenAt: T0 },
+  ]);
+  const task = (id: string, clientName: string, clientKey: string, taskName: string, clientCode: string | null) => ({
+    id, identity: `TSK0${id}`, taskName, clientName, clientKey, clientCode, department: "Income Tax", status: "3", statusName: "Completed", dueOn: null, completedOn: new Date("2016-07-31T00:00:00.000Z"),
+    turiaCreatedOn: null, assignees: [{ id: "t-priya", name: "Priya S" }], reviewers: [], hash: `h${id}`, appliedHash: `h${id}`, lastSeenAt: T0, lastChangedAt: T0, missingSince: null, closeCheckedAt: null, jobTaskId: null,
+  });
+  db.seed("turiaTaskMirror", [
+    { ...task("9001", NAME, "old ledger accounts", `ITR FY 2015-16 ${NAME}`, "OLDLED"), jobTaskId: "j-old" },
+    task("9002", `${NAME} (Pune)`, "old ledger accounts pune", `TDS return for ${CONTACT}, PAN ${PAN}`, null),
+    task("9003", "OLDLED Books", "oldled books", "Books FY 2015-16", "OLDLED"),
+  ]);
+  db.seed("turiaPullRun", [
+    {
+      id: "tpr-old",
+      mode: "dry-run",
+      trigger: "cron",
+      status: "ok",
+      complete: true,
+      counts: { fetched: 4 },
+      preview: [
+        { action: "wait", task: `TSK09002 · TDS return for ${CONTACT}, PAN ${PAN}`, client: `${NAME} (Pune)`, detail: "Waiting: the Turia client is not matched to a client in the client list." },
+        { action: "create", task: "TSK00777 · GSTR-3B Oct 2026", client: "Kumar Traders", detail: "Would create GST · GSTR-3B for Priya Staff." },
+      ],
+      startedAt: T0,
+    },
+  ]);
+  db.seed("auditEvent", [{ id: "ae-turia-link", actorId: USERS.admin.id, action: "turia-pull.client-link", entity: "TuriaClientLink", entityId: "old ledger accounts pune", meta: { action: "link", from: { status: "unmatched", lmsClientId: null }, to: { status: "manual", lmsClientId: "c-old" } } }]);
 }
+
+/**
+ * Every Firm OS column that can carry a person's identifiers (docs/dpdp/data-inventory.md), by
+ * table. seedShadowCopies() and the staff case put the person's identifiers in each of them, so a
+ * column erasure misses shows up as a survivor.
+ */
+const PERSONAL_COLUMNS: Record<string, readonly string[]> = {
+  client: ["name", "folderName", "pan", "contactName", "contactPhone", "contactEmail", "city"],
+  auditEvent: ["meta", "entityId"],
+  agentRun: ["figures", "reviewNotes"],
+  checklistResult: ["message", "evidence"],
+  deliverable: ["name", "spPath"],
+  jobTask: ["ackRef"],
+  jobTaskEvent: ["note"],
+  turiaSync: ["evidence"],
+  mistakeLog: ["example"],
+  coachEvent: ["payload"],
+  commsDraft: ["subject", "body"],
+  onboardingRun: ["prompt", "spec"],
+  certificateIssue: ["clientName", "payload"],
+  modelCall: ["error"],
+  turiaTaskMirror: ["clientName", "clientKey", "taskName", "assignees", "reviewers"],
+  turiaClientLink: ["key", "turiaName"],
+  turiaPersonLink: ["turiaName", "turiaEmail"],
+  turiaPullRun: ["preview"],
+  user: ["name", "email"],
+};
 
 /** Every table / column / row where one of the needles survives. */
 function survivors(db: MemoryDb, needles: Record<string, string> = NEEDLES): string[] {
@@ -72,11 +131,21 @@ async function verifiedErasure(db: MemoryDb, identifiers: Record<string, string>
 
 const byDataset = (plan: ErasurePlan) => Object.fromEntries(plan.items.map((i) => [i.dataset, i]));
 
+/** The personal-data columns (PERSONAL_COLUMNS) that hold one of the needles. */
+function seeded(db: MemoryDb, needles: Record<string, string>): string[] {
+  const all = survivors(db, needles).map((s) => s.split(" ")[0]);
+  return Object.entries(PERSONAL_COLUMNS)
+    .flatMap(([model, cols]) => cols.map((c) => `${model}.${c}`))
+    .filter((mc) => all.includes(mc));
+}
+
 describe("erasure completeness (audit finding #5)", () => {
   it("leaves no name, PAN, phone or email of the erased person anywhere, with UPDATEs only", async () => {
     const db = privacyWorld();
     seedShadowCopies(db);
     const id = await verifiedErasure(db, { pan: PAN, email: EMAIL, phone: PHONE }, `${CONTACT} called from ${PHONE} about ${PAN}`);
+    // Every Turia pull column the inventory lists for a client is seeded with the person's data.
+    expect(seeded(db, NEEDLES)).toEqual(expect.arrayContaining(["turiaTaskMirror.clientName", "turiaTaskMirror.clientKey", "turiaTaskMirror.taskName", "turiaClientLink.key", "turiaClientLink.turiaName", "turiaPullRun.preview", "auditEvent.entityId"]));
     const plan = (await planErasure(pdb(db), id, T0, { hashKey: KEY }))!;
     const sizes = Object.fromEntries(Object.entries(db.tables).map(([k, v]) => [k, v.length]));
 
@@ -101,10 +170,23 @@ describe("erasure completeness (audit finding #5)", () => {
     expect(find(db, "onboardingRun", "ob-old-failed")).toMatchObject({ prompt: "[erased]", spec: { erased: true }, status: "FAILED", error: "site creation failed" });
     expect(find(db, "commsDraft", "d-old-nojob")).toMatchObject({ subject: "[erased]", body: "[erased]" });
     expect(find(db, "privacyRequest", id)).toMatchObject({ status: "ON_HOLD", principalLabel: expect.stringContaining("OLDLED") });
+    // The Turia pull's copy: anonymised under an erased key the next run skips; the match set to ignore.
+    const erasedKey = erasedClientKey("old ledger accounts", KEY);
+    expect(find(db, "turiaTaskMirror", "9001")).toMatchObject({ clientName: "[erased]", taskName: "[erased]", clientCode: null, clientKey: erasedKey, jobTaskId: "j-old", status: "3" });
+    expect(find(db, "turiaTaskMirror", "9003")).toMatchObject({ clientName: "[erased]", clientKey: erasedClientKey("oldled books", KEY) });
+    expect(db.tables.turiaClientLink.find((l) => l.key === erasedKey)).toMatchObject({ status: "ignored", turiaName: ERASED_CLIENT_NOTE, lmsClientId: "c-old" });
+    expect(find(db, "turiaPullRun", "tpr-old").preview).toEqual([
+      { action: "wait", task: "TSK09002 · TDS return for [erased], PAN [erased]", client: "[erased]", detail: "Waiting: the Turia client is not matched to a client in the client list." },
+      { action: "create", task: "TSK00777 · GSTR-3B Oct 2026", client: "Kumar Traders", detail: "Would create GST · GSTR-3B for Priya Staff." },
+    ]);
 
     // Every row changed is audited, by row, with masked values only.
     const anonymised = new Set(db.tables.auditEvent.filter((e) => e.action === "anonymise").map((e) => `${String(e.entity)}:${String(e.entityId)}`));
-    for (const k of ["AuditEvent:ae-comment", "AuditEvent:ae-approve", "AgentRun:run-old", "ChecklistResult:cr-old", "JobTaskEvent:jte-old", "TuriaSync:ts-old", "MistakeLog:ml-old", "CoachEvent:ce-old", "ModelCall:mc-old", "OnboardingRun:ob-old-failed", "Deliverable:dl-old", "CommsDraft:d-old-nojob"]) {
+    for (const k of [
+      "AuditEvent:ae-comment", "AuditEvent:ae-approve", "AgentRun:run-old", "ChecklistResult:cr-old", "JobTaskEvent:jte-old", "TuriaSync:ts-old", "MistakeLog:ml-old", "CoachEvent:ce-old", "ModelCall:mc-old",
+      "OnboardingRun:ob-old-failed", "Deliverable:dl-old", "CommsDraft:d-old-nojob",
+      "TuriaTaskMirror:9001", "TuriaTaskMirror:9002", "TuriaTaskMirror:9003", `TuriaClientLink:${erasedKey}`, `TuriaClientLink:${erasedClientKey("old ledger accounts pune", KEY)}`, "TuriaPullRun:tpr-old", "AuditEvent:ae-turia-link",
+    ]) {
       expect(anonymised.has(k), k).toBe(true);
     }
     // Re-audit NEW-1: the request's own notes never held the caller's name (masked when typed), so there is nothing left to erase there.
@@ -118,11 +200,41 @@ describe("erasure completeness (audit finding #5)", () => {
     const plan = (await planErasure(pdb(db), id, T0, { hashKey: KEY }))!;
     const ds = byDataset(plan);
     expect(ds["onboarding-orphans"]).toMatchObject({ action: "anonymise", records: [{ id: "ob-old-failed" }] });
-    for (const key of ["audit-trail-notes", "agent-run-notes", "checklist-findings", "job-history-notes", "deliverable-names", "turia-bridge-evidence", "mistake-examples", "coach-nudges", "model-call-errors", "privacy-register-audit"]) {
+    for (const key of ["audit-trail-notes", "agent-run-notes", "checklist-findings", "job-history-notes", "deliverable-names", "turia-bridge-evidence", "mistake-examples", "coach-nudges", "model-call-errors", "privacy-register-audit", "turia-client-link-audit", "turia-pull-reports"]) {
       expect(ds[key]?.action, key).toBe("anonymise");
     }
     expect(ds["agent-run-notes"].fields.sort()).toEqual(["figures", "reviewNotes"]);
     expect(ds["agent-run-notes"].consequence).toMatch(/replaced with "\[erased\]"; everything else in them stays/);
+  });
+
+  it("leaves no name or email of an erased former staff member in the Turia pull's tables, other people's entries untouched", async () => {
+    const db = privacyWorld();
+    const STAFF_NEEDLES = { name: "Esha Ex", turiaName: "Esha Exley", email: "esha@indefine.test", turiaEmail: "esha.t@turia.test" };
+    db.seed("user", [{ id: "u-ex", name: "Esha Ex", email: "esha@indefine.test", active: false, deactivatedAt: new Date("2015-01-31T00:00:00.000Z"), excludedFromScoring: false, managerId: null }]);
+    db.seed("turiaPersonLink", [
+      { turiaUserId: "t-esha", turiaName: "Esha Exley", turiaEmail: "esha.t@turia.test", userId: "u-ex", matchedBy: "email", lastSeenAt: T0 },
+      { turiaUserId: "t-priya", turiaName: "Priya S", turiaEmail: null, userId: USERS.staff.id, matchedBy: "name", lastSeenAt: T0 },
+    ]);
+    db.seed("turiaTaskMirror", [
+      { id: "9101", identity: "TSK09101", taskName: "AOC-4 FY 2015-16", clientName: "Zenith Components Pvt Ltd", clientKey: "zenith components private limited", clientCode: null, assignees: [{ id: "t-esha", name: "Esha Exley" }], reviewers: [{ id: "t-priya", name: "Priya S" }], hash: "h", lastSeenAt: T0, lastChangedAt: T0 },
+      { id: "9102", identity: "TSK09102", taskName: "MGT-7 FY 2015-16", clientName: "Zenith Components Pvt Ltd", clientKey: "zenith components private limited", clientCode: null, assignees: [{ id: "t-priya", name: "Priya S" }], reviewers: [{ id: "t-esha", name: "Esha Exley" }], hash: "h", lastSeenAt: T0, lastChangedAt: T0 },
+    ]);
+    db.seed("turiaPullRun", [{ id: "tpr-staff", mode: "on", trigger: "cron", status: "ok", complete: true, counts: {}, preview: [{ action: "create", task: "TSK09101 · AOC-4", client: "Zenith Components Pvt Ltd", detail: "Created ROC · AOC-4 for Esha Ex, reviewer Priya Staff." }], startedAt: T0 }]);
+    expect(seeded(db, STAFF_NEEDLES)).toEqual(["turiaTaskMirror.assignees", "turiaTaskMirror.reviewers", "turiaPersonLink.turiaName", "turiaPersonLink.turiaEmail", "turiaPullRun.preview", "user.name", "user.email"]);
+
+    const r = await createRequest(USERS.admin, { kind: "erasure", identifiers: { email: "esha@indefine.test" } }, deps(db));
+    if (!r.ok) throw new Error(r.error);
+    await verifyIdentity(USERS.partner, r.data.id, { method: "Signed letter matching the records" }, deps(db));
+    const plan = (await planErasure(pdb(db), r.data.id, T0, { hashKey: KEY }))!;
+    const sizes = Object.fromEntries(Object.entries(db.tables).map(([k, v]) => [k, v.length]));
+    expect(await confirmErasure(USERS.admin, r.data.id, { fingerprint: plan.fingerprint }, deps(db))).toMatchObject({ ok: true, data: { status: "COMPLETED" } });
+
+    expect(survivors(db, STAFF_NEEDLES)).toEqual([]);
+    expect(removalCalls(db.calls)).toEqual([]);
+    for (const [model, n] of Object.entries(sizes)) if (model !== "auditEvent") expect(db.tables[model].length, model).toBe(n);
+    expect(find(db, "turiaTaskMirror", "9101")).toMatchObject({ assignees: [{ id: "t-esha", name: "[erased]" }], reviewers: [{ id: "t-priya", name: "Priya S" }], clientName: "Zenith Components Pvt Ltd" });
+    expect(db.tables.turiaPersonLink.find((p) => p.turiaUserId === "t-priya")).toMatchObject({ turiaName: "Priya S", userId: USERS.staff.id });
+    expect((find(db, "turiaPullRun", "tpr-staff").preview as Row[])[0].detail).toBe("Created ROC · AOC-4 for [erased], reviewer Priya Staff.");
   });
 
   it("holds the review trail of an active client under its duties, and still cleans derived copies", async () => {

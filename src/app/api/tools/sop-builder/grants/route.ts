@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { logAudit } from "@/lib/audit/log";
 import { isSopAdmin } from "@/lib/sop/access";
 import { validationMessage } from "@/lib/errors";
 import { readJsonCapped } from "@/lib/hardening/json-body";
@@ -20,11 +21,15 @@ export async function POST(req: Request) {
   const user = await prisma.user.findUnique({ where: { id: parsed.data.userId }, select: { id: true, name: true, email: true, active: true } });
   if (!user || !user.active) return NextResponse.json({ error: "That person isn't an active member of staff. Pick someone from the list." }, { status: 400 });
 
-  const editor = await prisma.sopEditor.upsert({
-    where: { userId: user.id },
-    update: {},
-    create: { userId: user.id, userName: user.name ?? user.email, userEmail: user.email, grantedById: session.user.id },
-    select: { userId: true, userName: true, userEmail: true },
+  const editor = await prisma.$transaction(async (tx) => {
+    const row = await tx.sopEditor.upsert({
+      where: { userId: user.id },
+      update: {},
+      create: { userId: user.id, userName: user.name ?? user.email, userEmail: user.email, grantedById: session.user.id },
+      select: { userId: true, userName: true, userEmail: true },
+    });
+    await logAudit(tx, { actorId: session.user.id, action: "sop.editor-grant", entity: "SopEditor", entityId: user.id });
+    return row;
   });
   return NextResponse.json({ editor }, { status: 201 });
 }

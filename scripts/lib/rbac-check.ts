@@ -16,7 +16,7 @@
 import type { CallGraph, CallSite, Handler } from "./route-graph";
 
 /** Files whose exported functions count as policy checks (internal helpers such as `has` do not). */
-export const POLICY_FILES = ["src/lib/rbac/policy.ts", "src/lib/agents/access.ts", "src/lib/agents/core/state.ts"];
+export const POLICY_FILES = ["src/lib/rbac/policy.ts", "src/lib/agents/access.ts", "src/lib/agents/core/state.ts", "src/lib/sop/access.ts"];
 /** Policy functions in POLICY_FILES that are not access decisions (helpers, labels). */
 const NOT_POLICY = new Set(["firmRolesOf", "actorOf", "actorRef", "isJobTaskState", "isLegalEdge", "nextStates", "transitionTable", "gateTokenProblem", "consumeCloseGateToken", "roleFromEntraGroups", "firmRole"]);
 
@@ -64,6 +64,9 @@ const COMPANION = "active admins and partners, or someone an admin switched the 
 const PRIVACY = "DPDP request register: active admins and partners";
 const SEARCH = "every active person; each result type scoped by the rule of the page that opens it";
 const ONBOARD_RUN = "partners, managers, admins; an existing run only by the person who started it or a partner";
+const SOP_VIEW = "every active person reads SOPs";
+const SOP_AUTHOR = "admins and granted SOP editors";
+const SOP_EDIT = "admins (any department) and granted editors (their own department)";
 
 /** What each Firm OS route must check. New routes: add a row here (verify-rbac prints a note until you do). */
 export const EXPECTED_POLICIES: ExpectedPolicy[] = [
@@ -125,6 +128,24 @@ export const EXPECTED_POLICIES: ExpectedPolicy[] = [
   { route: "/api/cron/firm-os/close-loop", method: "GET", policies: ["cronUnauthorized"], why: "system cron: CRON_SECRET" },
   { route: "/api/cron/firm-os/retention", method: "GET", policies: ["cronUnauthorized"], why: "system cron: CRON_SECRET" },
   { route: "/api/cron/firm-os/coach", method: "GET", policies: ["cronUnauthorized"], why: "system cron: CRON_SECRET" },
+  // Turia read-only pull (ADR-003 amendment 2026-11-06).
+  { route: "/api/cron/firm-os/turia-pull", method: "GET", policies: ["cronUnauthorized"], why: "system cron: CRON_SECRET" },
+  { route: "/api/firm-os/turia-sync/run", method: "POST", policies: ["canManageTuriaSync"], why: "Turia sync now: active admins and partners" },
+  { route: "/api/firm-os/turia-sync/people", method: "POST", policies: ["canManageTuriaSync"], why: "Turia people mapping: active admins and partners" },
+  { route: "/api/firm-os/turia-sync/clients", method: "POST", policies: ["canManageTuriaSync"], why: "Turia client mapping: active admins and partners" },
+  { route: "/api/firm-os/turia-sync/rules", method: "POST", policies: ["canManageTuriaSync"], why: "Turia task rules: active admins and partners" },
+  // SOP Builder (SOP review M2; GUARDED_ROUTE_DIRS): view firm-wide, author as an admin or granted editor.
+  { route: "/api/tools/sop-builder/analyze", method: "POST", policies: ["canCreateSop"], why: SOP_AUTHOR },
+  { route: "/api/tools/sop-builder/sops", method: "POST", policies: ["canEditSop"], why: SOP_EDIT },
+  { route: "/api/tools/sop-builder/sops/[id]/versions", method: "POST", policies: ["canEditSop"], why: SOP_EDIT },
+  { route: "/api/tools/sop-builder/sops/[id]/screens", method: "POST", policies: ["canEditSop"], why: SOP_EDIT },
+  { route: "/api/tools/sop-builder/sops/[id]/images", method: "POST", policies: ["canEditSop"], why: SOP_EDIT },
+  { route: "/api/tools/sop-builder/sops/[id]/images/[imageId]", method: "GET", policies: ["canViewSop"], why: SOP_VIEW },
+  { route: "/api/tools/sop-builder/sops/[id]/images/[imageId]/remove", method: "POST", policies: ["canRemoveSopScreen"], why: "remove a screenshot for good: active admins and partners" },
+  { route: "/api/tools/sop-builder/sops/[id]/download", method: "GET", policies: ["canViewSop"], why: SOP_VIEW },
+  { route: "/api/tools/sop-builder/sops/[id]/versions/[versionId]/onedrive", method: "POST", policies: ["canEditSop"], why: SOP_EDIT },
+  { route: "/api/tools/sop-builder/grants", method: "POST", policies: ["isSopAdmin"], why: "grant SOP editing: active admins only" },
+  { route: "/api/tools/sop-builder/grants/[userId]", method: "DELETE", policies: ["isSopAdmin"], why: "revoke SOP editing: active admins only" },
 ];
 
 export type RbacResult = {

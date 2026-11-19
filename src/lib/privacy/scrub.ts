@@ -17,6 +17,9 @@ import type { Row } from "./inventory";
 
 export const ERASED_TOKEN = "[erased]";
 
+/** What an export shows in place of another person's detail. */
+export const WITHHELD_THIRD_PARTY = "[withheld: another person's detail]";
+
 export type NeedleKind = "id" | "name" | "part";
 
 export interface Needle {

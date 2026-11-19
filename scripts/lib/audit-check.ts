@@ -23,7 +23,7 @@ import type { CallGraph, CallSite, Fn, Handler } from "./route-graph";
 
 export const AUDIT_LOG_FILE = "src/lib/audit/log.ts";
 /** GET handlers that hand data out of the firm's systems (downloads): audited like a mutation. */
-export const EXPORT_ROUTES = ["GET /api/firm-os/agents/deliverables/[id]", "GET /api/firm-os/privacy/requests/[id]/export"];
+export const EXPORT_ROUTES = ["GET /api/firm-os/agents/deliverables/[id]", "GET /api/firm-os/privacy/requests/[id]/export", "GET /api/tools/sop-builder/sops/[id]/download"];
 
 export type AuditExemption = {
   route: string;

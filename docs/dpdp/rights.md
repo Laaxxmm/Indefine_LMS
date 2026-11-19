@@ -119,11 +119,16 @@ It walks two lists:
 
 - **The person's records** (`DATASETS`): one item per row — the client master, contact details,
   jobs' ack refs, legacy job notes, message drafts (with or without a job), onboarding runs,
-  cached agent inputs, certificates, engagement letters, SharePoint files.
+  cached agent inputs, certificates, engagement letters, SharePoint files, and the Turia pull's copy
+  of the client's Turia tasks and its Turia client match (for staff: their Turia user match and their
+  entries in the copied tasks' assignee and reviewer lists). An erased client's Turia match is set to
+  ignore under an erased key, so the next pull run neither copies the client back from Turia nor maps
+  it again; a held client stays mapped, and its restriction stops the pull making new jobs for it.
 - **Copies of their identifiers inside other records** (`RESIDUE_DATASETS`, see the
   [inventory](data-inventory.md#what-erasure-walks)): one item per dataset listing its rows — audit
   comments and notes, agent figures / review notes / errors, checklist findings, job history notes,
-  deliverable names, Turia checklists, mistake examples, coach nudges, model errors, onboarding runs
+  deliverable names, Turia checklists, Turia pull run reports and the audit trail of the Turia client
+  match, mistake examples, coach nudges, model errors, onboarding runs
   that never reached a client record, and the notes of the person's privacy requests. Their names,
   PAN (also inside a GSTIN), GSTIN, CIN, email, phone, city and filing ack refs become `[erased]` in
   place; numbers, row ids, JSON keys, record ids and hashes stay, so figures and audit rows still

@@ -15,7 +15,7 @@ import { ChecklistPackSchema } from "@/lib/agents/core/checklist";
 import { formatDate } from "@/lib/agents/core/format";
 import { openQuestions as toOpenQuestions } from "@/lib/agents/core/guardrails/review";
 import { latestPackQuery, type AnyAgent, type FirmDb } from "@/lib/agents/core/runner";
-import { visibleAgents } from "@/lib/agents/registry";
+import { agentForJob, visibleAgents } from "@/lib/agents/registry";
 import { canActOnJob } from "@/lib/close-loop/actions";
 import { ackRefFor } from "@/lib/close-loop/review";
 import { DAY_MS, istDayStart } from "@/lib/ist";
@@ -34,6 +34,8 @@ export type JobForAction = {
   service: FirmService;
   assigneeId: string | null;
   reviewerId: string | null;
+  /** No agent for this job (a Turia task no rule maps, ADR-003 amendment): prepared by hand. */
+  agentless?: boolean;
 };
 
 export type NextTaskCandidate = JobForAction & {
@@ -80,7 +82,7 @@ export function actionFor(
 ): NextTaskAction | null {
   if (!user) return null;
   const can = reviewActions(user, job, latest?.blockFails ?? 0, now);
-  const agent = (latest && agents.find((a) => a.key === latest.agent)) ?? agents.find((a) => a.service === job.service) ?? null;
+  const agent = (latest && agents.find((a) => a.key === latest.agent)) ?? agentForJob(job, agents);
   if (can.run) {
     return agent
       ? { kind: "run-agent", label: "Run agent", href: `/agents/${agent.key}`, agent: agent.key, runId: null }
@@ -151,6 +153,7 @@ export async function listNextTaskCandidates(user: SessionUser, deps: NextTaskDe
       internalDueOn: true,
       statutoryDueOn: true,
       createdAt: true,
+      agentless: true,
       firmClient: { select: { clientCode: true, client: { select: { name: true } } } },
       agentRuns: { orderBy: { startedAt: "desc" }, take: 1, select: { id: true, agent: true, reviewNotes: true, checklist: { where: { status: "fail" }, select: { severity: true } } } },
     },
@@ -175,6 +178,7 @@ export async function listNextTaskCandidates(user: SessionUser, deps: NextTaskDe
       internalDueOn: j.internalDueOn,
       statutoryDueOn: j.statutoryDueOn,
       createdAt: j.createdAt,
+      ...(j.agentless ? { agentless: true } : {}),
       clientCode: j.firmClient.clientCode,
       clientName: j.firmClient.client?.name ?? "",
       latestRun: latest,
@@ -219,8 +223,8 @@ export type SopFacts = Pick<SopContext, "agentTitle" | "requiredInputs" | "packV
 const RULE_COUNTS = new Map<string, number | null>();
 
 /** The agent for the service and its active SOP pack (version, rule count; built-in pack when none is published). */
-export async function sopFacts(db: FirmDb, service: FirmService, agentKey: string | null, agents: readonly AnyAgent[]): Promise<SopFacts & { agent: AnyAgent | null }> {
-  const agent = (agentKey && agents.find((a) => a.key === agentKey)) || agents.find((a) => a.service === service) || null;
+export async function sopFacts(db: FirmDb, service: FirmService, agentKey: string | null, agents: readonly AnyAgent[], agentless = false): Promise<SopFacts & { agent: AnyAgent | null }> {
+  const agent = (agentKey && agents.find((a) => a.key === agentKey)) || agentForJob({ service, agentless }, agents);
   if (!agent) return { agent: null, agentTitle: null, requiredInputs: [], packVersion: null, ruleCount: null };
   // The version alone first: the pack's checklist JSON is read once per version per process, not on every render.
   const pack = await db.sopPack.findFirst({ ...latestPackQuery(agent.sopPackKey), select: { version: true } });
@@ -268,7 +272,7 @@ export async function rankedNextTasks(user: SessionUser, deps: NextTaskDeps): Pr
 
 async function buildTask(c: NextTaskCandidate, reason: string | null, deps: NextTaskDeps, now: Date): Promise<NextTask> {
   const agents = deps.agents ?? visibleAgents();
-  const [facts, questions] = await Promise.all([sopFacts(deps.db, c.service, c.latestRun?.agent ?? c.action.agent, agents), runOpenQuestions(deps.db, c.latestRun?.id ?? null)]);
+  const [facts, questions] = await Promise.all([sopFacts(deps.db, c.service, c.latestRun?.agent ?? c.action.agent, agents, c.agentless), runOpenQuestions(deps.db, c.latestRun?.id ?? null)]);
   const ctx: SopContext = {
     service: c.service,
     agentTitle: facts.agentTitle,

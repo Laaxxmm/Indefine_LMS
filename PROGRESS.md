@@ -23,6 +23,7 @@ Model mode: CLAUDE_ONLY + LOCAL_STUB(fail-closed) | Turia bridge: MANUAL (ADR-00
 - [ ] 15 Search & retrieval (merged: RBAC-scoped providers, identifier lookup exact-only/masked/audited, POST-only for identifiers, /search + command palette) · corrections with history (allow-listed fields, one transaction + masked before/after audit) · DPDP rights: request register, access export, erasure = anonymise or legal hold (UPDATE-only), grievance, consent withdrawal, breach register with 72-h clock — merged; local gate green ×3; staging UI pass Blocked; DPDP legal confirmation pending
 - [ ] 16 Admin workspace settings · focus mode · guided workspace — merged; navigation integration merged (requireModule in every layout, dashboard by module + focus landing, one Firm OS header, command palette, coach rank → next task, companion = /focus's task, comms links, History links, fonts via next/font); (module registry + role defaults, /admin/firm-os/workspace with change summary + audit, getNextTask + NextTaskView contract, /focus one-task page, /workspace/[jobId] split view); gating wired; local gate green ×3; staging UI pass Blocked
 - [ ] 17 Companion side-panel extension — merged (pairing tokens hashed, 90-day expiry, revoke by update; read-only GET next-task with CORS for the extension origin only; MV3 side panel with permissions sidePanel+storage, host LMS only, no content scripts; safety scan test); not yet tried in real Chrome
+- [ ] 19 Turia → Firm OS task pull, read only (owner decision 06 Nov 2026, ADR-003 Amendment 1) — built on a branch, not merged: `src/lib/integrations/turia/pull/` (read-only allowlist over Neo Centra's turiaPost + guard test; TuriaTaskMirror / TuriaPersonLink / TuriaClientLink / TuriaTaskRule / TuriaPullRun / TuriaPullLock; additive JobTask columns source, turiaTaskId, agentless, turiaMissingAt, turiaNote; migration 20261118120000_turia_pull re-runnable), FIRM_OS_TURIA_PULL off | dry-run | on (default off), cron /api/cron/firm-os/turia-pull + .github/workflows/firm-os-turia-pull.yml (every 15 min, Mon–Sat 09:00–20:00 IST), /admin/firm-os/turia-sync (Sync now, preview, people / clients / rules). Next: owner runs dry-run in prod and checks the preview (docs/go-live.md §4.1)
 - [ ] 2b Local open-weight wiring (WEEK 2)
 
 ## Current phase tasks
@@ -216,6 +217,7 @@ Model-dependent and LLM rules are gated as code path only in recorded mode (they
 
 ## Blocked / needs human   (what · why · exact action · since)
 - Turia API docs/credentials · ADR-003 · ask Turia for a documented API + credentials, and confirm UI automation is permitted · 2026-11-05
+- Turia terms for the automated read-only task pull · ADR-003 Amendment 1 (one director's session, undocumented endpoints) · owner asks Turia to confirm automated reads are permitted, or for a documented read API · 2026-11-06
 - PnP app 381abf0e-… certificate + SharePoint/Entra admin consent for site creation · Phase 1 ensureClientSite · upload cert, grant consent · 2026-11-05
 - Entra group → role mapping · nothing reads groups today · add groups claim (or GroupMember.Read.All consent) to the Entra app · 2026-11-05
 - Graph app-only creds + consent · verify-patha / ensure* · set MS_TENANT_ID/MS_CLIENT_ID/MS_CLIENT_SECRET in .env.local; grant Graph application Sites.ReadWrite.All + Group.Read.All with admin consent · 2026-11-05
@@ -248,10 +250,10 @@ Model-dependent and LLM rules are gated as code path only in recorded mode (they
 - **Agent conventions to confirm (round-2 fixes)**: TDS warn-before-due / block-on-due; audit sample below SOP minimum = block; should draft GST figures exclude a time-barred credit note (GST 12) and ITC on a bill the model abstained on (GST 23)?; books has no prior-month TB balance check; no input for cancelled documents (Table 13 cancelled always 0) · 2026-11-05
 - **Seed SopPacks** · runner loads the active SopPack from DB · run the seed functions (gst seed.ts; books/audit publish v1.0.0 from defaultChecklist) on staging/prod after partner review · 2026-11-05
 - ~~Push + PR firm-os/phase-0-inventory → main~~ — merged by the owner 06 Nov (PR #70), hotfix PR #71
-- **Remove `prisma db push` from the Railway start / pre-deploy command** (cause of the 06 Nov outage) · leave `npm start` only · 2026-11-06
+- ~~Remove `prisma db push` from the Railway start / pre-deploy command~~ · checked 19 Nov: Start is `npm start`, Pre-deploy and Build empty, nothing to remove · 2026-11-19
 - **Check Microsoft 365 and Turia features in production** after the hardening deploy (stricter token handling; LEGACY_PLAINTEXT_SECRETS=true set) · reconnect if asked · 2026-11-06
 
-**Incident 06 Nov 2026 (resolved 10:15 IST):** after PR #70 was merged and deployed, Railway ran `prisma db push` before `npm start`; it created the Firm OS tables without recording migrations, the first migration then failed on `CREATE TYPE "ModelProviderId"` (already exists) and the boot crash-looped — lms.indefine.in 502 from ~09:44 to 10:15. No LMS data changed. Fixed forward by PR #71 (every Firm OS migration re-runnable; unit test + CI psql re-run on Postgres 16). Details and lessons: docs/go-live.md §9.1.
+**Incident 06 Nov 2026 (resolved 10:15 IST):** after PR #70 was merged and deployed, the first Firm OS migration stopped part-way on boot; the boot script retried it and the retry failed on `CREATE TYPE "ModelProviderId"` (already exists) and the boot crash-looped — lms.indefine.in 502 from ~09:44 to 10:15. No LMS data changed. Fixed forward by PR #71 (every Firm OS migration re-runnable; unit test + CI psql re-run on Postgres 16). Details and lessons: docs/go-live.md §9.1 (corrected 19 Nov: there was no `db push`; Railway runs `npm start` only).
 
 ## Known gaps / tech debt
 - `npm ci` on npm 11 skips install scripts not covered by `allowScripts` (prisma, esbuild); run `npx prisma generate` after install locally.
@@ -357,7 +359,8 @@ Model-dependent and LLM rules are gated as code path only in recorded mode (they
 - 08:36 · 12 · Coverage-run speed budget 1 s (npm test keeps 200 ms) (229c318); lint, typecheck, test, coverage, verify:firm-os re-run ×3 — all green · 4403/4403 ×3 · coverage 99.46% lines ×3
 - 08:40 · 12 · **Ready for human go-live review — STOP.** Not pushed, no PR, nothing merged to main, no FIRM_OS_* flag set, nothing announced. Owner next: push + PR, Blocked items (keys, consents, staging), partner/legal verification list, then staging gate and go-live per docs/go-live.md · –
 - 09:33 · deploy · Owner merged PR #70 to main; Railway deployed it
-- 09:44 · incident · Production boot crash loop: Railway start ran `prisma db push` (created Firm OS objects unrecorded), then migrate deploy failed on CREATE TYPE "ModelProviderId" · site 502
+- 09:44 · incident · Production boot crash loop: the first Firm OS migration half-applied, then its retry failed on CREATE TYPE "ModelProviderId" · site 502
 - 10:06 · incident · Hotfix: all Firm OS migrations re-runnable; unit test + CI psql re-run step (59b3205) · 4412/4412 · verify:firm-os green
 - 10:15 · incident · Owner merged PR #71; boot recorded the migrations and started · site 200, Firm OS off, CI green incl. the re-run step
 - 10:25 · docs · Incident and deploy lessons recorded (PROGRESS, docs/go-live.md §1 + §9.1) · –
+- 13:50 · 19 · Turia → Firm OS read-only task pull built on a branch (ADR-003 Amendment 1): mirror, people / client / rule mapping, dry run, cron + Action, /admin/firm-os/turia-sync, guard test for the read allowlist · see the branch report

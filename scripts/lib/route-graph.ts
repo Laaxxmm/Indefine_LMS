@@ -10,10 +10,10 @@
 // checker can match it (verify-audit-coverage treats a call named `audit` as a legacy audit sink).
 //
 // Discovery is automatic: every route.ts under a Firm OS directory (scripts/lib/guards.ts
-// FIRM_OS_DIRS) is a route; nothing has to be registered for a new route to be checked.
+// FIRM_OS_DIRS, plus GUARDED_ROUTE_DIRS) is a route; nothing has to be registered for a new route to be checked.
 import ts from "typescript";
 import { isAbsolute, join } from "node:path";
-import { isFirmOs } from "./guards";
+import { isGuardedRoute } from "./guards";
 import { HTTP_METHODS, routeFromFile } from "./ui-links";
 
 export type Fn = {
@@ -96,11 +96,11 @@ export function createMemoryProgram(files: Record<string, string>): { program: t
 
 // ------------------------------------------------------------------ discovery
 
-/** Repo-relative route.ts files under the Firm OS directories. */
+/** Repo-relative route.ts files under the Firm OS directories and GUARDED_ROUTE_DIRS (the SOP Builder). */
 export function discoverFirmOsRoutes(paths: string[]): string[] {
   return paths
     .map(norm)
-    .filter((p) => p.startsWith("src/app/") && isFirmOs(p) && /\/route\.(ts|tsx)$/.test(p))
+    .filter((p) => p.startsWith("src/app/") && isGuardedRoute(p) && /\/route\.(ts|tsx)$/.test(p))
     .sort();
 }
 

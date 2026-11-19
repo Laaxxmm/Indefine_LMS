@@ -23,6 +23,15 @@ export function getAgent(key: string, agents: Readonly<Record<string, AnyAgent>>
   return Object.prototype.hasOwnProperty.call(agents, key) ? agents[key] : undefined;
 }
 
+/**
+ * The agent that prepares a job of this service, or null. A job marked `agentless` (a Turia task
+ * no rule maps, ADR-003 amendment) never gets one: it is prepared by hand.
+ */
+export function agentForJob<A extends { service: string }>(job: { service: string; agentless?: boolean | null }, agents: readonly A[]): A | null {
+  if (job.agentless) return null;
+  return agents.find((a) => a.service === job.service) ?? null;
+}
+
 /** Agents a person may see and run in the UI right now. */
 export function visibleAgents(env: Record<string, string | undefined> = process.env, agents: Readonly<Record<string, AnyAgent>> = AGENTS): AnyAgent[] {
   return Object.values(agents).filter((a) => !a.internal || isEchoAgentEnabled(env));

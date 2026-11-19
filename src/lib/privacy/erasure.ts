@@ -28,7 +28,7 @@ import type { SessionUser } from "@/lib/access";
 import { formatDate } from "@/lib/agents/core/format";
 import { Refusal, fail, ok, type ServiceResult } from "@/lib/corrections/result";
 import { canDecideErasure } from "./access";
-import { DATASETS, EXTERNAL_SYSTEMS, RESIDUE_DATASETS, eraseOnboardingRun, nameOnlyRecords, nameOnlySentence, scrubberOf, type DataSet, type ModelName, type PrivacyReadDb, type Row } from "./inventory";
+import { DATASETS, EXTERNAL_SYSTEMS, RESIDUE_DATASETS, eraseOnboardingRun, nameOnlyRecords, nameOnlySentence, scrubberOf, sopManualChecks, type DataSet, type ModelName, type PrivacyReadDb, type Row } from "./inventory";
 import type { DutyId, RequestStatus } from "./policy";
 import { guardRegister, loadOpen, requireResolved, requireVerified, resolutionOf, writeAudit, type PrivacyDeps, type Tx } from "./register";
 import { restrictInTx } from "./consent";
@@ -62,6 +62,8 @@ export interface PlanItem {
   consequence: string;
   /** Column values the UPDATE writes. Not shown; used by confirmErasure(). */
   set?: Row;
+  /** The UPDATE's where, for a table whose key is not `id` (TuriaClientLink, TuriaPersonLink). Not shown. */
+  where?: Row;
   /** A residue item covers several rows of one table: their ids and (when anonymised) the values written. */
   records?: { id: string; set?: Row }[];
 }
@@ -98,6 +100,12 @@ const EXTRA_LABELS: Record<string, string> = {
   inputs: "cached inputs",
   error: "failure details",
   steps: "onboarding steps",
+  clientKey: "client key",
+  hash: "change hash",
+  appliedHash: "applied change hash",
+  key: "Turia client key",
+  userId: "staff account link",
+  entityId: "record reference",
 };
 
 const fieldLabels = (key: string, names: string[]) => {
@@ -157,7 +165,7 @@ export async function planErasure(db: PrivacyReadDb, requestId: string, now: Dat
   if (!request) return null;
   // The single-principal rule: the one linked person, or the rows of a person known only by identifiers.
   const resolution = await resolutionOf(db, requestId, opts.hashKey);
-  const scopes = resolution.kind === "principal" ? await loadScopes(db, [resolution.principal]) : [];
+  const scopes = resolution.kind === "principal" ? await loadScopes(db, [resolution.principal], { hashKey: opts.hashKey }) : [];
   const items: PlanItem[] = [];
   const planned = new Set<string>(); // "model:id" of rows a residue item already covers
 
@@ -205,7 +213,7 @@ export async function planErasure(db: PrivacyReadDb, requestId: string, now: Dat
           });
           continue;
         }
-        if (rule.applies && !rule.applies(row, scrub)) continue;
+        if (rule.applies && !rule.applies(row, scrub, scope)) continue;
         const relevant = rule.duties === "client" ? duties : duties.filter((d) => (rule.duties as readonly DutyId[]).includes(d.id));
         if (relevant.length) {
           const h = holdLabel(relevant);
@@ -224,9 +232,10 @@ export async function planErasure(db: PrivacyReadDb, requestId: string, now: Dat
           });
           continue;
         }
-        const set = rule.set(row, scrub);
+        const set = rule.set(row, scrub, scope);
         const fields = Object.keys(set);
         const what = fieldLabels(ds.key, fields);
+        const note = rule.note ? `${rule.note} ` : "";
         items.push({
           key,
           dataset: ds.key,
@@ -238,8 +247,9 @@ export async function planErasure(db: PrivacyReadDb, requestId: string, now: Dat
           basis: [],
           holdUntil: null,
           holdUntilLabel: null,
-          consequence: `${what.charAt(0).toUpperCase()}${what.slice(1)} will be replaced with "[erased]" or left empty. ${ANONYMISE_TAIL}`,
+          consequence: `${what.charAt(0).toUpperCase()}${what.slice(1)} will be replaced with "[erased]" or left empty. ${note}${ANONYMISE_TAIL}`,
           set,
+          ...(ds.where ? { where: ds.where(row) } : {}),
         });
       }
     }
@@ -249,11 +259,11 @@ export async function planErasure(db: PrivacyReadDb, requestId: string, now: Dat
       const rule = ds.erasure;
       if (rule.kind !== "anonymise") continue;
       // A row two principals of one request share (e.g. one onboarding run) is planned once, by the first.
-      const rows = (await ds.rows(db, scope)).filter((r) => !planned.has(`${ds.model}:${String(r.id)}`) && (!rule.applies || rule.applies(r, scrub)));
+      const rows = (await ds.rows(db, scope)).filter((r) => !planned.has(`${ds.model}:${String(r.id)}`) && (!rule.applies || rule.applies(r, scrub, scope)));
       if (!rows.length) continue;
       for (const r of rows) planned.add(`${ds.model}:${String(r.id)}`);
       const relevant = rule.duties === "client" ? duties : duties.filter((d) => (rule.duties as readonly DutyId[]).includes(d.id));
-      const withSet = rows.map((row) => ({ row, set: relevant.length ? {} : rule.set(row, scrub) })).filter((r) => relevant.length || Object.keys(r.set).length);
+      const withSet = rows.map((row) => ({ row, set: relevant.length ? {} : rule.set(row, scrub, scope) })).filter((r) => relevant.length || Object.keys(r.set).length);
       if (withSet.length) items.push(residueItem(ds, scopeRef, withSet, relevant));
     }
     if (scope.kind === "client") {
@@ -274,8 +284,13 @@ export async function planErasure(db: PrivacyReadDb, requestId: string, now: Dat
           consequence: nameOnly,
         });
       }
+      // SOP review H1: SOP screenshots cannot be searched, and erased ones stay in OneDrive's Word files until re-filed.
+      const erasingScreens = items.some((i) => i.dataset === "sop-screenshots" && i.action === "anonymise");
+      for (const m of await sopManualChecks(db, { erasing: erasingScreens })) {
+        items.push({ key: `${m.key}:${String(scope.client.id)}`, dataset: m.key, label: m.label, model: null, recordId: null, fields: [], action: "manual", basis: [], holdUntil: null, holdUntilLabel: null, consequence: m.detail });
+      }
       for (const sys of EXTERNAL_SYSTEMS) {
-        const relevant = sys.key === "audit-log" || (sys.key === "turia" ? !!scope.firmClient?.turiaClientRef : !!(scope.firmClient?.clSiteUrl || scope.client.graphFolderId));
+        const relevant = sys.key === "audit-log" || (sys.key === "turia" ? !!scope.firmClient?.turiaClientRef || scope.turia.keys.length > 0 : !!(scope.firmClient?.clSiteUrl || scope.client.graphFolderId));
         if (!relevant) continue;
         items.push({
           key: `external:${sys.key}:${String(scope.client.id)}`,
@@ -316,7 +331,7 @@ export function publicPlan(plan: ErasurePlan): ErasurePlan {
   return {
     ...plan,
     items: plan.items.map((i) => {
-      const shown = Object.fromEntries(Object.entries(i).filter(([k]) => k !== "set")) as unknown as PlanItem;
+      const shown = Object.fromEntries(Object.entries(i).filter(([k]) => k !== "set" && k !== "where")) as unknown as PlanItem;
       return i.records ? { ...shown, records: i.records.map((r) => ({ id: r.id })) } : shown;
     }),
   };
@@ -344,9 +359,16 @@ const ENTITY_OF: Record<string, string> = {
   coachEvent: "CoachEvent",
   modelCall: "ModelCall",
   privacyRequest: "PrivacyRequest",
+  turiaTaskMirror: "TuriaTaskMirror",
+  turiaClientLink: "TuriaClientLink",
+  turiaPersonLink: "TuriaPersonLink",
+  turiaPullRun: "TuriaPullRun",
+  // SOP Builder (SOP review H1)
+  sopVersion: "SopVersion",
+  sopImage: "SopImage",
 };
 
-type Updater = { update(args: { where: { id: string }; data: Row }): Promise<unknown> };
+type Updater = { update(args: { where: Row; data: Row }): Promise<unknown> };
 
 /** Interactive-transaction limits for confirmErasure (Prisma defaults: wait 2 s, run 5 s). */
 const ERASURE_TX = { maxWait: 10_000, timeout: 120_000 } as const;
@@ -398,7 +420,7 @@ export async function confirmErasure(user: SessionUser, id: string, input: { fin
           continue;
         }
         if (item.action === "anonymise" && item.model && item.recordId && item.set) {
-          await (tx[item.model] as unknown as Updater).update({ where: { id: item.recordId }, data: item.set });
+          await (tx[item.model] as unknown as Updater).update({ where: item.where ?? { id: item.recordId }, data: item.set });
           await writeAudit(tx, { actorId, action: "anonymise", entity, entityId: item.recordId, meta: { fields: item.fields, privacyRequestId: id } });
         } else if (item.action === "hold" && item.recordId) {
           await writeAudit(tx, {

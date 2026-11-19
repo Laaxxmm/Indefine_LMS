@@ -275,6 +275,7 @@ const JOB_SELECT = {
   state: true,
   assigneeId: true,
   reviewerId: true,
+  agentless: true,
   firmClient: { select: { clientCode: true, lmsClientId: true, client: { select: { name: true } } } },
 } as const;
 
@@ -360,6 +361,8 @@ export async function runAgent<I, E>(def: AgentDefinition<I, E>, jobTaskId: stri
   const row = await db.jobTask.findUnique({ where: { id: jobTaskId }, select: JOB_SELECT });
   if (!row) return { ok: false, code: "NOT_FOUND", reason: "That job wasn't found. Go back to the agent's job list and open it again." };
   if (row.service !== def.service) return { ok: false, code: "WRONG_SERVICE", reason: `${def.title} prepares a different kind of job. Open this job from its own agent page.` };
+  // A Turia task no rule maps (ADR-003 amendment) is prepared by hand: no agent runs on it.
+  if (row.agentless) return { ok: false, code: "WRONG_SERVICE", reason: "This job came from Turia without a matching rule, so no agent prepares it. Open the job and prepare it by hand." };
   if (!RUNNABLE.includes(row.state)) return { ok: false, code: "NOT_READY", reason: `The agent can only run on a job that is assigned or in preparation; this job is ${STATE_WORDS[row.state].toLowerCase()}.` };
   // DPDP (src/lib/privacy/consent.ts): a client who withdrew consent, or is under an erasure hold,
   // gets no AI processing. Checked before any write or model call, so a refused run leaves nothing.
