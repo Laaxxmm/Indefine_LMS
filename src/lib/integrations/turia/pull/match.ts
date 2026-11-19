@@ -29,7 +29,7 @@ export function matchPerson(t: { name: string; email: string | null }, activeUse
   return byName.length === 1 ? { userId: byName[0].id, matchedBy: "name" } : null;
 }
 
-export type LmsClientRow = { id: string; name: string; firmClient: { id: string; clientCode: string } | null };
+export type LmsClientRow = { id: string; name: string; folderName?: string; firmClient: { id: string; clientCode: string } | null };
 
 export function matchClient(t: { name: string; code: string | null }, clients: readonly LmsClientRow[]): LmsClientRow | null {
   const code = t.code?.trim().toUpperCase();
@@ -44,6 +44,35 @@ export function matchClient(t: { name: string; code: string | null }, clients: r
 }
 
 const SUFFIX_WORDS = new Set(["the", "and", "of", "private", "limited", "llp", "company", "pvt", "ltd", "india", "m", "s"]);
+
+/** The name without its legal-form words ("Acme Traders Private Limited" -> "acme traders"). */
+export function looseClientKey(name: string): string {
+  return normName(name).split(" ").filter((w) => w && !SUFFIX_WORDS.has(w)).join(" ");
+}
+
+/**
+ * An LMS client whose name is close to this Turia name but not equal (same name once the legal-form
+ * words are dropped), or null. Such a Turia client is never added automatically: an admin picks.
+ */
+export function nearClient(turiaName: string, clients: readonly LmsClientRow[]): LmsClientRow | null {
+  const key = looseClientKey(turiaName);
+  if (!key) return null;
+  return clients.find((c) => looseClientKey(c.name) === key) ?? null;
+}
+
+/**
+ * The entity type a client name suggests, for a client added from Turia (the client page says it
+ * was guessed). OTHER when the name does not say.
+ */
+export function guessEntityType(name: string): "LLP" | "PVT_LTD" | "PUBLIC_LTD" | "HUF" | "TRUST_SOCIETY" | "OTHER" {
+  const n = normName(name);
+  if (/\bllp\b/.test(n)) return "LLP";
+  if (/\bprivate limited\b|\bopc\b/.test(n)) return "PVT_LTD";
+  if (/\blimited\b/.test(n)) return "PUBLIC_LTD";
+  if (/\bhuf\b/.test(n)) return "HUF";
+  if (/\b(trust|society|foundation|association|charitable)\b/.test(n)) return "TRUST_SOCIETY";
+  return "OTHER";
+}
 
 /** A free, valid client code for a new FirmClient (see the header). */
 export function clientCodeFor(name: string, turiaCode: string | null, taken: ReadonlySet<string>): string {

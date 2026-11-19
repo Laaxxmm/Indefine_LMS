@@ -2,7 +2,7 @@
 // people / client matching and client codes, the settings, and the per-task plan.
 import { describe, expect, it } from "vitest";
 import { inPullWindow, pullSortColumn, turiaPullMode } from "./config";
-import { clientCodeFor, matchClient, matchPerson } from "./match";
+import { clientCodeFor, guessEntityType, looseClientKey, matchClient, matchPerson, nearClient } from "./match";
 import { runResultMessage } from "./messages";
 import { isCancelled, isCompleted, mirrorHash, normName, normaliseTask, sortedByUpdateDesc, toDate } from "./normalise";
 import { fyFromName, fyOfMonth, monthFromName, monthPeriodOf, parsePeriod, quarterFromName } from "./period";
@@ -260,5 +260,27 @@ describe("plan", () => {
     expect(jobChanges({ ...job, state: "DONE", assigneeId: "x" }, ctx(), now)).toEqual([]);
     expect(planTask(ctx({ job, mirror: { ...m, status: "3" } }), now)).toEqual({ kind: "update", jobId: "j", changes: [], complete: true });
     expect(planTask(ctx({ job: { ...job, hasPullClose: true }, mirror: { ...m, status: "3" } }), now)).toEqual({ kind: "nothing", jobId: "j" });
+  });
+});
+
+describe("clients added from Turia: near matches and entity types", () => {
+  const list = [{ id: "c1", name: "Acme Traders Private Limited", firmClient: null }];
+  it("drops legal-form words for the near-match key", () => {
+    expect(looseClientKey("M/s. Acme Traders Pvt. Ltd.")).toBe("acme traders");
+    expect(looseClientKey("Private Limited")).toBe("");
+  });
+  it("a name equal once the legal form is dropped is near; a different name is not", () => {
+    expect(nearClient("Acme Traders LLP", list)?.id).toBe("c1");
+    expect(nearClient("Acme Textiles LLP", list)).toBeNull();
+    expect(nearClient("Private Limited", list)).toBeNull();
+  });
+  it("guesses the entity type from the name, else Other", () => {
+    expect(guessEntityType("Kappa Logistics LLP")).toBe("LLP");
+    expect(guessEntityType("Acme Traders Pvt Ltd")).toBe("PVT_LTD");
+    expect(guessEntityType("Nova Solutions (OPC) Private Limited")).toBe("PVT_LTD");
+    expect(guessEntityType("Bharat Steel Limited")).toBe("PUBLIC_LTD");
+    expect(guessEntityType("Ramesh Kumar HUF")).toBe("HUF");
+    expect(guessEntityType("Lambda Charitable Trust")).toBe("TRUST_SOCIETY");
+    expect(guessEntityType("Suresh Enterprises")).toBe("OTHER");
   });
 });

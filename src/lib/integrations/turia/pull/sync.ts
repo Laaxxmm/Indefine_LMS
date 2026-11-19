@@ -8,7 +8,8 @@
 //                 minimum and upserted into TuriaTaskMirror by Turia id; an unchanged hash costs
 //                 only lastSeenAt. A complete scan marks tasks no longer listed (missingSince)
 //   6. plan       per task (plan.ts): create / link / update / record completion / flag / wait
-//   7. apply      mode "on" only: JobTask, Engagement, FirmClient, TuriaSync (closeTask, mode PULL).
+//   7. apply      mode "on" only: JobTask, Engagement, FirmClient, TuriaSync (closeTask, mode PULL),
+//                 and a Client for a Turia client not in the client list (added with its first job).
 //                 Mode "dry-run" writes none of these and keeps the plan as the run's preview
 //   8. record     TuriaPullRun (counts, preview) and one AuditEvent with counts only
 //
@@ -24,6 +25,12 @@
 //                      name is written as "[erased]" in every assignee / reviewer list mirrored
 //   restricted client  (consent withdrawal or an erasure hold, isAiProcessingRestricted): still
 //                      mirrored and mapped, but no new job is created or linked for it
+//
+// Clients added from Turia (owner decision 19 Nov 2026): a Turia client with no client-list match
+// and no near match (same name without "Private Limited", "LLP" ...) is added to the client list
+// when its first job is made, with only what Turia gives: the name, an entity type guessed from it,
+// the assignee as handler, turnover unknown (0) and a note saying the details are to be completed.
+// No contact details, PAN or SharePoint folders. A near match always waits for an admin to pick.
 import { randomUUID } from "node:crypto";
 import { Prisma, type FirmService } from "@prisma/client";
 import type { prisma } from "@/lib/prisma";
@@ -32,10 +39,12 @@ import { formatDate } from "@/lib/agents/core/format";
 import { firmOsEnabled, FIRM_OS_OFF_MESSAGE } from "@/lib/workspace/flag";
 import { TuriaSessionError } from "@/lib/neo-centra/turia";
 import { isAiProcessingRestricted } from "@/lib/privacy/consent";
+import { ClientNameError, clientFolderName } from "@/lib/clients/service";
+import { turnoverBand } from "@/lib/clients/core";
 import { SERVICE_LABELS } from "../adapter";
 import { PULL_LIMITS, pullSortColumn, turiaPullMode, type PullLimits, type PullMode } from "./config";
 import { ERASED_KEY_PREFIX, ERASED_NAME, ERASED_PERSON, erasedClientKey, isErasedKey } from "./erased";
-import { clientCodeFor, matchClient, matchPerson, type LmsClientRow } from "./match";
+import { clientCodeFor, guessEntityType, looseClientKey, matchClient, matchPerson, nearClient, type LmsClientRow } from "./match";
 import { BUSY_MESSAGE, FAILED_MESSAGE, MODE_INVALID_MESSAGE, PULL_OFF_MESSAGE, SESSION_MESSAGE, TIMEOUT_MESSAGE, runResultMessage } from "./messages";
 import { mirrorHash, normaliseTask, sortedByUpdateDesc, type MirrorFields, type TuriaPerson } from "./normalise";
 import { FREQUENCIES, type Frequency } from "./period";
@@ -94,6 +103,8 @@ export type PullCounts = {
   closedInTuria: number;
   unmatchedPeople: number;
   unmatchedClients: number;
+  /** Turia clients added to the client list (mode "on"), or that would be (dry run). */
+  clientsAdded: number;
   /** Tasks of a client whose processing is restricted (DPDP): mirrored, no new job. */
   restricted: number;
   /** Tasks of an erased client (DPDP): skipped, the mirror is not written. */
@@ -124,7 +135,7 @@ export const PULL_ACTOR = "system:turia-pull";
 
 const emptyCounts = (): PullCounts => ({
   pages: 0, fetched: 0, unchanged: 0, new: 0, changed: 0, missing: 0, create: 0, link: 0, update: 0, completed: 0, completedNoTime: 0,
-  flagged: 0, agentless: 0, waitingClient: 0, waitingPeople: 0, closedInTuria: 0, unmatchedPeople: 0, unmatchedClients: 0, restricted: 0, erased: 0, errors: 0,
+  flagged: 0, agentless: 0, waitingClient: 0, waitingPeople: 0, closedInTuria: 0, unmatchedPeople: 0, unmatchedClients: 0, clientsAdded: 0, restricted: 0, erased: 0, errors: 0,
 });
 
 const LINKED_SELECT = {
@@ -370,12 +381,35 @@ export async function runTuriaPull(deps: PullDeps, opts: { trigger: "cron" | "ma
     // ---------------------------------------------------------------- clients
     let lmsClients: LmsClientRow[] | null = null;
     const takenCodes = new Set<string>();
+    const takenFolders = new Set<string>();
+    /** Loose keys of the Turia clients this run plans to add: a second one that close waits for an admin. */
+    const addingLoose = new Set<string>();
+    /** A Turia client with no match and nothing close in the client list, or null (it then waits). */
+    const addable = (m: MirrorFields, list: readonly LmsClientRow[]): ClientState | null => {
+      const name = m.clientName.trim().replace(/\s+/g, " ").slice(0, 200);
+      const loose = looseClientKey(name);
+      if (!name || !loose || addingLoose.has(loose) || nearClient(name, list)) return null;
+      let folderName: string;
+      try {
+        folderName = clientFolderName(name);
+      } catch (e) {
+        if (e instanceof ClientNameError) return null;
+        throw e;
+      }
+      if (takenFolders.has(folderName.toLowerCase())) return null;
+      const clientCode = clientCodeFor(name, m.clientCode, takenCodes);
+      takenCodes.add(clientCode);
+      takenFolders.add(folderName.toLowerCase());
+      addingLoose.add(loose);
+      return { status: "add", name, folderName, clientCode };
+    };
     const clientState = new Map<string, ClientState>();
     const resolveClient = async (m: MirrorFields): Promise<ClientState> => {
       const cached = clientState.get(m.clientKey);
       if (cached) return cached;
       if (!lmsClients) {
-        lmsClients = await db.client.findMany({ select: { id: true, name: true, firmClient: { select: { id: true, clientCode: true } } } });
+        lmsClients = await db.client.findMany({ select: { id: true, name: true, folderName: true, firmClient: { select: { id: true, clientCode: true } } } });
+        for (const c of lmsClients) if (c.folderName) takenFolders.add(c.folderName.toLowerCase());
         for (const c of await db.firmClient.findMany({ select: { clientCode: true } })) takenCodes.add(c.clientCode);
       }
       const link = clientLinks.get(m.clientKey);
@@ -391,10 +425,12 @@ export async function runTuriaPull(deps: PullDeps, opts: { trigger: "cron" | "ma
       } else {
         const manual = link?.status === "manual" && link.lmsClientId ? lmsClients.find((c) => c.id === link.lmsClientId) ?? null : null;
         const found = manual ?? (m.clientKey ? matchClient({ name: m.clientName, code: m.clientCode }, lmsClients) : null);
-        linkStatus = manual ? "manual" : found ? "matched" : "unmatched";
+        const toAdd = found || !m.clientKey ? null : addable(m, lmsClients);
+        linkStatus = manual ? "manual" : found ? "matched" : toAdd ? "add" : "unmatched";
         lmsId = found?.id ?? null;
         firmClientId = found?.firmClient?.id ?? null;
-        if (!found) state = { status: "unmatched" };
+        if (toAdd) state = toAdd;
+        else if (!found) state = { status: "unmatched" };
         // An LMS client anonymised by an erasure (matched by the client code it keeps) never gets work again.
         else if (found.name.startsWith(ERASED_NAME)) {
           state = { status: "ignored" };
@@ -416,16 +452,50 @@ export async function runTuriaPull(deps: PullDeps, opts: { trigger: "cron" | "ma
       clientState.set(m.clientKey, state);
       return state;
     };
+    /** Mode "on": a Turia client not in the client list is added to it (see the header). */
+    const addClient = async (m: MirrorFields, state: Extract<ClientState, { status: "add" }>, handlerId: string): Promise<{ lmsClientId: string; clientCode: string }> => {
+      let lmsClientId: string;
+      const entityType = guessEntityType(state.name);
+      try {
+        const created = await db.client.create({
+          data: {
+            name: state.name,
+            folderName: state.folderName,
+            entityType,
+            turnover: 0,
+            turnoverBand: turnoverBand(0),
+            growthGoal: "OTHER",
+            growthNote: `Added from Turia by the task sync on ${formatDate(runStart)}. The entity type was guessed from the name; turnover, growth goal, PAN and contact details are not known yet. Complete them here.`,
+            onboardedOn: runStart,
+            primaryHandlerId: handlerId,
+            createdById: opts.actorId ?? handlerId,
+          },
+          select: { id: true },
+        });
+        lmsClientId = created.id;
+        counts.clientsAdded++;
+        await logAudit(db, { actorId: opts.actorId ?? PULL_ACTOR, action: "turia-pull.client-add", entity: "Client", entityId: created.id, meta: { runId: run.id, entityType } });
+      } catch (e) {
+        // Someone added the same client meanwhile (name or folder name taken): use theirs.
+        if (!(e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")) throw e;
+        const existing = await db.client.findFirst({ where: { OR: [{ name: state.name }, { folderName: state.folderName }] }, select: { id: true } });
+        if (!existing) throw e;
+        lmsClientId = existing.id;
+      }
+      await db.turiaClientLink.update({ where: { key: m.clientKey }, data: { status: "matched", lmsClientId } });
+      return { lmsClientId, clientCode: state.clientCode };
+    };
     /** Mode "on": a matched LMS client without a FirmClient gets one (code from Turia, else made). */
-    const readyClient = async (m: MirrorFields, state: ClientState): Promise<{ firmClientId: string; clientCode: string } | null> => {
+    const readyClient = async (m: MirrorFields, state: ClientState, handlerId: string): Promise<{ firmClientId: string; clientCode: string } | null> => {
       if (state.status === "ready") return state;
-      if (state.status !== "new") return null;
+      if (state.status !== "new" && state.status !== "add") return null;
+      const target = state.status === "add" ? await addClient(m, state, handlerId) : state;
       let fc: { id: string; clientCode: string };
       try {
-        fc = await db.firmClient.create({ data: { lmsClientId: state.lmsClientId, clientCode: state.clientCode, createdById: opts.actorId }, select: { id: true, clientCode: true } });
+        fc = await db.firmClient.create({ data: { lmsClientId: target.lmsClientId, clientCode: target.clientCode, createdById: opts.actorId }, select: { id: true, clientCode: true } });
       } catch (e) {
         if (!(e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")) throw e;
-        const existing = await db.firmClient.findUnique({ where: { lmsClientId: state.lmsClientId }, select: { id: true, clientCode: true } });
+        const existing = await db.firmClient.findUnique({ where: { lmsClientId: target.lmsClientId }, select: { id: true, clientCode: true } });
         if (!existing) throw e;
         fc = existing;
       }
@@ -437,6 +507,7 @@ export async function runTuriaPull(deps: PullDeps, opts: { trigger: "cron" | "ma
 
     // ---------------------------------------------------------------- plan + apply
     let minuteReads = 0;
+    const addPreviewed = new Set<string>();
     const who = (id: string | null) => (id ? (userName.get(id) ?? "someone") : "nobody");
     const changeWords = (c: JobChange): string => {
       if (c.field === "assigneeId") return `preparer to ${who(c.to)}`;
@@ -512,7 +583,16 @@ export async function runTuriaPull(deps: PullDeps, opts: { trigger: "cron" | "ma
             if (draft.agentless) counts.agentless++;
             const reviewer = draft.reviewerId ? `, reviewer ${who(draft.reviewerId)}` : plan.reviewerUnmatched ? ", reviewer not matched yet" : "";
             const due = draft.internalDueOn ? `, due ${formatDate(draft.internalDueOn)}` : "";
-            const newClient = client.status === "new" ? ` New Firm OS client code ${client.clientCode}.` : "";
+            const newClient =
+              client.status === "new"
+                ? ` New Firm OS client code ${client.clientCode}.`
+                : client.status === "add"
+                  ? ` ${apply ? "Added" : "Would add"} the client to the client list from Turia (details to complete), Firm OS client code ${client.clientCode}.`
+                  : "";
+            if (client.status === "add" && !apply && !addPreviewed.has(m.clientKey)) {
+              addPreviewed.add(m.clientKey);
+              counts.clientsAdded++;
+            }
             const agent = draft.agentless ? `, ${AGENTLESS_WORDS[draft.agentlessWhy ?? "no rule"]}` : "";
             add({
               action: "create",
@@ -521,7 +601,7 @@ export async function runTuriaPull(deps: PullDeps, opts: { trigger: "cron" | "ma
               detail: `${apply ? "Created" : "Would create"} ${SERVICE_LABELS[draft.service]} · ${title} · ${draft.period} FY ${draft.fy} (period from the ${draft.periodFrom}) for ${who(draft.assigneeId)}${reviewer}${due}${agent}.${newClient}`,
             });
             if (!apply) continue;
-            const fc = await readyClient(m, client);
+            const fc = await readyClient(m, client, draft.assigneeId);
             if (!fc) continue;
             const engagement = draft.agentless
               ? null

@@ -197,7 +197,10 @@ only, through the Neo Centra Turia sign-in. Nothing is ever written to Turia. St
    period came from: name or due date), "Would link to the existing job …", "Would change …", or why a
    task waits. Fix what is wrong there, each change audited:
    - **People** not matched → pick the firm user (kept over automatic matching);
-   - **Clients** not matched → pick the client from the client list, or ignore it;
+   - **Clients** not matched (only names close to an existing client) → pick the client from the client
+     list, or ignore it. Clients not in the list at all are added from Turia with their first job; check the
+     "Clients to add from Turia" count and the "Would add the client" rows, and fill in turnover, PAN and
+     contact details on each client page afterwards;
    - **Task rules** → change the words, service, title or frequency; switch a rule off rather than
      removing it. Unmapped tasks become jobs **without an agent** (prepared by hand).
    Also check the Turia fields the pull could not confirm from Neo Centra's code (department, due date,

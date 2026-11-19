@@ -138,3 +138,13 @@ person does stays on the ManualBridge checklist.
   writes (there are none from the pull).
 - `JobTask` gains additive columns: `source`, `turiaTaskId` (unique), `agentless`, `turiaMissingAt`,
   `turiaNote`.
+
+### Amendment 1a — clients not in the client list are added from Turia (19 Nov 2026)
+
+The first dry run in production read 2,676 Turia tasks and made no job: the 442 open tasks belonged to
+359 Turia clients with no LMS client, because LMS clients are only added by hand. Owner decision: the
+pull adds them. In mode on, a Turia client with no match and no near match (same name without the
+legal-form words, or the same folder name) is added to the client list with its first job, with only the
+name, a guessed entity type, the assignee as handler, turnover 0 and a note that the details are to be
+completed (audited `turia-pull.client-add`). A near match waits for an admin pick, as before. Turia is
+still only read. No schema change.

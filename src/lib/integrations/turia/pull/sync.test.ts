@@ -249,6 +249,116 @@ describe("on", () => {
   });
 });
 
+describe("clients not in the client list are added from Turia (owner decision 19 Nov 2026)", () => {
+  it("dry run: previews the client it would add and adds nothing", async () => {
+    const w = world([rawTask({ id: "101", clientname: "Delta Steel Works" })]);
+    w.env.FIRM_OS_TURIA_PULL = "dry-run";
+    const before = w.db.client.rows.length;
+    const r = await run(w);
+    expect(r.counts).toMatchObject({ create: 1, clientsAdded: 1, waitingClient: 0, unmatchedClients: 0 });
+    expect(r.preview[0].detail).toMatch(/Would add the client to the client list from Turia \(details to complete\), Firm OS client code DELTAS?W?\w*\.$/);
+    expect(w.db.client.rows).toHaveLength(before);
+    expect(w.db.turiaClientLink.rows.find((l) => l.key === "delta steel works")).toMatchObject({ status: "add", lmsClientId: null });
+  });
+
+  it("on: adds the client with only what Turia gives, then its Firm OS client and the job; a later run adds no second client", async () => {
+    const w = world([rawTask({ id: "101", clientname: "Delta Steel Works" }), rawTask({ id: "102", clientname: "Delta Steel Works", taskname: "GSTR-1 Oct 2026" })]);
+    const r = await run(w);
+    expect(r.counts).toMatchObject({ create: 2, clientsAdded: 1 });
+    const added = w.db.client.rows.filter((c) => c.name === "Delta Steel Works");
+    expect(added).toHaveLength(1);
+    expect(added[0]).toMatchObject({
+      folderName: "Delta Steel Works",
+      entityType: "OTHER",
+      turnover: 0,
+      turnoverBand: "UNDER_40L",
+      growthGoal: "OTHER",
+      primaryHandlerId: "u-priya",
+      createdById: "u-priya",
+    });
+    expect(added[0].growthNote).toMatch(/^Added from Turia by the task sync on .*Complete them here\.$/);
+    expect(Object.keys(added[0])).not.toEqual(expect.arrayContaining(["pan", "contactEmail", "contactPhone"]));
+    const fc = w.db.firmClient.rows.find((f) => f.lmsClientId === added[0].id)!;
+    expect(jobOf(w, "101")).toMatchObject({ firmClientId: fc.id, assigneeId: "u-priya" });
+    expect(jobOf(w, "102")).toMatchObject({ firmClientId: fc.id });
+    expect(w.db.turiaClientLink.rows.find((l) => l.key === "delta steel works")).toMatchObject({ status: "matched", lmsClientId: added[0].id, firmClientId: fc.id });
+    const audit = w.db.auditEvent.rows.find((a) => a.action === "turia-pull.client-add")!;
+    expect(audit).toMatchObject({ actorId: PULL_ACTOR, entity: "Client", entityId: added[0].id });
+    expect(JSON.stringify(audit.meta)).not.toContain("Delta"); // no client name in the audit trail
+
+    w.turia.pages = [[rawTask({ id: "101", clientname: "Delta Steel Works" }), rawTask({ id: "103", clientname: "Delta Steel Works", taskname: "GSTR-3B Nov 2026" })]];
+    w.advance(15 * 60_000);
+    const r2 = await run(w);
+    expect(r2.counts.clientsAdded).toBe(0);
+    expect(w.db.client.rows.filter((c) => c.name === "Delta Steel Works")).toHaveLength(1);
+    expect(jobOf(w, "103")).toMatchObject({ firmClientId: fc.id });
+  });
+
+  it("guesses the entity type from the name", async () => {
+    const w = world([rawTask({ id: "101", clientname: "Kappa Logistics LLP" }), rawTask({ id: "102", clientname: "Lambda Charitable Trust" })]);
+    await run(w);
+    expect(w.db.client.rows.find((c) => c.name === "Kappa Logistics LLP")).toMatchObject({ entityType: "LLP" });
+    expect(w.db.client.rows.find((c) => c.name === "Lambda Charitable Trust")).toMatchObject({ entityType: "TRUST_SOCIETY" });
+  });
+
+  it("a name close to a client already in the list is never added: it waits for an admin", async () => {
+    const w = world([rawTask({ id: "101", clientname: "Acme Traders LLP" })]); // the list has Acme Traders Private Limited
+    const before = w.db.client.rows.length;
+    const r = await run(w);
+    expect(r.counts).toMatchObject({ create: 0, waitingClient: 1, unmatchedClients: 1, clientsAdded: 0 });
+    expect(w.db.client.rows).toHaveLength(before);
+    expect(w.db.turiaClientLink.rows.find((l) => l.key === "acme traders llp")).toMatchObject({ status: "unmatched" });
+  });
+
+  it("two Turia clients close to each other: the first is added, the second waits", async () => {
+    const w = world([rawTask({ id: "101", clientname: "Zeta Foods Pvt Ltd" }), rawTask({ id: "102", clientname: "Zeta Foods LLP" })]);
+    const r = await run(w);
+    expect(r.counts).toMatchObject({ create: 1, clientsAdded: 1, waitingClient: 1 });
+    expect(w.db.client.rows.filter((c) => String(c.name).startsWith("Zeta"))).toHaveLength(1);
+  });
+
+  it("a client with only completed or cancelled tasks is not added", async () => {
+    const w = world([rawTask({ id: "101", clientname: "Omega Retail", taskstatus: "3" }), rawTask({ id: "102", clientname: "Omega Retail", taskstatusname: "Cancelled" })]);
+    const r = await run(w);
+    expect(r.counts).toMatchObject({ create: 0, clientsAdded: 0, closedInTuria: 2 });
+    expect(w.db.client.rows.find((c) => c.name === "Omega Retail")).toBeUndefined();
+  });
+
+  it("a task whose assignee is not matched adds no client yet", async () => {
+    const w = world([rawTask({ id: "101", clientname: "Sigma Pharma", assignee: [{ id: "t-new", name: "N Kumar" }] })]);
+    const r = await run(w);
+    expect(r.counts).toMatchObject({ create: 0, clientsAdded: 0, waitingPeople: 1 });
+    expect(w.db.client.rows.find((c) => c.name === "Sigma Pharma")).toBeUndefined();
+  });
+
+  it("an admin pick or ignore still wins over adding", async () => {
+    const w = world([rawTask({ id: "101", clientname: "Delta Steel Works" })]);
+    await run(w, { env: { ...w.env, FIRM_OS_TURIA_PULL: "dry-run" } });
+    await saveClientLink(w.adminDb, admin, { key: "delta steel works", action: "ignore" });
+    const r = await run(w);
+    expect(r.counts).toMatchObject({ create: 0, clientsAdded: 0, waitingClient: 1 });
+    expect(w.db.client.rows.find((c) => c.name === "Delta Steel Works")).toBeUndefined();
+  });
+
+  it("if the same client was added by hand meanwhile, the sync uses it instead of adding another", async () => {
+    const w = world([rawTask({ id: "101", clientname: "Delta Steel Works" })]);
+    const realCreate = w.db.client.create.bind(w.db.client);
+    let once = true;
+    w.db.client.create = async (args: { data: Record<string, unknown> }) => {
+      if (once) {
+        once = false;
+        await realCreate({ data: { id: "c-delta-hand", name: "Delta Steel Works", folderName: "Delta Steel Works" } });
+      }
+      return realCreate(args);
+    };
+    const r = await run(w);
+    expect(r.counts.errors).toBe(0);
+    expect(w.db.client.rows.filter((c) => c.name === "Delta Steel Works")).toHaveLength(1);
+    expect(w.db.firmClient.rows.find((f) => f.lmsClientId === "c-delta-hand")).toBeDefined();
+    expect(w.db.turiaClientLink.rows.find((l) => l.key === "delta steel works")).toMatchObject({ status: "matched", lmsClientId: "c-delta-hand" });
+  });
+});
+
 describe("mapping waits", () => {
   it("an unmatched client waits; after a manual pick the next run creates the Firm OS client and the job", async () => {
     const w = world([rawTask({ id: "101", clientname: "Gamma Exports" })]);

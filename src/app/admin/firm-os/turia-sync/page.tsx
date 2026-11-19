@@ -27,7 +27,7 @@ const STATUS_WORDS: Record<string, string> = {
 };
 const ACTION_WORDS: Record<string, string> = { create: "New job", link: "Link", update: "Change", complete: "Completed", flag: "Flag", unflag: "Flag cleared", wait: "Waiting" };
 const MATCH_WORDS: Record<string, string> = { email: "By email", name: "By name", manual: "Picked by hand", none: "Not matched" };
-const CLIENT_WORDS: Record<string, string> = { matched: "Matched by name or code", manual: "Picked by hand", unmatched: "Not matched", ignored: "Ignored" };
+const CLIENT_WORDS: Record<string, string> = { matched: "Matched by name or code", manual: "Picked by hand", unmatched: "Not matched: pick it", add: "Not in the client list: added from Turia with its first job", ignored: "Ignored" };
 const FREQUENCY_WORDS: Record<string, string> = { MONTHLY: "Monthly", QUARTERLY: "Quarterly", ANNUAL: "Annual" };
 
 function Stat({ label, value }: { label: string; value: string | number }) {
@@ -104,6 +104,7 @@ export default async function TuriaSyncPage() {
               <Stat label="Without an agent" value={c.agentless ?? 0} />
               <Stat label="People not matched" value={c.unmatchedPeople ?? 0} />
               <Stat label="Clients not matched" value={c.unmatchedClients ?? 0} />
+              <Stat label={run.mode === "on" ? "Clients added from Turia" : "Clients to add from Turia"} value={c.clientsAdded ?? 0} />
               <Stat label="Waiting" value={(c.waitingClient ?? 0) + (c.waitingPeople ?? 0)} />
             </div>
           </div>
@@ -155,8 +156,10 @@ export default async function TuriaSyncPage() {
 
       <Section id="clients" title="Clients">
         <p className="text-[13px] leading-5 text-ink-mute mb-4 max-w-3xl">
-          Each Turia client is matched to a client in the client list by its client code, then by exact name. Pick the client, or ignore it. A matched client without a Firm OS client code
-          gets one when the sync is on (Turia&apos;s code when it is valid, otherwise one made from the name).
+          Each Turia client is matched to a client in the client list by its client code, then by exact name. A Turia client that is not in the list is added to it from Turia with
+          its first job when the sync is on: the name, an entity type guessed from the name and the assignee as handler. Turnover, PAN and contact details are left for you to
+          complete on the client page. A name close to an existing client (for example the same name without &quot;Private Limited&quot;) is never added: pick the client, or
+          ignore it. A matched client without a Firm OS client code gets one when the sync is on (Turia&apos;s code when it is valid, otherwise one made from the name).
         </p>
         {p.clients.length === 0 ? (
           <EmptyState title="No Turia clients yet. They appear after the first sync." />
