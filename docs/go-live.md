@@ -28,7 +28,8 @@ The final QA gate that must be green before this checklist is used: `docs/qa/pha
       (reason `close-loop`) — `tests/chaos/duplicate-cron-concurrent.test.ts` green after Phase 11.
 - [ ] PR `firm-os/phase-0-inventory → main` reviewed by the owner (the agent never merges).
 - [ ] **Deploy path checked (incident 06 Nov 2026, see §9.1):** the Railway Start / Pre-deploy command
-      is `npm start` only — no `prisma db push` (the boot script `scripts/migrate.mjs` runs
+      is `npm start` only — no `prisma db push` (checked 19 Nov 2026: Start `npm start`, Pre-deploy and
+      Build commands empty; the boot script `scripts/migrate.mjs` runs
       `prisma migrate deploy`); every new migration has been applied to a copy of the production
       database (staging) before merging; the CI step "Firm OS migrations re-run cleanly" is green.
 
@@ -300,24 +301,28 @@ on the build machine).
 
 ### 9.1 Incident 06 Nov 2026 — boot crash loop after the Firm OS merge (resolved)
 
-- **What happened:** PR #70 merged 09:33 IST; Railway deployed `main`. Its start path ran
-  `prisma db push` before `npm start`, which created the Firm OS tables and enums straight from
-  `schema.prisma` without recording migrations. `npm start` then ran `prisma migrate deploy`, and the
-  first Firm OS migration failed on `CREATE TYPE "ModelProviderId"` (already exists). The boot script
-  marks a half-applied migration rolled back and retries it, so every restart failed the same way.
-  lms.indefine.in returned 502 from about 09:44 to 10:15 IST. No LMS data was changed or lost (only
-  new, empty Firm OS objects were created).
+- **What happened:** PR #70 merged 09:33 IST; Railway deployed `main`. On boot `npm start` ran
+  `prisma migrate deploy`, and the first Firm OS migration stopped part-way, leaving some of its
+  tables and enums created but the migration unfinished. The boot script marks a half-applied
+  migration rolled back and retries it; the retry failed on `CREATE TYPE "ModelProviderId"` (already
+  exists), so every restart failed the same way. lms.indefine.in returned 502 from about 09:44 to
+  10:15 IST. No LMS data was changed or lost (only new, empty Firm OS objects were created).
+- **Correction (19 Nov 2026):** an earlier version of this note said Railway ran `prisma db push`
+  before `npm start`. Checked on Railway: the Start command is `npm start` and the Pre-deploy and
+  Build commands are empty, and `package.json` has not run `db push` since 5 Sep 2026 (060a33b). The
+  pre-existing objects came from the half-applied first attempt, not from `db push`.
 - **Fix (PR #71, merged 10:15):** every Firm OS migration is re-runnable (enums and constraints in
   DO blocks that ignore only the duplicate error; `CREATE TABLE / INDEX IF NOT EXISTS`;
   `ADD COLUMN IF NOT EXISTS`). The next boot recorded the migrations over the existing objects and
   started; Firm OS stays off (`FIRM_OS_ENABLED` unset). `tests/unit/migrations-rerunnable.test.ts`
   enforces the pattern and CI re-applies every Firm OS migration with psql on Postgres 16.
-- **Why a rollback would not have helped:** the previous release would also run `db push`, now with
-  the old schema, which tries to drop the new tables (refused without `--accept-data-loss`, so the
-  boot fails). Fix forward instead.
-- **Lessons (now preconditions in §1):** remove `prisma db push` from the Railway start path; apply
-  every migration to a copy of the production database before merging; check how the platform
-  actually starts the app, not only `package.json`.
+- **Why fix forward:** a rollback to the previous release would not have removed the half-created
+  objects or the failed migration record, so the next Firm OS deploy would have hit the same error.
+  Making the migrations re-runnable cleared it for good.
+- **Lessons (now preconditions in §1):** every migration must be safe to apply again over its own
+  partial state; apply every migration to a copy of the production database before merging; keep
+  the Railway Start command `npm start` with no Pre-deploy or Build command that touches the schema
+  (no `prisma db push`, ever, against production).
 
 ## 10. Sign-off
 

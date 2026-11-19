@@ -250,10 +250,10 @@ Model-dependent and LLM rules are gated as code path only in recorded mode (they
 - **Agent conventions to confirm (round-2 fixes)**: TDS warn-before-due / block-on-due; audit sample below SOP minimum = block; should draft GST figures exclude a time-barred credit note (GST 12) and ITC on a bill the model abstained on (GST 23)?; books has no prior-month TB balance check; no input for cancelled documents (Table 13 cancelled always 0) · 2026-11-05
 - **Seed SopPacks** · runner loads the active SopPack from DB · run the seed functions (gst seed.ts; books/audit publish v1.0.0 from defaultChecklist) on staging/prod after partner review · 2026-11-05
 - ~~Push + PR firm-os/phase-0-inventory → main~~ — merged by the owner 06 Nov (PR #70), hotfix PR #71
-- **Remove `prisma db push` from the Railway start / pre-deploy command** (cause of the 06 Nov outage) · leave `npm start` only · 2026-11-06
+- ~~Remove `prisma db push` from the Railway start / pre-deploy command~~ · checked 19 Nov: Start is `npm start`, Pre-deploy and Build empty, nothing to remove · 2026-11-19
 - **Check Microsoft 365 and Turia features in production** after the hardening deploy (stricter token handling; LEGACY_PLAINTEXT_SECRETS=true set) · reconnect if asked · 2026-11-06
 
-**Incident 06 Nov 2026 (resolved 10:15 IST):** after PR #70 was merged and deployed, Railway ran `prisma db push` before `npm start`; it created the Firm OS tables without recording migrations, the first migration then failed on `CREATE TYPE "ModelProviderId"` (already exists) and the boot crash-looped — lms.indefine.in 502 from ~09:44 to 10:15. No LMS data changed. Fixed forward by PR #71 (every Firm OS migration re-runnable; unit test + CI psql re-run on Postgres 16). Details and lessons: docs/go-live.md §9.1.
+**Incident 06 Nov 2026 (resolved 10:15 IST):** after PR #70 was merged and deployed, the first Firm OS migration stopped part-way on boot; the boot script retried it and the retry failed on `CREATE TYPE "ModelProviderId"` (already exists) and the boot crash-looped — lms.indefine.in 502 from ~09:44 to 10:15. No LMS data changed. Fixed forward by PR #71 (every Firm OS migration re-runnable; unit test + CI psql re-run on Postgres 16). Details and lessons: docs/go-live.md §9.1 (corrected 19 Nov: there was no `db push`; Railway runs `npm start` only).
 
 ## Known gaps / tech debt
 - `npm ci` on npm 11 skips install scripts not covered by `allowScripts` (prisma, esbuild); run `npx prisma generate` after install locally.
@@ -359,7 +359,7 @@ Model-dependent and LLM rules are gated as code path only in recorded mode (they
 - 08:36 · 12 · Coverage-run speed budget 1 s (npm test keeps 200 ms) (229c318); lint, typecheck, test, coverage, verify:firm-os re-run ×3 — all green · 4403/4403 ×3 · coverage 99.46% lines ×3
 - 08:40 · 12 · **Ready for human go-live review — STOP.** Not pushed, no PR, nothing merged to main, no FIRM_OS_* flag set, nothing announced. Owner next: push + PR, Blocked items (keys, consents, staging), partner/legal verification list, then staging gate and go-live per docs/go-live.md · –
 - 09:33 · deploy · Owner merged PR #70 to main; Railway deployed it
-- 09:44 · incident · Production boot crash loop: Railway start ran `prisma db push` (created Firm OS objects unrecorded), then migrate deploy failed on CREATE TYPE "ModelProviderId" · site 502
+- 09:44 · incident · Production boot crash loop: the first Firm OS migration half-applied, then its retry failed on CREATE TYPE "ModelProviderId" · site 502
 - 10:06 · incident · Hotfix: all Firm OS migrations re-runnable; unit test + CI psql re-run step (59b3205) · 4412/4412 · verify:firm-os green
 - 10:15 · incident · Owner merged PR #71; boot recorded the migrations and started · site 200, Firm OS off, CI green incl. the re-run step
 - 10:25 · docs · Incident and deploy lessons recorded (PROGRESS, docs/go-live.md §1 + §9.1) · –
