@@ -177,7 +177,7 @@ export const ADMIN_HELP: HelpEntry[] = [
       "Check the Turia sign-in. If it is missing or old, open Turia in Chrome with the Neo Centra extension signed in.",
       "Select Sync now to read Turia straight away, or wait for the scheduled run every 15 minutes, Monday to Saturday, 9:00 to 20:00 IST.",
       "In dry run, read the preview: each row says which job would be created or changed, for whom, and why a task is waiting.",
-      "Under People, pick the firm user for each Turia person who is not matched. Under Clients, pick the client from the client list or choose to ignore it.",
+      "Under People, pick the firm user for each Turia person who is not matched. Under Clients, pick the client from the client list or choose to ignore it. A Turia client that is not in the client list at all is added from Turia with its first job; only names close to an existing client wait for you.",
       "Under Task rules, change the words that decide which service and job title a Turia task becomes, or add a rule. Switch a rule off instead of removing it.",
       "When the preview looks right, ask IT to set the sync to on.",
     ],
@@ -187,6 +187,11 @@ export const ADMIN_HELP: HelpEntry[] = [
       { term: "Without an agent", meaning: "A task no rule matches. It still becomes a job in Next task and My day, and the person prepares it by hand." },
       { term: "Completed", meaning: "Turia shows the task completed. The time logged in Turia is recorded for the closing checks; the job still closes only when it is filed and its Final file is in SharePoint." },
       { term: "No longer in Turia", meaning: "A task that dropped out of Turia's task list. Its job is flagged, never removed." },
+      {
+        term: "Added from Turia",
+        meaning:
+          "A client that was not in the client list, added by the sync with its first job: the name, an entity type guessed from the name and the assignee as handler. Its client page says so; fill in turnover, PAN and contact details there.",
+      },
       { term: "Match automatically", meaning: "Firm OS matches by email or client code first, then by exact name. Choosing it again undoes a pick made by hand." },
     ],
     stuck: [
@@ -200,7 +205,7 @@ export const ADMIN_HELP: HelpEntry[] = [
       },
       {
         problem: "A task stays in the preview as waiting.",
-        fix: "Its client or assignee is not matched. Pick them under Clients or People, then select Sync now.",
+        fix: "Its client or assignee is not matched. A client waits only when its name is close to one already in the client list. Pick them under Clients or People, then select Sync now.",
       },
       {
         problem: "A Turia task became a job without an agent.",

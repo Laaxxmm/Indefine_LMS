@@ -229,6 +229,7 @@ export function createPullWorld(start = new Date("2026-11-06T05:30:00Z")) {
     engagement: m("eng", { uniques: [["firmClientId", "service"]] }),
     firmClient,
     client: m("client", {
+      uniques: [["name"], ["folderName"]],
       join: (r) => {
         const fc = firmClient.rows.find((f) => f.lmsClientId === r.id);
         return { firmClient: fc ? { id: fc.id, clientCode: fc.clientCode } : null };

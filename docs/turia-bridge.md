@@ -135,6 +135,13 @@ most 20 timesheet reads a run.
    ignore. A matched LMS client without a FirmClient gets one (mode on): Turia's code when it is a valid,
    free folder-contract code, else one made from the name (first word up to 6 letters plus initials, then
    numbered: `ACMET`, `ACMET01` …; never a Windows reserved name).
+   **Not in the client list** (owner decision 19 Nov 2026): a Turia client with no match and no near match
+   (the same name once "Private Limited", "LLP", "Company" and the like are dropped, or the same folder
+   name) is added to the client list with its first job, mode on only: the Turia name, an entity type
+   guessed from the name (LLP, private / public limited, HUF, trust or society, else Other), the assignee
+   as handler, turnover 0 (band under ₹40 L) and growth goal Other, with a note on the client that these
+   are to be completed. No PAN, contact details or SharePoint folders. The link shows status `add` until
+   then; the dry run counts it as "Clients to add from Turia". A near match always waits for an admin.
 3. **Rule.** The first active rule by position whose words appear (whole words; `|` = any of, `+` = all
    of; optional department words). It gives the service, title, frequency and calendar rule. The period
    comes from the task name (month, quarter, FY or AY) or, failing that, the due date (a monthly return is

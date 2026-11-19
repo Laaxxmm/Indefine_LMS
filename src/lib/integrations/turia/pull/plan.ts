@@ -24,6 +24,8 @@ import { AGENT_SERVICES, guessService, matchRule, type RuleRow } from "./rules";
 export type ClientState =
   | { status: "ready"; firmClientId: string; clientCode: string }
   | { status: "new"; lmsClientId: string; clientCode: string }
+  /** Not in the client list and nothing close to it: added from Turia with its first job (mode "on"). */
+  | { status: "add"; name: string; folderName: string; clientCode: string }
   | { status: "unmatched" }
   | { status: "ignored" }
   /** Matched, but processing is restricted (DPDP): mirrored, never given a new job. */
